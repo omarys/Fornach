@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 1. Universal Identifiers, Enums, and Coordinate Axes -->
+    <Compile Include="Common.fs" />
+
+    <!-- 2. The 12-Stat Matrix and Immutable StatBlock -->
+    <Compile Include="Attributes.fs" />
+
+    <!-- 3. Resource Types & Meters (0-100 bounded value objects) -->
+    <Compile Include="Meters.fs" />
+    <Compile Include="Pool.fs" />
+
+    <!-- 4. Collapse States and Conditions -->
+    <Compile Include="Collapse.fs" />
+
+    <!-- 5. Reactive Equipment Triggers and Effects -->
+    <Compile Include="Triggers.fs" />
+
+    <!-- 6. Domain Events -->
+    <Compile Include="CombatEvent.fs" />
+
+    <!-- 6. Equipment Items and Loadout Configuration -->
+    <Compile Include="Equipment.fs" />
+
+    <!-- 7. Aggregate Root and State Evaluators (Consumes all prior types) -->
+    <Compile Include="Combatant.fs" />
+  </ItemGroup>
+</Project>

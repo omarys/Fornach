@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="DicePool.fs" />
+    <Compile Include="Actions.fs" />
+    <Compile Include="ActionResolver.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fornach.Domain\Fornach.Domain.fsproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,36 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ["--maxkb=512"]
+      - id: check-xml
+
+  - repo: local
+    hooks:
+      - id: dotnet-build
+        name: dotnet build (Release, zero warnings)
+        entry: dotnet build Fornach.slnx -c Release -v q --nologo
+        language: system
+        pass_filenames: false
+        files: \.(fs|fsproj|slnx)$
+
+      - id: dotnet-test
+        name: dotnet test (Unit & property tests)
+        entry: dotnet test tests/Fornach.Domain.Tests/Fornach.Domain.Tests.fsproj --nologo -v q
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        files: \.(fs|fsproj)$
+
+      - id: sim-check
+        name: balance simulation sanity check
+        entry: dotnet run --project src/Fornach.Cli -c Release -- --sim -a1 "Iron Vanguard" -a2 "Thought-Weaver" -n 25
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        files: \.(fs|fsproj)$

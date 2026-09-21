@@ -1,0 +1,174 @@
+version: "1"
+contexts:
+  - name: "PhysicalDomain"
+    description: "Physical attributes, martial disciplines, and somatic trauma status effects governing kinetic force, speed, form, and posture."
+    rules:
+      - path: "**/Fornach.Domain/**"
+      - path: "**/Fornach.Engine/**"
+      - path: "**/Fornach.Cli/**"
+      - path: "**/tests/**"
+      - path: "**/*.fs"
+    terms:
+      # --- Power Axis: Kinetic Output & Structural Mass ---
+      - name: "Force"
+        definition: "Offensive Physical Power attribute. Represents raw kinetic output, explosive impact, and shield-breaking capability. High-commitment attacks scale with Force but generate Recklessness."
+        examples:
+          - "Base physical attack damage = Force * 2."
+          - "Heavy cleaves test target Fortitude, inflicting Exhaustion on landed hits."
+        aliases: ["Might", "PhysicalPower"]
+
+      - name: "Fortitude"
+        definition: "Defensive Physical Power attribute. Represents structural mass, bone density, and blunt impact absorption. Reduces incoming flat damage and resists stagger or somatic trauma."
+        aliases: ["Vigor", "StructuralIntegrity"]
+
+      # --- Agility Axis: Tempo, Precision & Evasion ---
+      - name: "Finesse"
+        definition: "Offensive Physical Agility attribute. Represents precision, strike velocity, and tempo exploitation. Deals amplified damage against targets with elevated Recklessness."
+        examples:
+          - "Rapid probing strikes exploit seams in enemy guard, inflicting Overwhelm."
+        aliases: ["Haste", "Precision"]
+
+      - name: "Reflex"
+        definition: "Defensive Physical Agility attribute. Governs kinetic evasion, active deflection windows, and spatial disengagement to dodge incoming bursts."
+        aliases: ["Evasion", "Dodge"]
+
+      # --- Discipline Axis: Martial Craft & Stance Equilibrium ---
+      - name: "Prowess"
+        definition: "Offensive Martial Discipline attribute. Represents martial mastery, stance optimization, and systematic dissection of enemy defensive tells over extended engagements."
+        examples:
+          - "Converts accumulated Study Stacks into critical vital openings and stance traps."
+        aliases: ["MartialCraft", "Technique"]
+
+      - name: "Poise"
+        definition: "Defensive Martial Discipline attribute. Represents physical balance, footwork stability, and posture equilibrium under pressure. Acts as the primary brake to bleed off Recklessness."
+        examples:
+          - "Steady Form reduces Recklessness by (Poise + 10) and generates Study Stacks."
+        aliases: ["Balance", "StanceEquilibrium"]
+
+      - name: "Martial"
+        definition: "Specifically denotes the Martial Discipline vector (Prowess and Poise). Distinguishes refined weaponcraft, footwork, and stance study from raw kinetic brute force (Power) or rapid evasion (Agility)."
+        aliases: ["MartialDiscipline", "Weaponcraft"]
+
+      # --- Physical Status Debuffs ---
+      - name: "Exhaustion"
+        definition: "A physical resource depletion debuff (0–100) inflicted by heavy Force strikes and Crushing Blows against Fortitude. Represents muscle fatigue, shortness of breath, and somatic weariness."
+        examples:
+          - "Reaching 100 Exhaustion triggers Somatic Anoxia Collapse."
+        aliases: ["Fatigue", "SomaticWeariness"]
+
+      - name: "Overwhelm"
+        definition: "A kinetic trauma debuff (0–100) inflicted by rapid Finesse cadence and Arterial Ruptures against Reflex. Represents blood loss, unmanaged cuts, and defensive panic."
+        examples:
+          - "Reaching 100 Overwhelm triggers Exsanguination Collapse."
+        aliases: ["Hemorrhage", "Bleed"]
+
+      - name: "Frustration"
+        definition: "A tactical erosion debuff (0–100) inflicted by Prowess pressure and weapon disarms against Poise. Represents broken guard, weapon arm compromise, and stance failure."
+        examples:
+          - "Reaching 100 Frustration triggers Stance Failure Collapse."
+        aliases: ["BrokenGuard", "StanceCompromise"]
+
+  - name: "MentalDomain"
+    description: "Cognitive, psychological, and social attributes, along with the status effects inflicted during mental, psychic, and interpersonal conflict."
+    rules:
+      - path: "**/Fornach.Domain/**"
+      - path: "**/Fornach.Engine/**"
+      - path: "**/Fornach.Cli/**"
+      - path: "**/tests/**"
+      - path: "**/*.fs"
+    terms:
+      # --- Power Axis: Authority & Will ---
+      - name: "Intellect"
+        definition: "Offensive Mental/Social Power attribute. Represents raw cognitive firepower, psychic projection, and authoritative command presence (mapped to Presence / Command in social encounters). Overwhelms Resolve to force capitulation and inflict Cognitive Fatigue."
+        examples:
+          - "Intimidation roll tests Presence against target Will."
+          - "Arcane Cataclysm channels raw Intellect into devastating psychic bleed."
+        aliases: ["Presence", "Command", "Authority", "PsychicPower"]
+
+      - name: "Resolve"
+        definition: "Defensive Mental/Social Power attribute. Represents internal psychological resilience, moral conviction, and defiance (mapped to Will / Defiance in social encounters). Absorbs psychic shock and resists intimidation, terror, and authoritarian cowing."
+        aliases: ["Will", "Defiance", "Nerve", "MentalFortitude"]
+
+      # --- Agility Axis: Subterfuge & Insight ---
+      - name: "Acuity"
+        definition: "Offensive Mental/Social Agility attribute. Speed of thought, rhetorical flair, and social subterfuge (mapped to Guile / Charm in social encounters). In social encounters, governs Charm, Coercion, Gaslighting, and rapid-fire deception. Probes for emotional seams to inflict Confusion."
+        examples:
+          - "Rhetorical Cross-Examination damage scales with target Recklessness / 100."
+          - "Synaptic Glamour projects neural static targeting gaps in Intuition."
+        aliases: ["Guile", "Charm", "Rhetoric", "Cunning", "MentalFinesse"]
+
+      - name: "Intuition"
+        definition: "Defensive Mental/Social Agility attribute. Instinctive situational awareness, lie detection, and gut skepticism (mapped to Insight / Scrutiny in social encounters). Detects micro-expressions, spots rhetorical traps, and defends against coercion, scams, and deceptive tells."
+        aliases: ["Insight", "Scrutiny", "Skepticism", "StreetSmarts", "Empathy"]
+
+      # --- Discipline Axis: Social Leverage & Emotional Anchor ---
+      - name: "Acumen"
+        definition: "Offensive Mental/Social Discipline attribute. Strategic deconstruction, procedural mastery, and social leverage (mapped to Leverage / Wit in social encounters). In interpersonal conflict, exploits institutional etiquette, legal technicalities, and public scorn to humiliate opponents and inflict Provoke."
+        examples:
+          - "Socratic deconstruction applies Provoke when catching an opponent in hypocrisy."
+          - "Runic Ward Trap uses Acumen to construct reactive abjuration glyphs."
+        aliases: ["Leverage", "Wit", "Tactics", "Strategy", "MentalProwess"]
+
+      - name: "Composure"
+        definition: "Defensive Mental/Social Discipline attribute. Internal emotional equilibrium, stoicism, and emotional poker face (mapped to Poise / Composure in social encounters). Resists public humiliation, taunts, and deliberate provocation, while acting as the primary governor that bleeds off Recklessness."
+        examples:
+          - "Center Mind bleeds Recklessness by (Composure + 10) and clears Confusion."
+        aliases: ["Poise", "PokerFace", "Equilibrium", "Stoicism"]
+
+      # --- Mental & Social Status Effects ---
+      - name: "CognitiveFatigue"
+        definition: "A mental depletion debuff (0–100) inflicted by heavy Intellect projection or authoritarian Command. In social encounters, represents mental exhaustion, broken morale, and weariness pushing the target toward total capitulation."
+        examples:
+          - "Reaching 100 Cognitive Fatigue triggers Catatonic Stupor Collapse."
+        aliases: ["MentalStrain", "MoraleCollapse"]
+
+      - name: "Confusion"
+        definition: "A cognitive disorientation debuff (0–100) inflicted by rapid Acuity strikes, bluffs, gaslighting, or synaptic glamour. Represents contradiction lock, loss of reactive timing, and cognitive static."
+        examples:
+          - "Reaching 100 Confusion triggers Contradiction Lock Collapse."
+        aliases: ["Disorientation", "ContradictionLock", "Bewilderment"]
+
+      - name: "Provoke"
+        definition: "A targeted agitation debuff (0–100) inflicted by Acumen deconstruction and mockery. In social settings, represents loss of face, righteous indignation, or blind outrage that forces reckless, unforced errors."
+        examples:
+          - "Reaching 100 Provoke triggers Hysterical Meltdown Collapse."
+        aliases: ["LossOfFace", "Agitate", "Humiliate"]
+
+  - name: "CombatDynamics"
+    description: "Shared meters, engine thresholds, dice mechanics, and cross-cutting systems governing turn execution."
+    rules:
+      - path: "**/**"
+    terms:
+      - name: "Recklessness"
+        definition: "A dynamic resource meter (0–100) representing exposure, overextension, and loss of composure. Surges during heavy Power actions and Gambits; exploited by Agility; drained by Defensive Discipline resets."
+        examples:
+          - "At Recklessness >= 100, the combatant triggers Reckless Exposure Collapse."
+        aliases: ["Overextension", "Strain", "Entropy"]
+
+      - name: "StudyStacks"
+        definition: "A cumulative resource generated by high-Poise/Acumen actions. Represents tactical observation of an opponent's patterns, unlocking rerolls for Discipline vectors and critical Vital Opening procs."
+        aliases: ["InsightStacks", "Analysis"]
+
+      - name: "Collapse"
+        definition: "A critical threshold state triggered when any of the 7 status meters reaches 100%. While Collapsed, the combatant's effective defenses are reduced by 75% and they become eligible for an instant Execute Strike."
+        examples:
+          - "A Collapsed opponent suffers 4x effective stat penalties."
+        aliases: ["VulnerabilityState", "ThresholdBreak"]
+
+      - name: "ExecuteStrike"
+        definition: "A definitive lethal finisher dispatched against an opponent in a Collapsed state, targeting either the Physical or Mental plane to instantly conclude the encounter."
+        aliases: ["Finisher", "DeathBlow", "CoupDeGrace"]
+
+      - name: "FloorHits"
+        definition: "Deterministic hits guaranteed before rolling dice, calculated as stat / 15. Ensures high-attribute combatants maintain a guaranteed competency baseline and never whiff against weaker opponents."
+        examples:
+          - "A stat of 135 guarantees 9 floor hits."
+        aliases: ["DeterministicHits", "GuaranteedHits"]
+
+      - name: "Gambit"
+        definition: "A high-risk offensive declaration that self-inflicts +20 to +35 Recklessness in exchange for a 1.5x damage multiplier and amplified status debuff application."
+        aliases: ["HighRiskManeuver", "Overreach"]
+
+      - name: "NetHits"
+        definition: "The net hit differential (Attacker Total Hits minus Defender Total Hits) in an opposed dice pool contest. Directly determines the tiered damage multiplier (≤0 whiff, 1–2 glancing, 3–5 dominance, 6+ blowout)."
+        aliases: ["ContestMargin", "MarginOfSuccess"]

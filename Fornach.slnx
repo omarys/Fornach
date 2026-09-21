@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Fornach.Domain/Fornach.Domain.fsproj" />
+    <Project Path="src/Fornach.Engine/Fornach.Engine.fsproj" />
+    <Project Path="src/Fornach.Cli/Fornach.Cli.fsproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Fornach.Domain.Tests/Fornach.Domain.Tests.fsproj" />
+  </Folder>
+</Solution>
