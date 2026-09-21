@@ -487,4 +487,3 @@ module ProlongedBattleTests =
     match swarmIntent with
     | ShiftStance CombatStance.DisciplineStance -> ()
     | other -> Assert.Fail(sprintf "Expected ShiftStance DisciplineStance when outnumbered, got %A" other)
-

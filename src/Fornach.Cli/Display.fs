@@ -277,4 +277,3 @@ module Display =
 
     | CombatEvent.StrikeChained (_, _, step, dmg) ->
       AnsiConsole.MarkupLine(sprintf "  [bold %s]⚡ CHAIN FLOW #%d:[/] Disciplined cadence flowed into adjacent target for [bold %s]%d damage[/]! (0 Recklessness)" Theme.Purple step Theme.Red dmg)
-
