@@ -58,6 +58,10 @@ type Combatant =
     Collapse: CollapseState
     StudyStacks: int
     Armor: ArmorIntegrity
+    WeaponCondition: WeaponCondition
+    Stance: CombatStance
+    BleedStacks: int
+    LimbDebuff: int
     ComboTracker: ConsecutiveComboTracker
     EquippedItems: EquipmentItem list }
 
@@ -67,10 +71,15 @@ type Combatant =
   /// Defenses drop by 75% when in a collapsed state
   member this.EffectiveDefenseMultiplier = if this.IsExecuteEligible then 0.25 else 1.0
 
-  /// Retrieves an effective stat value factoring in collapse penalties
+  /// Retrieves an effective stat value factoring in limb debuffs and collapse penalties
   member this.GetStat(stat: StatId) =
     let rawVal = this.Stats.Get stat
-    int (Math.Round(float rawVal * this.EffectiveDefenseMultiplier))
+    let penalized =
+      if stat = Reflex then
+        Math.Max(1, rawVal - this.LimbDebuff)
+      else
+        rawVal
+    int (Math.Round(float penalized * this.EffectiveDefenseMultiplier))
 
   /// Factory for creating a base combatant with default baseline pools and meters
   static member create id name maxHealth maxMorale stats =
@@ -83,6 +92,10 @@ type Combatant =
       Collapse = CollapseState.Stable
       StudyStacks = 0
       Armor = ArmorIntegrity.Create 50
+      WeaponCondition = WeaponCondition.Pristine
+      Stance = CombatStance.PowerStance
+      BleedStacks = 0
+      LimbDebuff = 0
       ComboTracker = ConsecutiveComboTracker.Zero
       EquippedItems = [] }
 
@@ -94,6 +107,22 @@ type Combatant =
   static member addStudyStacks delta (c: Combatant) =
     { c with
         StudyStacks = Math.Max(0, c.StudyStacks + delta) }
+
+  /// Shifts active tactical stance
+  static member setStance stance (c: Combatant) =
+    { c with Stance = stance }
+
+  /// Degrades weapon condition down one progressive stage
+  static member degradeWeapon (c: Combatant) =
+    { c with WeaponCondition = WeaponCondition.degradation c.WeaponCondition }
+
+  /// Accumulates bleeding trauma stacks
+  static member addBleed count (c: Combatant) =
+    { c with BleedStacks = Math.Max(0, c.BleedStacks + count) }
+
+  /// Applies crippled limb trauma penalty to Reflex
+  static member addLimbDebuff penalty (c: Combatant) =
+    { c with LimbDebuff = Math.Min(60, c.LimbDebuff + penalty) }
 
   /// Evaluates all 7 status meters against the 100% threshold to determine Collapse states
   static member evaluateCollapse(c: Combatant) : Combatant =

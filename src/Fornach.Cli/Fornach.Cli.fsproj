@@ -9,6 +9,7 @@
     <Compile Include="Types.fs" />
     <Compile Include="Archetypes.fs" />
     <Compile Include="AI.fs" />
+    <Compile Include="Theme.fs" />
     <Compile Include="Display.fs" />
     <Compile Include="Simulation.fs" />
     <Compile Include="Program.fs" />

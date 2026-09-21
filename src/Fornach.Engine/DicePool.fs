@@ -18,7 +18,8 @@ type ContestResult =
     Defender: DicePoolResult
     NetHits: int
     IsCritical: bool
-    IsWhiff: bool }
+    IsWhiff: bool
+    EncirclementPenalty: int }
 
 module DicePool =
 
@@ -100,7 +101,50 @@ module DicePool =
       RawRolls = finalRolls
       IsGlitch = isGlitch }
 
-  /// Opposed contest resolution between attacker and defender
+  /// Computes compounding successive defense penalty based on stat disparity.
+  /// When defender outclasses attacker, pressure drops non-linearly (quadratic ratio)
+  /// so that novices cannot coordinate to penetrate high-mastery defenses.
+  let computeEncirclementPenalty (attackerStat: int) (defenderStat: int) (priorDefenses: int) : int =
+    if priorDefenses <= 0 then 0
+    else
+      let rawRatio = float attackerStat / Math.Max(1.0, float defenderStat)
+      let pressureRatio = if rawRatio < 1.0 then Math.Pow(rawRatio, 2.0) else rawRatio
+      let compoundFactor = float (priorDefenses * (priorDefenses + 1)) / 2.0
+      int (Math.Round(compoundFactor * pressureRatio * 3.5))
+
+
+  /// Opposed contest resolution between attacker and defender with successive encirclement defense penalty
+  let resolveContestEx
+    (roller: int -> int -> int)
+    (vector: Vector)
+    (attackerStat: int)
+    (attackerStudy: int)
+    (defenderStat: int)
+    (defenderStudy: int)
+    (priorDefenses: int)
+    : ContestResult =
+    let penalty = computeEncirclementPenalty attackerStat defenderStat priorDefenses
+    let attackerPoolSize = computePoolSize attackerStat defenderStat
+    let defenderPoolSize = Math.Max(4, (computePoolSize defenderStat attackerStat) - (penalty / 2))
+
+    let attackerRes = evaluatePool roller vector attackerStat attackerStudy attackerPoolSize
+    let defenderResRaw = evaluatePool roller vector defenderStat defenderStudy defenderPoolSize
+
+    let effectiveDefTotalHits = Math.Max(0, defenderResRaw.TotalHits - penalty)
+    let defenderRes = { defenderResRaw with TotalHits = effectiveDefTotalHits }
+
+    let netHits = attackerRes.TotalHits - effectiveDefTotalHits
+    let isCritical = netHits >= 5
+    let isWhiff = netHits <= 0
+
+    { Attacker = attackerRes
+      Defender = defenderRes
+      NetHits = netHits
+      IsCritical = isCritical
+      IsWhiff = isWhiff
+      EncirclementPenalty = penalty }
+
+  /// Opposed contest resolution between attacker and defender (default 0 prior defenses)
   let resolveContest
     (roller: int -> int -> int)
     (vector: Vector)
@@ -109,18 +153,4 @@ module DicePool =
     (defenderStat: int)
     (defenderStudy: int)
     : ContestResult =
-    let attackerPoolSize = computePoolSize attackerStat defenderStat
-    let defenderPoolSize = computePoolSize defenderStat attackerStat
-
-    let attackerRes = evaluatePool roller vector attackerStat attackerStudy attackerPoolSize
-    let defenderRes = evaluatePool roller vector defenderStat defenderStudy defenderPoolSize
-
-    let netHits = attackerRes.TotalHits - defenderRes.TotalHits
-    let isCritical = netHits >= 5
-    let isWhiff = netHits <= 0
-
-    { Attacker = attackerRes
-      Defender = defenderRes
-      NetHits = netHits
-      IsCritical = isCritical
-      IsWhiff = isWhiff }
+    resolveContestEx roller vector attackerStat attackerStudy defenderStat defenderStudy 0

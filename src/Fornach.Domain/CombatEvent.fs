@@ -58,3 +58,39 @@ type CombatEvent =
 
   /// Fatal execution strike delivered to a Collapsed combatant
   | Executed of actorId: CombatantId * targetId: CombatantId * plane: Plane
+
+  /// Opponent weapon structural integrity degraded by heavy power impact or disarm
+  | WeaponDegraded of combatantId: CombatantId * newCondition: WeaponCondition
+
+  /// Combatant shifted their active tactical stance
+  | StanceShifted of combatantId: CombatantId * oldStance: CombatStance * newStance: CombatStance
+
+  /// Reactive counter-strike triggered by accumulated Study Stacks in Discipline stance
+  | RiposteExecuted of defenderId: CombatantId * attackerId: CombatantId * counterDamage: int
+
+  /// Weapon or stance disarmed by a tactical maneuver or Study Stacks counter
+  | DisarmExecuted of defenderId: CombatantId * attackerId: CombatantId * reason: string
+
+  /// Periodic somatic bleed trauma applied at start of turn
+  | BleedTicked of combatantId: CombatantId * damageDealt: int * remainingStacks: int
+
+  /// Critical finesse opening inflicted stacking bleed trauma
+  | BleedApplied of targetId: CombatantId * stacksAdded: int * totalStacks: int
+
+  /// Vital ligament or tendon severed, crippling opponent reflex
+  | LimbDisabled of targetId: CombatantId * reflexPenalty: int
+
+  /// Dedicated Discipline gambit executed by consuming Study Stacks without Recklessness spike
+  | DisciplineGambitExecuted of actorId: CombatantId * gambitName: string * stacksSpent: int
+
+  /// Defender suffered a compounding successive defense penalty from being surrounded
+  | EncirclementPenalized of defenderId: CombatantId * priorDefenses: int * penaltyHits: int
+
+  /// Preemptive Attack of Opportunity triggered against an opponent attempting to flank / surround
+  | AttackOfOpportunityTriggered of defenderId: CombatantId * attackerId: CombatantId * vectorName: string * damageDealt: int * attackDisrupted: bool
+
+  /// Sweeping cleave struck a secondary target in Power Stance, incurring disparity-scaled recklessness
+  | CleaveExecuted of attackerId: CombatantId * secondaryTargetId: CombatantId * cleaveDamage: int * recklessnessIncurred: int
+
+  /// Fluid martial cadence chained from target to target in Discipline Stance without reckless exposure
+  | StrikeChained of attackerId: CombatantId * chainedTargetId: CombatantId * chainStep: int * chainDamage: int

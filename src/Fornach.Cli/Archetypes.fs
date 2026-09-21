@@ -67,7 +67,23 @@ module Archetypes =
         Acumen, 40; Composure, 50
       ]
     { Combatant.create id "Theron (Iron Vanguard)" 2600 1400 stats with
-        Armor = ArmorIntegrity.Create 70 }
+        Armor = ArmorIntegrity.Create 70
+        Stance = CombatStance.PowerStance }
+
+  let createSilverFencer () =
+    let id = CombatantId.New()
+    let stats =
+      StatBlock.Create [
+        Force, 60; Fortitude, 70
+        Finesse, 140; Reflex, 130
+        Prowess, 95; Poise, 85
+        Intellect, 45; Resolve, 50
+        Acuity, 50; Intuition, 55
+        Acumen, 40; Composure, 50
+      ]
+    { Combatant.create id "Lyra (Silver Fencer)" 1800 1600 stats with
+        Armor = ArmorIntegrity.Create 45
+        Stance = CombatStance.AgilityStance }
 
   let createAurelius () =
     let id = CombatantId.New()
@@ -81,7 +97,8 @@ module Archetypes =
         Acumen, 105; Composure, 100
       ]
     { Combatant.create id "Aurelius (Thought-Weaver)" 1400 2600 stats with
-        Armor = ArmorIntegrity.Create 30 }
+        Armor = ArmorIntegrity.Create 30
+        Stance = CombatStance.AgilityStance }
 
   let createLadyVane () =
     let id = CombatantId.New()
@@ -95,7 +112,8 @@ module Archetypes =
         Acumen, 125; Composure, 110
       ]
     { Combatant.create id "Lady Vane (High Magistrate)" 1600 2400 stats with
-        Armor = ArmorIntegrity.Create 40 }
+        Armor = ArmorIntegrity.Create 40
+        Stance = CombatStance.DisciplineStance }
 
   // =========================================================================
   // Master Tier (Stats 300–400, HP/Morale 4000–8000)
@@ -171,6 +189,12 @@ module Archetypes =
       Discipline = CombatMode.Physical
       Description = "Seasoned martial warrior commanding heavy Force and stance pressure."
       Factory = createTheron }
+
+    { Name = "Silver Fencer"
+      Tier = Adept
+      Discipline = CombatMode.Physical
+      Description = "Agile fencer executing probing Finesse strikes, seeking critical vital openings."
+      Factory = createSilverFencer }
 
     { Name = "Thought-Weaver"
       Tier = Adept

@@ -28,6 +28,10 @@
   - **Clear Dominance (3–5 Net Hits)**: 1.50x – 2.20x multiplier.
   - **Blowout Catastrophe (6+ Net Hits)**: 2.50x – 4.00x+ multiplier.
   - High-impact hits automatically shred physical armor durability (`max 15 (damage / 3)`).
+- **Prolonged Battle & Tactical Stances**:
+  - **Power (Force vs. Fortitude)**: Disparity-scaled Exhaustion. Greater damage dealt escalates chances to shred armor and degrade opponent weapon condition (`Pristine` -> `Notched` -> `Damaged` -> `Broken`), diminishing enemy physical output by up to 50%.
+  - **Agility (Finesse vs. Reflex)**: Disparity-scaled Overwhelm. Lower base damage while probing guard, while consecutive hit cadence and target Overwhelm compound critical strike probability. Critical hits inflict stacking somatic bleed and sever ligaments to cripple Reflex.
+  - **Discipline (Prowess vs. Poise)**: Disparity-scaled Frustration. Exchanges build Study Stacks that passively grant reactive Ripostes and Disarming maneuvers on incoming attacks without consuming stacks. Stacks can be actively spent on dedicated Discipline Gambits (`Calculated Flaw Strike`, `Masterful Disarm`), with disarms strictly gated by target Poise vs. combatant Prowess.
 - **Dynamic Entropy & Threshold Collapses**:
   - High-commitment power strikes and gambits generate **Recklessness** (0–100%).
   - Six status debuff meters (**Exhaustion**, **Overwhelm**, **Frustration**, **Cognitive Fatigue**, **Confusion**, **Provoke**).

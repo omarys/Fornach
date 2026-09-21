@@ -28,3 +28,35 @@ type CombatMode =
   | Physical
   | Social
   | Arcane
+
+[<RequireQualifiedAccess>]
+type CombatStance =
+  | PowerStance
+  | AgilityStance
+  | DisciplineStance
+
+[<RequireQualifiedAccess>]
+type WeaponCondition =
+  | Pristine
+  | Notched
+  | Damaged
+  | Broken
+
+module WeaponCondition =
+  let degradation = function
+    | WeaponCondition.Pristine -> WeaponCondition.Notched
+    | WeaponCondition.Notched -> WeaponCondition.Damaged
+    | WeaponCondition.Damaged -> WeaponCondition.Broken
+    | WeaponCondition.Broken -> WeaponCondition.Broken
+
+  let effectiveness = function
+    | WeaponCondition.Pristine -> 1.0
+    | WeaponCondition.Notched -> 0.90
+    | WeaponCondition.Damaged -> 0.75
+    | WeaponCondition.Broken -> 0.50
+
+  let displayName = function
+    | WeaponCondition.Pristine -> "Pristine"
+    | WeaponCondition.Notched -> "Notched"
+    | WeaponCondition.Damaged -> "Damaged"
+    | WeaponCondition.Broken -> "Broken"

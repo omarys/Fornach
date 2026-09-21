@@ -13,6 +13,10 @@ type AttackClassification =
   | FinesseCadence of isRelentlessCadence: bool
   /// Martial Discipline (Prowess vs. Poise): Stance pressure and tactical disarms causing Frustration
   | ProwessStrike of isInvitationalBait: bool
+  /// Dedicated Discipline Gambit: Precision flaw exploitation consuming Study Stacks (0 Recklessness)
+  | CalculatedFlawStrike of stacksToSpend: int
+  /// Dedicated Discipline Gambit: Tactical disarm requiring Study Stacks scaled by target Poise vs. Prowess
+  | MasterfulDisarm of stacksToSpend: int
 
   // -------------------------------------------------------------------------
   // 2. Social Attacks (Mental Plane - Interpersonal / Courtroom)
@@ -39,7 +43,9 @@ type AttackClassification =
     match this with
     | ForceStrike _
     | FinesseCadence _
-    | ProwessStrike _ -> CombatMode.Physical
+    | ProwessStrike _
+    | CalculatedFlawStrike _
+    | MasterfulDisarm _ -> CombatMode.Physical
     | AuthorityDecree _
     | GuileDeception _
     | AcumenInterrogation _ -> CombatMode.Social
@@ -57,6 +63,8 @@ type AttackClassification =
     | GuileDeception _
     | SynapticGlamour _ -> Agility
     | ProwessStrike _
+    | CalculatedFlawStrike _
+    | MasterfulDisarm _
     | AcumenInterrogation _
     | RunicWardTrap _ -> Discipline
 
@@ -65,7 +73,9 @@ type AttackClassification =
     match this with
     | ForceStrike _
     | FinesseCadence _
-    | ProwessStrike _ -> Physical
+    | ProwessStrike _
+    | CalculatedFlawStrike _
+    | MasterfulDisarm _ -> Physical
     | AuthorityDecree _
     | GuileDeception _
     | AcumenInterrogation _
@@ -88,6 +98,8 @@ type ActionIntent =
   | RecoveryAction of DefensiveReset
   /// An execution attempt against an opponent currently in a Collapsed state
   | ExecuteStrike of Plane
+  /// Shifting active tactical stance (Power, Agility, Discipline)
+  | ShiftStance of CombatStance
 
 /// Result payload emitted after an ActionIntent is fully evaluated
 type ActionResult =
@@ -95,3 +107,10 @@ type ActionResult =
     Target: Combatant
     Events: CombatEvent list
     Contest: ContestResult option }
+
+/// Result payload emitted after a group-aware ActionIntent is evaluated across multiple opponents
+type GroupActionResult =
+  { Actor: Combatant
+    PrimaryTarget: Combatant
+    SecondaryTargets: Combatant list
+    Events: CombatEvent list }

@@ -11,6 +11,7 @@
     <Compile Include="CollapseProperties.fs" />
     <Compile Include="AttributeMappingTests.fs" />
     <Compile Include="DicePoolTests.fs" />
+    <Compile Include="ProlongedBattleTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -24,6 +25,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Fornach.Domain\Fornach.Domain.fsproj" />
     <ProjectReference Include="..\..\src\Fornach.Engine\Fornach.Engine.fsproj" />
+    <ProjectReference Include="..\..\src\Fornach.Cli\Fornach.Cli.fsproj" />
   </ItemGroup>
 
 </Project>

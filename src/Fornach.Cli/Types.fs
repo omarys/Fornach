@@ -46,6 +46,47 @@ type SimulationSummary =
     TotalWhiffs: int
     TotalCrits: int }
 
+type GroupSingleResult =
+  { SoloWon: bool
+    Rounds: int
+    OpponentsInitial: int
+    OpponentsEliminated: int
+    SoloRemainingHPPct: float
+    SoloRemainingMoralePct: float
+    SoloExhaustion: int
+    SoloOverwhelm: int
+    TotalCritsDealtByMob: int
+    PeakEncirclementPenalty: int
+    TotalAoOsTriggered: int
+    TotalCleaves: int
+    TotalChains: int
+    Condition: WinCondition }
+
+type GroupSimulationSummary =
+  { SoloArchetypeName: string
+    MobArchetypeName: string
+    MobCount: int
+    TotalIterations: int
+    SoloWins: int
+    MobWins: int
+    Stalemates: int
+    SoloWinRate: float
+    AvgRounds: float
+    MinRounds: int
+    MaxRounds: int
+    AvgEliminations: float
+    EliminationDistribution: (int * int * float) list // (kills, occurrences, percentage)
+    AvgPeakPenalty: float
+    AvgSoloRemainingHP: float
+    AvgAoOsTriggered: float
+    AvgCleaves: float
+    AvgChains: float
+    HealthDepletions: int
+    MoraleDepletions: int
+    Executions: int }
+
+
 type CliOptions =
   | InteractiveMenu
   | RunSimulation of archetypeA: string * archetypeB: string * iterations: int
+  | RunGroupSimulation of soloName: string * mobName: string * mobCount: int * iterations: int
