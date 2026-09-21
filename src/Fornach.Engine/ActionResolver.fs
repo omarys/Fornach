@@ -783,15 +783,17 @@ module ActionResolver =
         let baseTriggerChance = Math.Min(85, Math.Max(15, int (Math.Round((float delta / float defStat) * 80.0)) + 15))
 
         // Defensive penalties directly degrade opportunity attack responsiveness:
-        // 1. Encirclement defense penalty (attention & guard split across multiple attackers)
+        // 1. Finesse (Agility) stance focuses on linear 1-on-1 duels; duelist tunnel-vision incurs a -20% AoO penalty compared to Prowess (Discipline):
+        let stanceAoOPenalty = if currentTarget.Stance = CombatStance.AgilityStance then 20 else 0
+        // 2. Encirclement defense penalty (attention & guard split across multiple attackers)
         let encPenaltyHits = DicePool.computeEncirclementPenalty offStat defStat priorDefenses
         let encReduction = encPenaltyHits * 5
-        // 2. Physical limb trauma / severed ligaments
+        // 3. Physical limb trauma / severed ligaments
         let limbReduction = currentTarget.LimbDebuff / 2
-        // 3. Physical stamina exhaustion / fatigue
+        // 4. Physical stamina exhaustion / fatigue
         let fatigueReduction = currentTarget.Meters.Exhaustion.Value / 4
 
-        let totalDefensivePenalty = encReduction + limbReduction + fatigueReduction
+        let totalDefensivePenalty = stanceAoOPenalty + encReduction + limbReduction + fatigueReduction
         let effectiveTriggerChance = Math.Max(0, baseTriggerChance - totalDefensivePenalty)
 
         if roller 1 100 <= effectiveTriggerChance then

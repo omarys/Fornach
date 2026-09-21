@@ -117,11 +117,11 @@ module Program =
 
       // Tactical Stance Shifts
       if player.Stance <> CombatStance.PowerStance then
-        sprintf "↺ [bold %s]Shift Stance: Power Stance[/] (Cleaves & Sunder Armor/Weapon)" Theme.Red
+        sprintf "↺ [bold %s]Shift Stance: Power Stance[/] (Sweeping Cleaves & Sunder Armor/Weapon)" Theme.Red
       if player.Stance <> CombatStance.AgilityStance then
-        sprintf "↺ [bold %s]Shift Stance: Agility Stance[/] (Probing Cadence & Overwhelm Crits)" Theme.Green
+        sprintf "↺ [bold %s]Shift Stance: Agility Stance[/] (Probing Cadence & Overwhelm Crits; -20%% AoO vs Flanks)" Theme.Green
       if player.Stance <> CombatStance.DisciplineStance then
-        sprintf "↺ [bold %s]Shift Stance: Discipline Stance[/] (Study Stacks & Reactive Ripostes)" Theme.Purple
+        sprintf "↺ [bold %s]Shift Stance: Discipline Stance[/] (Chained Strikes, Study Stacks & Unpenalized AoO)" Theme.Purple
 
       // Social / Rhetorical Techniques
       sprintf "🗣️  [%s]Authority Decree: Imperious Command[/] (Presence vs. Will)" Theme.Yellow

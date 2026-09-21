@@ -355,6 +355,30 @@ module ProlongedBattleTests =
     Assert.False(burdenedAoO, "Burdened defender with encirclement and fatigue penalties should NOT trigger AoO on roll of 60")
 
   [<Fact>]
+  let ``Finesse stance receives penalty to Attack of Opportunity compared to Prowess stance`` () =
+    // Mid-high roll of 60 on d100
+    let roller = fixedRoller 60
+    let flanker = createFighter 45 40 30 30 30 30
+
+    // Equal disparity stats for Finesse and Prowess (140 vs 30)
+    let prowessMaster = { createFighter 50 50 90 85 140 130 with Stance = CombatStance.DisciplineStance }
+    let finesseDuelist = { createFighter 50 50 140 130 90 85 with Stance = CombatStance.AgilityStance }
+
+    // Case 1: Prowess master on initial flank has ~73% effective chance >= 60 -> Triggers!
+    let resProwess = ActionResolver.resolveEx roller (StandardAttack (ForceStrike false)) flanker prowessMaster 1
+    let prowessAoO =
+      resProwess.Events
+      |> List.exists (function CombatEvent.AttackOfOpportunityTriggered _ -> true | _ -> false)
+    Assert.True(prowessAoO, "Prowess master without stance penalty should trigger AoO on roll of 60")
+
+    // Case 2: Finesse duelist on identical flank suffers -20% tunnel-vision stance penalty (~53% effective chance < 60) -> Fails to trigger!
+    let resFinesse = ActionResolver.resolveEx roller (StandardAttack (ForceStrike false)) flanker finesseDuelist 1
+    let finesseAoO =
+      resFinesse.Events
+      |> List.exists (function CombatEvent.AttackOfOpportunityTriggered _ -> true | _ -> false)
+    Assert.False(finesseAoO, "Finesse duelist with -20% stance penalty should NOT trigger AoO on roll of 60")
+
+  [<Fact>]
   let ``Power Stance Cleave damages adjacent targets and scales Recklessness by stat disparity`` () =
     let roller = fixedRoller 6 // always lands penetrating hit
     let gmAttacker = { createFighter 350 320 180 200 300 280 with Stance = CombatStance.PowerStance }
