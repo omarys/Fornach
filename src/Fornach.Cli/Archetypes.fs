@@ -115,6 +115,36 @@ module Archetypes =
         Armor = ArmorIntegrity.Create 40
         Stance = CombatStance.DisciplineStance }
 
+  let createMirageWeaver () =
+    let id = CombatantId.New()
+    let stats =
+      StatBlock.Create [
+        Force, 40; Fortitude, 45
+        Finesse, 50; Reflex, 60
+        Prowess, 45; Poise, 50
+        Intellect, 85; Resolve, 90
+        Acuity, 145; Intuition, 120
+        Acumen, 85; Composure, 90
+      ]
+    { Combatant.create id "Seraphina (Mirage Weaver)" 1500 2500 stats with
+        Armor = ArmorIntegrity.Create 35
+        Stance = CombatStance.AgilityStance }
+
+  let createRunicAbjurer () =
+    let id = CombatantId.New()
+    let stats =
+      StatBlock.Create [
+        Force, 45; Fortitude, 55
+        Finesse, 40; Reflex, 45
+        Prowess, 50; Poise, 60
+        Intellect, 90; Resolve, 105
+        Acuity, 80; Intuition, 90
+        Acumen, 145; Composure, 125
+      ]
+    { Combatant.create id "Kaelen (Runic Abjurer)" 1700 2300 stats with
+        Armor = ArmorIntegrity.Create 45
+        Stance = CombatStance.DisciplineStance }
+
   // =========================================================================
   // Master Tier (Stats 300–400, HP/Morale 4000–8000)
   // =========================================================================
@@ -201,6 +231,18 @@ module Archetypes =
       Discipline = CombatMode.Arcane
       Description = "Psionic mystic shredding mental defenses via raw Intellect and Acuity."
       Factory = createAurelius }
+
+    { Name = "Mirage Weaver"
+      Tier = Adept
+      Discipline = CombatMode.Arcane
+      Description = "Guile illusionist conjuring decoy mirror swarms and disorienting glamours."
+      Factory = createMirageWeaver }
+
+    { Name = "Runic Abjurer"
+      Tier = Adept
+      Discipline = CombatMode.Arcane
+      Description = "Discipline abjurer commanding defensive wards and posture-shattering shockwaves."
+      Factory = createRunicAbjurer }
 
     { Name = "High Magistrate"
       Tier = Adept

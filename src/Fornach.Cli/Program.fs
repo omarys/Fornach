@@ -74,10 +74,18 @@ module Program =
       StandardAttack (SynapticGlamour false)
     elif choice.Contains("Synaptic Glamour: Mind Fracture") then
       StandardAttack (SynapticGlamour true)
+    elif choice.Contains("Mirror Illusion: Phantasmal Decoys") then
+      StandardAttack (MirrorIllusion false)
+    elif choice.Contains("Mirror Illusion: Decoy Swarm") then
+      StandardAttack (MirrorIllusion true)
     elif choice.Contains("Runic Ward Trap: Abjuration Glyph") then
       StandardAttack (RunicWardTrap false)
     elif choice.Contains("Runic Ward Trap: Anomalous Glyph") then
       StandardAttack (RunicWardTrap true)
+    elif choice.Contains("Disorienting Shockwave: Balance Disruption") then
+      StandardAttack (DisorientingShockwave false)
+    elif choice.Contains("Disorienting Shockwave: Staggering Pulse") then
+      StandardAttack (DisorientingShockwave true)
     elif choice.Contains("Shift Stance: Power Stance") then
       ShiftStance CombatStance.PowerStance
     elif choice.Contains("Shift Stance: Agility Stance") then
@@ -131,17 +139,29 @@ module Program =
       sprintf "🗣️  [%s]Acumen Interrogation: Procedural Pressure[/] (Leverage vs. Composure)" Theme.Orange
       sprintf "⚡ [bold %s]Acumen Interrogation: Socratic Checkmate[/] (Social Gambit: +30 Recklessness)" Theme.Orange
 
-      // Arcane Techniques
-      sprintf "✨ [%s]Arcane Cataclysm: Elemental Blast[/] (Intellect vs. Resolve)" Theme.Pink
-      sprintf "⚡ [bold %s]Arcane Cataclysm: Overchannel[/] (Arcane Gambit: +35 Recklessness)" Theme.Pink
-      sprintf "✨ [%s]Synaptic Glamour: Neural Static[/] (Acuity vs. Intuition)" Theme.Purple
-      sprintf "⚡ [bold %s]Synaptic Glamour: Mind Fracture[/] (Arcane Gambit: +25 Recklessness)" Theme.Purple
-      sprintf "✨ [%s]Runic Ward Trap: Abjuration Glyph[/] (Acumen vs. Composure)" Theme.Cyan
-      sprintf "⚡ [bold %s]Runic Ward Trap: Anomalous Glyph[/] (Arcane Gambit: +25 Recklessness)" Theme.Cyan
+      // Arcane Spellcraft (Universal Casting scaled by Mental Vector Proficiency)
+      let powProf = int (Math.Round(player.GetArcaneProficiency Power * 100.0))
+      let agiProf = int (Math.Round(player.GetArcaneProficiency Agility * 100.0))
+      let disProf = int (Math.Round(player.GetArcaneProficiency Discipline * 100.0))
+
+      let strainTag (prof: int) =
+        if prof < 85 then sprintf " [%s](%d%% Prof - Off-School Strain)[/]" Theme.Comment prof
+        else sprintf " [bold %s](%d%% Prof - Specialization)[/]" Theme.Green prof
+
+      sprintf "✨ [%s]Arcane Cataclysm: Elemental Blast[/] (Power - Intellect vs. Resolve)%s" Theme.Pink (strainTag powProf)
+      sprintf "⚡ [bold %s]Arcane Cataclysm: Overchannel[/] (Power Gambit: +35 Recklessness, Splash)%s" Theme.Pink (strainTag powProf)
+      sprintf "✨ [%s]Synaptic Glamour: Neural Static[/] (Agility - Acuity vs. Intuition)%s" Theme.Purple (strainTag agiProf)
+      sprintf "⚡ [bold %s]Synaptic Glamour: Mind Fracture[/] (Agility Gambit: +25 Recklessness)%s" Theme.Purple (strainTag agiProf)
+      sprintf "🪞 [%s]Mirror Illusion: Phantasmal Decoys[/] (Agility - Weave Mirror Clones)%s" Theme.Purple (strainTag agiProf)
+      sprintf "⚡ [bold %s]Mirror Illusion: Decoy Swarm[/] (Agility Gambit: +25 Recklessness, Extra Clones)%s" Theme.Purple (strainTag agiProf)
+      sprintf "🛡️  [%s]Runic Ward Trap: Abjuration Glyph[/] (Discipline - Acumen vs. Composure, Ward)%s" Theme.Cyan (strainTag disProf)
+      sprintf "⚡ [bold %s]Runic Ward Trap: Anomalous Glyph[/] (Discipline Gambit: +30 Recklessness, Heavy Ward)%s" Theme.Cyan (strainTag disProf)
+      sprintf "🌀 [%s]Disorienting Shockwave: Balance Disruption[/] (Discipline - Break Posture & Tempo)%s" Theme.Orange (strainTag disProf)
+      sprintf "⚡ [bold %s]Disorienting Shockwave: Staggering Pulse[/] (Discipline Gambit: +25 Recklessness, Swarm Pulse)%s" Theme.Orange (strainTag disProf)
 
       // Defensive Resets
       sprintf "🛡️  [%s]Steady Form[/] (Physical Reset: Drain Recklessness via Poise, build Study)" Theme.Green
-      sprintf "🧠 [%s]Center Mind[/] (Mental Reset: Drain Recklessness via Composure, clear Confusion)" Theme.Cyan
+      sprintf "🧠 [%s]Center Mind[/] (Mental Reset: Drain Recklessness, clear Confusion, restore Arcane Ward)" Theme.Cyan
     ]
 
   let private runInteractiveDuel (playerArch: ArchetypeInfo) (enemyArch: ArchetypeInfo) =

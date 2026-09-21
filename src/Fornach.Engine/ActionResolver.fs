@@ -24,29 +24,38 @@ module ActionResolver =
     elif netHits = 8 then 3.50
     else 4.00 + (float (netHits - 8) * 0.50)
 
-  /// Applies pool damage, armor soak, and massive blow armor shredding
+  /// Applies pool damage, arcane ward barrier soak, armor soak, and massive blow armor shredding
   let private applyDamage
     (plane: Plane)
     (rawAmount: int)
     (isCrit: bool)
     (target: Combatant)
-    : Combatant * DamageEvent =
+    : Combatant * DamageEvent * CombatEvent list =
+    let wardSoaked = Math.Min(target.ArcaneWard, rawAmount)
+    let remAmount = rawAmount - wardSoaked
+    let newWard = target.ArcaneWard - wardSoaked
+    let wardEvts =
+      if wardSoaked > 0 then
+        [ CombatEvent.ArcaneWardAbsorbed(target.Id, wardSoaked, newWard) ]
+      else []
+    let targetWithWard = { target with ArcaneWard = newWard }
+
     match plane with
     | Physical ->
-      let absorbed = int (float rawAmount * target.Armor.AbsorptionRatio)
-      let actualDmg = Math.Max(1, rawAmount - absorbed)
-      let updatedPool = target.Health.ApplyDelta -actualDmg
+      let absorbed = int (float remAmount * targetWithWard.Armor.AbsorptionRatio)
+      let actualDmg = if remAmount <= 0 then 0 else Math.Max(1, remAmount - absorbed)
+      let updatedPool = targetWithWard.Health.ApplyDelta -actualDmg
 
       // Massive blows automatically shred armor durability: shred = max 15 (damageDealt / 3)
       let updatedArmor =
-        if isCrit || actualDmg >= 40 then
+        if actualDmg > 0 && (isCrit || actualDmg >= 40) then
           let shredAmount = Math.Max(15, actualDmg / 3)
-          target.Armor.Shred shredAmount
+          targetWithWard.Armor.Shred shredAmount
         else
-          target.Armor
+          targetWithWard.Armor
 
       let updatedTarget =
-        { target with
+        { targetWithWard with
             Health = updatedPool
             Armor = updatedArmor }
 
@@ -57,12 +66,12 @@ module ActionResolver =
           IsCritical = isCrit
           IsArmorCompromised = updatedArmor.IsShredded || isCrit }
 
-      updatedTarget, evt
+      updatedTarget, evt, wardEvts
 
     | Mental ->
-      let actualDmg = Math.Max(1, rawAmount)
-      let updatedPool = target.Morale.ApplyDelta -actualDmg
-      let updatedTarget = { target with Morale = updatedPool }
+      let actualDmg = if remAmount <= 0 then 0 else Math.Max(1, remAmount)
+      let updatedPool = targetWithWard.Morale.ApplyDelta -actualDmg
+      let updatedTarget = { targetWithWard with Morale = updatedPool }
 
       let evt =
         { TargetId = target.Id
@@ -71,7 +80,7 @@ module ActionResolver =
           IsCritical = isCrit
           IsArmorCompromised = false }
 
-      updatedTarget, evt
+      updatedTarget, evt, wardEvts
 
   // =========================================================================
   // 2. Equipment Hook Execution
@@ -386,6 +395,8 @@ module ActionResolver =
       let acumen = resetActor.GetStat Acumen
       let reckDrain = composure + 10
       let studyGain = Math.Max(1, acumen / 4)
+      let profRatio = resetActor.GetArcaneProficiency Discipline
+      let wardRestore = int (float acumen * 0.40 * profRatio)
 
       let updatedActor =
         resetActor
@@ -394,10 +405,16 @@ module ActionResolver =
               Recklessness = m.Recklessness - reckDrain
               Confusion = m.Confusion - (composure / 2) })
         |> Combatant.addStudyStacks studyGain
+        |> Combatant.addWard wardRestore
+
+      let wardEvts =
+        if wardRestore > 0 then
+          [ CombatEvent.ArcaneWardErected(actor.Id, wardRestore, updatedActor.ArcaneWard) ]
+        else []
 
       { Actor = updatedActor
         Target = target
-        Events = [ resetEvt; CombatEvent.FormStabilized(actor.Id, reckDrain, studyGain) ]
+        Events = [ resetEvt; CombatEvent.FormStabilized(actor.Id, reckDrain, studyGain) ] @ wardEvts
         Contest = None }
 
   let private resolveShiftStance (newStance: CombatStance) (actor: Combatant) (target: Combatant) : ActionResult =
@@ -457,8 +474,8 @@ module ActionResolver =
         | Physical -> target.Health.Current + 9999
         | Mental -> target.Morale.Current + 9999
 
-      let updatedTarget, dmgEvt = applyDamage plane killDamage true target
-      let events = [ CombatEvent.DamageApplied dmgEvt; CombatEvent.Executed(actor.Id, target.Id, plane) ]
+      let updatedTarget, dmgEvt, wardEvts = applyDamage plane killDamage true target
+      let events = wardEvts @ [ CombatEvent.DamageApplied dmgEvt; CombatEvent.Executed(actor.Id, target.Id, plane) ]
 
       { Actor = actor
         Target = updatedTarget
@@ -508,7 +525,9 @@ module ActionResolver =
       | AcumenInterrogation true -> true, "Social Gambit: Calculated Sacrilege", 35
       | ArcaneCataclysm true -> true, "Arcane Gambit: Overchanneled Cataclysm", 35
       | SynapticGlamour true -> true, "Arcane Gambit: Neural Fracture", 30
+      | MirrorIllusion true -> true, "Arcane Gambit: Phantasmal Swarm", 25
       | RunicWardTrap true -> true, "Arcane Gambit: Anomalous Glyph", 30
+      | DisorientingShockwave true -> true, "Arcane Gambit: Resonant Shockwave", 25
       | _ -> false, "", 0
 
     if isGambit then
@@ -524,6 +543,47 @@ module ActionResolver =
     // --- Step B: Determine Coordinates, Opposed Stats & Vector Parameters ---
     let vector = atk.Vector
     let plane = atk.Plane
+
+    // Arcane vector proficiency and off-specialization mental strain
+    let profRatio =
+      if atk.Mode = CombatMode.Arcane then
+        currentActor.GetArcaneProficiency vector
+      else
+        1.0
+
+    let profMult =
+      if atk.Mode = CombatMode.Arcane then
+        0.40 + 0.60 * profRatio
+      else
+        1.0
+
+    if atk.Mode = CombatMode.Arcane && profRatio < 0.85 then
+      let strain = Math.Max(1, int (Math.Round(16.0 * (1.0 - profRatio))))
+      let profPct = int (Math.Round(profRatio * 100.0))
+      let spellName =
+        match atk with
+        | ArcaneCataclysm _ -> "Arcane Cataclysm"
+        | SynapticGlamour _ -> "Synaptic Glamour"
+        | MirrorIllusion _ -> "Mirror Illusion"
+        | RunicWardTrap _ -> "Runic Ward Trap"
+        | DisorientingShockwave _ -> "Disorienting Shockwave"
+        | _ -> "Arcane Spell"
+      currentActor <- currentActor |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue + strain })
+      events <- CombatEvent.ArcaneStrainIncurred(currentActor.Id, spellName, strain, profPct) :: events
+
+    // Arcane Spell Preparation Procs (weaving clones or erecting abjuration wards)
+    match atk with
+    | MirrorIllusion isDecoySwarm ->
+      let baseClones = if isDecoySwarm then 3.0 else 2.0
+      let clonesConjured = Math.Max(1, int (Math.Round(baseClones * profRatio)))
+      currentActor <- currentActor |> Combatant.addClones clonesConjured
+      events <- CombatEvent.MirrorClonesConjured(currentActor.Id, clonesConjured, currentActor.MirrorClones) :: events
+    | RunicWardTrap isAnomalousGlyph ->
+      let glyphScale = if isAnomalousGlyph then 1.0 else 0.6
+      let wardErected = Math.Max(10, int (float (currentActor.GetStat Acumen) * glyphScale * profRatio))
+      currentActor <- currentActor |> Combatant.addWard wardErected
+      events <- CombatEvent.ArcaneWardErected(currentActor.Id, wardErected, currentActor.ArcaneWard) :: events
+    | _ -> ()
 
     let offStat, defStat, classMult, disparityFactory, meterUpdates =
       match atk with
@@ -678,8 +738,8 @@ module ActionResolver =
           else
             0.0
 
-        let cataclysmMult = 1.0 + (surge / Math.Max(10.0, float off))
-        let fatigue = fun isCrit -> if isCrit then 45 else 20
+        let cataclysmMult = (1.0 + (surge / Math.Max(10.0, float off))) * profMult
+        let fatigue = fun isCrit -> int (float (if isCrit then 45 else 20) * profMult)
         let disp = fun isCrit -> if isCrit then Some(CognitiveRupture(fatigue true)) else None
 
         let upd isCrit (m: StatusMeters) =
@@ -696,7 +756,7 @@ module ActionResolver =
         let off = currentActor.GetStat Acuity
         let def = currentTarget.GetStat Intuition
         let pulses = if isMindFracture then 3 else 1
-        let confusion = fun isCrit -> if isCrit then 15 * pulses else 10
+        let confusion = fun isCrit -> int (float (if isCrit then 15 * pulses else 10) * profMult)
         let disp = fun isCrit -> if isCrit then Some DialecticalParalysis else None
 
         let upd isCrit (m: StatusMeters) =
@@ -704,14 +764,28 @@ module ActionResolver =
               Confusion = m.Confusion + (confusion isCrit)
               Recklessness = m.Recklessness + (5 * pulses) }
 
-        off, def, float pulses, disp, upd
+        off, def, (float pulses * profMult), disp, upd
+
+      | MirrorIllusion isDecoySwarm ->
+        let off = currentActor.GetStat Acuity
+        let def = currentTarget.GetStat Intuition
+        let swarms = if isDecoySwarm then 2 else 1
+        let confusion = fun isCrit -> int (float (if isCrit then 25 else 12) * profMult)
+        let disp = fun isCrit -> if isCrit then Some DialecticalParalysis else None
+
+        let upd isCrit (m: StatusMeters) =
+          { m with
+              Confusion = m.Confusion + (confusion isCrit)
+              Recklessness = m.Recklessness + 5 }
+
+        off, def, (0.75 * float swarms * profMult), disp, upd
 
       | RunicWardTrap isAnomalousGlyph ->
         let off = currentActor.GetStat Acumen
         let def = currentTarget.GetStat Composure
         let studyMult = 1.0 + (float currentActor.StudyStacks * 0.25)
         let glyphMult = if isAnomalousGlyph then 1.2 else 1.0
-        let provoke = fun isCrit -> if isCrit then 40 else 15
+        let provoke = fun isCrit -> int (float (if isCrit then 40 else 15) * profMult)
         let disp = fun isCrit -> if isCrit then Some(StrippedCredibility(provoke true)) else None
 
         let upd isCrit (m: StatusMeters) =
@@ -719,7 +793,23 @@ module ActionResolver =
               Provoke = m.Provoke + (provoke isCrit)
               Recklessness = m.Recklessness + 15 }
 
-        off, def, (studyMult * glyphMult), disp, upd
+        off, def, (studyMult * glyphMult * profMult), disp, upd
+
+      | DisorientingShockwave isStaggeringPulse ->
+        let off = currentActor.GetStat Acumen
+        let def = currentTarget.GetStat Composure
+        let studyMult = 1.0 + (float currentActor.StudyStacks * 0.15)
+        let pulseMult = if isStaggeringPulse then 1.3 else 1.0
+        let provoke = fun isCrit -> int (float (if isCrit then 30 else 15) * profMult)
+        let disp = fun isCrit -> if isCrit then Some(StrippedCredibility(provoke true)) else None
+
+        let upd isCrit (m: StatusMeters) =
+          { m with
+              Provoke = m.Provoke + (provoke isCrit)
+              Confusion = m.Confusion + int (float (if isCrit then 20 else 10) * profMult)
+              Recklessness = m.Recklessness + 10 }
+
+        off, def, (studyMult * pulseMult * profMult), disp, upd
 
     // Check if an offensive MasterfulDisarm was declared but conditions were not met
     let disarmFailedEarly =
@@ -832,6 +922,31 @@ module ActionResolver =
       | None -> ()
 
     if flankDefusedByAoO then
+      let finalActor = Combatant.evaluateCollapse currentActor
+      let finalTarget = Combatant.evaluateCollapse currentTarget
+      { Actor = finalActor
+        Target = finalTarget
+        Events = events
+        Contest = None }
+    else
+
+    // --- Step B.4.5: Defender Mirror Decoy Clone Interception ---
+    let mutable decoyIntercepted = false
+
+    if currentTarget.MirrorClones > 0 then
+      let atkIntuition = currentActor.GetStat Intuition
+      let defAcuity = currentTarget.GetStat Acuity
+      let delta = defAcuity - atkIntuition
+      let deceiveChance = Math.Clamp(50 + (delta / 2), 20, 85)
+
+      if roller 1 100 <= deceiveChance then
+        currentTarget <- currentTarget |> Combatant.addClones -1
+        events <- CombatEvent.MirrorCloneDecoyed(currentTarget.Id, currentActor.Id, currentTarget.MirrorClones) :: events
+        currentActor <- { currentActor with ComboTracker = currentActor.ComboTracker.ResetCombo() }
+        events <- CombatEvent.ComboReset(currentActor.Id, "Strike deceived and defused by a phantasmal mirror decoy clone.") :: events
+        decoyIntercepted <- true
+
+    if decoyIntercepted then
       let finalActor = Combatant.evaluateCollapse currentActor
       let finalTarget = Combatant.evaluateCollapse currentTarget
       { Actor = finalActor
@@ -959,9 +1074,9 @@ module ActionResolver =
 
 
       // Apply core pool damage and potential armor shred
-      let updatedTarget, dmgEvt = applyDamage plane rawDmg isCrit currentTarget
+      let updatedTarget, dmgEvt, wardEvts = applyDamage plane rawDmg isCrit currentTarget
       currentTarget <- updatedTarget
-      events <- CombatEvent.DamageApplied dmgEvt :: events
+      events <- wardEvts @ (CombatEvent.DamageApplied dmgEvt :: events)
 
       // Disparity trigger if critical
       match disparityFactory isCrit with
@@ -978,6 +1093,10 @@ module ActionResolver =
               ComboTracker = currentTarget.ComboTracker.ResetCombo() }
         events <- CombatEvent.DisarmExecuted(currentActor.Id, currentTarget.Id, "Masterful disarm wrested the weapon!") :: events
         events <- CombatEvent.WeaponDegraded(currentTarget.Id, degraded) :: events
+      | DisorientingShockwave _ ->
+        currentTarget <- { currentTarget with ComboTracker = currentTarget.ComboTracker.ResetCombo() }
+        events <- CombatEvent.OpponentDisoriented(currentActor.Id, currentTarget.Id, "Disorienting shockwave shattered stance tempo and balance!") :: events
+        events <- CombatEvent.ComboReset(currentTarget.Id, "Disorienting shockwave disrupted posture; combo momentum cleared.") :: events
       | _ -> ()
 
       // Step E: Evaluate Consecutive Passives (scaled by damage dealt)
@@ -1079,7 +1198,114 @@ module ActionResolver =
         | _ -> false
       | _ -> false
 
-    if not isLandedPhysicalHit || adjacentTargets.IsEmpty then
+    let isLandedArcaneCataclysm =
+      match primaryRes.Contest with
+      | Some contest when not contest.IsWhiff ->
+        match intent with
+        | StandardAttack (ArcaneCataclysm _) -> true
+        | _ -> false
+      | _ -> false
+
+    let isLandedDisorientingShockwave =
+      match primaryRes.Contest with
+      | Some contest when not contest.IsWhiff ->
+        match intent with
+        | StandardAttack (DisorientingShockwave _) -> true
+        | _ -> false
+      | _ -> false
+
+    if isLandedArcaneCataclysm && not adjacentTargets.IsEmpty then
+      // Arcane Cataclysm: Destructive mental burst splashes to up to 2 adjacent targets
+      let splashCandidates = adjacentTargets |> List.truncate 2
+      let unengaged = adjacentTargets |> List.skip splashCandidates.Length
+      let mutable splashEvents = []
+
+      let primaryDmg =
+        primaryRes.Events
+        |> List.choose (function CombatEvent.DamageApplied d when d.TargetId = currentPrimary.Id && d.Plane = Mental -> Some d.Amount | _ -> None)
+        |> List.tryHead
+        |> Option.defaultValue (Math.Max(20, currentActor.GetStat Intellect))
+
+      let rawSplashDmg = Math.Max(10, int (float primaryDmg * 0.50))
+
+      let processedSplash =
+        splashCandidates
+        |> List.map (fun secTarget ->
+          let targetAfterDmg, dmgEvt, wardEvts = applyDamage Mental rawSplashDmg false secTarget
+          let targetAfterHit =
+            targetAfterDmg
+            |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue + 15 })
+            |> Combatant.evaluateCollapse
+
+          splashEvents <-
+            splashEvents
+            @ wardEvts
+            @ [
+              CombatEvent.CataclysmSplashed(currentActor.Id, secTarget.Id, dmgEvt.Amount)
+              CombatEvent.DamageApplied dmgEvt
+            ]
+
+          if CollapseState.isCollapsed targetAfterHit.Collapse && not (CollapseState.isCollapsed secTarget.Collapse) then
+            match targetAfterHit.Collapse with
+            | CollapseState.Collapsed reason ->
+              splashEvents <- splashEvents @ [ CombatEvent.CollapseTriggered(targetAfterHit.Id, reason) ]
+            | CollapseState.Stable -> ()
+
+          targetAfterHit
+        )
+
+      { Actor = currentActor
+        PrimaryTarget = currentPrimary
+        SecondaryTargets = processedSplash @ unengaged
+        Events = allEvents @ splashEvents }
+
+    elif isLandedDisorientingShockwave && not adjacentTargets.IsEmpty then
+      // Disorienting Shockwave: Multi-target crowd control pulsing outward across up to 3 adjacent targets
+      let shockCandidates = adjacentTargets |> List.truncate 3
+      let unengaged = adjacentTargets |> List.skip shockCandidates.Length
+      let mutable shockEvents = []
+
+      let primaryDmg =
+        primaryRes.Events
+        |> List.choose (function CombatEvent.DamageApplied d when d.TargetId = currentPrimary.Id && d.Plane = Mental -> Some d.Amount | _ -> None)
+        |> List.tryHead
+        |> Option.defaultValue (Math.Max(15, currentActor.GetStat Acumen))
+
+      let rawShockDmg = Math.Max(8, int (float primaryDmg * 0.50))
+
+      let processedShock =
+        shockCandidates
+        |> List.map (fun secTarget ->
+          let targetAfterDmg, dmgEvt, wardEvts = applyDamage Mental rawShockDmg false secTarget
+          let targetAfterHit =
+            { targetAfterDmg with ComboTracker = targetAfterDmg.ComboTracker.ResetCombo() }
+            |> Combatant.updateMeters (fun m -> { m with Confusion = m.Confusion + 15; Provoke = m.Provoke + 10 })
+            |> Combatant.evaluateCollapse
+
+          shockEvents <-
+            shockEvents
+            @ wardEvts
+            @ [
+              CombatEvent.OpponentDisoriented(currentActor.Id, secTarget.Id, "Resonant shockwave pulse shattered balance across adjacent swarm enemies!")
+              CombatEvent.ComboReset(secTarget.Id, "Disorienting pulse disrupted posture; combo momentum cleared.")
+              CombatEvent.DamageApplied dmgEvt
+            ]
+
+          if CollapseState.isCollapsed targetAfterHit.Collapse && not (CollapseState.isCollapsed secTarget.Collapse) then
+            match targetAfterHit.Collapse with
+            | CollapseState.Collapsed reason ->
+              shockEvents <- shockEvents @ [ CombatEvent.CollapseTriggered(targetAfterHit.Id, reason) ]
+            | CollapseState.Stable -> ()
+
+          targetAfterHit
+        )
+
+      { Actor = currentActor
+        PrimaryTarget = currentPrimary
+        SecondaryTargets = processedShock @ unengaged
+        Events = allEvents @ shockEvents }
+
+    elif not isLandedPhysicalHit || adjacentTargets.IsEmpty then
       { Actor = currentActor
         PrimaryTarget = currentPrimary
         SecondaryTargets = adjacentTargets

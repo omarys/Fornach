@@ -26,7 +26,9 @@ module AI =
   let private chooseRecovery (self: Combatant) : ActionIntent =
     let poise = self.GetStat Poise
     let composure = self.GetStat Composure
-    if poise >= composure then
+    if self.ArcaneFocus = Discipline && self.ArcaneWard < 40 then
+      RecoveryAction CenterMind
+    elif poise >= composure then
       RecoveryAction SteadyForm
     else
       RecoveryAction CenterMind
@@ -122,12 +124,22 @@ module AI =
         if isSocialPreferred then
           StandardAttack (GuileDeception isGambit)
         else
-          StandardAttack (SynapticGlamour isGambit)
+          // Guile/Trickery specialist: if without clones, conjure mirror decoys first!
+          if self.MirrorClones = 0 then
+            StandardAttack (MirrorIllusion isGambit)
+          else
+            StandardAttack (SynapticGlamour isGambit)
       else
         if isSocialPreferred then
           StandardAttack (AcumenInterrogation isGambit)
         else
-          StandardAttack (RunicWardTrap isGambit)
+          // Defensive/CC specialist: if mobbed or opponent has combo momentum, disorient them! If ward low, erect ward!
+          if surroundingOpponents >= 2 || opponent.ComboTracker.ConsecutiveHits >= 2 then
+            StandardAttack (DisorientingShockwave isGambit)
+          elif self.ArcaneWard < 25 then
+            StandardAttack (RunicWardTrap isGambit)
+          else
+            StandardAttack (DisorientingShockwave isGambit)
 
   /// Top-level tactical decision evaluator for autonomous combatants with surrounding opponent count
   let chooseIntentWithContext (self: Combatant) (opponent: Combatant) (surroundingOpponents: int) : ActionIntent =

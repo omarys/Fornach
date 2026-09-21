@@ -487,3 +487,165 @@ module ProlongedBattleTests =
     match swarmIntent with
     | ShiftStance CombatStance.DisciplineStance -> ()
     | other -> Assert.Fail(sprintf "Expected ShiftStance DisciplineStance when outnumbered, got %A" other)
+
+  // =========================================================================
+  // Arcane Magic Tests
+  // =========================================================================
+
+  let createMage (intellect: int) (resolve: int) (acuity: int) (intuition: int) (acumen: int) (composure: int) =
+    let id = CombatantId.New()
+    let stats =
+      StatBlock.Create [
+        Force, 20; Fortitude, 20
+        Finesse, 20; Reflex, 20
+        Prowess, 20; Poise, 20
+        Intellect, intellect; Resolve, resolve
+        Acuity, acuity; Intuition, intuition
+        Acumen, acumen; Composure, composure
+      ]
+    Combatant.create id "TestMage" 2000 2000 stats
+
+  [<Fact>]
+  let ``Power / Intellect magic user deals high Cataclysm damage and splashes to swarm in group turn`` () =
+    let roller = fixedRoller 6 // always hits
+    let intellectMage = createMage 150 100 30 30 30 30
+    let primaryTarget = createMage 30 30 30 30 30 30
+    let secA = createMage 30 30 30 30 30 30
+    let secB = createMage 30 30 30 30 30 30
+
+    let groupRes =
+      ActionResolver.resolveGroupTurn roller (StandardAttack (ArcaneCataclysm false)) intellectMage primaryTarget [ secA; secB ]
+
+    // Primary target took damage
+    Assert.True(groupRes.PrimaryTarget.Morale.Current < primaryTarget.Morale.Current)
+
+    // Cataclysm splashes to adjacent targets
+    let splashEvents =
+      groupRes.Events
+      |> List.filter (function CombatEvent.CataclysmSplashed _ -> true | _ -> false)
+    Assert.Equal(2, splashEvents.Length)
+    Assert.True(groupRes.SecondaryTargets.[0].Morale.Current < secA.Morale.Current)
+    Assert.True(groupRes.SecondaryTargets.[1].Morale.Current < secB.Morale.Current)
+
+  [<Fact>]
+  let ``Off-specialization arcane spellcasting incurs Cognitive Fatigue strain and scales down potency`` () =
+    let roller = fixedRoller 6
+    // Intellect specialist (Intellect 150, Acuity 30 -> 20% proficiency in Guile/Illusion)
+    let intellectMage = createMage 150 100 30 30 30 30
+    let target = createMage 30 30 30 30 30 30
+
+    // Casting off-school spell: MirrorIllusion (Agility vector)
+    let resOff = ActionResolver.resolve roller (StandardAttack (MirrorIllusion false)) intellectMage target
+
+    // Should incur ArcaneStrainIncurred event
+    let strainEvt =
+      resOff.Events
+      |> List.tryFind (function CombatEvent.ArcaneStrainIncurred _ -> true | _ -> false)
+    Assert.True(strainEvt.IsSome, "Off-school spell cast should incur ArcaneStrainIncurred event")
+
+    // Caster incurs Cognitive Fatigue from mental strain
+    Assert.True(resOff.Actor.Meters.CognitiveFatigue.Value > 0, "Actor should suffer Cognitive Fatigue from off-school strain")
+
+  [<Fact>]
+  let ``Agility / Acuity magic user weaves Mirror Clones that intercept and defuse incoming attacks`` () =
+    let roller = fixedRoller 6
+    let acuityMage = createMage 40 40 150 100 40 40
+    let target = createMage 30 30 30 30 30 30
+
+    // 1. Weave Mirror Illusion
+    let resWeave = ActionResolver.resolve roller (StandardAttack (MirrorIllusion false)) acuityMage target
+    Assert.True(resWeave.Actor.MirrorClones > 0, "Casting Mirror Illusion should conjure mirror clones")
+
+    let conjuredEvt =
+      resWeave.Events
+      |> List.tryFind (function CombatEvent.MirrorClonesConjured _ -> true | _ -> false)
+    Assert.True(conjuredEvt.IsSome, "MirrorClonesConjured event should be emitted")
+
+    // 2. Incoming enemy attack is intercepted by mirror decoy
+    let cloneProtectedMage = resWeave.Actor
+    let attacker = { createFighter 100 50 50 50 50 50 with ComboTracker = ConsecutiveComboTracker.Zero.RegisterHit().RegisterHit() }
+    let deceiveRoller = fixedRoller 30 // low roll <= deceiveChance -> clone deceives attacker
+
+    let resDefend = ActionResolver.resolve deceiveRoller (StandardAttack (ForceStrike false)) attacker cloneProtectedMage
+
+    // Attack was defused: clone destroyed, 0 damage to defender, attacker combo reset
+    let decoyEvt =
+      resDefend.Events
+      |> List.tryFind (function CombatEvent.MirrorCloneDecoyed _ -> true | _ -> false)
+    Assert.True(decoyEvt.IsSome, "Incoming attack should be intercepted by MirrorCloneDecoyed")
+    Assert.Equal(cloneProtectedMage.MirrorClones - 1, resDefend.Target.MirrorClones)
+    Assert.Equal(cloneProtectedMage.Health.Current, resDefend.Target.Health.Current)
+    Assert.Equal(0, resDefend.Actor.ComboTracker.ConsecutiveHits)
+
+  [<Fact>]
+  let ``Discipline / Acumen magic user erects Arcane Ward that absorbs incoming damage and restores via CenterMind`` () =
+    let roller = fixedRoller 6
+    let acumenMage = createMage 40 40 40 40 150 100
+    let target = createMage 30 30 30 30 30 30
+
+    // 1. Erect Arcane Ward via RunicWardTrap
+    let resWard = ActionResolver.resolve roller (StandardAttack (RunicWardTrap false)) acumenMage target
+    Assert.True(resWard.Actor.ArcaneWard > 0, "Runic Ward Trap should erect an Arcane Ward barrier")
+
+    // Reinforce ward to test absorption of full strike
+    let strongWardedMage = Combatant.addWard 2000 resWard.Actor
+    let initialWard = strongWardedMage.ArcaneWard
+    let initialHealth = strongWardedMage.Health.Current
+
+    // 2. Incoming physical attack hits ward first
+    let attacker = createFighter 40 30 30 30 30 30
+    let resHit = ActionResolver.resolve roller (StandardAttack (ForceStrike false)) attacker strongWardedMage
+
+    let absorbEvt =
+      resHit.Events
+      |> List.tryFind (function CombatEvent.ArcaneWardAbsorbed _ -> true | _ -> false)
+    Assert.True(absorbEvt.IsSome, "ArcaneWardAbsorbed event should be emitted when damage hits ward")
+    Assert.True(resHit.Target.ArcaneWard < initialWard, "Arcane Ward should be reduced by absorbed damage")
+    Assert.Equal(initialHealth, resHit.Target.Health.Current)
+
+    // 3. CenterMind restores Arcane Ward scaled by Acumen
+    let depletedMage = { resHit.Target with ArcaneWard = 0 }
+    let resRecovery = ActionResolver.resolve roller (RecoveryAction CenterMind) depletedMage target
+    Assert.True(resRecovery.Actor.ArcaneWard > 0, "CenterMind should restore Arcane Ward for Discipline mage")
+
+  [<Fact>]
+  let ``Discipline / Acumen Disorienting Shockwave resets opponent combo tempo and pulses in group turn`` () =
+    let roller = fixedRoller 6
+    let acumenMage = createMage 40 40 40 40 150 100
+    let primaryEnemy =
+      { createFighter 40 30 30 30 30 30 with
+          ComboTracker = ConsecutiveComboTracker.Zero.RegisterHit().RegisterHit().RegisterHit() }
+    let secA =
+      { createFighter 40 30 30 30 30 30 with
+          ComboTracker = ConsecutiveComboTracker.Zero.RegisterHit().RegisterHit() }
+    let secB = createFighter 40 30 30 30 30 30
+
+    // Group turn with Disorienting Shockwave
+    let groupRes =
+      ActionResolver.resolveGroupTurn roller (StandardAttack (DisorientingShockwave false)) acumenMage primaryEnemy [ secA; secB ]
+
+    // Primary enemy combo reset and OpponentDisoriented emitted
+    Assert.Equal(0, groupRes.PrimaryTarget.ComboTracker.ConsecutiveHits)
+    let disorientEvents =
+      groupRes.Events
+      |> List.filter (function CombatEvent.OpponentDisoriented _ -> true | _ -> false)
+    Assert.True(disorientEvents.Length >= 2, "Disorienting shockwave should disorient primary and secondary swarm enemies")
+
+    // Secondary enemy combo also reset by pulse
+    Assert.Equal(0, groupRes.SecondaryTargets.[0].ComboTracker.ConsecutiveHits)
+
+  [<Fact>]
+  let ``Universal spell access allows all magic users to cast all spells with scaled proficiency`` () =
+    let roller = fixedRoller 6
+    let intellectSpecialist = createMage 150 100 40 40 40 40
+    let acumenSpecialist = createMage 40 40 40 40 150 100
+    let target = createMage 30 30 30 30 30 30
+
+    // Both can cast RunicWardTrap!
+    let resIntellect = ActionResolver.resolve roller (StandardAttack (RunicWardTrap false)) intellectSpecialist target
+    let resAcumen = ActionResolver.resolve roller (StandardAttack (RunicWardTrap false)) acumenSpecialist target
+
+    // Acumen specialist erects a significantly stronger ward due to higher specialization ratio
+    Assert.True(resAcumen.Actor.ArcaneWard > resIntellect.Actor.ArcaneWard,
+      sprintf "Acumen specialist ward (%d) should be stronger than off-specialist ward (%d)"
+        resAcumen.Actor.ArcaneWard resIntellect.Actor.ArcaneWard)

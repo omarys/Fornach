@@ -66,10 +66,12 @@ module Display =
         sprintf "[%s]%d / %d[/] [%s](%d%% soak)[/]" Theme.Comment c.Armor.Current c.Armor.Max Theme.Yellow armorPct
     grid.AddRow(Markup(sprintf "%-18s %s" "Armor Integrity" armorText)) |> ignore
 
-    if c.BleedStacks > 0 || c.LimbDebuff > 0 then
+    if c.BleedStacks > 0 || c.LimbDebuff > 0 || c.ArcaneWard > 0 || c.MirrorClones > 0 then
       let bleedText = if c.BleedStacks > 0 then sprintf "[bold %s]%d Bleed Stacks[/] " Theme.Red c.BleedStacks else ""
-      let limbText = if c.LimbDebuff > 0 then sprintf "[%s]-%d Reflex (Crippled)[/]" Theme.Orange c.LimbDebuff else ""
-      grid.AddRow(Markup(sprintf "%-18s %s%s" "Debuffs" bleedText limbText)) |> ignore
+      let limbText = if c.LimbDebuff > 0 then sprintf "[%s]-%d Reflex (Crippled)[/] " Theme.Orange c.LimbDebuff else ""
+      let wardText = if c.ArcaneWard > 0 then sprintf "[bold %s]🛡️ %d Arcane Ward[/] " Theme.Cyan c.ArcaneWard else ""
+      let cloneText = if c.MirrorClones > 0 then sprintf "[bold %s]🪞 %d Mirror Clones[/] " Theme.Purple c.MirrorClones else ""
+      grid.AddRow(Markup(sprintf "%-18s %s%s%s%s" "Special State" wardText cloneText bleedText limbText)) |> ignore
 
     grid.AddRow(Rule().RuleStyle(Theme.StyleCurrentLine)) |> ignore
 
@@ -277,3 +279,24 @@ module Display =
 
     | CombatEvent.StrikeChained (_, _, step, dmg) ->
       AnsiConsole.MarkupLine(sprintf "  [bold %s]⚡ CHAIN FLOW #%d:[/] Disciplined cadence flowed into adjacent target for [bold %s]%d damage[/]! (0 Recklessness)" Theme.Purple step Theme.Red dmg)
+
+    | CombatEvent.ArcaneStrainIncurred (_, spellName, strain, profPct) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]⚡ ARCANE STRAIN:[/] Off-specialization cast of [bold underline %s]%s[/] (%d%% proficiency) caused [bold %s]+%d Cognitive Fatigue[/]!" Theme.Purple Theme.Cyan spellName profPct Theme.Purple strain)
+
+    | CombatEvent.MirrorClonesConjured (_, count, total) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🪞 MIRROR ILLUSION:[/] Conjured [bold %s]+%d phantasmal mirror decoys[/] (Total Active: [bold %s]%d[/])." Theme.Purple Theme.Cyan count Theme.Purple total)
+
+    | CombatEvent.MirrorCloneDecoyed (_, _, remaining) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🪞 DECOY SHATTERED:[/] Incoming strike was deceived and absorbed by a mirror clone! (Remaining: [bold %s]%d[/])" Theme.Cyan Theme.Purple remaining)
+
+    | CombatEvent.ArcaneWardErected (_, added, total) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🛡️ ARCANE WARD:[/] Abjuration barrier reinforced by [bold %s]+%d[/] (Active Barrier: [bold %s]%d[/])." Theme.Cyan Theme.Green added Theme.Cyan total)
+
+    | CombatEvent.ArcaneWardAbsorbed (_, soaked, remaining) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🛡️ WARD ABSORPTION:[/] Arcane barrier absorbed [bold %s]%d damage[/]! (Barrier Remaining: [bold %s]%d[/])" Theme.Cyan Theme.Yellow soaked Theme.Cyan remaining)
+
+    | CombatEvent.OpponentDisoriented (_, _, reason) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🌀 DISORIENTED:[/] %s" Theme.Orange reason)
+
+    | CombatEvent.CataclysmSplashed (_, _, dmg) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]💥 CATACLYSM SPLASH:[/] Overwhelming arcane rupture splashed [bold %s]%d mental damage[/] to adjacent target!" Theme.Purple Theme.Cyan dmg)

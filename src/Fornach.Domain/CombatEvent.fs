@@ -94,3 +94,24 @@ type CombatEvent =
 
   /// Fluid martial cadence chained from target to target in Discipline Stance without reckless exposure
   | StrikeChained of attackerId: CombatantId * chainedTargetId: CombatantId * chainStep: int * chainDamage: int
+
+  /// Caster struggled with an off-specialization spell, incurring Cognitive Fatigue strain
+  | ArcaneStrainIncurred of casterId: CombatantId * spellName: string * strain: int * proficiencyPct: int
+
+  /// Guile illusionist conjured mirror clones/decoys to misdirect incoming strikes
+  | MirrorClonesConjured of casterId: CombatantId * countAdded: int * totalClones: int
+
+  /// Attacker's strike was deceived and absorbed by an illusionary mirror decoy clone
+  | MirrorCloneDecoyed of defenderId: CombatantId * attackerId: CombatantId * remainingClones: int
+
+  /// Abjuration caster raised or reinforced an active Arcane Ward barrier
+  | ArcaneWardErected of casterId: CombatantId * barrierAdded: int * totalWard: int
+
+  /// Active Arcane Ward absorbed incoming damage before reaching health/morale
+  | ArcaneWardAbsorbed of defenderId: CombatantId * damageSoaked: int * remainingWard: int
+
+  /// Disorienting shockwave disrupted enemy balance, resetting tempo and inflicting confusion
+  | OpponentDisoriented of casterId: CombatantId * targetId: CombatantId * reason: string
+
+  /// Overwhelming cataclysmic blast splashed destructive energy to adjacent swarm targets
+  | CataclysmSplashed of casterId: CombatantId * secondaryTargetId: CombatantId * splashDamage: int

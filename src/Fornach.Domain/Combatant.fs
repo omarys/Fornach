@@ -62,6 +62,8 @@ type Combatant =
     Stance: CombatStance
     BleedStacks: int
     LimbDebuff: int
+    ArcaneWard: int
+    MirrorClones: int
     ComboTracker: ConsecutiveComboTracker
     EquippedItems: EquipmentItem list }
 
@@ -81,6 +83,28 @@ type Combatant =
         rawVal
     int (Math.Round(float penalized * this.EffectiveDefenseMultiplier))
 
+  /// Dominant arcane vector focus based on mental attribute allocation
+  member this.ArcaneFocus : Vector =
+    let i = this.GetStat Intellect
+    let a = this.GetStat Acuity
+    let m = this.GetStat Acumen
+    if i >= a && i >= m then Power
+    elif a >= i && a >= m then Agility
+    else Discipline
+
+  /// Arcane proficiency ratio for a given vector relative to the combatant's highest mental stat (20% - 100%)
+  member this.GetArcaneProficiency(vector: Vector) : float =
+    let i = float (this.GetStat Intellect)
+    let a = float (this.GetStat Acuity)
+    let m = float (this.GetStat Acumen)
+    let maxMental = Math.Max(1.0, Math.Max(i, Math.Max(a, m)))
+    let statVal =
+      match vector with
+      | Power -> i
+      | Agility -> a
+      | Discipline -> m
+    Math.Clamp(statVal / maxMental, 0.20, 1.0)
+
   /// Factory for creating a base combatant with default baseline pools and meters
   static member create id name maxHealth maxMorale stats =
     { Id = id
@@ -96,6 +120,8 @@ type Combatant =
       Stance = CombatStance.PowerStance
       BleedStacks = 0
       LimbDebuff = 0
+      ArcaneWard = 0
+      MirrorClones = 0
       ComboTracker = ConsecutiveComboTracker.Zero
       EquippedItems = [] }
 
@@ -107,6 +133,14 @@ type Combatant =
   static member addStudyStacks delta (c: Combatant) =
     { c with
         StudyStacks = Math.Max(0, c.StudyStacks + delta) }
+
+  /// Modifies active Arcane Ward barrier absorption pool
+  static member addWard delta (c: Combatant) =
+    { c with ArcaneWard = Math.Max(0, c.ArcaneWard + delta) }
+
+  /// Adds or consumes active Mirror Clone decoys
+  static member addClones delta (c: Combatant) =
+    { c with MirrorClones = Math.Max(0, c.MirrorClones + delta) }
 
   /// Shifts active tactical stance
   static member setStance stance (c: Combatant) =

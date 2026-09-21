@@ -35,8 +35,12 @@ type AttackClassification =
   | ArcaneCataclysm of isOverchannel: bool
   /// Agility (Acuity vs. Intuition): Blinding sensory glamours and neural static causing Confusion and Paralysis
   | SynapticGlamour of isMindFracture: bool
+  /// Agility (Acuity vs. Intuition): Mirror illusions and decoy trickery creating clone decoys and misdirection
+  | MirrorIllusion of isDecoySwarm: bool
   /// Arcane Discipline (Acumen vs. Composure): Reactive abjuration wards and runic glyphs inflicting Provoke and stance traps
   | RunicWardTrap of isAnomalousGlyph: bool
+  /// Arcane Discipline (Acumen vs. Composure): Disorienting shockwave that disrupts enemy balance and stance tempo
+  | DisorientingShockwave of isStaggeringPulse: bool
 
   /// Identifies the CombatMode (Physical, Social, or Arcane)
   member this.Mode : CombatMode =
@@ -51,7 +55,9 @@ type AttackClassification =
     | AcumenInterrogation _ -> CombatMode.Social
     | ArcaneCataclysm _
     | SynapticGlamour _
-    | RunicWardTrap _ -> CombatMode.Arcane
+    | MirrorIllusion _
+    | RunicWardTrap _
+    | DisorientingShockwave _ -> CombatMode.Arcane
 
   /// Identifies the underlying stat Vector (Power, Agility, or Discipline)
   member this.Vector : Vector =
@@ -61,12 +67,14 @@ type AttackClassification =
     | ArcaneCataclysm _ -> Power
     | FinesseCadence _
     | GuileDeception _
-    | SynapticGlamour _ -> Agility
+    | SynapticGlamour _
+    | MirrorIllusion _ -> Agility
     | ProwessStrike _
     | CalculatedFlawStrike _
     | MasterfulDisarm _
     | AcumenInterrogation _
-    | RunicWardTrap _ -> Discipline
+    | RunicWardTrap _
+    | DisorientingShockwave _ -> Discipline
 
   /// Identifies the target Plane (Physical or Mental)
   member this.Plane : Plane =
@@ -81,7 +89,9 @@ type AttackClassification =
     | AcumenInterrogation _
     | ArcaneCataclysm _
     | SynapticGlamour _
-    | RunicWardTrap _ -> Mental
+    | MirrorIllusion _
+    | RunicWardTrap _
+    | DisorientingShockwave _ -> Mental
 
 /// Defensive recoveries used to bleed accumulated Recklessness and re-center posture
 type DefensiveReset =
