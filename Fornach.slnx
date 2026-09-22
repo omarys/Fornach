@@ -3,8 +3,10 @@
     <Project Path="src/Fornach.Domain/Fornach.Domain.fsproj" />
     <Project Path="src/Fornach.Engine/Fornach.Engine.fsproj" />
     <Project Path="src/Fornach.Cli/Fornach.Cli.fsproj" />
+    <Project Path="src/Fornach.Spatial/Fornach.Spatial.fsproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Fornach.Domain.Tests/Fornach.Domain.Tests.fsproj" />
+    <Project Path="tests/Fornach.Spatial.Tests/Fornach.Spatial.Tests.fsproj" />
   </Folder>
 </Solution>

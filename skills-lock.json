@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "skills": {
+    "fsharp-testing": {
+      "source": "affaan-m/ecc",
+      "sourceType": "github",
+      "skillPath": "skills/fsharp-testing/SKILL.md",
+      "computedHash": "cfb678b2dcf4c0dc460315eb4fd381de14501f5636985d491d7b278f3f5f1a23"
+    },
+    "procedural-gen": {
+      "source": "gamedev-skills/awesome-gamedev-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/disciplines/procedural-gen/SKILL.md",
+      "computedHash": "b55735586c0b4cf7c4db06ca3818cce679bb2fe99d4abe838a03083e8b135d37"
+    },
+    "roguelike": {
+      "source": "gamedev-skills/awesome-gamedev-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/genres/roguelike/SKILL.md",
+      "computedHash": "f31dab5b014cbe1ed2cc9dbba9be9d2541fbf3280684baacc986820da53387f6"
+    }
+  }
+}
