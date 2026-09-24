@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Point.fs" />
+    <Compile Include="Direction.fs" />
+    <Compile Include="Distance.fs" />
+    <Compile Include="Line.fs" />
+    <Compile Include="Los.fs" />
+    <Compile Include="VisionCone.fs" />
+    <Compile Include="Fov.fs" />
+  </ItemGroup>
+
+</Project>
