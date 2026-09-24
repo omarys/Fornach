@@ -13,6 +13,7 @@
     <Compile Include="Los.fs" />
     <Compile Include="VisionCone.fs" />
     <Compile Include="Fov.fs" />
+    <Compile Include="Pathfinding.fs" />
   </ItemGroup>
 
 </Project>

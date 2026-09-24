@@ -17,6 +17,7 @@
     <Compile Include="PointTests.fs" />
     <Compile Include="LineTests.fs" />
     <Compile Include="FovTests.fs" />
+    <Compile Include="PathfindingTests.fs" />
     <ProjectReference Include="..\..\src\Fornach.Spatial\Fornach.Spatial.fsproj" />
   </ItemGroup>
 
