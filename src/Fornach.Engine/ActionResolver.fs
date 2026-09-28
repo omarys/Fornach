@@ -3,8 +3,6 @@ namespace Fornach.Engine
 open System
 open Fornach.Domain
 
-type DiceRoller = int -> int -> int
-
 module ActionResolver =
 
   // =========================================================================
@@ -435,6 +433,154 @@ module ActionResolver =
       Events = evts
       Contest = None }
 
+  let private resolveDeployPreparation
+    (prepType: PreparationType)
+    (targetIdOpt: CombatantId option)
+    (actor: Combatant)
+    (target: Combatant)
+    : ActionResult =
+    if not (actor.Progression.HasRemainingUses prepType) then
+      { Actor = actor
+        Target = target
+        Events = [ CombatEvent.ComboReset(actor.Id, sprintf "Cannot deploy %s: no preparation charges remaining!" prepType.Name) ]
+        Contest = None }
+    else
+      let actorSpent = actor |> Combatant.spendPreparation prepType
+      match prepType with
+      | PreparationType.ShockwaveSlam ->
+        let updatedActor =
+          actorSpent
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ShockwaveSlam None 3)
+        let evts = [
+          CombatEvent.PreparationDeployed(actor.Id, prepType, None, "Shockwave Slam prepared: surplus NetHits (>= 3) will spill over as flat kinetic damage to all engaged flankers.")
+        ]
+        { Actor = updatedActor; Target = target; Events = evts; Contest = None }
+
+      | PreparationType.BerserkTincture ->
+        let healthCost = Math.Min(25, Math.Max(5, actorSpent.Health.Current / 4))
+        let updatedActor =
+          { actorSpent with Health = actorSpent.Health.ApplyDelta -healthCost }
+          |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness + 35 })
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.BerserkTincture None 3)
+        let evts = [
+          CombatEvent.PreparationDeployed(actor.Id, prepType, None, sprintf "Consumed Berserk Tincture (lost %d HP): Recklessness spiked into Fever Pitch (+35)!" healthCost)
+          CombatEvent.DamageApplied { TargetId = actor.Id; Plane = Physical; Amount = healthCost; IsCritical = false; IsArmorCompromised = false }
+        ]
+        { Actor = updatedActor; Target = target; Events = evts; Contest = None }
+
+      | PreparationType.DreadWarhorn ->
+        let updatedTarget =
+          target
+          |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue + 25 })
+          |> Combatant.evaluateCollapse
+        let evts = [
+          CombatEvent.PreparationDeployed(actor.Id, prepType, Some target.Id, "Dread Warhorn sounded! Incurred +25 Cognitive Fatigue on target.")
+        ]
+        { Actor = actorSpent; Target = updatedTarget; Events = evts; Contest = None }
+
+      | PreparationType.SynapticBrand ->
+        let tgtId = targetIdOpt |> Option.defaultValue target.Id
+        let updatedActor =
+          actorSpent
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.SynapticBrand (Some tgtId) 3)
+        let updatedTarget =
+          target
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.SynapticBrand None 3)
+        let evts = [
+          CombatEvent.PreparationDeployed(actor.Id, prepType, Some tgtId, "Synaptic Brand inscribed: critical strikes deal 2x Morale damage and inflict Rupture.")
+        ]
+        { Actor = updatedActor; Target = updatedTarget; Events = evts; Contest = None }
+
+      | PreparationType.CaltropPouch ->
+        let updatedActor =
+          actorSpent
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.CaltropPouch None 2)
+        let evts = [
+          CombatEvent.PreparationDeployed(actor.Id, prepType, None, "Caltrops deployed across flanks: secondary flanker multi-opponent penalties stripped for 2 turns.")
+        ]
+        { Actor = updatedActor; Target = target; Events = evts; Contest = None }
+
+      | PreparationType.ConcealedBlade ->
+        let updatedActor =
+          actorSpent
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ConcealedBlade None 3)
+        let evts = [
+          CombatEvent.PreparationDeployed(actor.Id, prepType, None, "Concealed boot blade readied: prepared to counter-puncture from the Nach!")
+        ]
+        { Actor = updatedActor; Target = target; Events = evts; Contest = None }
+
+      | PreparationType.MirrorMirage ->
+        let updatedActor =
+          actorSpent
+          |> Combatant.addClones 2
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.MirrorMirage None 2)
+        let evts = [
+          CombatEvent.PreparationDeployed(actor.Id, prepType, None, "Mirror Mirage wove phantasms: secondary flankers hit illusions (+20 Confusion) and multi-opponent penalties ignored.")
+        ]
+        { Actor = updatedActor; Target = target; Events = evts; Contest = None }
+
+      | PreparationType.NeuroToxin ->
+        let tgtId = targetIdOpt |> Option.defaultValue target.Id
+        let updatedActor =
+          actorSpent
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.NeuroToxin (Some tgtId) 3)
+        let updatedTarget =
+          target
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.NeuroToxin None 3)
+        let evts = [
+          CombatEvent.PreparationDeployed(actor.Id, prepType, Some tgtId, "Psychic Neurotoxin applied: target suffers escalating Morale drain on Recklessness accumulation.")
+        ]
+        { Actor = updatedActor; Target = updatedTarget; Events = evts; Contest = None }
+
+      | PreparationType.BastionZoneControl ->
+        let updatedActor =
+          actorSpent
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.BastionZoneControl None 3)
+        let evts = [
+          CombatEvent.BastionZoneErected(actor.Id)
+          CombatEvent.PreparationDeployed(actor.Id, prepType, None, "Bastion Zone planted: caps engaged opponents strictly to 1, forcing single-file engagements!")
+        ]
+        { Actor = updatedActor; Target = target; Events = evts; Contest = None }
+
+      | PreparationType.ParryingBuckler ->
+        let updatedActor =
+          actorSpent
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ParryingBuckler None 3)
+        let evts = [
+          CombatEvent.PreparationDeployed(actor.Id, prepType, None, "Parrying Buckler braced: Indes threshold reduced by -1, widening the window to seize the Vor!")
+        ]
+        { Actor = updatedActor; Target = target; Events = evts; Contest = None }
+
+      | PreparationType.HeraldicTreatise ->
+        let updatedActor =
+          actorSpent
+          |> Combatant.addStudyStacks 2
+        let evts = [
+          CombatEvent.HeraldicTreatiseStudied(actor.Id, 2)
+          CombatEvent.PreparationDeployed(actor.Id, prepType, None, "Heraldic Treatise reviewed: +2 Study Stacks granted immediately across visible foes.")
+        ]
+        { Actor = updatedActor; Target = target; Events = evts; Contest = None }
+
+      | PreparationType.SocraticDossier ->
+        let tgtId = targetIdOpt |> Option.defaultValue target.Id
+        let reckVal = Math.Max(10, target.Meters.Recklessness.Value)
+        let updatedTarget =
+          { target with Morale = target.Morale.ApplyDelta -reckVal }
+          |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness - reckVal })
+          |> Combatant.evaluateCollapse
+        let evts = [
+          CombatEvent.SocraticDossierExecuted(actor.Id, tgtId, reckVal, reckVal)
+          CombatEvent.DamageApplied {
+            TargetId = tgtId
+            Plane = Mental
+            Amount = reckVal
+            IsCritical = false
+            IsArmorCompromised = false
+          }
+          CombatEvent.PreparationDeployed(actor.Id, prepType, Some tgtId, sprintf "Socratic Dossier deployed: converted %d Recklessness directly to unmitigated Morale damage!" reckVal)
+        ]
+        { Actor = actorSpent; Target = updatedTarget; Events = evts; Contest = None }
+
   let applyTurnUpkeep (c: Combatant) : Combatant * CombatEvent list =
     let baseUpdated, baseEvents =
       if c.BleedStacks > 0 then
@@ -455,9 +601,11 @@ module ActionResolver =
         c, []
 
     // Natural combat exertion in prolonged battle (+1 Exhaustion per active round)
+    // Decrement active preparation timers and remove expired ones
     let withExertion =
       baseUpdated
       |> Combatant.updateMeters (fun m -> { m with Exhaustion = m.Exhaustion + 1 })
+      |> Combatant.decrementActivePreparations
 
     withExertion, baseEvents
 
@@ -843,6 +991,55 @@ module ActionResolver =
         Contest = None }
     else
 
+    // Calculate effective prior defenses taking into account defensive preparations
+    // BastionZoneControl caps EngagedOpponents strictly to 1.
+    // CaltropPouch and MirrorMirage ignore multi-opponent penalties from secondary attackers.
+    let effectivePriorDefenses =
+      if currentTarget.HasActivePreparation PreparationType.BastionZoneControl then 0
+      elif currentTarget.HasActivePreparation PreparationType.CaltropPouch then 0
+      elif currentTarget.HasActivePreparation PreparationType.MirrorMirage then 0
+      else priorDefenses
+
+    // --- Step B.3.9: Defender Concealed Blade Counter-Puncture from the Nach ---
+    let mutable concealedBladeDisrupted = false
+    if currentTarget.HasActivePreparation PreparationType.ConcealedBlade then
+      let updatedDefender, updatedAttacker, bladeEvents, isDisrupted =
+        IndesResolver.resolveConcealedBlade roller currentTarget currentActor
+      currentTarget <- updatedDefender
+      currentActor <- updatedAttacker
+      events <- bladeEvents @ events
+      if isDisrupted then
+        concealedBladeDisrupted <- true
+
+    if concealedBladeDisrupted then
+      let finalActor = Combatant.evaluateCollapse currentActor
+      let finalTarget = Combatant.evaluateCollapse currentTarget
+      { Actor = finalActor
+        Target = finalTarget
+        Events = events
+        Contest = None }
+    else
+
+    // --- Step B.4.1: Defender Mirror Mirage Phantasm Deception ---
+    let mutable mirrorMirageDeceived = false
+    if priorDefenses >= 1 && currentTarget.HasActivePreparation PreparationType.MirrorMirage then
+      currentActor <-
+        currentActor
+        |> Combatant.updateMeters (fun m -> { m with Confusion = m.Confusion + 20 })
+        |> fun a -> { a with ComboTracker = a.ComboTracker.ResetCombo() }
+      events <- CombatEvent.MirrorMirageDeceived(currentTarget.Id, currentActor.Id, 20) :: events
+      events <- CombatEvent.ComboReset(currentActor.Id, "Strike deceived by Mirror Mirage phantasm; flank attack defused!") :: events
+      mirrorMirageDeceived <- true
+
+    if mirrorMirageDeceived then
+      let finalActor = Combatant.evaluateCollapse currentActor
+      let finalTarget = Combatant.evaluateCollapse currentTarget
+      { Actor = finalActor
+        Target = finalTarget
+        Events = events
+        Contest = None }
+    else
+
     // --- Step B.4: Defender Preemptive Attack of Opportunity against Flank / Encirclement ---
     let mutable flankDefusedByAoO = false
 
@@ -876,7 +1073,7 @@ module ActionResolver =
         // 1. Finesse (Agility) stance focuses on linear 1-on-1 duels; duelist tunnel-vision incurs a -20% AoO penalty compared to Prowess (Discipline):
         let stanceAoOPenalty = if currentTarget.Stance = CombatStance.AgilityStance then 20 else 0
         // 2. Encirclement defense penalty (attention & guard split across multiple attackers)
-        let encPenaltyHits = DicePool.computeEncirclementPenalty offStat defStat priorDefenses
+        let encPenaltyHits = DicePool.computeEncirclementPenalty offStat defStat effectivePriorDefenses
         let encReduction = encPenaltyHits * 5
         // 3. Physical limb trauma / severed ligaments
         let limbReduction = currentTarget.LimbDebuff / 2
@@ -1005,10 +1202,10 @@ module ActionResolver =
         currentActor.StudyStacks
         defStat
         currentTarget.StudyStacks
-        priorDefenses
+        effectivePriorDefenses
 
     if contest.EncirclementPenalty > 0 then
-      events <- CombatEvent.EncirclementPenalized(currentTarget.Id, priorDefenses, contest.EncirclementPenalty) :: events
+      events <- CombatEvent.EncirclementPenalized(currentTarget.Id, effectivePriorDefenses, contest.EncirclementPenalty) :: events
 
     // --- Step D: Whiff vs. Landed Hit Branching ---
     if contest.IsWhiff then
@@ -1020,6 +1217,14 @@ module ActionResolver =
       events <-
         CombatEvent.ComboReset(currentActor.Id, "Attack failed to penetrate defenses; combo momentum cleared.")
         :: events
+
+      // Evaluate Indes tempo seizure opportunity (enhanced by Parrying Buckler)
+      let updatedDef, updatedAtk, indesEvents, seized =
+        IndesResolver.resolveIndesOpportunity currentTarget currentActor contest
+      if seized then
+        currentTarget <- updatedDef
+        currentActor <- updatedAtk
+        events <- events @ indesEvents
 
       // Evaluate collapse on actor in case gambit self-spiked Recklessness
       let finalActor = Combatant.evaluateCollapse currentActor
@@ -1044,6 +1249,7 @@ module ActionResolver =
       let tierMult = computeTierMultiplier contest.NetHits
       let gambitMult = if isGambit then 1.5 else 1.0
       let weaponEff = WeaponCondition.effectiveness currentActor.WeaponCondition
+      let berserkMult = if currentActor.HasActivePreparation PreparationType.BerserkTincture then 1.35 else 1.0
 
       // If strike landed while defender was encircled, apply flank overwhelm pressure scaled by disparity
       if contest.EncirclementPenalty > 0 then
@@ -1067,16 +1273,38 @@ module ActionResolver =
 
       let isCrit = contest.IsCritical || agilityCritRolled
       let critDmgMult = if isCrit && isAgilityAtk then 3.2 elif isCrit then 1.5 else 1.0
-      let rawDmg = Math.Max(1, int (float baseDamage * tierMult * gambitMult * classMult * weaponEff * critDmgMult))
+      let rawDmg = Math.Max(1, int (float baseDamage * tierMult * gambitMult * classMult * weaponEff * critDmgMult * berserkMult))
+
+      // Track Recklessness before updates for Neurotoxin check
+      let reckBefore = currentTarget.Meters.Recklessness.Value
 
       // Apply dynamic status meters to target
       currentTarget <- Combatant.updateMeters (meterUpdates isCrit) currentTarget
 
+      let reckAfter = currentTarget.Meters.Recklessness.Value
+      let reckDelta = reckAfter - reckBefore
+
+      // NeuroToxin Psychic Venom: drains Morale when target gains Recklessness
+      if reckDelta > 0 && (currentTarget.HasActivePreparation PreparationType.NeuroToxin || currentActor.HasActivePreparationAgainst PreparationType.NeuroToxin currentTarget.Id) then
+        let toxinDrain = reckDelta * 2
+        let toxinTarget, toxinDmgEvt, _ = applyDamage Mental toxinDrain false currentTarget
+        currentTarget <- toxinTarget
+        events <- CombatEvent.NeuroToxinDrained(currentTarget.Id, reckDelta, toxinDrain) :: events
+        events <- CombatEvent.DamageApplied toxinDmgEvt :: events
 
       // Apply core pool damage and potential armor shred
       let updatedTarget, dmgEvt, wardEvts = applyDamage plane rawDmg isCrit currentTarget
       currentTarget <- updatedTarget
       events <- wardEvts @ (CombatEvent.DamageApplied dmgEvt :: events)
+
+      // Synaptic Brand: critical strikes deal 2x Morale damage and inflict Rupture
+      if isCrit && (currentTarget.HasActivePreparation PreparationType.SynapticBrand || currentActor.HasActivePreparationAgainst PreparationType.SynapticBrand currentTarget.Id) then
+        let brandMoraleDmg = Math.Max(25, rawDmg)
+        let brandTarget, brandDmgEvt, _ = applyDamage Mental brandMoraleDmg true currentTarget
+        currentTarget <- brandTarget
+        events <- CombatEvent.SynapticBrandTriggered(currentActor.Id, currentTarget.Id, brandMoraleDmg) :: events
+        events <- CombatEvent.DamageApplied brandDmgEvt :: events
+        events <- CombatEvent.DisparityTriggered(currentActor.Id, currentTarget.Id, CognitiveRupture 35) :: events
 
       // Disparity trigger if critical
       match disparityFactory isCrit with
@@ -1169,6 +1397,7 @@ module ActionResolver =
         | ExecuteStrike plane -> resolveExecute plane upkeepActor target
         | ShiftStance stance -> resolveShiftStance stance upkeepActor target
         | StandardAttack atk -> resolveAttack roller atk upkeepActor target priorDefenses
+        | DeployPreparation (prep, targetIdOpt) -> resolveDeployPreparation prep targetIdOpt upkeepActor target
 
       { res with Events = upkeepEvents @ res.Events }
 
@@ -1190,274 +1419,346 @@ module ActionResolver =
     let mutable currentPrimary = primaryRes.Target
     let mutable allEvents = primaryRes.Events
 
-    let isLandedPhysicalHit =
-      match primaryRes.Contest with
-      | Some contest when not contest.IsWhiff ->
-        match intent with
-        | StandardAttack atk when atk.Plane = Physical -> true
-        | _ -> false
-      | _ -> false
-
-    let isLandedArcaneCataclysm =
-      match primaryRes.Contest with
-      | Some contest when not contest.IsWhiff ->
-        match intent with
-        | StandardAttack (ArcaneCataclysm _) -> true
-        | _ -> false
-      | _ -> false
-
-    let isLandedDisorientingShockwave =
-      match primaryRes.Contest with
-      | Some contest when not contest.IsWhiff ->
-        match intent with
-        | StandardAttack (DisorientingShockwave _) -> true
-        | _ -> false
-      | _ -> false
-
-    if isLandedArcaneCataclysm && not adjacentTargets.IsEmpty then
-      // Arcane Cataclysm: Destructive mental burst splashes to up to 2 adjacent targets
-      let splashCandidates = adjacentTargets |> List.truncate 2
-      let unengaged = adjacentTargets |> List.skip splashCandidates.Length
-      let mutable splashEvents = []
-
-      let primaryDmg =
-        primaryRes.Events
-        |> List.choose (function CombatEvent.DamageApplied d when d.TargetId = currentPrimary.Id && d.Plane = Mental -> Some d.Amount | _ -> None)
-        |> List.tryHead
-        |> Option.defaultValue (Math.Max(20, currentActor.GetStat Intellect))
-
-      let rawSplashDmg = Math.Max(10, int (float primaryDmg * 0.50))
-
-      let processedSplash =
-        splashCandidates
+    // 2. Handle group-wide deployment of preparations
+    match intent with
+    | DeployPreparation (PreparationType.DreadWarhorn, _) when not adjacentTargets.IsEmpty ->
+      let mutable dreadEvents = []
+      let processedDread =
+        adjacentTargets
         |> List.map (fun secTarget ->
-          let targetAfterDmg, dmgEvt, wardEvts = applyDamage Mental rawSplashDmg false secTarget
           let targetAfterHit =
-            targetAfterDmg
-            |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue + 15 })
+            secTarget
+            |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue + 25 })
             |> Combatant.evaluateCollapse
 
-          splashEvents <-
-            splashEvents
-            @ wardEvts
-            @ [
-              CombatEvent.CataclysmSplashed(currentActor.Id, secTarget.Id, dmgEvt.Amount)
-              CombatEvent.DamageApplied dmgEvt
-            ]
+          dreadEvents <-
+            dreadEvents
+            @ [ CombatEvent.PreparationDeployed(currentActor.Id, PreparationType.DreadWarhorn, Some secTarget.Id, "Dread Warhorn echoed across secondary flankers (+25 Cognitive Fatigue)!") ]
 
           if CollapseState.isCollapsed targetAfterHit.Collapse && not (CollapseState.isCollapsed secTarget.Collapse) then
             match targetAfterHit.Collapse with
             | CollapseState.Collapsed reason ->
-              splashEvents <- splashEvents @ [ CombatEvent.CollapseTriggered(targetAfterHit.Id, reason) ]
+              dreadEvents <- dreadEvents @ [ CombatEvent.CollapseTriggered(targetAfterHit.Id, reason) ]
             | CollapseState.Stable -> ()
 
           targetAfterHit
         )
-
+      allEvents <- allEvents @ dreadEvents
       { Actor = currentActor
         PrimaryTarget = currentPrimary
-        SecondaryTargets = processedSplash @ unengaged
-        Events = allEvents @ splashEvents }
+        SecondaryTargets = processedDread
+        Events = allEvents }
 
-    elif isLandedDisorientingShockwave && not adjacentTargets.IsEmpty then
-      // Disorienting Shockwave: Multi-target crowd control pulsing outward across up to 3 adjacent targets
-      let shockCandidates = adjacentTargets |> List.truncate 3
-      let unengaged = adjacentTargets |> List.skip shockCandidates.Length
-      let mutable shockEvents = []
-
-      let primaryDmg =
-        primaryRes.Events
-        |> List.choose (function CombatEvent.DamageApplied d when d.TargetId = currentPrimary.Id && d.Plane = Mental -> Some d.Amount | _ -> None)
-        |> List.tryHead
-        |> Option.defaultValue (Math.Max(15, currentActor.GetStat Acumen))
-
-      let rawShockDmg = Math.Max(8, int (float primaryDmg * 0.50))
-
-      let processedShock =
-        shockCandidates
-        |> List.map (fun secTarget ->
-          let targetAfterDmg, dmgEvt, wardEvts = applyDamage Mental rawShockDmg false secTarget
-          let targetAfterHit =
-            { targetAfterDmg with ComboTracker = targetAfterDmg.ComboTracker.ResetCombo() }
-            |> Combatant.updateMeters (fun m -> { m with Confusion = m.Confusion + 15; Provoke = m.Provoke + 10 })
-            |> Combatant.evaluateCollapse
-
-          shockEvents <-
-            shockEvents
-            @ wardEvts
-            @ [
-              CombatEvent.OpponentDisoriented(currentActor.Id, secTarget.Id, "Resonant shockwave pulse shattered balance across adjacent swarm enemies!")
-              CombatEvent.ComboReset(secTarget.Id, "Disorienting pulse disrupted posture; combo momentum cleared.")
-              CombatEvent.DamageApplied dmgEvt
-            ]
-
-          if CollapseState.isCollapsed targetAfterHit.Collapse && not (CollapseState.isCollapsed secTarget.Collapse) then
-            match targetAfterHit.Collapse with
-            | CollapseState.Collapsed reason ->
-              shockEvents <- shockEvents @ [ CombatEvent.CollapseTriggered(targetAfterHit.Id, reason) ]
-            | CollapseState.Stable -> ()
-
-          targetAfterHit
-        )
-
-      { Actor = currentActor
-        PrimaryTarget = currentPrimary
-        SecondaryTargets = processedShock @ unengaged
-        Events = allEvents @ shockEvents }
-
-    elif not isLandedPhysicalHit || adjacentTargets.IsEmpty then
+    | DeployPreparation (PreparationType.HeraldicTreatise, _) when not adjacentTargets.IsEmpty ->
+      let bonusStudy = 2 * adjacentTargets.Length
+      currentActor <- currentActor |> Combatant.addStudyStacks bonusStudy
+      allEvents <- allEvents @ [ CombatEvent.HeraldicTreatiseStudied(currentActor.Id, bonusStudy) ]
       { Actor = currentActor
         PrimaryTarget = currentPrimary
         SecondaryTargets = adjacentTargets
         Events = allEvents }
-    else
-      match currentActor.Stance with
-      | CombatStance.PowerStance ->
-        // Power Stance: Cleave up to 2 adjacent targets
-        // Cleave incurs a Recklessness penalty based on stat disparity:
-        // High disparity (attacker Force >> target Fortitude) mitigates penalty.
-        // Low disparity (target Fortitude >= attacker Force) causes a severe Recklessness spike.
-        let cleaveCandidates = adjacentTargets |> List.truncate 2
-        let unengaged = adjacentTargets |> List.skip cleaveCandidates.Length
-        let mutable cleaveEvents = []
+
+    | DeployPreparation _ ->
+      { Actor = currentActor
+        PrimaryTarget = currentPrimary
+        SecondaryTargets = adjacentTargets
+        Events = allEvents }
+
+    | _ ->
+      // 3. Shockwave Slam: surplus NetHits (>= 3) spill over as flat kinetic damage to all engaged flankers
+      let mutable currentAdjacent = adjacentTargets
+      if currentActor.HasActivePreparation PreparationType.ShockwaveSlam then
+        match primaryRes.Contest with
+        | Some contest when not contest.IsWhiff && contest.NetHits >= 3 && not adjacentTargets.IsEmpty ->
+          let excessHits = contest.NetHits - 2
+          let flatDmg = Math.Max(15, excessHits * 12)
+          let mutable shockwaveEvents = []
+          currentAdjacent <-
+            adjacentTargets
+            |> List.map (fun secTarget ->
+              let targetAfterDmg, dmgEvt, wardEvts = applyDamage Physical flatDmg false secTarget
+              let targetAfterHit =
+                targetAfterDmg
+                |> Combatant.updateMeters (fun m -> { m with Overwhelm = m.Overwhelm + 10 })
+                |> Combatant.evaluateCollapse
+
+              shockwaveEvents <-
+                shockwaveEvents
+                @ wardEvts
+                @ [
+                  CombatEvent.ShockwaveSurplusDamage(currentActor.Id, secTarget.Id, excessHits, flatDmg)
+                  CombatEvent.DamageApplied dmgEvt
+                ]
+
+              if CollapseState.isCollapsed targetAfterHit.Collapse && not (CollapseState.isCollapsed secTarget.Collapse) then
+                match targetAfterHit.Collapse with
+                | CollapseState.Collapsed reason ->
+                  shockwaveEvents <- shockwaveEvents @ [ CombatEvent.CollapseTriggered(targetAfterHit.Id, reason) ]
+                | CollapseState.Stable -> ()
+
+              targetAfterHit
+            )
+          allEvents <- allEvents @ shockwaveEvents
+        | _ -> ()
+
+      let isLandedPhysicalHit =
+        match primaryRes.Contest with
+        | Some contest when not contest.IsWhiff ->
+          match intent with
+          | StandardAttack atk when atk.Plane = Physical -> true
+          | _ -> false
+        | _ -> false
+
+      let isLandedArcaneCataclysm =
+        match primaryRes.Contest with
+        | Some contest when not contest.IsWhiff ->
+          match intent with
+          | StandardAttack (ArcaneCataclysm _) -> true
+          | _ -> false
+        | _ -> false
+
+      let isLandedDisorientingShockwave =
+        match primaryRes.Contest with
+        | Some contest when not contest.IsWhiff ->
+          match intent with
+          | StandardAttack (DisorientingShockwave _) -> true
+          | _ -> false
+        | _ -> false
+
+      if isLandedArcaneCataclysm && not currentAdjacent.IsEmpty then
+        // Arcane Cataclysm: Destructive mental burst splashes to up to 2 adjacent targets
+        let splashCandidates = currentAdjacent |> List.truncate 2
+        let unengaged = currentAdjacent |> List.skip splashCandidates.Length
+        let mutable splashEvents = []
 
         let primaryDmg =
           primaryRes.Events
-          |> List.choose (function CombatEvent.DamageApplied d when d.TargetId = currentPrimary.Id && d.Plane = Physical -> Some d.Amount | _ -> None)
+          |> List.choose (function CombatEvent.DamageApplied d when d.TargetId = currentPrimary.Id && d.Plane = Mental -> Some d.Amount | _ -> None)
           |> List.tryHead
-          |> Option.defaultValue (Math.Max(20, currentActor.GetStat Force))
+          |> Option.defaultValue (Math.Max(20, currentActor.GetStat Intellect))
 
-        let rawCleaveDmg = Math.Max(10, int (float primaryDmg * 0.60))
+        let rawSplashDmg = Math.Max(10, int (float primaryDmg * 0.50))
 
-        let processedCleaves =
-          cleaveCandidates
+        let processedSplash =
+          splashCandidates
           |> List.map (fun secTarget ->
-            let offForce = currentActor.GetStat Force
-            let defFort = secTarget.GetStat Fortitude
-
-            // Recklessness penalty scaled by disparity ratio:
-            let disparityRatio = float defFort / Math.Max(1.0, float offForce)
-            let reckSpike = Math.Max(3, int (Math.Round(25.0 * disparityRatio)))
-
-            // Apply armor mitigation
-            let soakedDmg = Math.Max(5, int (Math.Round(float rawCleaveDmg * (1.0 - secTarget.Armor.AbsorptionRatio))))
-            let newArmor = secTarget.Armor.Shred 5
-
-            // Apply damage & status meters to secondary target
+            let targetAfterDmg, dmgEvt, wardEvts = applyDamage Mental rawSplashDmg false secTarget
             let targetAfterHit =
-              { secTarget with
-                  Health = secTarget.Health.ApplyDelta -soakedDmg
-                  Armor = newArmor }
-              |> Combatant.updateMeters (fun m -> { m with Exhaustion = m.Exhaustion + 10 })
+              targetAfterDmg
+              |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue + 15 })
               |> Combatant.evaluateCollapse
 
-            // Attacker incurs disparity-based Recklessness
-            currentActor <-
-              currentActor
-              |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness + reckSpike })
-
-            cleaveEvents <-
-              cleaveEvents
+            splashEvents <-
+              splashEvents
+              @ wardEvts
               @ [
-                CombatEvent.CleaveExecuted(currentActor.Id, secTarget.Id, soakedDmg, reckSpike)
-                CombatEvent.DamageApplied {
-                  TargetId = secTarget.Id
-                  Plane = Physical
-                  Amount = soakedDmg
-                  IsCritical = false
-                  IsArmorCompromised = newArmor.IsShredded
-                }
+                CombatEvent.CataclysmSplashed(currentActor.Id, secTarget.Id, dmgEvt.Amount)
+                CombatEvent.DamageApplied dmgEvt
               ]
 
             if CollapseState.isCollapsed targetAfterHit.Collapse && not (CollapseState.isCollapsed secTarget.Collapse) then
               match targetAfterHit.Collapse with
               | CollapseState.Collapsed reason ->
-                cleaveEvents <- cleaveEvents @ [ CombatEvent.CollapseTriggered(targetAfterHit.Id, reason) ]
+                splashEvents <- splashEvents @ [ CombatEvent.CollapseTriggered(targetAfterHit.Id, reason) ]
               | CollapseState.Stable -> ()
 
             targetAfterHit
           )
 
-        // Evaluate collapse on currentActor in case recklessness reached threshold
-        let actorAfterCleaves = Combatant.evaluateCollapse currentActor
-        if CollapseState.isCollapsed actorAfterCleaves.Collapse && not (CollapseState.isCollapsed primaryRes.Actor.Collapse) then
-          match actorAfterCleaves.Collapse with
-          | CollapseState.Collapsed reason ->
-            cleaveEvents <- cleaveEvents @ [ CombatEvent.CollapseTriggered(actorAfterCleaves.Id, reason) ]
-          | CollapseState.Stable -> ()
-
-        { Actor = actorAfterCleaves
+        { Actor = currentActor
           PrimaryTarget = currentPrimary
-          SecondaryTargets = processedCleaves @ unengaged
-          Events = allEvents @ cleaveEvents }
+          SecondaryTargets = processedSplash @ unengaged
+          Events = allEvents @ splashEvents }
 
-      | CombatStance.DisciplineStance ->
-        // Discipline Stance: Chain strikes across engaged opponents
-        // Max chained targets: 1 base + (StudyStacks / 2), up to 3 targets.
-        // No Recklessness penalty! Flowing martial economy and balance.
-        // Generates +1 Study Stack per chained target hit.
-        let chainCapacity = Math.Min(3, 1 + (currentActor.StudyStacks / 2))
-        let chainCandidates = adjacentTargets |> List.truncate chainCapacity
-        let unengaged = adjacentTargets |> List.skip chainCandidates.Length
-        let mutable chainEvents = []
+      elif isLandedDisorientingShockwave && not currentAdjacent.IsEmpty then
+        // Disorienting Shockwave: Multi-target crowd control pulsing outward across up to 3 adjacent targets
+        let shockCandidates = currentAdjacent |> List.truncate 3
+        let unengaged = currentAdjacent |> List.skip shockCandidates.Length
+        let mutable shockEvents = []
 
         let primaryDmg =
           primaryRes.Events
-          |> List.choose (function CombatEvent.DamageApplied d when d.TargetId = currentPrimary.Id && d.Plane = Physical -> Some d.Amount | _ -> None)
+          |> List.choose (function CombatEvent.DamageApplied d when d.TargetId = currentPrimary.Id && d.Plane = Mental -> Some d.Amount | _ -> None)
           |> List.tryHead
-          |> Option.defaultValue (Math.Max(20, currentActor.GetStat Prowess))
+          |> Option.defaultValue (Math.Max(15, currentActor.GetStat Acumen))
 
-        let rawChainDmg = Math.Max(10, int (float primaryDmg * 0.70))
+        let rawShockDmg = Math.Max(8, int (float primaryDmg * 0.50))
 
-        let mutable step = 1
-        let processedChains =
-          chainCandidates
+        let processedShock =
+          shockCandidates
           |> List.map (fun secTarget ->
-            // Apply armor mitigation
-            let soakedDmg = Math.Max(5, int (Math.Round(float rawChainDmg * (1.0 - secTarget.Armor.AbsorptionRatio))))
-
-            // Apply damage & status meters to chained target
+            let targetAfterDmg, dmgEvt, wardEvts = applyDamage Mental rawShockDmg false secTarget
             let targetAfterHit =
-              { secTarget with
-                  Health = secTarget.Health.ApplyDelta -soakedDmg }
-              |> Combatant.updateMeters (fun m -> { m with Frustration = m.Frustration + 12 })
+              { targetAfterDmg with ComboTracker = targetAfterDmg.ComboTracker.ResetCombo() }
+              |> Combatant.updateMeters (fun m -> { m with Confusion = m.Confusion + 15; Provoke = m.Provoke + 10 })
               |> Combatant.evaluateCollapse
 
-            // Attacker gains Study Stack from fluid martial cadence; 0 Recklessness!
-            currentActor <- currentActor |> Combatant.addStudyStacks 1
-
-            chainEvents <-
-              chainEvents
+            shockEvents <-
+              shockEvents
+              @ wardEvts
               @ [
-                CombatEvent.StrikeChained(currentActor.Id, secTarget.Id, step, soakedDmg)
-                CombatEvent.DamageApplied {
-                  TargetId = secTarget.Id
-                  Plane = Physical
-                  Amount = soakedDmg
-                  IsCritical = false
-                  IsArmorCompromised = secTarget.Armor.IsShredded
-                }
+                CombatEvent.OpponentDisoriented(currentActor.Id, secTarget.Id, "Resonant shockwave pulse shattered balance across adjacent swarm enemies!")
+                CombatEvent.ComboReset(secTarget.Id, "Disorienting pulse disrupted posture; combo momentum cleared.")
+                CombatEvent.DamageApplied dmgEvt
               ]
 
             if CollapseState.isCollapsed targetAfterHit.Collapse && not (CollapseState.isCollapsed secTarget.Collapse) then
               match targetAfterHit.Collapse with
               | CollapseState.Collapsed reason ->
-                chainEvents <- chainEvents @ [ CombatEvent.CollapseTriggered(targetAfterHit.Id, reason) ]
+                shockEvents <- shockEvents @ [ CombatEvent.CollapseTriggered(targetAfterHit.Id, reason) ]
               | CollapseState.Stable -> ()
 
-            step <- step + 1
             targetAfterHit
           )
 
         { Actor = currentActor
           PrimaryTarget = currentPrimary
-          SecondaryTargets = processedChains @ unengaged
-          Events = allEvents @ chainEvents }
+          SecondaryTargets = processedShock @ unengaged
+          Events = allEvents @ shockEvents }
 
-      | CombatStance.AgilityStance ->
-        // Agility / Finesse Stance: Specialized for 1-on-1 duels!
-        // No cleave, no chain. The combatant hyper-focuses on the primary opponent.
+      elif not isLandedPhysicalHit || currentAdjacent.IsEmpty then
         { Actor = currentActor
           PrimaryTarget = currentPrimary
-          SecondaryTargets = adjacentTargets
+          SecondaryTargets = currentAdjacent
           Events = allEvents }
+      else
+        match currentActor.Stance with
+        | CombatStance.PowerStance ->
+          // Power Stance: Cleave up to 2 adjacent targets
+          // Cleave incurs a Recklessness penalty based on stat disparity:
+          let cleaveCandidates = currentAdjacent |> List.truncate 2
+          let unengaged = currentAdjacent |> List.skip cleaveCandidates.Length
+          let mutable cleaveEvents = []
+
+          let primaryDmg =
+            primaryRes.Events
+            |> List.choose (function CombatEvent.DamageApplied d when d.TargetId = currentPrimary.Id && d.Plane = Physical -> Some d.Amount | _ -> None)
+            |> List.tryHead
+            |> Option.defaultValue (Math.Max(20, currentActor.GetStat Force))
+
+          let rawCleaveDmg = Math.Max(10, int (float primaryDmg * 0.60))
+
+          let processedCleaves =
+            cleaveCandidates
+            |> List.map (fun secTarget ->
+              let offForce = currentActor.GetStat Force
+              let defFort = secTarget.GetStat Fortitude
+
+              // Recklessness penalty scaled by disparity ratio:
+              let disparityRatio = float defFort / Math.Max(1.0, float offForce)
+              let reckSpike = Math.Max(3, int (Math.Round(25.0 * disparityRatio)))
+
+              // Apply armor mitigation
+              let soakedDmg = Math.Max(5, int (Math.Round(float rawCleaveDmg * (1.0 - secTarget.Armor.AbsorptionRatio))))
+              let newArmor = secTarget.Armor.Shred 5
+
+              // Apply damage & status meters to secondary target
+              let targetAfterHit =
+                { secTarget with
+                    Health = secTarget.Health.ApplyDelta -soakedDmg
+                    Armor = newArmor }
+                |> Combatant.updateMeters (fun m -> { m with Exhaustion = m.Exhaustion + 10 })
+                |> Combatant.evaluateCollapse
+
+              // Attacker incurs disparity-based Recklessness
+              currentActor <-
+                currentActor
+                |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness + reckSpike })
+
+              cleaveEvents <-
+                cleaveEvents
+                @ [
+                  CombatEvent.CleaveExecuted(currentActor.Id, secTarget.Id, soakedDmg, reckSpike)
+                  CombatEvent.DamageApplied {
+                    TargetId = secTarget.Id
+                    Plane = Physical
+                    Amount = soakedDmg
+                    IsCritical = false
+                    IsArmorCompromised = newArmor.IsShredded
+                  }
+                ]
+
+              if CollapseState.isCollapsed targetAfterHit.Collapse && not (CollapseState.isCollapsed secTarget.Collapse) then
+                match targetAfterHit.Collapse with
+                | CollapseState.Collapsed reason ->
+                  cleaveEvents <- cleaveEvents @ [ CombatEvent.CollapseTriggered(targetAfterHit.Id, reason) ]
+                | CollapseState.Stable -> ()
+
+              targetAfterHit
+            )
+
+          // Evaluate collapse on currentActor in case recklessness reached threshold
+          let actorAfterCleaves = Combatant.evaluateCollapse currentActor
+          if CollapseState.isCollapsed actorAfterCleaves.Collapse && not (CollapseState.isCollapsed primaryRes.Actor.Collapse) then
+            match actorAfterCleaves.Collapse with
+            | CollapseState.Collapsed reason ->
+              cleaveEvents <- cleaveEvents @ [ CombatEvent.CollapseTriggered(actorAfterCleaves.Id, reason) ]
+            | CollapseState.Stable -> ()
+
+          { Actor = actorAfterCleaves
+            PrimaryTarget = currentPrimary
+            SecondaryTargets = processedCleaves @ unengaged
+            Events = allEvents @ cleaveEvents }
+
+        | CombatStance.DisciplineStance ->
+          // Discipline Stance: Chain strikes across engaged opponents
+          let chainCapacity = Math.Min(3, 1 + (currentActor.StudyStacks / 2))
+          let chainCandidates = currentAdjacent |> List.truncate chainCapacity
+          let unengaged = currentAdjacent |> List.skip chainCandidates.Length
+          let mutable chainEvents = []
+
+          let primaryDmg =
+            primaryRes.Events
+            |> List.choose (function CombatEvent.DamageApplied d when d.TargetId = currentPrimary.Id && d.Plane = Physical -> Some d.Amount | _ -> None)
+            |> List.tryHead
+            |> Option.defaultValue (Math.Max(20, currentActor.GetStat Prowess))
+
+          let rawChainDmg = Math.Max(10, int (float primaryDmg * 0.70))
+
+          let mutable step = 1
+          let processedChains =
+            chainCandidates
+            |> List.map (fun secTarget ->
+              let soakedDmg = Math.Max(5, int (Math.Round(float rawChainDmg * (1.0 - secTarget.Armor.AbsorptionRatio))))
+
+              let targetAfterHit =
+                { secTarget with
+                    Health = secTarget.Health.ApplyDelta -soakedDmg }
+                |> Combatant.updateMeters (fun m -> { m with Frustration = m.Frustration + 12 })
+                |> Combatant.evaluateCollapse
+
+              currentActor <- currentActor |> Combatant.addStudyStacks 1
+
+              chainEvents <-
+                chainEvents
+                @ [
+                  CombatEvent.StrikeChained(currentActor.Id, secTarget.Id, step, soakedDmg)
+                  CombatEvent.DamageApplied {
+                    TargetId = secTarget.Id
+                    Plane = Physical
+                    Amount = soakedDmg
+                    IsCritical = false
+                    IsArmorCompromised = secTarget.Armor.IsShredded
+                  }
+                ]
+
+              if CollapseState.isCollapsed targetAfterHit.Collapse && not (CollapseState.isCollapsed secTarget.Collapse) then
+                match targetAfterHit.Collapse with
+                | CollapseState.Collapsed reason ->
+                  chainEvents <- chainEvents @ [ CombatEvent.CollapseTriggered(targetAfterHit.Id, reason) ]
+                | CollapseState.Stable -> ()
+
+              step <- step + 1
+              targetAfterHit
+            )
+
+          { Actor = currentActor
+            PrimaryTarget = currentPrimary
+            SecondaryTargets = processedChains @ unengaged
+            Events = allEvents @ chainEvents }
+
+        | CombatStance.AgilityStance ->
+          { Actor = currentActor
+            PrimaryTarget = currentPrimary
+            SecondaryTargets = currentAdjacent
+            Events = allEvents }

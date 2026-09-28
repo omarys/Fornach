@@ -110,6 +110,8 @@ type ActionIntent =
   | ExecuteStrike of Plane
   /// Shifting active tactical stance (Power, Agility, Discipline)
   | ShiftStance of CombatStance
+  /// Deploying a class-specific tactical preparation asset
+  | DeployPreparation of preparation: PreparationType * targetId: CombatantId option
 
 /// Result payload emitted after an ActionIntent is fully evaluated
 type ActionResult =

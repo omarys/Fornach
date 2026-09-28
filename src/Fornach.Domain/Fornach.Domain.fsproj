@@ -21,7 +21,11 @@
     <!-- 5. Reactive Equipment Triggers and Effects -->
     <Compile Include="Triggers.fs" />
 
-    <!-- 6. Domain Events -->
+    <!-- 6. Classes and Tactical Preparations -->
+    <Compile Include="Classes.fs" />
+    <Compile Include="Preparations.fs" />
+
+    <!-- 7. Domain Events -->
     <Compile Include="CombatEvent.fs" />
 
     <!-- 6. Equipment Items and Loadout Configuration -->

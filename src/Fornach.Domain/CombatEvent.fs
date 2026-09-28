@@ -115,3 +115,33 @@ type CombatEvent =
 
   /// Overwhelming cataclysmic blast splashed destructive energy to adjacent swarm targets
   | CataclysmSplashed of casterId: CombatantId * secondaryTargetId: CombatantId * splashDamage: int
+
+  /// Tactical preparation deployed by combatant
+  | PreparationDeployed of actorId: CombatantId * prepType: PreparationType * targetId: CombatantId option * description: string
+
+  /// Surplus NetHits from Shockwave Slam spilled over to engaged flanker
+  | ShockwaveSurplusDamage of attackerId: CombatantId * secondaryTargetId: CombatantId * surplusNetHits: int * flatDamage: int
+
+  /// Critical strike triggered Synaptic Brand on marked target for double Morale damage and Rupture
+  | SynapticBrandTriggered of attackerId: CombatantId * targetId: CombatantId * bonusMoraleDamage: int
+
+  /// Concealed boot blade quick-drawn from the Nach to counter-puncture incoming attacker
+  | ConcealedBladeCounter of defenderId: CombatantId * attackerId: CombatantId * damage: int * attackDisrupted: bool
+
+  /// Neurotoxin psychic venom drained Morale due to Recklessness gain
+  | NeuroToxinDrained of targetId: CombatantId * recklessnessSpike: int * moraleDrain: int
+
+  /// Secondary flanker struck a Mirror Mirage phantasm, suffering Confusion and missing turn
+  | MirrorMirageDeceived of defenderId: CombatantId * flankerId: CombatantId * confusionInflicted: int
+
+  /// Defender seized the Vor from the Nach via an Indes counter-interception
+  | IndesSeized of defenderId: CombatantId * attackerId: CombatantId * threshold: int * margin: int
+
+  /// Bastion Zone Control planted, restricting multi-opponent engagement to single file
+  | BastionZoneErected of actorId: CombatantId
+
+  /// Socratic Dossier exposed hypocrisies, converting Recklessness directly to Morale damage
+  | SocraticDossierExecuted of actorId: CombatantId * targetId: CombatantId * recklessnessConverted: int * moraleDamage: int
+
+  /// Heraldic Treatise reviewed, granting immediate Study Stacks across all engaged foes
+  | HeraldicTreatiseStudied of actorId: CombatantId * studyStacksGranted: int

@@ -3,6 +3,9 @@ namespace Fornach.Engine
 open System
 open Fornach.Domain
 
+/// Function signature for rolling dice: (min -> max -> int)
+type DiceRoller = int -> int -> int
+
 /// Result of evaluating an individual combatant's dice pool
 type DicePoolResult =
   { StatValue: int

@@ -12,6 +12,7 @@
     <Compile Include="AttributeMappingTests.fs" />
     <Compile Include="DicePoolTests.fs" />
     <Compile Include="ProlongedBattleTests.fs" />
+    <Compile Include="PreparationTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

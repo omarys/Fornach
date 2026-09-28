@@ -1,0 +1,881 @@
+namespace Fornach.Domain.Tests
+
+open System
+open Xunit
+open Fornach.Domain
+open Fornach.Engine
+
+module PreparationTests =
+
+  let fixedRoller (rollVal: int) : DiceRoller =
+    fun _ _ -> rollVal
+
+  let createFighterWithClass (charClass: CharacterClass) (level: int) force fort finesse reflex prowess poise intellect resolve acuity intuition acumen composure =
+    let id = CombatantId.New()
+    let stats =
+      StatBlock.Create [
+        Force, force; Fortitude, fort
+        Finesse, finesse; Reflex, reflex
+        Prowess, prowess; Poise, poise
+        Intellect, intellect; Resolve, resolve
+        Acuity, acuity; Intuition, intuition
+        Acumen, acumen; Composure, composure
+      ]
+    Combatant.createWithClass id "TestFighter" 2000 2000 stats charClass level
+
+  let createStandardFighter (charClass: CharacterClass) (level: int) =
+    createFighterWithClass charClass level 50 50 50 50 50 50 50 50 50 50 50 50
+
+  // =========================================================================
+  // 1. Progression & Level Scaling Tests
+  // =========================================================================
+
+  [<Theory>]
+  [<InlineData(1, 2)>]
+  [<InlineData(4, 2)>]
+  [<InlineData(5, 3)>]
+  [<InlineData(9, 3)>]
+  [<InlineData(10, 4)>]
+  [<InlineData(14, 4)>]
+  [<InlineData(15, 5)>]
+  [<InlineData(19, 5)>]
+  [<InlineData(20, 6)>]
+  [<InlineData(25, 6)>]
+  [<InlineData(50, 6)>]
+  let ``CalculateMaxPrepUses scales correctly by level up to hard cap of 6`` (level: int, expectedMaxUses: int) =
+    let actualUses = ProgressionProfile.CalculateMaxPrepUses level
+    Assert.Equal(expectedMaxUses, actualUses)
+
+  [<Fact>]
+  let ``Combatant created with class initializes correct progression slots and capacity`` () =
+    let level = 10
+    let justicar = createStandardFighter CharacterClass.Justicar level
+    Assert.Equal(CharacterClass.Justicar, justicar.Class)
+    Assert.Equal(level, justicar.Progression.Level)
+    Assert.Equal(4, ProgressionProfile.CalculateMaxPrepUses level)
+    Assert.Equal(2, justicar.Preparations.Length)
+
+    for slot in justicar.Preparations do
+      Assert.Equal(4, slot.MaxUses)
+      Assert.Equal(4, slot.RemainingUses)
+
+  [<Fact>]
+  let ``Spending preparation decrements remaining charges and blocks deployment when exhausted`` () =
+    let justicar = createStandardFighter CharacterClass.Justicar 1 // 2 uses
+    let dummy = createStandardFighter CharacterClass.Titan 1
+    let roller = fixedRoller 3
+
+    // Deploy 1st use
+    let res1 = ActionResolver.resolve roller (DeployPreparation (PreparationType.BastionZoneControl, None)) justicar dummy
+    Assert.True(res1.Actor.HasActivePreparation PreparationType.BastionZoneControl)
+    Assert.Equal(1, res1.Actor.Progression.Preparations |> List.find (fun s -> s.Type = PreparationType.BastionZoneControl) |> fun s -> s.RemainingUses)
+
+    // Deploy 2nd use
+    let res2 = ActionResolver.resolve roller (DeployPreparation (PreparationType.BastionZoneControl, None)) res1.Actor dummy
+    Assert.Equal(0, res2.Actor.Progression.Preparations |> List.find (fun s -> s.Type = PreparationType.BastionZoneControl) |> fun s -> s.RemainingUses)
+
+    // Attempt 3rd use (exhausted)
+    let res3 = ActionResolver.resolve roller (DeployPreparation (PreparationType.BastionZoneControl, None)) res2.Actor dummy
+    let failedDeploy = res3.Events |> List.exists (function CombatEvent.ComboReset (_, r) when r.Contains("no preparation charges remaining") -> true | _ -> false)
+    Assert.True(failedDeploy, "Should emit ComboReset indicating no remaining preparation charges.")
+
+  [<Fact>]
+  let ``Replenishing progression profile restores all preparations to maximum capacity`` () =
+    let duelist = createStandardFighter CharacterClass.Duelist 5 // 3 uses
+    let spentOnce = duelist |> Combatant.spendPreparation PreparationType.ConcealedBlade
+    let slot = spentOnce.Progression.Preparations |> List.find (fun s -> s.Type = PreparationType.ConcealedBlade)
+    Assert.Equal(2, slot.RemainingUses)
+
+    let replenishedProfile = spentOnce.Progression.ReplenishAll()
+    let repSlot = replenishedProfile.Preparations |> List.find (fun s -> s.Type = PreparationType.ConcealedBlade)
+    Assert.Equal(3, repSlot.RemainingUses)
+
+  // =========================================================================
+  // 2. Class Archetype & Preparation Mapping Tests
+  // =========================================================================
+
+  [<Fact>]
+  let ``All 6 player character classes correctly map Vector, Plane, and 2 unique preparations (1 Crowd, 1 Duel)`` () =
+    let playerClasses = CharacterClass.PlayerClasses
+    Assert.Equal(6, playerClasses.Length)
+
+    for cls in playerClasses do
+      Assert.False(cls.IsGeneric)
+      Assert.True(cls.IsPlayerClass)
+      let preps = PreparationType.ForClass cls
+      Assert.Equal(2, preps.Length)
+
+      let crowdPreps = preps |> List.filter (fun p -> p.Category = PreparationCategory.CrowdControl)
+      let duelPreps = preps |> List.filter (fun p -> p.Category = PreparationCategory.SingleTargetDuel)
+
+      Assert.Single(crowdPreps) |> ignore
+      Assert.Single(duelPreps) |> ignore
+
+      for p in preps do
+        Assert.Equal(cls, p.Class)
+        Assert.False(String.IsNullOrWhiteSpace(p.Name))
+        Assert.False(String.IsNullOrWhiteSpace(p.Description))
+
+  [<Fact>]
+  let ``All 4 generic NPC classes (Warrior, Assassin, Soldier, Mage) map correctly and possess zero preparations`` () =
+    let genericClasses = CharacterClass.GenericClasses
+    Assert.Equal(4, genericClasses.Length)
+    Assert.Equal(10, CharacterClass.All.Length)
+
+    for cls in genericClasses do
+      Assert.True(cls.IsGeneric)
+      Assert.False(cls.IsPlayerClass)
+      let preps = PreparationType.ForClass cls
+      Assert.Empty(preps)
+      Assert.False(String.IsNullOrWhiteSpace(cls.Name))
+      Assert.False(String.IsNullOrWhiteSpace(cls.Description))
+
+    // Specific generic class checks
+    Assert.Equal(Vector.Power, CharacterClass.Warrior.Vector)
+    Assert.Equal(Plane.Physical, CharacterClass.Warrior.Plane)
+
+    Assert.Equal(Vector.Agility, CharacterClass.Assassin.Vector)
+    Assert.Equal(Plane.Physical, CharacterClass.Assassin.Plane)
+
+    Assert.Equal(Vector.Discipline, CharacterClass.Soldier.Vector)
+    Assert.Equal(Plane.Physical, CharacterClass.Soldier.Plane)
+
+    Assert.Equal(Vector.Power, CharacterClass.Mage.Vector)
+    Assert.Equal(Plane.Mental, CharacterClass.Mage.Plane)
+
+  // =========================================================================
+  // 3. Multi-Opponent Crowd Control Tests: BastionZoneControl
+  // =========================================================================
+
+  [<Fact>]
+  let ``BastionZoneControl prevents multi-opponent encirclement penalties against multiple attackers`` () =
+    // Attacker has Force 60, defender Fortitude 30.
+    // Fixed roller of 4 so defense hits and attack hits are consistent.
+    let roller = fixedRoller 4
+    let attacker = createFighterWithClass CharacterClass.Titan 1 60 40 40 40 40 40 10 10 10 10 10 10
+    let baseDefender = createFighterWithClass CharacterClass.Justicar 5 40 30 40 40 40 40 10 10 10 10 10 10
+
+    // Without BastionZoneControl at priorDefenses = 2 (3rd attacker in a round)
+    let resWithoutBastion = ActionResolver.resolveEx roller (StandardAttack (ForceStrike false)) attacker baseDefender 2
+    let contestWithout = resWithoutBastion.Contest.Value
+    Assert.True(contestWithout.EncirclementPenalty > 0, "Defender without Bastion should suffer encirclement penalty against 3rd attacker.")
+
+    let penalizedEventEmitted =
+      resWithoutBastion.Events
+      |> List.exists (function CombatEvent.EncirclementPenalized _ -> true | _ -> false)
+    Assert.True(penalizedEventEmitted, "EncirclementPenalized event should be emitted without Bastion.")
+
+    // With BastionZoneControl active on defender
+    let bastionActive =
+      baseDefender
+      |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.BastionZoneControl None 3)
+
+    let resWithBastion = ActionResolver.resolveEx roller (StandardAttack (ForceStrike false)) attacker bastionActive 2
+    let contestWith = resWithBastion.Contest.Value
+    Assert.Equal(0, contestWith.EncirclementPenalty)
+
+    let penalizedWithBastion =
+      resWithBastion.Events
+      |> List.exists (function CombatEvent.EncirclementPenalized _ -> true | _ -> false)
+    Assert.False(penalizedWithBastion, "EncirclementPenalized event should NOT be emitted when Bastion is active.")
+
+  // =========================================================================
+  // 4. Single-Target Duel Tests: ConcealedBlade & NeuroToxin
+  // =========================================================================
+
+  [<Fact>]
+  let ``ConcealedBlade interrupts incoming attack from the Nach with immediate counter-puncture`` () =
+    // High finesse defender with ConcealedBlade
+    let defender =
+      createFighterWithClass CharacterClass.Duelist 5 30 30 100 80 40 40 10 10 10 10 10 10
+      |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ConcealedBlade None 3)
+
+    // Attacker with lower reflex
+    let attacker = createFighterWithClass CharacterClass.Titan 1 60 50 30 30 40 40 10 10 10 10 10 10
+
+    // Roller 1 ensures reliable puncture and disruption
+    let roller = fixedRoller 1
+    let res = ActionResolver.resolve roller (StandardAttack (ForceStrike false)) attacker defender
+
+    // Concealed blade should deal damage to attacker and consume preparation
+    let counterEvt =
+      res.Events
+      |> List.tryPick (function CombatEvent.ConcealedBladeCounter (_, _, dmg, disrupted) -> Some (dmg, disrupted) | _ -> None)
+
+    Assert.True(counterEvt.IsSome, "ConcealedBladeCounter event must be emitted.")
+    let dmg, disrupted = counterEvt.Value
+    Assert.True(dmg > 0, "Concealed blade counter-puncture must deal damage.")
+    Assert.True(disrupted, "High finesse disparity should disrupt the incoming strike.")
+
+    // Preparation should have been consumed from defender
+    Assert.False(res.Target.HasActivePreparation PreparationType.ConcealedBlade, "Concealed Blade should be consumed after execution.")
+
+    // Since strike was disrupted, attacker strike did not land on defender health
+    Assert.Equal(defender.Health.Current, res.Target.Health.Current)
+
+  [<Fact>]
+  let ``NeuroToxin inflicts escalating Morale drain when target gains Recklessness`` () =
+    let attacker = createFighterWithClass CharacterClass.Mesmer 5 30 30 40 40 40 40 60 50 70 50 50 50
+    let defender =
+      createFighterWithClass CharacterClass.Titan 1 50 50 30 30 40 40 30 30 30 30 30 30
+      |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.NeuroToxin None 3)
+
+    let initialMorale = defender.Morale.Current
+
+    // Attacker uses GuileDeception which inflicts Recklessness on defender
+    let roller = fixedRoller 6 // ensures hit
+    let res = ActionResolver.resolve roller (StandardAttack (GuileDeception false)) attacker defender
+
+    let toxinEvt =
+      res.Events
+      |> List.tryPick (function CombatEvent.NeuroToxinDrained (_, reckSpike, drain) -> Some (reckSpike, drain) | _ -> None)
+
+    Assert.True(toxinEvt.IsSome, "NeuroToxinDrained event must be emitted when target gains Recklessness.")
+    let reckSpike, drain = toxinEvt.Value
+    Assert.True(reckSpike > 0, "Recklessness spike must be positive.")
+    Assert.True(drain > 0, "Morale drain must be positive.")
+    Assert.True(res.Target.Morale.Current < initialMorale, "Target Morale must be reduced by Neurotoxin.")
+
+  // =========================================================================
+  // 5. Tactical Timing & Indes Tests: ParryingBuckler
+  // =========================================================================
+
+  [<Fact>]
+  let ``ParryingBuckler reduces Indes threshold by 1, widening window to seize the Vor`` () =
+    let standardJusticar = createStandardFighter CharacterClass.Justicar 1
+    Assert.Equal(Indes.defaultThreshold, Indes.calculateThreshold standardJusticar)
+    Assert.Equal(3, Indes.calculateThreshold standardJusticar)
+
+    let bucklerJusticar =
+      standardJusticar
+      |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ParryingBuckler None 3)
+
+    Assert.Equal(2, Indes.calculateThreshold bucklerJusticar)
+
+  [<Fact>]
+  let ``ParryingBuckler enables seizing the Vor at 2 net defense hits on a whiffed attack`` () =
+    // Attacker attacks, but defender defense hits exceed attack hits by 2.
+    // With Parrying Buckler, threshold is 2, so IndesSeized should trigger.
+    let attacker = createFighterWithClass CharacterClass.Titan 1 20 20 20 20 20 20 10 10 10 10 10 10
+    let defender =
+      createFighterWithClass CharacterClass.Justicar 5 40 80 40 40 40 40 10 10 10 10 10 10
+      |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ParryingBuckler None 3)
+
+    // Roller where defender rolls hits and attacker rolls whiffs
+    // Roller returning 4 (hits on Fortitude for TN 4+)
+    let roller = fixedRoller 4
+    let res = ActionResolver.resolve roller (StandardAttack (ForceStrike false)) attacker defender
+
+    let seizedEvt =
+      res.Events
+      |> List.tryPick (function CombatEvent.IndesSeized (_, _, thresh, margin) -> Some (thresh, margin) | _ -> None)
+
+    Assert.True(seizedEvt.IsSome, "IndesSeized event should be emitted when threshold is met with Parrying Buckler.")
+    let thresh, margin = seizedEvt.Value
+    Assert.Equal(2, thresh)
+    Assert.True(margin >= thresh)
+
+  // =========================================================================
+  // 6. Multi-Opponent Shockwave Slam & Group Turn Tests
+  // =========================================================================
+
+  [<Fact>]
+  let ``ShockwaveSlam distributes flat surplus damage across all flankers on NetHits 3 or more`` () =
+    let titan =
+      createFighterWithClass CharacterClass.Titan 5 120 80 30 30 40 40 10 10 10 10 10 10
+      |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ShockwaveSlam None 3)
+
+    let primaryTarget = createStandardFighter CharacterClass.Duelist 1
+    let flanker1 = createStandardFighter CharacterClass.Duelist 1
+    let flanker2 = createStandardFighter CharacterClass.Duelist 1
+
+    let roller = fixedRoller 6 // Max rolls for NetHits >= 3
+    let groupRes =
+      ActionResolver.resolveGroupTurn
+        roller
+        (StandardAttack (ForceStrike false))
+        titan
+        primaryTarget
+        [ flanker1; flanker2 ]
+
+    let shockwaveEvents =
+      groupRes.Events
+      |> List.choose (function CombatEvent.ShockwaveSurplusDamage (a, t, excess, dmg) -> Some (t, excess, dmg) | _ -> None)
+
+    Assert.Equal(2, shockwaveEvents.Length)
+    for (targetId, excessHits, flatDmg) in shockwaveEvents do
+      Assert.True(excessHits >= 1)
+      Assert.True(flatDmg >= 15)
+
+  // =========================================================================
+  // 7. Tactical Duel Finishers: SocraticDossier & SynapticBrand
+  // =========================================================================
+
+  [<Fact>]
+  let ``SocraticDossier converts opponent Recklessness directly to unmitigated Morale damage`` () =
+    let strategist = createStandardFighter CharacterClass.Strategist 5
+    let targetWithReck =
+      createStandardFighter CharacterClass.Titan 1
+      |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness + 40 })
+
+    let initialMorale = targetWithReck.Morale.Current
+    let roller = fixedRoller 3
+
+    let res = ActionResolver.resolve roller (DeployPreparation (PreparationType.SocraticDossier, Some targetWithReck.Id)) strategist targetWithReck
+
+    let dossierEvt =
+      res.Events
+      |> List.tryPick (function CombatEvent.SocraticDossierExecuted (_, _, reckConv, moraleDmg) -> Some (reckConv, moraleDmg) | _ -> None)
+
+    Assert.True(dossierEvt.IsSome, "SocraticDossierExecuted event must be emitted.")
+    let reckConv, moraleDmg = dossierEvt.Value
+    Assert.Equal(40, reckConv)
+    Assert.Equal(40, moraleDmg)
+    Assert.Equal(initialMorale - 40, res.Target.Morale.Current)
+    Assert.Equal(0, res.Target.Meters.Recklessness.Value)
+
+  // =========================================================================
+  // 8. Tiered Archetypes & Matchup Factory (Novice / Intermediate / Master / Grandmaster)
+  // =========================================================================
+
+  type CombatTier =
+    | Novice
+    | Intermediate
+    | Master
+    | Grandmaster
+
+  module TierFactory =
+
+    let createClassTier (cls: CharacterClass) (tier: CombatTier) : Combatant =
+      let id = CombatantId.New()
+      let level, (primStat, secStat, minStat), (health, morale, armor) =
+        match tier with
+        | Novice ->
+          1, (45, 25, 15), (if cls.Plane = Physical then 650, 450, 25 else 450, 650, 15)
+        | Intermediate ->
+          6, (120, 75, 45), (if cls.Plane = Physical then 2200, 1400, 65 else 1400, 2200, 35)
+        | Master ->
+          15, (240, 140, 90), (if cls.Plane = Physical then 5000, 3000, 110 else 3000, 5000, 70)
+        | Grandmaster ->
+          20, (360, 220, 130), (if cls.Plane = Physical then 8500, 5000, 150 else 5000, 8500, 100)
+
+      let statMap =
+        match cls with
+        | CharacterClass.Titan
+        | CharacterClass.Warrior ->
+          // Power / Physical: Primary Force, Fortitude; Secondary Prowess, Poise; Minor rest
+          [ Force, primStat; Fortitude, primStat
+            Prowess, secStat; Poise, secStat
+            Finesse, minStat; Reflex, minStat
+            Intellect, minStat; Resolve, minStat
+            Acuity, minStat; Intuition, minStat
+            Acumen, minStat; Composure, minStat ]
+        | CharacterClass.Inquisitor
+        | CharacterClass.Mage ->
+          // Power / Mental: Primary Intellect, Resolve; Secondary Acumen, Composure; Minor rest
+          [ Intellect, primStat; Resolve, primStat
+            Acumen, secStat; Composure, secStat
+            Force, minStat; Fortitude, minStat
+            Finesse, minStat; Reflex, minStat
+            Prowess, minStat; Poise, minStat
+            Acuity, minStat; Intuition, minStat ]
+        | CharacterClass.Duelist
+        | CharacterClass.Assassin ->
+          // Agility / Physical: Primary Finesse, Reflex; Secondary Prowess, Poise; Minor rest
+          [ Finesse, primStat; Reflex, primStat
+            Prowess, secStat; Poise, secStat
+            Force, minStat; Fortitude, minStat
+            Intellect, minStat; Resolve, minStat
+            Acuity, minStat; Intuition, minStat
+            Acumen, minStat; Composure, minStat ]
+        | CharacterClass.Mesmer ->
+          // Agility / Mental: Primary Acuity, Intuition; Secondary Intellect, Resolve; Minor rest
+          [ Acuity, primStat; Intuition, primStat
+            Intellect, secStat; Resolve, secStat
+            Force, minStat; Fortitude, minStat
+            Finesse, minStat; Reflex, minStat
+            Prowess, minStat; Poise, minStat
+            Acumen, minStat; Composure, minStat ]
+        | CharacterClass.Justicar
+        | CharacterClass.Soldier ->
+          // Discipline / Physical: Primary Prowess, Poise; Secondary Fortitude, Force; Minor rest
+          [ Prowess, primStat; Poise, primStat
+            Fortitude, primStat; Force, secStat
+            Finesse, minStat; Reflex, minStat
+            Intellect, minStat; Resolve, minStat
+            Acuity, minStat; Intuition, minStat
+            Acumen, minStat; Composure, minStat ]
+        | CharacterClass.Strategist ->
+          // Discipline / Mental: Primary Acumen, Composure; Secondary Intellect, Intuition; Minor rest
+          [ Acumen, primStat; Composure, primStat
+            Intellect, secStat; Intuition, secStat
+            Force, minStat; Fortitude, minStat
+            Finesse, minStat; Reflex, minStat
+            Prowess, minStat; Poise, minStat
+            Acuity, minStat; Resolve, minStat ]
+
+      let stats = StatBlock.Create statMap
+      let name = sprintf "%s %s" (tier.ToString()) cls.Name
+      let stance =
+        match cls with
+        | CharacterClass.Titan
+        | CharacterClass.Warrior -> CombatStance.PowerStance
+        | CharacterClass.Inquisitor
+        | CharacterClass.Mage -> CombatStance.PowerStance
+        | CharacterClass.Duelist
+        | CharacterClass.Assassin -> CombatStance.AgilityStance
+        | CharacterClass.Mesmer -> CombatStance.AgilityStance
+        | CharacterClass.Justicar
+        | CharacterClass.Soldier -> CombatStance.DisciplineStance
+        | CharacterClass.Strategist -> CombatStance.DisciplineStance
+
+      { Combatant.createWithClass id name health morale stats cls level with
+          Armor = ArmorIntegrity.Create armor
+          Stance = stance }
+
+  [<Fact>]
+  let ``TierFactory initializes all 40 archetypes across 10 classes and 4 tiers correctly`` () =
+    let tiers = [ Novice; Intermediate; Master; Grandmaster ]
+    let classes = CharacterClass.All
+
+    Assert.Equal(10, classes.Length)
+
+    for cls in classes do
+      for tier in tiers do
+        let fighter = TierFactory.createClassTier cls tier
+        Assert.Equal(cls, fighter.Class)
+
+        let expectedLevel =
+          match tier with
+          | Novice -> 1
+          | Intermediate -> 6
+          | Master -> 15
+          | Grandmaster -> 20
+
+        Assert.Equal(expectedLevel, fighter.Progression.Level)
+
+        if cls.IsGeneric then
+          // Generic NPC classes do NOT receive specialized preparations or slots
+          Assert.Empty(fighter.Preparations)
+          Assert.Equal(0, fighter.Progression.TotalRemainingPrepUses)
+        else
+          // Player classes receive 2 preparation slots scaled with level
+          let expectedPrepUses = ProgressionProfile.CalculateMaxPrepUses expectedLevel
+          Assert.Equal(2, fighter.Preparations.Length)
+          for slot in fighter.Preparations do
+            Assert.Equal(expectedPrepUses, slot.MaxUses)
+            Assert.Equal(expectedPrepUses, slot.RemainingUses)
+
+        // Health, Morale, and Armor must be positive and scale with tier
+        Assert.True(fighter.Health.Current > 0)
+        Assert.True(fighter.Morale.Current > 0)
+        Assert.True(fighter.Armor.Current > 0)
+
+  [<Fact>]
+  let ``Generic NPC classes cannot deploy specialized player preparations`` () =
+    let genericClasses = CharacterClass.GenericClasses
+    let roller = fixedRoller 4
+    let target = TierFactory.createClassTier CharacterClass.Warrior Novice
+
+    for cls in genericClasses do
+      let npc = TierFactory.createClassTier cls Novice
+      Assert.Empty(npc.Preparations)
+      Assert.Equal(0, npc.Progression.TotalRemainingPrepUses)
+
+      // Attempting to deploy any specialized preparation should fail gracefully with ComboReset
+      let attemptDeploy = ActionResolver.resolve roller (DeployPreparation (PreparationType.ShockwaveSlam, None)) npc target
+      let resetEvt =
+        attemptDeploy.Events
+        |> List.tryPick (function CombatEvent.ComboReset (_, r) -> Some r | _ -> None)
+
+      Assert.True(resetEvt.IsSome, sprintf "Generic class %s must not be able to deploy ShockwaveSlam." cls.Name)
+      Assert.Contains("no preparation charges remaining", resetEvt.Value)
+      // NPC's active preparations remain empty
+      Assert.Empty(attemptDeploy.Actor.ActivePreparations)
+
+  // =========================================================================
+  // 9. Duel Matchups Across Tiers (1v1)
+  // =========================================================================
+
+  [<Fact>]
+  let ``Duel: Novice Duelist uses Concealed Blade to interrupt and defuse Novice Warrior strike`` () =
+    let duelist =
+      TierFactory.createClassTier CharacterClass.Duelist Novice
+      |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ConcealedBlade None 3)
+    let warrior = TierFactory.createClassTier CharacterClass.Warrior Novice
+    let roller = fixedRoller 1 // triggers puncture & disruption
+
+    let res = ActionResolver.resolve roller (StandardAttack (ForceStrike false)) warrior duelist
+
+    let counterEvt =
+      res.Events
+      |> List.tryPick (function CombatEvent.ConcealedBladeCounter (_, _, dmg, disrupted) -> Some (dmg, disrupted) | _ -> None)
+
+    Assert.True(counterEvt.IsSome, "Novice Duelist should trigger Concealed Blade counter-puncture.")
+    let dmg, disrupted = counterEvt.Value
+    Assert.True(dmg > 0)
+    Assert.True(disrupted)
+    // Warrior strike was defused; duelist took 0 damage
+    Assert.Equal(duelist.Health.Current, res.Target.Health.Current)
+
+  [<Fact>]
+  let ``Duel: Intermediate Mesmer deploys NeuroToxin on Intermediate Warrior, draining Morale on Recklessness gain`` () =
+    let mesmer = TierFactory.createClassTier CharacterClass.Mesmer Intermediate
+    let warrior = TierFactory.createClassTier CharacterClass.Warrior Intermediate
+    let roller = fixedRoller 6
+
+    // Mesmer deploys NeuroToxin
+    let deployRes = ActionResolver.resolve roller (DeployPreparation (PreparationType.NeuroToxin, Some warrior.Id)) mesmer warrior
+    let warriorToxined = deployRes.Target
+
+    // Mesmer strikes with GuileDeception, causing Warrior to gain Recklessness
+    let attackRes = ActionResolver.resolve roller (StandardAttack (GuileDeception false)) deployRes.Actor warriorToxined
+
+    let toxinDrainEvt =
+      attackRes.Events
+      |> List.tryPick (function CombatEvent.NeuroToxinDrained (_, reckSpike, drain) -> Some (reckSpike, drain) | _ -> None)
+
+    Assert.True(toxinDrainEvt.IsSome, "Neurotoxin should drain Morale when Intermediate Warrior gains Recklessness.")
+    let _, drain = toxinDrainEvt.Value
+    Assert.True(drain > 0)
+    Assert.True(attackRes.Target.Morale.Current < warriorToxined.Morale.Current)
+
+  [<Fact>]
+  let ``Duel: Master Justicar with Parrying Buckler seizes Vor in Indes against Master Assassin`` () =
+    let justicar =
+      TierFactory.createClassTier CharacterClass.Justicar Master
+      |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ParryingBuckler None 3)
+    let assassin = TierFactory.createClassTier CharacterClass.Assassin Master
+
+    // Parrying Buckler reduces Indes threshold from 3 to 2
+    Assert.Equal(2, Indes.calculateThreshold justicar)
+
+    // Roller where justicar's high defense hits generate margin of 2+ on whiff
+    let roller = fixedRoller 4
+    let res = ActionResolver.resolve roller (StandardAttack (ProwessStrike false)) assassin justicar
+
+    let seizedEvt =
+      res.Events
+      |> List.tryPick (function CombatEvent.IndesSeized (_, _, thresh, margin) -> Some (thresh, margin) | _ -> None)
+
+    Assert.True(seizedEvt.IsSome, "Master Justicar should seize the Vor in Indes with Parrying Buckler active.")
+    let thresh, margin = seizedEvt.Value
+    Assert.Equal(2, thresh)
+    Assert.True(margin >= 2)
+
+  [<Fact>]
+  let ``Duel: Master Inquisitor triggers Synaptic Brand for double Morale damage against Master Warrior`` () =
+    let inquisitor = TierFactory.createClassTier CharacterClass.Inquisitor Master
+    let warrior = TierFactory.createClassTier CharacterClass.Warrior Master
+    let roller = fixedRoller 6 // ensures critical hit
+
+    // Inquisitor marks warrior with Synaptic Brand
+    let deployRes = ActionResolver.resolve roller (DeployPreparation (PreparationType.SynapticBrand, Some warrior.Id)) inquisitor warrior
+    let warriorBranded = deployRes.Target
+
+    // Inquisitor lands a critical strike with AuthorityDecree
+    let attackRes = ActionResolver.resolve roller (StandardAttack (AuthorityDecree true)) deployRes.Actor warriorBranded
+
+    let brandEvt =
+      attackRes.Events
+      |> List.tryPick (function CombatEvent.SynapticBrandTriggered (_, _, bonusDmg) -> Some bonusDmg | _ -> None)
+
+    Assert.True(brandEvt.IsSome, "Synaptic Brand should detonate upon critical strike.")
+    Assert.True(brandEvt.Value > 0)
+
+  [<Fact>]
+  let ``Duel: Grandmaster Duelist completely outmatches Novice Warrior via deterministic floor hits`` () =
+    // Grandmaster Duelist has 360 Finesse -> 24 guaranteed floor hits (360 / 15)
+    // Novice Warrior has 45 Fortitude -> 3 guaranteed floor hits (45 / 15)
+    let duelist = TierFactory.createClassTier CharacterClass.Duelist Grandmaster
+    let novice = TierFactory.createClassTier CharacterClass.Warrior Novice
+    let roller = fixedRoller 4
+
+    let res = ActionResolver.resolve roller (StandardAttack (FinesseCadence false)) duelist novice
+
+    Assert.NotNull(res.Contest)
+    let contest = res.Contest.Value
+    Assert.False(contest.IsWhiff)
+    Assert.True(contest.NetHits >= 10, sprintf "Grandmaster NetHits (%d) should overwhelmingly crush Novice" contest.NetHits)
+    Assert.True(res.Target.Health.Current < novice.Health.Current / 2, "Novice should take catastrophic damage from Grandmaster strike.")
+
+  [<Fact>]
+  let ``Duel: Novice Warrior Force strike cleanly whiffs against Grandmaster Justicar with 0 Overwhelm`` () =
+    // Novice has Force 45; Grandmaster Justicar has Poise 360 & Fortitude 360 (24 floor hits)
+    let novice = TierFactory.createClassTier CharacterClass.Warrior Novice
+    let grandmaster = TierFactory.createClassTier CharacterClass.Justicar Grandmaster
+    let roller = fixedRoller 4
+
+    let res = ActionResolver.resolve roller (StandardAttack (ForceStrike false)) novice grandmaster
+
+    Assert.NotNull(res.Contest)
+    Assert.True(res.Contest.Value.IsWhiff, "Novice strike must cleanly whiff against Grandmaster Poise.")
+    Assert.Equal(0, res.Target.Meters.Overwhelm.Value)
+    Assert.Equal(grandmaster.Health.Current, res.Target.Health.Current)
+
+  [<Fact>]
+  let ``Duel: Grandmaster Strategist converts Grandmaster Mage Recklessness to unmitigated Morale damage`` () =
+    let strategist = TierFactory.createClassTier CharacterClass.Strategist Grandmaster
+    let mage =
+      TierFactory.createClassTier CharacterClass.Mage Grandmaster
+      |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness + 60 })
+
+    let initialMorale = mage.Morale.Current
+    let roller = fixedRoller 3
+
+    let res = ActionResolver.resolve roller (DeployPreparation (PreparationType.SocraticDossier, Some mage.Id)) strategist mage
+
+    let dossierEvt =
+      res.Events
+      |> List.tryPick (function CombatEvent.SocraticDossierExecuted (_, _, reckConv, moraleDmg) -> Some (reckConv, moraleDmg) | _ -> None)
+
+    Assert.True(dossierEvt.IsSome, "Socratic Dossier should convert Recklessness to Morale damage.")
+    let reckConv, moraleDmg = dossierEvt.Value
+    Assert.Equal(60, reckConv)
+    Assert.Equal(60, moraleDmg)
+    Assert.Equal(initialMorale - 60, res.Target.Morale.Current)
+    Assert.Equal(0, res.Target.Meters.Recklessness.Value)
+
+  [<Fact>]
+  let ``Duel: Generic Novice Soldier vs Novice Assassin duels without preparations testing pure martial mechanics`` () =
+    let soldier = TierFactory.createClassTier CharacterClass.Soldier Novice
+    let assassin = TierFactory.createClassTier CharacterClass.Assassin Novice
+    let roller = fixedRoller 4
+
+    Assert.Empty(soldier.Preparations)
+    Assert.Empty(assassin.Preparations)
+
+    let res = ActionResolver.resolve roller (StandardAttack (ProwessStrike false)) soldier assassin
+
+    Assert.NotNull(res.Contest)
+    // No preparation events should be emitted
+    let prepEvents =
+      res.Events
+      |> List.filter (function
+        | CombatEvent.PreparationDeployed _
+        | CombatEvent.ConcealedBladeCounter _
+        | CombatEvent.NeuroToxinDrained _
+        | CombatEvent.SynapticBrandTriggered _ -> true
+        | _ -> false)
+    Assert.Empty(prepEvents)
+
+  [<Fact>]
+  let ``Duel: Generic Intermediate Warrior vs Intermediate Mage duels across physical and mental planes`` () =
+    let warrior = TierFactory.createClassTier CharacterClass.Warrior Intermediate
+    let mage = TierFactory.createClassTier CharacterClass.Mage Intermediate
+    let roller = fixedRoller 4
+
+    Assert.Equal(Plane.Physical, warrior.Class.Plane)
+    Assert.Equal(Plane.Mental, mage.Class.Plane)
+    Assert.Empty(warrior.Preparations)
+    Assert.Empty(mage.Preparations)
+
+    let res = ActionResolver.resolve roller (StandardAttack (ForceStrike false)) warrior mage
+    Assert.NotNull(res.Contest)
+    Assert.True(res.Target.Health.Current < mage.Health.Current, "Mage should take physical damage from Warrior Force strike.")
+
+  [<Fact>]
+  let ``Duel: Generic Master Soldier vs Master Assassin duels with high defense poise`` () =
+    let soldier = TierFactory.createClassTier CharacterClass.Soldier Master
+    let assassin = TierFactory.createClassTier CharacterClass.Assassin Master
+    let roller = fixedRoller 4
+
+    // Assassin attacks Soldier with ProwessStrike (assassin secStat 140 vs soldier primStat 240) -> Whiffs
+    let res = ActionResolver.resolve roller (StandardAttack (ProwessStrike false)) assassin soldier
+    Assert.NotNull(res.Contest)
+    Assert.True(res.Contest.Value.IsWhiff, "Assassin secondary Prowess strike whiffs against Soldier Master Poise.")
+
+  [<Fact>]
+  let ``Duel: Generic Grandmaster Warrior vs Grandmaster Soldier duels in clash of brute force and guard`` () =
+    let warrior = TierFactory.createClassTier CharacterClass.Warrior Grandmaster
+    let soldier = TierFactory.createClassTier CharacterClass.Soldier Grandmaster
+    // Attacker rolls high (6s) while defender rolls lower (4s)
+    let mutable rollCount = 0
+    let roller _ _ =
+      rollCount <- rollCount + 1
+      if rollCount <= 10 then 6 else 4
+
+    // Warrior Force strike against Soldier Fortitude (both primStat 360)
+    let res = ActionResolver.resolve roller (StandardAttack (ForceStrike false)) warrior soldier
+    Assert.NotNull(res.Contest)
+    Assert.False(res.Contest.Value.IsWhiff, "High rolling Grandmaster Warrior strike overcomes guard.")
+    Assert.True(res.Target.Health.Current < soldier.Health.Current)
+
+  // =========================================================================
+  // 10. 1 vs N Swarm Matchups Across Tiers
+  // =========================================================================
+
+  [<Fact>]
+  let ``1vsN: Grandmaster Titan with Shockwave Slam and Power Cleave decimates 5 Novice Assassins`` () =
+    let titan =
+      TierFactory.createClassTier CharacterClass.Titan Grandmaster
+      |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ShockwaveSlam None 3)
+
+    let primaryNovice = TierFactory.createClassTier CharacterClass.Assassin Novice
+    let flankers = List.init 4 (fun _ -> TierFactory.createClassTier CharacterClass.Assassin Novice)
+
+    let roller = fixedRoller 6 // guarantees NetHits >= 3
+    let groupRes =
+      ActionResolver.resolveGroupTurn
+        roller
+        (StandardAttack (ForceStrike false))
+        titan
+        primaryNovice
+        flankers
+
+    // Shockwave surplus flat damage should hit all 4 secondary flankers
+    let shockwaveEvents =
+      groupRes.Events
+      |> List.choose (function CombatEvent.ShockwaveSurplusDamage (a, t, excess, dmg) -> Some (t, excess, dmg) | _ -> None)
+
+    Assert.Equal(4, shockwaveEvents.Length)
+    for (_, excessHits, flatDmg) in shockwaveEvents do
+      Assert.True(excessHits >= 1)
+      Assert.True(flatDmg >= 15)
+
+    // In Power Stance, Cleave should also strike 2 flankers
+    let cleaveEvents =
+      groupRes.Events
+      |> List.choose (function CombatEvent.CleaveExecuted (a, t, dmg, reck) -> Some (t, dmg, reck) | _ -> None)
+
+    Assert.Equal(2, cleaveEvents.Length)
+
+  [<Fact>]
+  let ``1vsN: Grandmaster Justicar with Bastion Zone Control completely negates encirclement penalties against 4 Novice Warriors`` () =
+    let justicar =
+      TierFactory.createClassTier CharacterClass.Justicar Grandmaster
+      |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.BastionZoneControl None 3)
+
+    let novices = List.init 4 (fun _ -> TierFactory.createClassTier CharacterClass.Warrior Novice)
+    let roller = fixedRoller 4
+
+    // 4 Novice Warriors attack in succession
+    let mutable currentJusticar = justicar
+    for i in 0 .. 3 do
+      let novice = novices.[i]
+      let res = ActionResolver.resolveEx roller (StandardAttack (ForceStrike false)) novice currentJusticar i
+
+      // With BastionZoneControl active, effective prior defenses is capped to 0
+      match res.Contest with
+      | Some contest ->
+        Assert.Equal(0, contest.EncirclementPenalty)
+      | None ->
+        // Strike was intercepted and defused by Attack of Opportunity
+        let aooEvt = res.Events |> List.exists (function CombatEvent.AttackOfOpportunityTriggered _ -> true | _ -> false)
+        Assert.True(aooEvt, "If contest was bypassed, attack must have been defused by Attack of Opportunity.")
+
+      let penalizedEvt =
+        res.Events
+        |> List.exists (function CombatEvent.EncirclementPenalized _ -> true | _ -> false)
+      Assert.False(penalizedEvt, sprintf "Attack #%d should suffer 0 encirclement penalty under Bastion Zone Control." (i + 1))
+
+      currentJusticar <- res.Target
+
+  [<Fact>]
+  let ``1vsN: Grandmaster Duelist with Caltrop Pouch strips flank penalties and uses AoO to defuse 4 Novice Soldiers`` () =
+    let duelist =
+      TierFactory.createClassTier CharacterClass.Duelist Grandmaster
+      |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.CaltropPouch None 2)
+
+    let noviceFlanker = TierFactory.createClassTier CharacterClass.Soldier Novice
+    let roller = fixedRoller 1 // triggers AoO
+
+    // Novice attacks as 3rd flanker (priorDefenses = 2)
+    let res = ActionResolver.resolveEx roller (StandardAttack (ForceStrike false)) noviceFlanker duelist 2
+
+    // Preemptive Attack of Opportunity triggered and defused the incoming flank attack
+    let aooEvt =
+      res.Events
+      |> List.tryPick (function CombatEvent.AttackOfOpportunityTriggered (_, _, vec, dmg, disrupted) -> Some (vec, dmg, disrupted) | _ -> None)
+
+    Assert.True(aooEvt.IsSome, "Attack of Opportunity should trigger on flank attempt.")
+    let vec, dmg, disrupted = aooEvt.Value
+    Assert.Equal("Agility", vec)
+    Assert.True(dmg > 0)
+    Assert.True(disrupted, "Grandmaster Agility disparity must disrupt novice flank attack.")
+    Assert.True(res.Contest.IsNone, "Attack contest should be bypassed when strike is defused by AoO.")
+    Assert.Equal(duelist.Health.Current, res.Target.Health.Current)
+
+    let penalizedEvt =
+      res.Events
+      |> List.exists (function CombatEvent.EncirclementPenalized _ -> true | _ -> false)
+    Assert.False(penalizedEvt, "Caltrop Pouch strips flank penalties; EncirclementPenalized must not be emitted.")
+
+  [<Fact>]
+  let ``1vsN: Grandmaster Mesmer with Mirror Mirage confuses flankers and defuses flank attacks from Novice Warriors`` () =
+    let mesmer =
+      TierFactory.createClassTier CharacterClass.Mesmer Grandmaster
+      |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.MirrorMirage None 2)
+
+    let noviceFlanker = TierFactory.createClassTier CharacterClass.Warrior Novice
+    let roller = fixedRoller 4
+
+    // Secondary flanker attacks (priorDefenses = 1)
+    let res = ActionResolver.resolveEx roller (StandardAttack (ForceStrike false)) noviceFlanker mesmer 1
+
+    let mirageEvt =
+      res.Events
+      |> List.tryPick (function CombatEvent.MirrorMirageDeceived (_, _, confusion) -> Some confusion | _ -> None)
+
+    Assert.True(mirageEvt.IsSome, "Flanker should hit a Mirror Mirage phantasm.")
+    Assert.Equal(20, mirageEvt.Value)
+    Assert.True(res.Actor.Meters.Confusion.Value >= 20, "Flanker should incur +20 Confusion.")
+    Assert.Equal(mesmer.Health.Current, res.Target.Health.Current)
+
+  [<Fact>]
+  let ``1vsN: Grandmaster Inquisitor with Dread Warhorn inflicts Cognitive Fatigue across entire swarm of 5 Novice Mages`` () =
+    let inquisitor = TierFactory.createClassTier CharacterClass.Inquisitor Grandmaster
+    let primaryNovice = TierFactory.createClassTier CharacterClass.Mage Novice
+    let flankers = List.init 4 (fun _ -> TierFactory.createClassTier CharacterClass.Mage Novice)
+    let roller = fixedRoller 3
+
+    let groupRes =
+      ActionResolver.resolveGroupTurn
+        roller
+        (DeployPreparation (PreparationType.DreadWarhorn, None))
+        inquisitor
+        primaryNovice
+        flankers
+
+    // Primary target should have gained Cognitive Fatigue
+    Assert.True(groupRes.PrimaryTarget.Meters.CognitiveFatigue.Value >= 25)
+
+    // All 4 secondary flankers must have gained +25 Cognitive Fatigue
+    Assert.Equal(4, groupRes.SecondaryTargets.Length)
+    for sec in groupRes.SecondaryTargets do
+      Assert.True(sec.Meters.CognitiveFatigue.Value >= 25, "Each flanker should suffer +25 Cognitive Fatigue from Dread Warhorn.")
+
+  [<Fact>]
+  let ``1vsN: Grandmaster Strategist with Heraldic Treatise generates massive Study Stacks across swarm of 5 Novice Soldiers`` () =
+    let strategist = TierFactory.createClassTier CharacterClass.Strategist Grandmaster
+    let primaryNovice = TierFactory.createClassTier CharacterClass.Soldier Novice
+    let flankers = List.init 4 (fun _ -> TierFactory.createClassTier CharacterClass.Soldier Novice)
+    let roller = fixedRoller 3
+
+    let groupRes =
+      ActionResolver.resolveGroupTurn
+        roller
+        (DeployPreparation (PreparationType.HeraldicTreatise, None))
+        strategist
+        primaryNovice
+        flankers
+
+    // Base deployment grants +2 Study Stacks; group deployment across 4 flankers adds +8 (2 per flanker) = 10 total stacks
+    Assert.True(groupRes.Actor.StudyStacks >= 10, sprintf "Strategist should gain massive Study Stacks across swarm (Actual: %d)" groupRes.Actor.StudyStacks)
+
+  [<Fact>]
+  let ``1vsN Control: Novice Warrior without preparations suffers escalating encirclement against 4 Novice Assassins`` () =
+    let noviceDefender = TierFactory.createClassTier CharacterClass.Warrior Novice
+    let attacker = TierFactory.createClassTier CharacterClass.Assassin Novice
+    let roller = fixedRoller 4
+
+    // Novice attacks against 1st defense (prior = 0) vs 4th defense (prior = 3)
+    let res0 = ActionResolver.resolveEx roller (StandardAttack (FinesseCadence false)) attacker noviceDefender 0
+    let res3 = ActionResolver.resolveEx roller (StandardAttack (FinesseCadence false)) attacker noviceDefender 3
+
+    let pen0 = res0.Contest.Value.EncirclementPenalty
+    let pen3 = res3.Contest.Value.EncirclementPenalty
+
+    Assert.Equal(0, pen0)
+    Assert.True(pen3 > 0, "Novice defender without Bastion must suffer significant encirclement penalty at priorDefenses = 3.")
+    Assert.True(pen3 >= 10, sprintf "Encirclement penalty should be steep for unassisted novice (Actual: %d)" pen3)

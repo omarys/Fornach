@@ -65,13 +65,32 @@ type Combatant =
     ArcaneWard: int
     MirrorClones: int
     ComboTracker: ConsecutiveComboTracker
-    EquippedItems: EquipmentItem list }
+    EquippedItems: EquipmentItem list
+    Class: CharacterClass
+    Progression: ProgressionProfile
+    Preparations: PreparationSlot list
+    ActivePreparations: ActivePreparation list }
 
   /// Indicates if this combatant has collapsed and is vulnerable to an instant ExecuteStrike
   member this.IsExecuteEligible = CollapseState.isCollapsed this.Collapse
 
   /// Defenses drop by 75% when in a collapsed state
   member this.EffectiveDefenseMultiplier = if this.IsExecuteEligible then 0.25 else 1.0
+
+  /// Checks if a preparation is currently active and unexpired
+  member this.HasActivePreparation(prepType: PreparationType) : bool =
+    this.ActivePreparations
+    |> List.exists (fun a -> a.Type = prepType && not a.IsExpired)
+
+  /// Retrieves an active preparation if present and unexpired
+  member this.GetActivePreparation(prepType: PreparationType) : ActivePreparation option =
+    this.ActivePreparations
+    |> List.tryFind (fun a -> a.Type = prepType && not a.IsExpired)
+
+  /// Checks if an active preparation is targeted specifically against a given combatant
+  member this.HasActivePreparationAgainst (prepType: PreparationType) (targetId: CombatantId) : bool =
+    this.ActivePreparations
+    |> List.exists (fun a -> a.Type = prepType && a.TargetId = Some targetId && not a.IsExpired)
 
   /// Retrieves an effective stat value factoring in limb debuffs and collapse penalties
   member this.GetStat(stat: StatId) =
@@ -105,8 +124,9 @@ type Combatant =
       | Discipline -> m
     Math.Clamp(statVal / maxMental, 0.20, 1.0)
 
-  /// Factory for creating a base combatant with default baseline pools and meters
+  /// Factory for creating a base combatant with default baseline pools, meters, and Titan class profile
   static member create id name maxHealth maxMorale stats =
+    let defaultProg = ProgressionProfile.create CharacterClass.Titan 1
     { Id = id
       Name = name
       Health = Pool.Create maxHealth
@@ -123,7 +143,41 @@ type Combatant =
       ArcaneWard = 0
       MirrorClones = 0
       ComboTracker = ConsecutiveComboTracker.Zero
-      EquippedItems = [] }
+      EquippedItems = []
+      Class = CharacterClass.Titan
+      Progression = defaultProg
+      Preparations = defaultProg.Preparations
+      ActivePreparations = [] }
+
+  /// Factory for creating a combatant with explicit class archetype and progression level
+  static member createWithClass id name maxHealth maxMorale stats (cls: CharacterClass) (level: int) =
+    let prog = ProgressionProfile.create cls level
+    let defaultStance =
+      match cls.Vector with
+      | Power -> CombatStance.PowerStance
+      | Agility -> CombatStance.AgilityStance
+      | Discipline -> CombatStance.DisciplineStance
+    { Id = id
+      Name = name
+      Health = Pool.Create maxHealth
+      Morale = Pool.Create maxMorale
+      Stats = stats
+      Meters = StatusMeters.Zero
+      Collapse = CollapseState.Stable
+      StudyStacks = 0
+      Armor = ArmorIntegrity.Create 50
+      WeaponCondition = WeaponCondition.Pristine
+      Stance = defaultStance
+      BleedStacks = 0
+      LimbDebuff = 0
+      ArcaneWard = 0
+      MirrorClones = 0
+      ComboTracker = ConsecutiveComboTracker.Zero
+      EquippedItems = []
+      Class = cls
+      Progression = prog
+      Preparations = prog.Preparations
+      ActivePreparations = [] }
 
   /// Pure helper to update status meters
   static member updateMeters (updater: StatusMeters -> StatusMeters) (c: Combatant) =
@@ -141,6 +195,34 @@ type Combatant =
   /// Adds or consumes active Mirror Clone decoys
   static member addClones delta (c: Combatant) =
     { c with MirrorClones = Math.Max(0, c.MirrorClones + delta) }
+
+  /// Adds or updates an active preparation on the combatant
+  static member addActivePreparation (active: ActivePreparation) (c: Combatant) =
+    let filtered =
+      c.ActivePreparations
+      |> List.filter (fun a ->
+        not (a.Type = active.Type && a.TargetId = active.TargetId))
+    { c with ActivePreparations = active :: filtered }
+
+  /// Removes an active preparation by type
+  static member removeActivePreparation (prepType: PreparationType) (c: Combatant) =
+    { c with ActivePreparations = c.ActivePreparations |> List.filter (fun a -> a.Type <> prepType) }
+
+  /// Spends 1 use of a tactical preparation from the combatant's progression profile
+  static member spendPreparation (prepType: PreparationType) (c: Combatant) : Combatant =
+    match c.Progression.SpendPreparation prepType with
+    | Some updatedProg ->
+      { c with Progression = updatedProg; Preparations = updatedProg.Preparations }
+    | None -> c
+
+  /// Ticks down turn durations on active preparations, removing expired ones
+  static member decrementActivePreparations (c: Combatant) : Combatant =
+    let updated =
+      c.ActivePreparations
+      |> List.choose (fun a ->
+        if a.DurationTurns <= 1 then None
+        else Some (a.DecrementTurn()))
+    { c with ActivePreparations = updated }
 
   /// Shifts active tactical stance
   static member setStance stance (c: Combatant) =

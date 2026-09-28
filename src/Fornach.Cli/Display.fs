@@ -300,3 +300,34 @@ module Display =
 
     | CombatEvent.CataclysmSplashed (_, _, dmg) ->
       AnsiConsole.MarkupLine(sprintf "  [bold %s]💥 CATACLYSM SPLASH:[/] Overwhelming arcane rupture splashed [bold %s]%d mental damage[/] to adjacent target!" Theme.Purple Theme.Cyan dmg)
+
+    | CombatEvent.PreparationDeployed (_, prepType, _, desc) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🎯 PREPARATION DEPLOYED:[/] [bold underline %s]%s[/] - %s" Theme.Green Theme.Cyan prepType.Name desc)
+
+    | CombatEvent.ShockwaveSurplusDamage (_, _, surplusHits, flatDmg) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]💥 SHOCKWAVE SLAM:[/] Surplus NetHits (%d) erupted for [bold %s]%d flat damage[/] to flanker!" Theme.Orange surplusHits Theme.Red flatDmg)
+
+    | CombatEvent.SynapticBrandTriggered (_, _, bonusDmg) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🧠 SYNAPTIC BRAND:[/] Critical rupture detonated brand for [bold %s]+%d Morale damage[/]!" Theme.Purple Theme.Pink bonusDmg)
+
+    | CombatEvent.ConcealedBladeCounter (_, _, dmg, disrupted) ->
+      let statusStr = if disrupted then sprintf " [bold %s](Incoming strike intercepted & defused!)[/]" Theme.Green else ""
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🗡️ CONCEALED BLADE:[/] Quick-draw boot blade counter punctured for [bold %s]%d damage[/]!%s" Theme.Yellow Theme.Red dmg statusStr)
+
+    | CombatEvent.NeuroToxinDrained (_, reckSpike, drain) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🧪 NEUROTOXIN VENOM:[/] Recklessness spike (+%d) triggered [bold %s]%d Morale drain[/]!" Theme.Green reckSpike Theme.Pink drain)
+
+    | CombatEvent.MirrorMirageDeceived (_, _, confusion) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🪞 MIRROR MIRAGE:[/] Flanker struck an illusion! Incurred [bold %s]+%d Confusion[/] and lost action!" Theme.Cyan Theme.Purple confusion)
+
+    | CombatEvent.IndesSeized (_, _, thresh, margin) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]⚡ INDES SEIZURE:[/] Defenses overwhelmed attack (Margin: %d >= Threshold: %d); seized the Vor!" Theme.Yellow margin thresh)
+
+    | CombatEvent.BastionZoneErected _ ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🏰 BASTION ZONE:[/] Polearm planted! Caps engaged opponents strictly to 1 (single-file duels)!" Theme.Cyan)
+
+    | CombatEvent.SocraticDossierExecuted (_, _, reckConverted, moraleDmg) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]📜 SOCRATIC DOSSIER:[/] Dialectical trap converted %d Recklessness into [bold %s]%d unmitigated Morale damage[/]!" Theme.Purple reckConverted Theme.Pink moraleDmg)
+
+    | CombatEvent.HeraldicTreatiseStudied (_, stacks) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]📖 HERALDIC TREATISE:[/] Tactical dossiers reviewed; granted [bold %s]+%d Study Stacks[/] on all visible foes!" Theme.Purple Theme.Green stacks)

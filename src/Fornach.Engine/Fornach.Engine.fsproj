@@ -8,6 +8,7 @@
   <ItemGroup>
     <Compile Include="DicePool.fs" />
     <Compile Include="Actions.fs" />
+    <Compile Include="IndesResolver.fs" />
     <Compile Include="ActionResolver.fs" />
   </ItemGroup>
 
