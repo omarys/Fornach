@@ -2,10 +2,7 @@ namespace Fornach.Cli
 
 open Fornach.Domain
 
-type Tier =
-  | Novice
-  | Adept
-  | Master
+type Tier = CombatTier
 
 type ArchetypeInfo =
   { Name: string
@@ -90,3 +87,4 @@ type CliOptions =
   | InteractiveMenu
   | RunSimulation of archetypeA: string * archetypeB: string * iterations: int
   | RunGroupSimulation of soloName: string * mobName: string * mobCount: int * iterations: int
+  | RunBalanceMatrix

@@ -49,7 +49,13 @@ module AI =
     let bestPhysical = Math.Max(force, Math.Max(finesse, prowess))
     let bestMental = Math.Max(intellect, Math.Max(acuity, acumen))
 
-    if bestPhysical >= bestMental then
+    if self.Class = CharacterClass.Berserker then
+      // Berserkers embody kinetic juggernaut momentum: stay in Power Stance, unleash Force strikes, and always cleave
+      if self.Stance <> CombatStance.PowerStance && self.Meters.Recklessness.Value < 50 then
+        ShiftStance CombatStance.PowerStance
+      else
+        StandardAttack (ForceStrike isGambit)
+    elif bestPhysical >= bestMental then
       // Tactical Stance Evaluation:
       // When facing multiple opponents (surroundingOpponents >= 2):
       // - Prowess (Discipline Stance) is tactically superior: chains attacks with 0 Recklessness,
@@ -143,22 +149,51 @@ module AI =
 
   /// Top-level tactical decision evaluator for autonomous combatants with surrounding opponent count
   let chooseIntentWithContext (self: Combatant) (opponent: Combatant) (surroundingOpponents: int) : ActionIntent =
-    // 1. If opponent is in a Collapsed threshold state, seize the moment with an Execution finisher
-    if opponent.IsExecuteEligible then
-      ExecuteStrike (chooseExecutePlane opponent)
+    // 0. Tactical Preparations Deployment
+    let prepIntentOpt =
+      if surroundingOpponents >= 2 then
+        // Multi-opponent Swarm: deploy available Crowd Control preparation if not active
+        self.Preparations
+        |> List.tryFind (fun slot ->
+          slot.Category = CrowdControl
+          && slot.RemainingUses > 0
+          && not (self.HasActivePreparation slot.Type))
+        |> Option.bind (fun slot ->
+          match slot.Type with
+          | PreparationType.HeraldicTreatise when self.StudyStacks >= 6 -> None
+          | prepType -> Some (DeployPreparation (prepType, None)))
+      else
+        // 1-on-1 Duel: deploy available Single-Target preparation
+        self.Preparations
+        |> List.tryFind (fun slot ->
+          slot.Category = SingleTargetDuel
+          && slot.RemainingUses > 0
+          && not (self.HasActivePreparation slot.Type))
+        |> Option.bind (fun slot ->
+          match slot.Type with
+          | PreparationType.SocraticDossier when opponent.Meters.Recklessness.Value < 25 -> None
+          | PreparationType.BerserkTincture when self.Health.Current < (self.Health.Maximum / 2) || self.Meters.Recklessness.Value >= 40 -> None
+          | prepType -> Some (DeployPreparation (prepType, Some opponent.Id)))
 
-    // 2. If self is reaching dangerous entropy or status debuff levels, bleed Recklessness
-    elif self.Meters.Recklessness.Value >= 40
-         || self.Meters.Exhaustion.Value >= 65
-         || self.Meters.Overwhelm.Value >= 65
-         || self.Meters.CognitiveFatigue.Value >= 65
-         || self.Meters.Confusion.Value >= 65
-         || self.Meters.Provoke.Value >= 65 then
-      chooseRecovery self
+    match prepIntentOpt with
+    | Some prepIntent -> prepIntent
+    | None ->
+      // 1. If opponent is in a Collapsed threshold state, seize the moment with an Execution finisher
+      if opponent.IsExecuteEligible then
+        ExecuteStrike (chooseExecutePlane opponent)
 
-    // 3. Otherwise, launch an offensive strike leveraging primary attributes and stance mechanics
-    else
-      chooseOffensiveAttack self opponent surroundingOpponents
+      // 2. If self is reaching dangerous entropy or status debuff levels, bleed Recklessness
+      elif self.Meters.Recklessness.Value >= 40
+           || self.Meters.Exhaustion.Value >= 65
+           || self.Meters.Overwhelm.Value >= 65
+           || self.Meters.CognitiveFatigue.Value >= 65
+           || self.Meters.Confusion.Value >= 65
+           || self.Meters.Provoke.Value >= 65 then
+        chooseRecovery self
+
+      // 3. Otherwise, launch an offensive strike leveraging primary attributes and stance mechanics
+      else
+        chooseOffensiveAttack self opponent surroundingOpponents
 
   /// Top-level tactical decision evaluator for autonomous combatants in 1-on-1 duels
   let chooseIntent (self: Combatant) (opponent: Combatant) : ActionIntent =

@@ -324,10 +324,16 @@ module Display =
       AnsiConsole.MarkupLine(sprintf "  [bold %s]⚡ INDES SEIZURE:[/] Defenses overwhelmed attack (Margin: %d >= Threshold: %d); seized the Vor!" Theme.Yellow margin thresh)
 
     | CombatEvent.BastionZoneErected _ ->
-      AnsiConsole.MarkupLine(sprintf "  [bold %s]🏰 BASTION ZONE:[/] Polearm planted! Caps engaged opponents strictly to 1 (single-file duels)!" Theme.Cyan)
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🏰 BASTION ZONE:[/] Polearm planted! Limits simultaneous attackers strictly to 3 (frontline choke)!" Theme.Cyan)
 
     | CombatEvent.SocraticDossierExecuted (_, _, reckConverted, moraleDmg) ->
       AnsiConsole.MarkupLine(sprintf "  [bold %s]📜 SOCRATIC DOSSIER:[/] Dialectical trap converted %d Recklessness into [bold %s]%d unmitigated Morale damage[/]!" Theme.Purple reckConverted Theme.Pink moraleDmg)
 
     | CombatEvent.HeraldicTreatiseStudied (_, stacks) ->
       AnsiConsole.MarkupLine(sprintf "  [bold %s]📖 HERALDIC TREATISE:[/] Tactical dossiers reviewed; granted [bold %s]+%d Study Stacks[/] on all visible foes!" Theme.Purple Theme.Green stacks)
+
+    | CombatEvent.PsychicHemorrhageInflicted (_, _, bleedStacks, disparity) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🩸 CRANIAL HEMORRHAGE:[/] Overwhelming cognitive disparity (%+d) ruptured cerebral vessels! Inflicted [bold %s]+%d Bleed Stacks[/]!" Theme.Red disparity Theme.Red bleedStacks)
+
+    | CombatEvent.PsychicShockwaveResonated (_, _, dmg) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🔮 PSYCHIC RESONANCE:[/] Overwhelming mental shockwave resonated into flanker for [bold %s]%d damage[/]!" Theme.Purple Theme.Cyan dmg)

@@ -450,9 +450,9 @@ module ActionResolver =
       | PreparationType.ShockwaveSlam ->
         let updatedActor =
           actorSpent
-          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ShockwaveSlam None 3)
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ShockwaveSlam None 5)
         let evts = [
-          CombatEvent.PreparationDeployed(actor.Id, prepType, None, "Shockwave Slam prepared: surplus NetHits (>= 3) will spill over as flat kinetic damage to all engaged flankers.")
+          CombatEvent.PreparationDeployed(actor.Id, prepType, None, "Shockwave Slam prepared for 5 turns: surplus NetHits (>= 3) will spill over as flat kinetic damage to all engaged flankers.")
         ]
         { Actor = updatedActor; Target = target; Events = evts; Contest = None }
 
@@ -461,9 +461,9 @@ module ActionResolver =
         let updatedActor =
           { actorSpent with Health = actorSpent.Health.ApplyDelta -healthCost }
           |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness + 35 })
-          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.BerserkTincture None 3)
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.BerserkTincture None 5)
         let evts = [
-          CombatEvent.PreparationDeployed(actor.Id, prepType, None, sprintf "Consumed Berserk Tincture (lost %d HP): Recklessness spiked into Fever Pitch (+35)!" healthCost)
+          CombatEvent.PreparationDeployed(actor.Id, prepType, None, sprintf "Consumed Berserk Tincture (lost %d HP): Recklessness spiked into Fever Pitch (+35) for 5 turns!" healthCost)
           CombatEvent.DamageApplied { TargetId = actor.Id; Plane = Physical; Amount = healthCost; IsCritical = false; IsArmorCompromised = false }
         ]
         { Actor = updatedActor; Target = target; Events = evts; Contest = None }
@@ -482,40 +482,40 @@ module ActionResolver =
         let tgtId = targetIdOpt |> Option.defaultValue target.Id
         let updatedActor =
           actorSpent
-          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.SynapticBrand (Some tgtId) 3)
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.SynapticBrand (Some tgtId) 5)
         let updatedTarget =
           target
-          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.SynapticBrand None 3)
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.SynapticBrand None 5)
         let evts = [
-          CombatEvent.PreparationDeployed(actor.Id, prepType, Some tgtId, "Synaptic Brand inscribed: critical strikes deal 2x Morale damage and inflict Rupture.")
+          CombatEvent.PreparationDeployed(actor.Id, prepType, Some tgtId, "Synaptic Brand inscribed for 5 turns: critical strikes deal 2x Morale damage and inflict Rupture.")
         ]
         { Actor = updatedActor; Target = updatedTarget; Events = evts; Contest = None }
 
       | PreparationType.CaltropPouch ->
         let updatedActor =
           actorSpent
-          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.CaltropPouch None 2)
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.CaltropPouch None 5)
         let evts = [
-          CombatEvent.PreparationDeployed(actor.Id, prepType, None, "Caltrops deployed across flanks: secondary flanker multi-opponent penalties stripped for 2 turns.")
+          CombatEvent.PreparationDeployed(actor.Id, prepType, None, "Caltrops deployed across flanks: secondary flanker multi-opponent penalties stripped for 5 turns.")
         ]
         { Actor = updatedActor; Target = target; Events = evts; Contest = None }
 
       | PreparationType.ConcealedBlade ->
         let updatedActor =
           actorSpent
-          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ConcealedBlade None 3)
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ConcealedBlade None 5)
         let evts = [
-          CombatEvent.PreparationDeployed(actor.Id, prepType, None, "Concealed boot blade readied: prepared to counter-puncture from the Nach!")
+          CombatEvent.PreparationDeployed(actor.Id, prepType, None, "Concealed boot blade readied for 5 turns: prepared to counter-puncture from the Nach!")
         ]
         { Actor = updatedActor; Target = target; Events = evts; Contest = None }
 
       | PreparationType.MirrorMirage ->
         let updatedActor =
           actorSpent
-          |> Combatant.addClones 2
-          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.MirrorMirage None 2)
+          |> Combatant.addClones 3
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.MirrorMirage None 5)
         let evts = [
-          CombatEvent.PreparationDeployed(actor.Id, prepType, None, "Mirror Mirage wove phantasms: secondary flankers hit illusions (+20 Confusion) and multi-opponent penalties ignored.")
+          CombatEvent.PreparationDeployed(actor.Id, prepType, None, "Mirror Mirage wove phantasms: secondary flankers hit illusions (+20 Confusion) and multi-opponent penalties ignored for 5 turns.")
         ]
         { Actor = updatedActor; Target = target; Events = evts; Contest = None }
 
@@ -523,31 +523,31 @@ module ActionResolver =
         let tgtId = targetIdOpt |> Option.defaultValue target.Id
         let updatedActor =
           actorSpent
-          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.NeuroToxin (Some tgtId) 3)
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.NeuroToxin (Some tgtId) 5)
         let updatedTarget =
           target
-          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.NeuroToxin None 3)
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.NeuroToxin None 5)
         let evts = [
-          CombatEvent.PreparationDeployed(actor.Id, prepType, Some tgtId, "Psychic Neurotoxin applied: target suffers escalating Morale drain on Recklessness accumulation.")
+          CombatEvent.PreparationDeployed(actor.Id, prepType, Some tgtId, "Psychic Neurotoxin applied for 5 turns: target suffers escalating Morale drain on Recklessness accumulation.")
         ]
         { Actor = updatedActor; Target = updatedTarget; Events = evts; Contest = None }
 
       | PreparationType.BastionZoneControl ->
         let updatedActor =
           actorSpent
-          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.BastionZoneControl None 3)
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.BastionZoneControl None 5)
         let evts = [
           CombatEvent.BastionZoneErected(actor.Id)
-          CombatEvent.PreparationDeployed(actor.Id, prepType, None, "Bastion Zone planted: caps engaged opponents strictly to 1, forcing single-file engagements!")
+          CombatEvent.PreparationDeployed(actor.Id, prepType, None, "Bastion Zone planted for 5 turns: limits simultaneous attackers strictly to 3 (front three tiles)!")
         ]
         { Actor = updatedActor; Target = target; Events = evts; Contest = None }
 
       | PreparationType.ParryingBuckler ->
         let updatedActor =
           actorSpent
-          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ParryingBuckler None 3)
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ParryingBuckler None 5)
         let evts = [
-          CombatEvent.PreparationDeployed(actor.Id, prepType, None, "Parrying Buckler braced: Indes threshold reduced by -1, widening the window to seize the Vor!")
+          CombatEvent.PreparationDeployed(actor.Id, prepType, None, "Parrying Buckler braced for 5 turns: Indes threshold reduced by -1, widening the window to seize the Vor!")
         ]
         { Actor = updatedActor; Target = target; Events = evts; Contest = None }
 
@@ -834,44 +834,50 @@ module ActionResolver =
       | AuthorityDecree isImperious ->
         let off = currentActor.GetStat Intellect
         let def = currentTarget.GetStat Resolve
+        let disparity = Math.Max(0, off - def)
+        let disparityReck = int (Math.Round(float disparity / 15.0))
         let imperiousMult = if isImperious then 1.3 else 1.0
-        let fatigue = fun isCrit -> if isCrit then 35 else 18
+        let fatigue = fun isCrit -> (if isCrit then 40 else 20) + (disparity / 25)
         let disp = fun isCrit -> if isCrit then Some(CognitiveRupture(fatigue true)) else None
 
         let upd isCrit (m: StatusMeters) =
           { m with
               CognitiveFatigue = m.CognitiveFatigue + (fatigue isCrit)
-              Recklessness = m.Recklessness + 10 }
+              Recklessness = m.Recklessness + 15 + disparityReck }
 
         off, def, imperiousMult, disp, upd
 
       | GuileDeception isConfidenceTrap ->
         let off = currentActor.GetStat Acuity
         let def = currentTarget.GetStat Intuition
+        let disparity = Math.Max(0, off - def)
+        let disparityReck = int (Math.Round(float disparity / 10.0))
         let args = if isConfidenceTrap then 3 else 1
-        let reckMult = 1.0 + (float currentTarget.Meters.Recklessness.Value / 100.0)
-        let confusion = fun isCrit -> if isCrit then 15 * args else 10
+        let reckMult = 1.0 + (float currentTarget.Meters.Recklessness.Value / 80.0)
+        let confusion = fun isCrit -> (if isCrit then 20 * args else 12) + (disparity / 20)
         let disp = fun isCrit -> if isCrit then Some DialecticalParalysis else None
 
         let upd isCrit (m: StatusMeters) =
           { m with
               Confusion = m.Confusion + (confusion isCrit)
-              Recklessness = m.Recklessness + (5 * args) }
+              Recklessness = m.Recklessness + (15 * args) + disparityReck }
 
         off, def, (float args * reckMult), disp, upd
 
       | AcumenInterrogation isCheckmate ->
         let off = currentActor.GetStat Acumen
         let def = currentTarget.GetStat Composure
+        let disparity = Math.Max(0, off - def)
+        let disparityReck = int (Math.Round(float disparity / 10.0))
         let studyMult = 1.0 + (float currentActor.StudyStacks * 0.25)
-        let checkmateMult = if isCheckmate then 1.25 else 1.0
-        let provoke = fun isCrit -> if isCrit then 45 else 20
+        let checkmateMult = if isCheckmate then 1.35 else 1.0
+        let provoke = fun isCrit -> (if isCrit then 50 else 25) + (disparity / 20)
         let disp = fun isCrit -> if isCrit then Some(StrippedCredibility(provoke true)) else None
 
         let upd isCrit (m: StatusMeters) =
           { m with
               Provoke = m.Provoke + (provoke isCrit)
-              Recklessness = m.Recklessness + 20 }
+              Recklessness = m.Recklessness + 30 + disparityReck }
 
         off, def, (studyMult * checkmateMult), disp, upd
 
@@ -879,6 +885,8 @@ module ActionResolver =
       | ArcaneCataclysm isOverchannel ->
         let off = currentActor.GetStat Intellect
         let def = currentTarget.GetStat Resolve
+        let disparity = Math.Max(0, off - def)
+        let disparityReck = int (Math.Round(float disparity / 15.0))
 
         let surge =
           if isOverchannel then
@@ -886,8 +894,8 @@ module ActionResolver =
           else
             0.0
 
-        let cataclysmMult = (1.0 + (surge / Math.Max(10.0, float off))) * profMult
-        let fatigue = fun isCrit -> int (float (if isCrit then 45 else 20) * profMult)
+        let cataclysmMult = (1.1 + (surge / Math.Max(10.0, float off))) * profMult
+        let fatigue = fun isCrit -> int (float (if isCrit then 45 else 22) * profMult) + (disparity / 25)
         let disp = fun isCrit -> if isCrit then Some(CognitiveRupture(fatigue true)) else None
 
         let upd isCrit (m: StatusMeters) =
@@ -896,66 +904,74 @@ module ActionResolver =
           { m with
               CognitiveFatigue = m.CognitiveFatigue + f
               Exhaustion = m.Exhaustion + (f / 2)
-              Recklessness = m.Recklessness + 10 }
+              Recklessness = m.Recklessness + 15 + disparityReck }
 
         off, def, cataclysmMult, disp, upd
 
       | SynapticGlamour isMindFracture ->
         let off = currentActor.GetStat Acuity
         let def = currentTarget.GetStat Intuition
+        let disparity = Math.Max(0, off - def)
+        let disparityReck = int (Math.Round(float disparity / 10.0))
         let pulses = if isMindFracture then 3 else 1
-        let confusion = fun isCrit -> int (float (if isCrit then 15 * pulses else 10) * profMult)
+        let confusion = fun isCrit -> int (float (if isCrit then 18 * pulses else 12) * profMult) + (disparity / 20)
         let disp = fun isCrit -> if isCrit then Some DialecticalParalysis else None
 
         let upd isCrit (m: StatusMeters) =
           { m with
               Confusion = m.Confusion + (confusion isCrit)
-              Recklessness = m.Recklessness + (5 * pulses) }
+              Recklessness = m.Recklessness + (15 * pulses) + disparityReck }
 
         off, def, (float pulses * profMult), disp, upd
 
       | MirrorIllusion isDecoySwarm ->
         let off = currentActor.GetStat Acuity
         let def = currentTarget.GetStat Intuition
+        let disparity = Math.Max(0, off - def)
+        let disparityReck = int (Math.Round(float disparity / 12.0))
         let swarms = if isDecoySwarm then 2 else 1
-        let confusion = fun isCrit -> int (float (if isCrit then 25 else 12) * profMult)
+        let confusion = fun isCrit -> int (float (if isCrit then 25 else 14) * profMult) + (disparity / 25)
         let disp = fun isCrit -> if isCrit then Some DialecticalParalysis else None
 
         let upd isCrit (m: StatusMeters) =
           { m with
               Confusion = m.Confusion + (confusion isCrit)
-              Recklessness = m.Recklessness + 5 }
+              Recklessness = m.Recklessness + (12 * swarms) + disparityReck }
 
-        off, def, (0.75 * float swarms * profMult), disp, upd
+        off, def, (0.85 * float swarms * profMult), disp, upd
 
       | RunicWardTrap isAnomalousGlyph ->
         let off = currentActor.GetStat Acumen
         let def = currentTarget.GetStat Composure
+        let disparity = Math.Max(0, off - def)
+        let disparityReck = int (Math.Round(float disparity / 12.0))
         let studyMult = 1.0 + (float currentActor.StudyStacks * 0.25)
-        let glyphMult = if isAnomalousGlyph then 1.2 else 1.0
-        let provoke = fun isCrit -> int (float (if isCrit then 40 else 15) * profMult)
+        let glyphMult = if isAnomalousGlyph then 1.25 else 1.0
+        let provoke = fun isCrit -> int (float (if isCrit then 45 else 20) * profMult) + (disparity / 25)
         let disp = fun isCrit -> if isCrit then Some(StrippedCredibility(provoke true)) else None
 
         let upd isCrit (m: StatusMeters) =
           { m with
               Provoke = m.Provoke + (provoke isCrit)
-              Recklessness = m.Recklessness + 15 }
+              Recklessness = m.Recklessness + 25 + disparityReck }
 
         off, def, (studyMult * glyphMult * profMult), disp, upd
 
       | DisorientingShockwave isStaggeringPulse ->
         let off = currentActor.GetStat Acumen
         let def = currentTarget.GetStat Composure
+        let disparity = Math.Max(0, off - def)
+        let disparityReck = int (Math.Round(float disparity / 12.0))
         let studyMult = 1.0 + (float currentActor.StudyStacks * 0.15)
-        let pulseMult = if isStaggeringPulse then 1.3 else 1.0
-        let provoke = fun isCrit -> int (float (if isCrit then 30 else 15) * profMult)
+        let pulseMult = if isStaggeringPulse then 1.35 else 1.0
+        let provoke = fun isCrit -> int (float (if isCrit then 35 else 18) * profMult) + (disparity / 25)
         let disp = fun isCrit -> if isCrit then Some(StrippedCredibility(provoke true)) else None
 
         let upd isCrit (m: StatusMeters) =
           { m with
               Provoke = m.Provoke + (provoke isCrit)
-              Confusion = m.Confusion + int (float (if isCrit then 20 else 10) * profMult)
-              Recklessness = m.Recklessness + 10 }
+              Confusion = m.Confusion + int (float (if isCrit then 25 else 12) * profMult)
+              Recklessness = m.Recklessness + 20 + disparityReck }
 
         off, def, (studyMult * pulseMult * profMult), disp, upd
 
@@ -992,10 +1008,10 @@ module ActionResolver =
     else
 
     // Calculate effective prior defenses taking into account defensive preparations
-    // BastionZoneControl caps EngagedOpponents strictly to 1.
+    // BastionZoneControl limits simultaneous attackers to 3 (three tiles in front).
     // CaltropPouch and MirrorMirage ignore multi-opponent penalties from secondary attackers.
     let effectivePriorDefenses =
-      if currentTarget.HasActivePreparation PreparationType.BastionZoneControl then 0
+      if currentTarget.HasActivePreparation PreparationType.BastionZoneControl then Math.Min(2, priorDefenses)
       elif currentTarget.HasActivePreparation PreparationType.CaltropPouch then 0
       elif currentTarget.HasActivePreparation PreparationType.MirrorMirage then 0
       else priorDefenses
@@ -1245,10 +1261,15 @@ module ActionResolver =
 
     else
       // Landed Strike: Scaled Tiered NetHits Damage & Weapon Degradation Multiplier
-      let baseDamage = offStat * 2
+      let baseDamage =
+        if plane = Mental then
+          // Cognitive and psychic strikes scale superlinearly with raw mental dominance
+          int (float offStat * 3.0) + (offStat * offStat / 180)
+        else
+          offStat * 2
       let tierMult = computeTierMultiplier contest.NetHits
       let gambitMult = if isGambit then 1.5 else 1.0
-      let weaponEff = WeaponCondition.effectiveness currentActor.WeaponCondition
+      let weaponEff = if plane = Mental then 1.0 else WeaponCondition.effectiveness currentActor.WeaponCondition
       let berserkMult = if currentActor.HasActivePreparation PreparationType.BerserkTincture then 1.35 else 1.0
 
       // If strike landed while defender was encircled, apply flank overwhelm pressure scaled by disparity
@@ -1296,6 +1317,20 @@ module ActionResolver =
       let updatedTarget, dmgEvt, wardEvts = applyDamage plane rawDmg isCrit currentTarget
       currentTarget <- updatedTarget
       events <- wardEvts @ (CombatEvent.DamageApplied dmgEvt :: events)
+
+      // Severe Mental Stat Disparity: Cranial Hemorrhage (Psychic Bleeding)
+      if plane = Mental then
+        let mentalDisparity = offStat - defStat
+        if mentalDisparity >= 30 || contest.NetHits >= 4 then
+          let bleedStacks =
+            if mentalDisparity >= 100 || contest.NetHits >= 6 then 3
+            elif mentalDisparity >= 50 || contest.NetHits >= 4 then 2
+            else 1
+          currentTarget <- currentTarget |> Combatant.addBleed bleedStacks
+          events <-
+            CombatEvent.BleedApplied(currentTarget.Id, bleedStacks, currentTarget.BleedStacks)
+            :: CombatEvent.PsychicHemorrhageInflicted(currentActor.Id, currentTarget.Id, bleedStacks, mentalDisparity)
+            :: events
 
       // Synaptic Brand: critical strikes deal 2x Morale damage and inflict Rupture
       if isCrit && (currentTarget.HasActivePreparation PreparationType.SynapticBrand || currentActor.HasActivePreparationAgainst PreparationType.SynapticBrand currentTarget.Id) then
@@ -1525,6 +1560,14 @@ module ActionResolver =
           | _ -> false
         | _ -> false
 
+      let isLandedMentalHit =
+        match primaryRes.Contest with
+        | Some contest when not contest.IsWhiff ->
+          match intent with
+          | StandardAttack atk when atk.Plane = Mental -> true
+          | _ -> false
+        | _ -> false
+
       if isLandedArcaneCataclysm && not currentAdjacent.IsEmpty then
         // Arcane Cataclysm: Destructive mental burst splashes to up to 2 adjacent targets
         let splashCandidates = currentAdjacent |> List.truncate 2
@@ -1616,15 +1659,93 @@ module ActionResolver =
           SecondaryTargets = processedShock @ unengaged
           Events = allEvents @ shockEvents }
 
+      elif isLandedMentalHit && not currentAdjacent.IsEmpty then
+        // Mental attacks with stat disparity cause resonant Area of Effect psychic damage across adjacent flankers
+        let splashCandidates = currentAdjacent |> List.truncate 2
+        let unengaged = currentAdjacent |> List.skip splashCandidates.Length
+        let mutable splashEvents = []
+
+        let primaryDmg =
+          primaryRes.Events
+          |> List.choose (function CombatEvent.DamageApplied d when d.TargetId = currentPrimary.Id && d.Plane = Mental -> Some d.Amount | _ -> None)
+          |> List.tryHead
+          |> Option.defaultValue (Math.Max(20, currentActor.GetStat Intellect))
+
+        let rawSplashDmg = Math.Max(10, int (float primaryDmg * 0.50))
+
+        let processedSplash =
+          splashCandidates
+          |> List.map (fun secTarget ->
+            let targetAfterDmg, dmgEvt, wardEvts = applyDamage Mental rawSplashDmg false secTarget
+            let offStatSec =
+              match currentActor.ArcaneFocus with
+              | Power -> currentActor.GetStat Intellect
+              | Agility -> currentActor.GetStat Acuity
+              | Discipline -> currentActor.GetStat Acumen
+            let defStatSec =
+              match currentActor.ArcaneFocus with
+              | Power -> secTarget.GetStat Resolve
+              | Agility -> secTarget.GetStat Intuition
+              | Discipline -> secTarget.GetStat Composure
+            let secDisparity = offStatSec - defStatSec
+
+            let targetWithMeters =
+              targetAfterDmg
+              |> Combatant.updateMeters (fun m ->
+                let baseSpike = 15
+                let dispSpike = Math.Max(0, secDisparity / 20)
+                let totalSpike = baseSpike + dispSpike
+                match currentActor.ArcaneFocus with
+                | Power -> { m with CognitiveFatigue = m.CognitiveFatigue + totalSpike; Recklessness = m.Recklessness + 10 }
+                | Agility -> { m with Confusion = m.Confusion + totalSpike; Recklessness = m.Recklessness + totalSpike }
+                | Discipline -> { m with Provoke = m.Provoke + totalSpike; Recklessness = m.Recklessness + totalSpike }
+              )
+
+            // If severe disparity on secondary target, also inflict 1 bleed stack from resonant shockwave
+            let targetWithBleed =
+              if secDisparity >= 50 then
+                targetWithMeters |> Combatant.addBleed 1
+              else
+                targetWithMeters
+
+            let targetAfterHit = Combatant.evaluateCollapse targetWithBleed
+
+            splashEvents <-
+              splashEvents
+              @ wardEvts
+              @ [
+                CombatEvent.PsychicShockwaveResonated(currentActor.Id, secTarget.Id, dmgEvt.Amount)
+                CombatEvent.DamageApplied dmgEvt
+              ]
+            if secDisparity >= 50 then
+              splashEvents <- splashEvents @ [ CombatEvent.BleedApplied(targetAfterHit.Id, 1, targetAfterHit.BleedStacks) ]
+
+            if CollapseState.isCollapsed targetAfterHit.Collapse && not (CollapseState.isCollapsed secTarget.Collapse) then
+              match targetAfterHit.Collapse with
+              | CollapseState.Collapsed reason ->
+                splashEvents <- splashEvents @ [ CombatEvent.CollapseTriggered(targetAfterHit.Id, reason) ]
+              | CollapseState.Stable -> ()
+
+            targetAfterHit
+          )
+
+        { Actor = currentActor
+          PrimaryTarget = currentPrimary
+          SecondaryTargets = processedSplash @ unengaged
+          Events = allEvents @ splashEvents }
+
       elif not isLandedPhysicalHit || currentAdjacent.IsEmpty then
         { Actor = currentActor
           PrimaryTarget = currentPrimary
           SecondaryTargets = currentAdjacent
           Events = allEvents }
       else
-        match currentActor.Stance with
-        | CombatStance.PowerStance ->
-          // Power Stance: Cleave up to 2 adjacent targets
+        let isCleaving =
+          currentActor.Class = CharacterClass.Berserker
+          || currentActor.Stance = CombatStance.PowerStance
+
+        if isCleaving then
+          // Power Stance & Berserker Cleave: Cleave up to 2 adjacent targets
           // Cleave incurs a Recklessness penalty based on stat disparity:
           let cleaveCandidates = currentAdjacent |> List.truncate 2
           let unengaged = currentAdjacent |> List.skip cleaveCandidates.Length
@@ -1700,7 +1821,7 @@ module ActionResolver =
             SecondaryTargets = processedCleaves @ unengaged
             Events = allEvents @ cleaveEvents }
 
-        | CombatStance.DisciplineStance ->
+        elif currentActor.Stance = CombatStance.DisciplineStance then
           // Discipline Stance: Chain strikes across engaged opponents
           let chainCapacity = Math.Min(3, 1 + (currentActor.StudyStacks / 2))
           let chainCandidates = currentAdjacent |> List.truncate chainCapacity
@@ -1757,7 +1878,7 @@ module ActionResolver =
             SecondaryTargets = processedChains @ unengaged
             Events = allEvents @ chainEvents }
 
-        | CombatStance.AgilityStance ->
+        else
           { Actor = currentActor
             PrimaryTarget = currentPrimary
             SecondaryTargets = currentAdjacent

@@ -263,7 +263,7 @@ module Simulation =
   // 4. 1 vs N Encirclement Swarm Simulation
   // =========================================================================
 
-  let private runSingleGroupMatch
+  let runSingleGroupMatch
     (roller: DiceRoller)
     (soloFactory: unit -> Combatant)
     (mobFactory: unit -> Combatant)
@@ -325,14 +325,20 @@ module Simulation =
         condition <- MoraleDepleted
       else
         // Phase 2: Swarm Turn (All surviving mob members attack Solo concurrently)
+        // When BastionZoneControl is active, only the 3 frontline tiles in front of the Tactician can swing this round.
+        let maxSwingsThisRound =
+          if solo.HasActivePreparation PreparationType.BastionZoneControl then 3
+          else mob.Length
         let mutable priorDefenses = 0
         let mutable mobIdx = 0
-        while mobIdx < mob.Length && winnerIsSolo.IsNone do
+        let mutable swingsCount = 0
+        while mobIdx < mob.Length && swingsCount < maxSwingsThisRound && winnerIsSolo.IsNone do
           let attacker = mob.[mobIdx]
           let intentMob = AI.chooseIntent attacker solo
           let mobRes = ActionResolver.resolveEx roller intentMob attacker solo priorDefenses
           let newAttacker = mobRes.Actor
           solo <- mobRes.Target
+          swingsCount <- swingsCount + 1
 
           let aooHits = mobRes.Events |> List.filter (function CombatEvent.AttackOfOpportunityTriggered _ -> true | _ -> false) |> List.length
           totalAoOs <- totalAoOs + aooHits
@@ -403,10 +409,22 @@ module Simulation =
       Condition = condition }
 
 
+  /// Headless batch simulation of 1 vs N swarm combat without console progress bars
+  let runHeadlessGroupBatch
+    (soloFactory: unit -> Combatant)
+    (mobFactory: unit -> Combatant)
+    (mobCount: int)
+    (iterations: int)
+    (roller: DiceRoller)
+    : GroupSingleResult list =
+    let maxRounds = Math.Max(60, mobCount + 20)
+    List.init iterations (fun _ ->
+      runSingleGroupMatch roller soloFactory mobFactory mobCount maxRounds)
+
   let runGroupBatch (soloArch: ArchetypeInfo) (mobArch: ArchetypeInfo) (mobCount: int) (iterations: int) : GroupSimulationSummary =
     let rng = Random()
     let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
-    let maxRoundsPerMatch = 60
+    let maxRoundsPerMatch = Math.Max(60, mobCount + 20)
 
     let results =
       AnsiConsole.Progress()
@@ -583,4 +601,177 @@ module Simulation =
     telemetryTable.AddRow("Total Champion Overruns (0 Slain)", sprintf "[bold %s]%.1f%%[/]" Theme.Red overruns, "Swarm overwhelmed champion before losing a single unit") |> ignore
 
     AnsiConsole.Write(telemetryTable)
+    AnsiConsole.WriteLine()
+
+
+  type TippingPointResult =
+    | OverrunBy of int
+    | Impenetrable of int
+    with
+      member this.Value =
+        match this with
+        | OverrunBy n -> n
+        | Impenetrable cap -> cap
+
+      override this.ToString() =
+        match this with
+        | OverrunBy n -> sprintf "%d" n
+        | Impenetrable cap -> sprintf "%d+" cap
+
+  let evaluateMobWinRate
+    (championFactory: unit -> Combatant)
+    (mobFactory: unit -> Combatant)
+    (mobCount: int)
+    (iterations: int)
+    (roller: DiceRoller) : float =
+    let results = runHeadlessGroupBatch championFactory mobFactory mobCount iterations roller
+    let mobWins = results |> List.filter (fun r -> not r.SoloWon && r.Condition <> Stalemate) |> List.length
+    float mobWins / float results.Length
+
+  let findSwarmTippingPoint
+    (championFactory: unit -> Combatant)
+    (mobFactory: unit -> Combatant)
+    (maxMobCount: int)
+    (iterationsPerProbe: int)
+    (roller: DiceRoller) : TippingPointResult =
+
+    let rate1 = evaluateMobWinRate championFactory mobFactory 1 iterationsPerProbe roller
+    if rate1 >= 0.50 then
+      OverrunBy 1
+    else
+      let brackets = [ 2; 3; 5; 8; 12; 16; 24; 32; 48; 64; 80; maxMobCount ] |> List.distinct |> List.sort
+      let rec searchBracket prevN remaining =
+        match remaining with
+        | [] -> None
+        | n :: rest ->
+          let rate = evaluateMobWinRate championFactory mobFactory n iterationsPerProbe roller
+          if rate >= 0.50 then
+            Some (prevN, n)
+          else
+            searchBracket n rest
+
+      match searchBracket 1 brackets with
+      | None -> Impenetrable maxMobCount
+      | Some (low, high) ->
+        let rec binarySearch l h =
+          if l >= h - 1 then
+            h
+          else
+            let mid = (l + h) / 2
+            let rate = evaluateMobWinRate championFactory mobFactory mid iterationsPerProbe roller
+            if rate >= 0.50 then
+              binarySearch l mid
+            else
+              binarySearch mid h
+        OverrunBy (binarySearch low high)
+
+  let renderBalanceMatrix () =
+    AnsiConsole.WriteLine()
+    AnsiConsole.Write(
+      Rule(sprintf "[bold %s]FORNACH ARCHETYPE BALANCE BENCHMARK: 96 MATCHUP MATRIX[/]" Theme.Purple)
+        .Centered()
+        .RuleStyle(Theme.StyleCurrentLine)
+    )
+    AnsiConsole.WriteLine()
+
+    let championClasses = [
+      CharacterClass.Berserker
+      CharacterClass.Duelist
+      CharacterClass.Justicar
+      CharacterClass.Inquisitor
+      CharacterClass.Mesmer
+      CharacterClass.Strategist
+    ]
+
+    let tiers = [
+      CombatTier.Novice
+      CombatTier.Veteran
+      CombatTier.Master
+      CombatTier.GrandMaster
+    ]
+
+    let rng = Random(42)
+    let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
+    let maxMobCount = 100
+    let iterations = 10
+
+    let matrixTable = Table().Border(TableBorder.Rounded).BorderColor(Theme.ColorCurrentLine)
+    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]Champion Archetype[/]" Theme.Foreground)) |> ignore
+    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]Tier[/]" Theme.Cyan)) |> ignore
+    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]vs. Warrior (Power)[/]" Theme.Red)) |> ignore
+    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]vs. Assassin (Finesse)[/]" Theme.Green)) |> ignore
+    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]vs. Soldier (Discipline)[/]" Theme.Yellow)) |> ignore
+    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]vs. Mage (Arcane)[/]" Theme.Pink)) |> ignore
+    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]Tactical Dynamics & Observations[/]" Theme.Comment)) |> ignore
+
+    AnsiConsole.Progress()
+      .AutoClear(false)
+      .Columns([|
+        TaskDescriptionColumn() :> ProgressColumn
+        ProgressBarColumn() :> ProgressColumn
+        PercentageColumn() :> ProgressColumn
+        RemainingTimeColumn() :> ProgressColumn
+      |])
+      .Start(fun ctx ->
+        let task = ctx.AddTask(sprintf "[bold %s]Sweeping 24 Archetype Tiers across 4 Base Classes (96 Matchups)...[/]" Theme.Cyan, maxValue = 24.0)
+
+        for cls in championClasses do
+          for tier in tiers do
+            let champFactory () = TierFactory.createClassTier cls tier
+            let warriorTP = findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Warrior Novice) maxMobCount iterations roller
+            let assassinTP = findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Assassin Novice) maxMobCount iterations roller
+            let soldierTP = findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Soldier Novice) maxMobCount iterations roller
+            let mageTP = findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Mage Novice) maxMobCount iterations roller
+
+            let displayName =
+              match cls with
+              | CharacterClass.Justicar -> "Tactician (Justicar)"
+              | _ -> cls.Name
+
+            let tierColor =
+              match tier with
+              | Novice -> Theme.Comment
+              | Veteran -> Theme.Cyan
+              | Master -> Theme.Yellow
+              | GrandMaster -> Theme.Purple
+
+            let formatTP (tp: TippingPointResult) (color: string) =
+              match tp with
+              | Impenetrable cap -> sprintf "[bold %s]%d+ (Impenetrable)[/]" Theme.Green cap
+              | OverrunBy n when n >= 20 -> sprintf "[bold %s]%d[/]" Theme.Cyan n
+              | OverrunBy n when n >= 10 -> sprintf "[bold %s]%d[/]" Theme.Yellow n
+              | OverrunBy n -> sprintf "[%s]%d[/]" color n
+
+            let notes =
+              match cls, tier with
+              | CharacterClass.Justicar, GrandMaster -> "BastionZoneControl limits frontline to 3; Prowess disparity triggers massive AoOs; resilient against swarms."
+              | CharacterClass.Justicar, Master -> "BastionZoneControl limits frontline to 3; exceptional defense soak against physical hordes."
+              | CharacterClass.Justicar, _ -> "Discipline posture & bastion geometry resist early encirclement penalties."
+              | CharacterClass.Berserker, GrandMaster -> "Shockwave Slam & cleaves wipe out clusters; breaks only under extreme encirclement."
+              | CharacterClass.Berserker, _ -> "Brute kinetic Force & high HP pool; vulnerable to compounding flank penalties over prolonged duels."
+              | CharacterClass.Duelist, GrandMaster -> "Caltrop Pouch strips flank penalties for 5 turns; Agility disparity triggers lethal AoO counters."
+              | CharacterClass.Duelist, _ -> "High Finesse & Reflex dodge initial attacks; overwhelmed once caltrops expire against large mobs."
+              | CharacterClass.Inquisitor, GrandMaster -> "Dread Warhorn inflicts +25 Cognitive Fatigue on all attackers; devastates Mage morale & triggers mental routs."
+              | CharacterClass.Inquisitor, _ -> "Formidable mental dominance; vulnerable if physical brute force bypasses lower physical armor."
+              | CharacterClass.Mesmer, GrandMaster -> "Mirror Mirage forces flankers to attack decoys; NeuroToxin punishes enemy recklessness."
+              | CharacterClass.Mesmer, _ -> "Deceptive sensory phantasms disrupt attackers; susceptible to dogpiling once illusions exhaust."
+              | CharacterClass.Strategist, GrandMaster -> "Heraldic Treatise seeds instant study stacks; Socratic Dossier converts high recklessness to morale collapse."
+              | CharacterClass.Strategist, _ -> "Calculated tactical interrogation; balances composure and defense through procedural attrition."
+              | _ -> "Standard archetype profile."
+
+            matrixTable.AddRow(
+              Markup(sprintf "[bold %s]%s[/]" Theme.Foreground displayName),
+              Markup(sprintf "[bold %s]%A[/]" tierColor tier),
+              Markup(formatTP warriorTP Theme.Red),
+              Markup(formatTP assassinTP Theme.Green),
+              Markup(formatTP soldierTP Theme.Yellow),
+              Markup(formatTP mageTP Theme.Pink),
+              Markup(sprintf "[%s]%s[/]" Theme.Comment notes)
+            ) |> ignore
+
+            task.Increment 1.0
+      )
+
+    AnsiConsole.WriteLine()
+    AnsiConsole.Write(matrixTable)
     AnsiConsole.WriteLine()

@@ -29,8 +29,9 @@ module Program =
           let tierColor =
             match a.Tier with
             | Novice -> Theme.Comment
-            | Adept -> Theme.Cyan
+            | Veteran -> Theme.Cyan
             | Master -> Theme.Yellow
+            | GrandMaster -> Theme.Purple
           sprintf "[bold %s][[%A]][/] [bold %s]%-22s[/] ([%s]%A[/]) - [%s]%s[/]"
             tierColor a.Tier Theme.Foreground a.Name Theme.Pink a.Discipline Theme.Comment a.Description)
 
@@ -262,7 +263,7 @@ module Program =
       AnsiConsole.Prompt(
         SelectionPrompt<int>()
           .Title(sprintf "[bold %s]Select Swarm Size (Number of Opponents fighting simultaneously):[/]" Theme.Yellow)
-          .AddChoices([ 2; 3; 4; 5; 6; 8 ])
+          .AddChoices([ 2; 3; 4; 5; 6; 8; 10; 20; 50; 100 ])
       )
 
     let iterations =
@@ -292,8 +293,9 @@ module Program =
       let tierColor =
         match arch.Tier with
         | Novice -> Theme.Comment
-        | Adept -> Theme.Cyan
+        | Veteran -> Theme.Cyan
         | Master -> Theme.Yellow
+        | GrandMaster -> Theme.Purple
 
       let soakPct = int (sample.Armor.AbsorptionRatio * 100.0)
       let keyStats =
@@ -367,7 +369,7 @@ module Program =
       Archetypes.createCustom name hp morale armor statsList
 
     { Name = name
-      Tier = Adept
+      Tier = Veteran
       Discipline = if force + prowess >= intellect + acumen then CombatMode.Physical else CombatMode.Arcane
       Description = "Custom player-crafted combatant."
       Factory = customFactory }
@@ -391,9 +393,12 @@ module Program =
       |> Option.map (fun i -> i + 1 >= args.Length || args.[i + 1].StartsWith("-"))
       |> Option.defaultValue false
 
+    let isMatrix = hasFlag "--balance-matrix" || hasFlag "--matrix" || hasFlag "-b"
     let isSim = hasFlag "--sim" || hasGroupFlag || isStandaloneSimFlag || hasFlag "-a1" || hasFlag "--solo"
 
-    if not isSim then
+    if isMatrix then
+      RunBalanceMatrix
+    elif not isSim then
       InteractiveMenu
     else
       let arch1 = findArg ["--solo"; "-s"; "-a1"; "--archetype1"] "Iron Vanguard"
@@ -414,6 +419,11 @@ module Program =
   [<EntryPoint>]
   let main (args: string array) =
     match parseCliArgs args with
+    | RunBalanceMatrix ->
+      printBanner()
+      Simulation.renderBalanceMatrix()
+      0
+
     | RunSimulation (nameA, nameB, iters) ->
       printBanner()
       let optA = Archetypes.findByName nameA
@@ -463,6 +473,7 @@ module Program =
                 sprintf "👥  [bold %s]1 vs N Encirclement Swarm Simulator[/]" Theme.Pink
                 sprintf "🛠️   [bold %s]Custom Combatant Builder[/]" Theme.Orange
                 sprintf "📜  [bold %s]View Archetype Roster[/]" Theme.Purple
+                sprintf "📈  [bold %s]Swarm Tipping Point Balance Matrix (96 Matchups)[/]" Theme.Yellow
                 sprintf "🚪  [bold %s]Exit[/]" Theme.Red
               ])
           )
@@ -489,6 +500,11 @@ module Program =
 
         elif choice.Contains("View Archetype Roster") then
           showRoster ()
+
+        elif choice.Contains("Swarm Tipping Point Balance Matrix") then
+          Simulation.renderBalanceMatrix ()
+          AnsiConsole.MarkupLine(sprintf "[%s]Press any key to return to menu...[/]" Theme.Comment)
+          Console.ReadKey(true) |> ignore
 
         elif choice.Contains("Exit") then
           running <- false

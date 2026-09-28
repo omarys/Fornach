@@ -124,9 +124,9 @@ type Combatant =
       | Discipline -> m
     Math.Clamp(statVal / maxMental, 0.20, 1.0)
 
-  /// Factory for creating a base combatant with default baseline pools, meters, and Titan class profile
+  /// Factory for creating a base combatant with default baseline pools, meters, and generic Warrior class profile
   static member create id name maxHealth maxMorale stats =
-    let defaultProg = ProgressionProfile.create CharacterClass.Titan 1
+    let defaultProg = ProgressionProfile.create CharacterClass.Warrior 1
     { Id = id
       Name = name
       Health = Pool.Create maxHealth
@@ -144,14 +144,15 @@ type Combatant =
       MirrorClones = 0
       ComboTracker = ConsecutiveComboTracker.Zero
       EquippedItems = []
-      Class = CharacterClass.Titan
+      Class = CharacterClass.Warrior
       Progression = defaultProg
       Preparations = defaultProg.Preparations
       ActivePreparations = [] }
 
   /// Factory for creating a combatant with explicit class archetype and progression level
-  static member createWithClass id name maxHealth maxMorale stats (cls: CharacterClass) (level: int) =
-    let prog = ProgressionProfile.create cls level
+  static member createWithClass id name maxHealth maxMorale (stats: StatBlock) (cls: CharacterClass) (level: int) =
+    let primStat = stats.Get cls.PrimaryStat
+    let prog = ProgressionProfile.createWithStat cls level primStat
     let defaultStance =
       match cls.Vector with
       | Power -> CombatStance.PowerStance

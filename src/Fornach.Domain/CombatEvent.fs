@@ -137,7 +137,7 @@ type CombatEvent =
   /// Defender seized the Vor from the Nach via an Indes counter-interception
   | IndesSeized of defenderId: CombatantId * attackerId: CombatantId * threshold: int * margin: int
 
-  /// Bastion Zone Control planted, restricting multi-opponent engagement to single file
+  /// Bastion Zone Control planted, restricting multi-opponent engagement to 3 simultaneous attackers
   | BastionZoneErected of actorId: CombatantId
 
   /// Socratic Dossier exposed hypocrisies, converting Recklessness directly to Morale damage
@@ -145,3 +145,9 @@ type CombatEvent =
 
   /// Heraldic Treatise reviewed, granting immediate Study Stacks across all engaged foes
   | HeraldicTreatiseStudied of actorId: CombatantId * studyStacksGranted: int
+
+  /// Severe mental stat disparity caused cranial hemorrhage (bleeding)
+  | PsychicHemorrhageInflicted of casterId: CombatantId * targetId: CombatantId * bleedStacks: int * disparity: int
+
+  /// Severe mental stat disparity resonated as an Area of Effect psychic shockwave to adjacent flanker
+  | PsychicShockwaveResonated of casterId: CombatantId * secondaryTargetId: CombatantId * splashDamage: int

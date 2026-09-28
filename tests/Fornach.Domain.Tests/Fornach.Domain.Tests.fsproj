@@ -13,6 +13,8 @@
     <Compile Include="DicePoolTests.fs" />
     <Compile Include="ProlongedBattleTests.fs" />
     <Compile Include="PreparationTests.fs" />
+    <Compile Include="MonteCarloSwarmTests.fs" />
+    <Compile Include="OverallBalanceTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

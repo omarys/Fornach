@@ -6,7 +6,7 @@ type CharacterClass =
   // --- Specialized Player Archetypes (with Tactical Preparations) ---
   // Power Vector (Force & Intellect)
   /// Physical: Juggernaut/Golem, massive kinetic momentum, cleaves
-  | Titan
+  | Berserker
   /// Mental: Dread Arcanist/Psychic, raw cognitive dominance, mind-shock
   | Inquisitor
 
@@ -36,7 +36,7 @@ type CharacterClass =
   member this.IsGeneric : bool =
     match this with
     | Warrior | Assassin | Soldier | Mage -> true
-    | Titan | Inquisitor | Duelist | Mesmer | Justicar | Strategist -> false
+    | Berserker | Inquisitor | Duelist | Mesmer | Justicar | Strategist -> false
 
   /// True if this is a specialized player archetype equipped with tactical preparations
   member this.IsPlayerClass : bool = not this.IsGeneric
@@ -44,21 +44,31 @@ type CharacterClass =
   /// The underlying stat Vector (Power, Agility, or Discipline)
   member this.Vector : Vector =
     match this with
-    | Titan | Inquisitor | Warrior -> Power
+    | Berserker | Inquisitor | Warrior -> Power
     | Duelist | Mesmer | Assassin -> Agility
     | Justicar | Strategist | Soldier -> Discipline
     | Mage -> Power // Baseline vector; arcane casting dynamically specializes based on stats
 
+  /// The primary governing attribute of this class archetype
+  member this.PrimaryStat : StatId =
+    match this with
+    | Berserker | Warrior -> Force
+    | Inquisitor | Mage -> Intellect
+    | Duelist | Assassin -> Finesse
+    | Mesmer -> Acuity
+    | Justicar | Soldier -> Prowess
+    | Strategist -> Acumen
+
   /// The operative combat Plane (Physical or Mental)
   member this.Plane : Plane =
     match this with
-    | Titan | Duelist | Justicar | Warrior | Assassin | Soldier -> Physical
+    | Berserker | Duelist | Justicar | Warrior | Assassin | Soldier -> Physical
     | Inquisitor | Mesmer | Strategist | Mage -> Mental
 
   /// Display name of the character class
   member this.Name : string =
     match this with
-    | Titan -> "Titan"
+    | Berserker -> "Berserker"
     | Inquisitor -> "Inquisitor"
     | Duelist -> "Duelist"
     | Mesmer -> "Mesmer"
@@ -72,7 +82,7 @@ type CharacterClass =
   /// Full descriptive title including archetype flavor
   member this.Title : string =
     match this with
-    | Titan -> "Titan (Kinetic Juggernaut)"
+    | Berserker -> "Berserker (Kinetic Juggernaut)"
     | Inquisitor -> "Inquisitor (Dread Arcanist)"
     | Duelist -> "Duelist (Vital Skirmisher)"
     | Mesmer -> "Mesmer (Phantasmist)"
@@ -86,7 +96,7 @@ type CharacterClass =
   /// Narrative description of combat specialization
   member this.Description : string =
     match this with
-    | Titan -> "Massive kinetic momentum, devastating cleaves, and reckless fever pitch."
+    | Berserker -> "Massive kinetic momentum, devastating cleaves, and reckless fever pitch."
     | Inquisitor -> "Raw cognitive dominance, psychic warhorns, and synaptic branding."
     | Duelist -> "Rapid probing cadences, vital punctures, and quick-draw concealed counters."
     | Mesmer -> "Sensory static, feedback traps, phantasmal mirages, and psychic neurotoxins."
@@ -98,7 +108,7 @@ type CharacterClass =
     | Mage -> "Generic arcane practitioner channeling mental energies without specialized preparation assets."
 
   /// All 6 specialized player class archetypes
-  static member PlayerClasses = [ Titan; Inquisitor; Duelist; Mesmer; Justicar; Strategist ]
+  static member PlayerClasses = [ Berserker; Inquisitor; Duelist; Mesmer; Justicar; Strategist ]
 
   /// All 4 generic NPC classes
   static member GenericClasses = [ Warrior; Assassin; Soldier; Mage ]

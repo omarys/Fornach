@@ -11,7 +11,7 @@ type PreparationCategory =
 
 /// Class-specific tactical preparation edge assets
 type PreparationType =
-  // --- Titan (Power / Physical) ---
+  // --- Berserker (Power / Physical) ---
   /// Crowd: Surplus NetHits spill over as flat damage to all engaged flankers
   | ShockwaveSlam
   /// Duel: Consumes own health to spike Recklessness into Fever Pitch (bonus dice + damage)
@@ -24,7 +24,7 @@ type PreparationType =
   | SynapticBrand
 
   // --- Duelist (Agility / Physical) ---
-  /// Crowd: Blinds secondary flankers, stripping their multi-opponent penalty for 2 turns
+  /// Crowd: Blinds secondary flankers, stripping their multi-opponent penalty for 5 turns
   | CaltropPouch
   /// Duel: Quick-draw boot blade; usable from Nach to land an immediate un-telegraphed puncture
   | ConcealedBlade
@@ -36,7 +36,7 @@ type PreparationType =
   | NeuroToxin
 
   // --- Justicar (Discipline / Physical) ---
-  /// Crowd: Plants polearm/shield; caps EngagedOpponents strictly to 1 (forces single file)
+  /// Crowd: Plants polearm/shield; limits simultaneous attackers strictly to 3 (front 3 tiles)
   | BastionZoneControl
   /// Duel: Dedicated off-hand reaction die pool, expands Indes trigger window by +1 hit
   | ParryingBuckler
@@ -66,7 +66,7 @@ type PreparationType =
   /// Class association for this preparation
   member this.Class : CharacterClass =
     match this with
-    | ShockwaveSlam | BerserkTincture -> CharacterClass.Titan
+    | ShockwaveSlam | BerserkTincture -> CharacterClass.Berserker
     | DreadWarhorn | SynapticBrand -> CharacterClass.Inquisitor
     | CaltropPouch | ConcealedBlade -> CharacterClass.Duelist
     | MirrorMirage | NeuroToxin -> CharacterClass.Mesmer
@@ -92,16 +92,16 @@ type PreparationType =
   /// Tactical mechanical description
   member this.Description : string =
     match this with
-    | ShockwaveSlam -> "Surplus NetHits (>= 3) spill over as flat damage to all engaged flankers."
-    | BerserkTincture -> "Consumes health to spike Recklessness into Fever Pitch for bonus dice and damage."
+    | ShockwaveSlam -> "Surplus NetHits (>= 3) spill over as flat damage to all engaged flankers for 5 turns."
+    | BerserkTincture -> "Spikes Recklessness into Fever Pitch for bonus dice and damage for 5 turns."
     | DreadWarhorn -> "Dreadful psychic howl inflicts +25 Cognitive Fatigue across active attackers."
-    | SynapticBrand -> "Marks target: any critical strike deals 2x Morale damage and inflicts Rupture."
-    | CaltropPouch -> "Blinds secondary flankers, stripping their multi-opponent penalty for 2 turns."
-    | ConcealedBlade -> "Quick-draw boot blade; interrupts incoming attack from Nach with immediate puncture."
-    | MirrorMirage -> "Phantasmal decoy field; flankers hit illusions, building +20 Confusion and missing turn."
-    | NeuroToxin -> "Psychic venom; target suffers escalating Morale drain per point of Recklessness gained."
-    | BastionZoneControl -> "Plants polearm/shield; caps EngagedOpponents strictly to 1 (forces single file)."
-    | ParryingBuckler -> "Dedicated off-hand reaction shield; modifies Indes threshold by -1, widening Vor window."
+    | SynapticBrand -> "Marks target for 5 turns: any critical strike deals 2x Morale damage and inflicts Rupture."
+    | CaltropPouch -> "Blinds secondary flankers, stripping their multi-opponent penalty for 5 turns."
+    | ConcealedBlade -> "Quick-draw boot blade; readied for 5 turns to interrupt incoming attacks from the Nach."
+    | MirrorMirage -> "Phantasmal decoy field for 5 turns; flankers hit illusions, building +20 Confusion and missing turn."
+    | NeuroToxin -> "Psychic venom for 5 turns; target suffers escalating Morale drain per point of Recklessness gained."
+    | BastionZoneControl -> "Plants polearm/shield for 5 turns; limits simultaneous attackers strictly to 3 (front three tiles)."
+    | ParryingBuckler -> "Dedicated off-hand reaction shield for 5 turns; modifies Indes threshold by -1, widening Vor window."
     | HeraldicTreatise -> "Pre-battle tactical notes; immediately grants +2 Study Stacks across all foes."
     | SocraticDossier -> "Exposes contradictions; immediately converts opponent's Recklessness to unmitigated Morale damage."
 
@@ -109,7 +109,7 @@ type PreparationType =
   /// Generic NPC classes (Warrior, Assassin, Soldier, Mage) do not possess specialized preparation abilities.
   static member ForClass (cls: CharacterClass) : PreparationType list =
     match cls with
-    | CharacterClass.Titan -> [ ShockwaveSlam; BerserkTincture ]
+    | CharacterClass.Berserker -> [ ShockwaveSlam; BerserkTincture ]
     | CharacterClass.Inquisitor -> [ DreadWarhorn; SynapticBrand ]
     | CharacterClass.Duelist -> [ CaltropPouch; ConcealedBlade ]
     | CharacterClass.Mesmer -> [ MirrorMirage; NeuroToxin ]
@@ -138,25 +138,31 @@ type ProgressionProfile = {
   Level: int
   CurrentXP: int
   Class: CharacterClass
+  PrimaryStat: int
   Preparations: PreparationSlot list
 } with
-  /// Progression formula: Base 2 uses at Level 1, +1 use every 5 levels, hard-capped at 6 uses (Level 20)
-  static member CalculateMaxPrepUses (level: int) : int =
-    Math.Clamp(2 + (level / 5), 2, 6)
+  /// Preparation capacity: strictly limited to 2 uses per encounter
+  static member CalculateMaxPrepUses (_primaryStat: int) : int = 2
 
-  /// Creates a standard progression profile with replenished class preparations.
+  /// Creates a standard progression profile with replenished class preparations based on primary stat.
   /// Generic NPC classes do not receive preparation uses or slots.
-  static member create (cls: CharacterClass) (level: int) : ProgressionProfile =
+  static member createWithStat (cls: CharacterClass) (level: int) (primaryStat: int) : ProgressionProfile =
     let maxUses =
       if cls.IsGeneric then 0
-      else ProgressionProfile.CalculateMaxPrepUses level
+      else ProgressionProfile.CalculateMaxPrepUses primaryStat
     let slots =
       PreparationType.ForClass cls
       |> List.map (fun pt -> PreparationSlot.create pt maxUses)
     { Level = Math.Max(1, level)
       CurrentXP = 0
       Class = cls
+      PrimaryStat = primaryStat
       Preparations = slots }
+
+  /// Creates profile with estimated primary stat for level
+  static member create (cls: CharacterClass) (level: int) : ProgressionProfile =
+    let estimatedPrimaryStat = 45 + (Math.Max(1, level) - 1) * 4
+    ProgressionProfile.createWithStat cls level estimatedPrimaryStat
 
   /// Total remaining uses across all equipped preparation slots
   member this.TotalRemainingPrepUses : int =
@@ -184,7 +190,9 @@ type ProgressionProfile = {
 
   /// Replenishes all preparation uses to maximum capacity (e.g. upon complete rest)
   member this.ReplenishAll () : ProgressionProfile =
-    let maxUses = ProgressionProfile.CalculateMaxPrepUses this.Level
+    let maxUses =
+      if this.Class.IsGeneric then 0
+      else ProgressionProfile.CalculateMaxPrepUses this.PrimaryStat
     let restored =
       this.Preparations
       |> List.map (fun s -> { s with MaxUses = maxUses; RemainingUses = maxUses })
