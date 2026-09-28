@@ -14,6 +14,7 @@
     <Compile Include="VisionCone.fs" />
     <Compile Include="Fov.fs" />
     <Compile Include="Pathfinding.fs" />
+    <Compile Include="Dijkstra.fs" />
   </ItemGroup>
 
 </Project>

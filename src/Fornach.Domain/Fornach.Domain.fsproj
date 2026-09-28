@@ -36,5 +36,12 @@
 
     <!-- 8. Tiered Archetypes and Combat Mastery Factories -->
     <Compile Include="TierFactory.fs" />
+
+    <!-- 9. Dynamic Vision and Locomotion Domain Resolver -->
+    <Compile Include="Vision.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fornach.Spatial\Fornach.Spatial.fsproj" />
   </ItemGroup>
 </Project>

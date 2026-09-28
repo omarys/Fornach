@@ -15,6 +15,7 @@
     <Compile Include="PreparationTests.fs" />
     <Compile Include="MonteCarloSwarmTests.fs" />
     <Compile Include="OverallBalanceTests.fs" />
+    <Compile Include="VisionResolverTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
