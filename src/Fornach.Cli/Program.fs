@@ -150,13 +150,6 @@ module Program =
       if player.Stance <> CombatStance.DisciplineStance then
         sprintf "↺ [bold %s]Shift Stance: Discipline Stance[/] (Chained Strikes, Study Stacks & Unpenalized AoO)" Theme.Purple
 
-      // Social / Rhetorical Techniques
-      sprintf "🗣️  [%s]Authority Decree: Imperious Command[/] (Presence vs. Will)" Theme.Yellow
-      sprintf "⚡ [bold %s]Authority Decree: Overwhelming Demand[/] (Social Gambit: +25 Recklessness)" Theme.Yellow
-      sprintf "🗣️  [%s]Guile Deception: Rhetorical Misdirection[/] (Guile vs. Insight)" Theme.Orange
-      sprintf "⚡ [bold %s]Guile Deception: Confidence Trap[/] (Social Gambit: +20 Recklessness)" Theme.Orange
-      sprintf "🗣️  [%s]Acumen Interrogation: Procedural Pressure[/] (Leverage vs. Composure)" Theme.Orange
-      sprintf "⚡ [bold %s]Acumen Interrogation: Socratic Checkmate[/] (Social Gambit: +30 Recklessness)" Theme.Orange
 
       // Arcane Spellcraft (Universal Casting scaled by Mental Vector Proficiency)
       let powProf = int (Math.Round(player.GetArcaneProficiency Power * 100.0))
@@ -707,7 +700,7 @@ module Program =
               .Title(sprintf "[bold %s]Select Mode:[/]" Theme.Yellow)
               .PageSize(9)
               .AddChoices([
-                sprintf "📖  [bold %s]Interactive Story Mode (5 Grief Stages & The Tower)[/]" Theme.Cyan
+                sprintf "📖  [bold %s]Interactive Story Mode[/]" Theme.Cyan
                 sprintf "🗼  [bold %s]Ascend The Infinite Tower (Roguelike Dungeon Crawl)[/]" Theme.Yellow
                 sprintf "⚔️   [bold %s]Interactive Duel Arena[/]" Theme.Green
                 sprintf "📊  [bold %s]Monte-Carlo Balance Simulator (1 vs 1)[/]" Theme.Cyan

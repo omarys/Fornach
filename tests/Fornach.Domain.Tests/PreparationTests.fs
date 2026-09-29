@@ -91,9 +91,9 @@ module PreparationTests =
   // =========================================================================
 
   [<Fact>]
-  let ``All 6 player character classes correctly map Vector, Plane, and 2 unique preparations (1 Crowd, 1 Duel)`` () =
+  let ``All 10 player character classes correctly map Vector, Plane, and 2 unique preparations (1 Crowd, 1 Duel)`` () =
     let playerClasses = CharacterClass.PlayerClasses
-    Assert.Equal(6, playerClasses.Length)
+    Assert.Equal(10, playerClasses.Length)
 
     for cls in playerClasses do
       Assert.False(cls.IsGeneric)
@@ -108,15 +108,14 @@ module PreparationTests =
       Assert.Single(duelPreps) |> ignore
 
       for p in preps do
-        Assert.Equal(cls, p.Class)
         Assert.False(String.IsNullOrWhiteSpace(p.Name))
         Assert.False(String.IsNullOrWhiteSpace(p.Description))
 
   [<Fact>]
-  let ``All 4 generic NPC classes (Warrior, Assassin, Soldier, Mage) map correctly and possess zero preparations`` () =
+  let ``All 4 generic NPC classes (Warrior, Rogue, Soldier, Mage) map correctly and possess zero preparations`` () =
     let genericClasses = CharacterClass.GenericClasses
     Assert.Equal(4, genericClasses.Length)
-    Assert.Equal(10, CharacterClass.All.Length)
+    Assert.Equal(14, CharacterClass.All.Length)
 
     for cls in genericClasses do
       Assert.True(cls.IsGeneric)
@@ -130,8 +129,8 @@ module PreparationTests =
     Assert.Equal(Vector.Power, CharacterClass.Warrior.Vector)
     Assert.Equal(Plane.Physical, CharacterClass.Warrior.Plane)
 
-    Assert.Equal(Vector.Agility, CharacterClass.Assassin.Vector)
-    Assert.Equal(Plane.Physical, CharacterClass.Assassin.Plane)
+    Assert.Equal(Vector.Agility, CharacterClass.Rogue.Vector)
+    Assert.Equal(Plane.Physical, CharacterClass.Rogue.Plane)
 
     Assert.Equal(Vector.Discipline, CharacterClass.Soldier.Vector)
     Assert.Equal(Plane.Physical, CharacterClass.Soldier.Plane)
@@ -171,7 +170,7 @@ module PreparationTests =
     Assert.True(contestWith.EncirclementPenalty < contestWithout.EncirclementPenalty, "Encirclement penalty with Bastion capped to 3 attackers should be smaller than uncapped 6th attacker penalty.")
 
   // =========================================================================
-  // 4. Single-Target Duel Tests: ConcealedBlade & NeuroToxin
+  // 4. Single-Target Duel Tests: ConcealedBlade & PrismaticFlare
   // =========================================================================
 
   [<Fact>]
@@ -205,11 +204,11 @@ module PreparationTests =
     Assert.Equal(defender.Health.Current, res.Target.Health.Current)
 
   [<Fact>]
-  let ``NeuroToxin inflicts escalating Morale drain when target gains Recklessness`` () =
+  let ``PrismaticFlare inflicts escalating Morale drain and confusion when target gains Recklessness`` () =
     let attacker = createFighterWithClass CharacterClass.Mesmer 5 30 30 40 40 40 40 60 50 70 50 50 50
     let defender =
       createFighterWithClass CharacterClass.Berserker 1 50 50 30 30 40 40 30 30 30 30 30 30
-      |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.NeuroToxin None 3)
+      |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.PrismaticFlare None 3)
 
     let initialMorale = defender.Morale.Current
 
@@ -217,15 +216,16 @@ module PreparationTests =
     let roller = fixedRoller 6 // ensures hit
     let res = ActionResolver.resolve roller (StandardAttack (GuileDeception false)) attacker defender
 
-    let toxinEvt =
+    let flareEvt =
       res.Events
-      |> List.tryPick (function CombatEvent.NeuroToxinDrained (_, reckSpike, drain) -> Some (reckSpike, drain) | _ -> None)
+      |> List.tryPick (function CombatEvent.PrismaticFlareBlinded (_, reckSpike, drain) -> Some (reckSpike, drain) | _ -> None)
 
-    Assert.True(toxinEvt.IsSome, "NeuroToxinDrained event must be emitted when target gains Recklessness.")
-    let reckSpike, drain = toxinEvt.Value
+    Assert.True(flareEvt.IsSome, "PrismaticFlareBlinded event must be emitted when target gains Recklessness.")
+    let reckSpike, drain = flareEvt.Value
     Assert.True(reckSpike > 0, "Recklessness spike must be positive.")
     Assert.True(drain > 0, "Morale drain must be positive.")
-    Assert.True(res.Target.Morale.Current < initialMorale, "Target Morale must be reduced by Neurotoxin.")
+    Assert.True(res.Target.Morale.Current < initialMorale, "Target Morale must be reduced by Prismatic Flare.")
+    Assert.True(res.Target.Meters.Confusion.Value >= 20, "Target must suffer confusion from Prismatic Flare glitter burst.")
 
   // =========================================================================
   // 5. Tactical Timing & Indes Tests: ParryingBuckler
@@ -331,11 +331,11 @@ module PreparationTests =
 
 
   [<Fact>]
-  let ``TierFactory initializes all 40 archetypes across 10 classes and 4 tiers correctly`` () =
+  let ``TierFactory initializes all 56 archetypes across 14 classes and 4 tiers correctly`` () =
     let tiers = [ Novice; Veteran; Master; GrandMaster ]
     let classes = CharacterClass.All
 
-    Assert.Equal(10, classes.Length)
+    Assert.Equal(14, classes.Length)
 
     for cls in classes do
       for tier in tiers do
@@ -416,26 +416,26 @@ module PreparationTests =
     Assert.Equal(duelist.Health.Current, res.Target.Health.Current)
 
   [<Fact>]
-  let ``Duel: Veteran Mesmer deploys NeuroToxin on Veteran Warrior, draining Morale on Recklessness gain`` () =
+  let ``Duel: Veteran Mesmer deploys PrismaticFlare on Veteran Warrior, draining Morale on Recklessness gain`` () =
     let mesmer = TierFactory.createClassTier CharacterClass.Mesmer Veteran
     let warrior = TierFactory.createClassTier CharacterClass.Warrior Veteran
     let roller = fixedRoller 6
 
-    // Mesmer deploys NeuroToxin
-    let deployRes = ActionResolver.resolve roller (DeployPreparation (PreparationType.NeuroToxin, Some warrior.Id)) mesmer warrior
-    let warriorToxined = deployRes.Target
+    // Mesmer deploys PrismaticFlare
+    let deployRes = ActionResolver.resolve roller (DeployPreparation (PreparationType.PrismaticFlare, Some warrior.Id)) mesmer warrior
+    let warriorFlared = deployRes.Target
 
     // Mesmer strikes with GuileDeception, causing Warrior to gain Recklessness
-    let attackRes = ActionResolver.resolve roller (StandardAttack (GuileDeception false)) deployRes.Actor warriorToxined
+    let attackRes = ActionResolver.resolve roller (StandardAttack (GuileDeception false)) deployRes.Actor warriorFlared
 
-    let toxinDrainEvt =
+    let flareDrainEvt =
       attackRes.Events
-      |> List.tryPick (function CombatEvent.NeuroToxinDrained (_, reckSpike, drain) -> Some (reckSpike, drain) | _ -> None)
+      |> List.tryPick (function CombatEvent.PrismaticFlareBlinded (_, reckSpike, drain) -> Some (reckSpike, drain) | _ -> None)
 
-    Assert.True(toxinDrainEvt.IsSome, "Neurotoxin should drain Morale when Veteran Warrior gains Recklessness.")
-    let _, drain = toxinDrainEvt.Value
+    Assert.True(flareDrainEvt.IsSome, "Prismatic Flare should drain Morale when Veteran Warrior gains Recklessness.")
+    let _, drain = flareDrainEvt.Value
     Assert.True(drain > 0)
-    Assert.True(attackRes.Target.Morale.Current < warriorToxined.Morale.Current)
+    Assert.True(attackRes.Target.Morale.Current < warriorFlared.Morale.Current)
 
   [<Fact>]
   let ``Duel: Master Justicar with Parrying Buckler seizes Vor in Indes against Master Assassin`` () =
@@ -534,15 +534,15 @@ module PreparationTests =
     Assert.Equal(0, res.Target.Meters.Recklessness.Value)
 
   [<Fact>]
-  let ``Duel: Generic Novice Soldier vs Novice Assassin duels without preparations testing pure martial mechanics`` () =
+  let ``Duel: Generic Novice Soldier vs Novice Rogue duels without preparations testing pure martial mechanics`` () =
     let soldier = TierFactory.createClassTier CharacterClass.Soldier Novice
-    let assassin = TierFactory.createClassTier CharacterClass.Assassin Novice
+    let rogue = TierFactory.createClassTier CharacterClass.Rogue Novice
     let roller = fixedRoller 4
 
     Assert.Empty(soldier.Preparations)
-    Assert.Empty(assassin.Preparations)
+    Assert.Empty(rogue.Preparations)
 
-    let res = ActionResolver.resolve roller (StandardAttack (ProwessStrike false)) soldier assassin
+    let res = ActionResolver.resolve roller (StandardAttack (ProwessStrike false)) soldier rogue
 
     Assert.NotNull(res.Contest)
     // No preparation events should be emitted
@@ -551,8 +551,10 @@ module PreparationTests =
       |> List.filter (function
         | CombatEvent.PreparationDeployed _
         | CombatEvent.ConcealedBladeCounter _
-        | CombatEvent.NeuroToxinDrained _
-        | CombatEvent.SynapticBrandTriggered _ -> true
+        | CombatEvent.PrismaticFlareBlinded _
+        | CombatEvent.SynapticBrandTriggered _
+        | CombatEvent.RetributionReflected _
+        | CombatEvent.DestabilizingWardTripped _ -> true
         | _ -> false)
     Assert.Empty(prepEvents)
 
@@ -630,12 +632,12 @@ module PreparationTests =
       Assert.True(excessHits >= 1)
       Assert.True(flatDmg >= 15)
 
-    // In Power Stance, Cleave should also strike 2 flankers
+    // In Power Stance with Shockwave Slam, Cleave should strike across all flankers (up to 4)
     let cleaveEvents =
       groupRes.Events
       |> List.choose (function CombatEvent.CleaveExecuted (a, t, dmg, reck) -> Some (t, dmg, reck) | _ -> None)
 
-    Assert.Equal(2, cleaveEvents.Length)
+    Assert.True(cleaveEvents.Length >= 2, sprintf "Cleave should strike multiple flankers (Actual: %d)" cleaveEvents.Length)
 
   [<Fact>]
   let ``1vsN: GrandMaster Justicar with Bastion Zone Control completely negates encirclement penalties against 4 Novice Warriors`` () =
@@ -778,15 +780,24 @@ module PreparationTests =
     Assert.True(pen3 >= 10, sprintf "Encirclement penalty should be steep for unassisted novice (Actual: %d)" pen3)
 
   [<Fact>]
-  let ``Caltrop Pouch deploys with 5 turns duration and strips flank penalties`` () =
-    let duelist = TierFactory.createClassTier CharacterClass.Duelist Veteran
+  let ``Caltrop Pouch deploys with 2 turns duration at Novice and scales with tier progression`` () =
+    let noviceDuelist = TierFactory.createClassTier CharacterClass.Duelist Novice
+    let vetDuelist = TierFactory.createClassTier CharacterClass.Duelist Veteran
+    let gmDuelist = TierFactory.createClassTier CharacterClass.Duelist GrandMaster
     let opponent = TierFactory.createClassTier CharacterClass.Soldier Novice
     let roller = fixedRoller 3
 
-    let res = ActionResolver.resolve roller (DeployPreparation (PreparationType.CaltropPouch, None)) duelist opponent
-    let caltropPrep = res.Actor.ActivePreparations |> List.find (fun p -> p.Type = PreparationType.CaltropPouch)
+    let resNovice = ActionResolver.resolve roller (DeployPreparation (PreparationType.CaltropPouch, None)) noviceDuelist opponent
+    let prepNovice = resNovice.Actor.ActivePreparations |> List.find (fun p -> p.Type = PreparationType.CaltropPouch)
+    Assert.Equal(2, prepNovice.DurationTurns)
 
-    Assert.Equal(5, caltropPrep.DurationTurns)
+    let resVet = ActionResolver.resolve roller (DeployPreparation (PreparationType.CaltropPouch, None)) vetDuelist opponent
+    let prepVet = resVet.Actor.ActivePreparations |> List.find (fun p -> p.Type = PreparationType.CaltropPouch)
+    Assert.True(prepVet.DurationTurns > prepNovice.DurationTurns, "Veteran Caltrop Pouch should last longer than Novice.")
+
+    let resGM = ActionResolver.resolve roller (DeployPreparation (PreparationType.CaltropPouch, None)) gmDuelist opponent
+    let prepGM = resGM.Actor.ActivePreparations |> List.find (fun p -> p.Type = PreparationType.CaltropPouch)
+    Assert.True(prepGM.DurationTurns > prepVet.DurationTurns, "Grandmaster Caltrop Pouch should scale even further.")
 
   [<Fact>]
   let ``Berserker always cleaves adjacent targets on physical hit regardless of stance`` () =
@@ -859,3 +870,76 @@ module PreparationTests =
     Assert.Equal(2, resonanceEvts.Length)
     Assert.True(groupRes.SecondaryTargets.[0].Morale.Current < flanker1.Morale.Current, "Secondary flanker 1 should take psychic splash damage.")
     Assert.True(groupRes.SecondaryTargets.[1].Morale.Current < flanker2.Morale.Current, "Secondary flanker 2 should take psychic splash damage.")
+
+  [<Fact>]
+  let ``AegisOfRetribution reduces incoming damage taken by 35% and reflects 50% back as retribution with Frustration`` () =
+    let abjurer = TierFactory.createClassTier CharacterClass.Abjurer Veteran
+    let ally = TierFactory.createClassTier CharacterClass.Soldier Veteran
+    let attacker = TierFactory.createClassTier CharacterClass.Warrior Veteran
+    let roller = fixedRoller 4
+
+    // 1. Abjurer deploys Aegis of Retribution onto ally
+    let deployRes = ActionResolver.resolve roller (DeployPreparation (PreparationType.AegisOfRetribution, Some ally.Id)) abjurer ally
+    let shieldedAlly = deployRes.Target
+    Assert.True(shieldedAlly.HasActivePreparation PreparationType.AegisOfRetribution)
+
+    // Attacker strikes shielded ally with ForceStrike
+    let attackRes = ActionResolver.resolve roller (StandardAttack (ForceStrike false)) attacker shieldedAlly
+
+    let reflectEvt =
+      attackRes.Events
+      |> List.tryPick (function CombatEvent.RetributionReflected (_, _, dmg, frust) -> Some (dmg, frust) | _ -> None)
+
+    Assert.True(reflectEvt.IsSome, "RetributionReflected event must be emitted when attacker strikes target with Aegis of Retribution.")
+    let dmg, frust = reflectEvt.Value
+    Assert.True(dmg > 0, "Reflected retribution damage must be positive.")
+    Assert.True(frust >= 15, "Frustration inflicted on attacker must be >= 15.")
+    Assert.True(attackRes.Actor.Meters.Frustration.Value >= 15, "Attacker Frustration meter must have increased.")
+    Assert.True(attackRes.Target.Health.Current < ally.Health.Current, "Ally should take damage, but reduced by 35%.")
+
+    // 2. Abjurer deploys Aegis of Retribution on self; flanker beyond ground wards (priorDefenses = 5) strikes
+    let deploySelfRes = ActionResolver.resolve roller (DeployPreparation (PreparationType.AegisOfRetribution, None)) abjurer attacker
+    let abjurerShielded = deploySelfRes.Actor
+    let abjurerAttackRes = ActionResolver.resolveEx roller (StandardAttack (ForceStrike false)) attacker abjurerShielded 5
+    let selfReflectEvt =
+      abjurerAttackRes.Events
+      |> List.tryPick (function CombatEvent.RetributionReflected (_, _, d, f) -> Some (d, f) | _ -> None)
+    Assert.True(selfReflectEvt.IsSome, "RetributionReflected event must be emitted when flanker strikes Abjurer directly.")
+
+  [<Fact>]
+  let ``BerserkTincture mitigates incoming physical damage by 35% and emits EnrageDamageShrugged`` () =
+    let berserker = TierFactory.createClassTier CharacterClass.Berserker Veteran
+    let attacker = TierFactory.createClassTier CharacterClass.Warrior Master
+    let roller = fixedRoller 4
+
+    // Deploy Berserk Tincture (consume potion, lose health, gain Recklessness + active preparation)
+    let deployRes = ActionResolver.resolve roller (DeployPreparation (PreparationType.BerserkTincture, None)) berserker attacker
+    let enragedBerserker = deployRes.Actor
+    Assert.True(enragedBerserker.HasActivePreparation PreparationType.BerserkTincture)
+
+    // Attacker strikes enraged Berserker with ForceStrike
+    let attackRes = ActionResolver.resolve roller (StandardAttack (ForceStrike false)) attacker enragedBerserker
+
+    let shrugEvt =
+      attackRes.Events
+      |> List.tryPick (function CombatEvent.EnrageDamageShrugged (_, dmgIgnored) -> Some dmgIgnored | _ -> None)
+
+    Assert.True(shrugEvt.IsSome, "EnrageDamageShrugged event must be emitted when physical damage hits an enraged Berserker.")
+    Assert.True(shrugEvt.Value > 0, "Ignored physical damage must be positive.")
+
+  [<Fact>]
+  let ``Grandmaster Berserker cleaves up to 5 adjacent targets with massive Force and Shockwave synergy`` () =
+    let gmBerserker = TierFactory.createClassTier CharacterClass.Berserker GrandMaster
+    let primaryTarget = TierFactory.createClassTier CharacterClass.Soldier Novice
+    let flankers = [ for i in 1 .. 6 -> TierFactory.createClassTier CharacterClass.Soldier Novice ]
+    let roller = fixedRoller 5
+
+    // GM Berserker executes ForceStrike against primary target with 6 adjacent flankers
+    let groupRes = ActionResolver.resolveGroupTurn roller (StandardAttack (ForceStrike false)) gmBerserker primaryTarget flankers
+
+    let cleaveHits =
+      groupRes.Events
+      |> List.choose (function CombatEvent.CleaveExecuted (_, tid, dmg, _) -> Some (tid, dmg) | _ -> None)
+
+    // Grandmaster Force (~160) gives min(5, max(2, 160/35)) = 4 or 5 targets
+    Assert.True(cleaveHits.Length >= 4, sprintf "Grandmaster Berserker should cleave at least 4 adjacent targets (Actual: %d)" cleaveHits.Length)

@@ -32,8 +32,8 @@ type PreparationType =
   // --- Mesmer (Agility / Mental) ---
   /// Crowd: Creates phantasms; flankers hit illusions, building +20 Confusion and missing turn
   | MirrorMirage
-  /// Duel: Psychic venom; target takes escalating Morale drain for every point of Recklessness gained
-  | NeuroToxin
+  /// Duel: Blinding burst of prismatic fireworks; target takes acute Morale shock and +20 Confusion for every point of Recklessness gained
+  | PrismaticFlare
 
   // --- Justicar (Discipline / Physical) ---
   /// Crowd: Plants polearm/shield; limits simultaneous attackers strictly to 3 (front 3 tiles)
@@ -41,7 +41,9 @@ type PreparationType =
   /// Duel: Dedicated off-hand reaction die pool, expands Indes trigger window by +1 hit
   | ParryingBuckler
 
-  // --- Strategist (Discipline / Mental) ---
+  // --- Abjurer (Discipline / Mental) ---
+  /// Crowd/Buff: Runic sanctuary barrier applied to self or ally; reduces all damage taken by 35% and reflects 50% back to attackers as radiant retribution damage and +15 Frustration
+  | AegisOfRetribution
   /// Crowd: Pre-battle notes; grants +2 Study Stacks on all visible foes immediately
   | HeraldicTreatise
   /// Duel: Exposes contradictions; immediately converts opponent's current Recklessness to unmitigated Morale damage
@@ -55,11 +57,12 @@ type PreparationType =
     | CaltropPouch
     | MirrorMirage
     | BastionZoneControl
+    | AegisOfRetribution
     | HeraldicTreatise -> CrowdControl
     | BerserkTincture
     | SynapticBrand
     | ConcealedBlade
-    | NeuroToxin
+    | PrismaticFlare
     | ParryingBuckler
     | SocraticDossier -> SingleTargetDuel
 
@@ -69,9 +72,9 @@ type PreparationType =
     | ShockwaveSlam | BerserkTincture -> CharacterClass.Berserker
     | DreadWarhorn | SynapticBrand -> CharacterClass.Inquisitor
     | CaltropPouch | ConcealedBlade -> CharacterClass.Duelist
-    | MirrorMirage | NeuroToxin -> CharacterClass.Mesmer
-    | BastionZoneControl | ParryingBuckler -> CharacterClass.Justicar
-    | HeraldicTreatise | SocraticDossier -> CharacterClass.Strategist
+    | MirrorMirage | PrismaticFlare -> CharacterClass.Mesmer
+    | BastionZoneControl | ParryingBuckler -> CharacterClass.Warden
+    | AegisOfRetribution | HeraldicTreatise | SocraticDossier -> CharacterClass.Abjurer
 
   /// Human-readable display name
   member this.Name : string =
@@ -83,40 +86,85 @@ type PreparationType =
     | CaltropPouch -> "Caltrop Pouch"
     | ConcealedBlade -> "Concealed Blade"
     | MirrorMirage -> "Mirror Mirage"
-    | NeuroToxin -> "NeuroToxin"
+    | PrismaticFlare -> "Prismatic Flare"
     | BastionZoneControl -> "Bastion Zone Control"
     | ParryingBuckler -> "Parrying Buckler"
+    | AegisOfRetribution -> "Aegis of Retribution"
     | HeraldicTreatise -> "Heraldic Treatise"
     | SocraticDossier -> "Socratic Dossier"
 
   /// Tactical mechanical description
   member this.Description : string =
     match this with
-    | ShockwaveSlam -> "Surplus NetHits (>= 3) spill over as flat damage to all engaged flankers for 5 turns."
-    | BerserkTincture -> "Spikes Recklessness into Fever Pitch for bonus dice and damage for 5 turns."
+    | ShockwaveSlam -> "Surplus NetHits (>= 3) spill over as flat damage to all engaged flankers (duration scales with level/primary stat)."
+    | BerserkTincture -> "Spikes Recklessness into Fever Pitch for bonus dice and damage (duration scales with level/primary stat)."
     | DreadWarhorn -> "Dreadful psychic howl inflicts +25 Cognitive Fatigue across active attackers."
-    | SynapticBrand -> "Marks target for 5 turns: any critical strike deals 2x Morale damage and inflicts Rupture."
-    | CaltropPouch -> "Blinds secondary flankers, stripping their multi-opponent penalty for 5 turns."
-    | ConcealedBlade -> "Quick-draw boot blade; readied for 5 turns to interrupt incoming attacks from the Nach."
-    | MirrorMirage -> "Phantasmal decoy field for 5 turns; flankers hit illusions, building +20 Confusion and missing turn."
-    | NeuroToxin -> "Psychic venom for 5 turns; target suffers escalating Morale drain per point of Recklessness gained."
-    | BastionZoneControl -> "Plants polearm/shield for 5 turns; limits simultaneous attackers strictly to 3 (front three tiles)."
-    | ParryingBuckler -> "Dedicated off-hand reaction shield for 5 turns; modifies Indes threshold by -1, widening Vor window."
+    | SynapticBrand -> "Marks target: any critical strike deals 2x Morale damage and inflicts Rupture (duration scales with level/primary stat)."
+    | CaltropPouch -> "Blinds secondary flankers, stripping their multi-opponent penalty (duration scales with level/primary stat; base 2 turns)."
+    | ConcealedBlade -> "Quick-draw boot blade; readied to interrupt incoming attacks from the Nach (duration scales with level/primary stat)."
+    | MirrorMirage -> "Phantasmal decoy field; flankers hit illusions, building +20 Confusion and missing turn (duration scales with level/primary stat)."
+    | PrismaticFlare -> "Blinding burst of prismatic fireworks; target suffers acute Morale shock and +20 Confusion per point of Recklessness gained (duration scales with level/primary stat)."
+    | BastionZoneControl -> "Plants polearm/shield; limits simultaneous attackers strictly to 3 (front three tiles; duration scales with level/primary stat)."
+    | ParryingBuckler -> "Dedicated off-hand reaction shield; modifies Indes threshold by -1, widening Vor window (duration scales with level/primary stat)."
+    | AegisOfRetribution -> "Runic sanctuary barrier applied to self or an ally: reduces incoming damage taken by 35% and reflects 50% back to attackers as radiant retribution damage and +15 Frustration (duration scales with level/primary stat)."
     | HeraldicTreatise -> "Pre-battle tactical notes; immediately grants +2 Study Stacks across all foes."
     | SocraticDossier -> "Exposes contradictions; immediately converts opponent's Recklessness to unmitigated Morale damage."
+
+  /// Base duration in turns for tactical preparations at Level 1 (Novice).
+  /// Instantaneous preparations return 0.
+  member this.BaseDuration : int =
+    match this with
+    | CaltropPouch -> 2
+    | BastionZoneControl -> 3
+    | ShockwaveSlam
+    | BerserkTincture
+    | SynapticBrand
+    | ConcealedBlade
+    | MirrorMirage
+    | PrismaticFlare
+    | ParryingBuckler
+    | AegisOfRetribution -> 3
+    | DreadWarhorn
+    | HeraldicTreatise
+    | SocraticDossier -> 0
+
+  /// Calculates scaled duration in turns based on character level and/or primary stat points.
+  /// Operational window extends with character level and primary stat investment.
+  member this.CalculateDuration (level: int) (primaryStat: int) : int =
+    if this.BaseDuration <= 0 then 0
+    else
+      let lvl = Math.Max(1, level)
+      match this with
+      | CaltropPouch ->
+        // Caltrops scale steadily: +1 turn per 40 levels / 160 primary stat points
+        let bonus = Math.Max((lvl - 1) / 40, Math.Max(0, (primaryStat - 40) / 160))
+        Math.Max(2, this.BaseDuration + bonus)
+      | BastionZoneControl ->
+        // Bastion zone control scales strongly: disciplined defenders hold chokepoints against swarms
+        let bonus = Math.Max((lvl - 1) / 13, Math.Max(0, (primaryStat - 40) / 53))
+        Math.Max(3, this.BaseDuration + bonus)
+      | _ ->
+        // Standard combat preparations:
+        let bonus = Math.Max((lvl - 1) / 20, Math.Max(0, (primaryStat - 40) / 80))
+        Math.Max(this.BaseDuration, this.BaseDuration + bonus)
 
   /// Retrieves the pair of preparations (1 CrowdControl, 1 SingleTargetDuel) belonging to a class.
   /// Generic NPC classes (Warrior, Assassin, Soldier, Mage) do not possess specialized preparation abilities.
   static member ForClass (cls: CharacterClass) : PreparationType list =
     match cls with
     | CharacterClass.Berserker -> [ ShockwaveSlam; BerserkTincture ]
+    | CharacterClass.Juggernaut -> [ ShockwaveSlam; ParryingBuckler ]
     | CharacterClass.Inquisitor -> [ DreadWarhorn; SynapticBrand ]
     | CharacterClass.Duelist -> [ CaltropPouch; ConcealedBlade ]
-    | CharacterClass.Mesmer -> [ MirrorMirage; NeuroToxin ]
+    | CharacterClass.Assassin -> [ CaltropPouch; ConcealedBlade ]
+    | CharacterClass.Mesmer -> [ MirrorMirage; PrismaticFlare ]
+    | CharacterClass.Warden
     | CharacterClass.Justicar -> [ BastionZoneControl; ParryingBuckler ]
+    | CharacterClass.Ranger -> [ CaltropPouch; ParryingBuckler ]
+    | CharacterClass.Abjurer -> [ AegisOfRetribution; SocraticDossier ]
     | CharacterClass.Strategist -> [ HeraldicTreatise; SocraticDossier ]
     | CharacterClass.Warrior
-    | CharacterClass.Assassin
+    | CharacterClass.Rogue
     | CharacterClass.Soldier
     | CharacterClass.Mage -> []
 
@@ -206,6 +254,13 @@ type ActivePreparation = {
   Parameter: int
 } with
   static member create (prepType: PreparationType) (targetIdOpt: CombatantId option) (duration: int) : ActivePreparation =
+    { Type = prepType
+      TargetId = targetIdOpt
+      DurationTurns = duration
+      Parameter = 0 }
+
+  static member createScaled (prepType: PreparationType) (targetIdOpt: CombatantId option) (level: int) (primaryStat: int) : ActivePreparation =
+    let duration = prepType.CalculateDuration level primaryStat
     { Type = prepType
       TargetId = targetIdOpt
       DurationTurns = duration

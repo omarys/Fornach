@@ -128,8 +128,8 @@ type CombatEvent =
   /// Concealed boot blade quick-drawn from the Nach to counter-puncture incoming attacker
   | ConcealedBladeCounter of defenderId: CombatantId * attackerId: CombatantId * damage: int * attackDisrupted: bool
 
-  /// Neurotoxin psychic venom drained Morale due to Recklessness gain
-  | NeuroToxinDrained of targetId: CombatantId * recklessnessSpike: int * moraleDrain: int
+  /// Prismatic Flare fireworks detonated due to Recklessness gain, blinding target for Morale shock and Confusion
+  | PrismaticFlareBlinded of targetId: CombatantId * recklessnessSpike: int * moraleDrain: int
 
   /// Secondary flanker struck a Mirror Mirage phantasm, suffering Confusion and missing turn
   | MirrorMirageDeceived of defenderId: CombatantId * flankerId: CombatantId * confusionInflicted: int
@@ -151,3 +151,30 @@ type CombatEvent =
 
   /// Severe mental stat disparity resonated as an Area of Effect psychic shockwave to adjacent flanker
   | PsychicShockwaveResonated of casterId: CombatantId * secondaryTargetId: CombatantId * splashDamage: int
+
+  /// Mesmer actively swapped places with a mirror decoy clone in the Nach/Indes
+  | PhantasmalSwapExecuted of defenderId: CombatantId * attackerId: CombatantId * success: bool * note: string
+
+  /// Strategist projected a tactical ground rune under an incoming attacker mid-swing
+  | DestabilizingWardTriggered of defenderId: CombatantId * attackerId: CombatantId * outcome: string * damageMitigation: float
+
+  /// Inquisitor projected a synaptic mind-shock to disrupt the attacker's focus
+  | SynapticMindShockDisrupted of defenderId: CombatantId * attackerId: CombatantId * fatigueInflicted: int * attackDisrupted: bool
+
+  /// Passive class ability generated clones, wards, or psychological dread
+  | PassiveGenerationTriggered of combatantId: CombatantId * description: string
+
+  /// Mirror decoy clone was struck and shattered upon contact, inflicting retaliatory feedback damage
+  | MirrorCloneShattered of defenderId: CombatantId * attackerId: CombatantId * blastDamage: int * remainingClones: int
+
+  /// Aegis of Retribution / Retribution Ward reflected damage back onto attacker, inflicting damage and Frustration
+  | RetributionReflected of defenderId: CombatantId * attackerId: CombatantId * damageReflected: int * frustrationInflicted: int
+
+  /// Attacker stumbled and fell onto a destabilizing ground ward, suffering kinetic impact damage and severe Frustration
+  | DestabilizingWardTripped of defenderId: CombatantId * attackerId: CombatantId * impactDamage: int * frustrationInflicted: int
+
+  /// Enraged Berserker deadened pain receptors, shrugging off incoming physical damage
+  | EnrageDamageShrugged of defenderId: CombatantId * damageIgnored: int
+
+  /// Enraged Berserker executed an adrenaline-fueled Frenzy bonus attack against the swarm
+  | FrenzyStrikeExecuted of actorId: CombatantId * targetId: CombatantId

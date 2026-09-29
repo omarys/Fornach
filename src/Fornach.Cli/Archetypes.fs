@@ -200,19 +200,32 @@ module Archetypes =
   // =========================================================================
 
   let createGrandMasterBerserker () = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
+  let createGrandMasterJuggernaut () = TierFactory.createClassTier CharacterClass.Juggernaut CombatTier.GrandMaster
   let createGrandMasterInquisitor () = TierFactory.createClassTier CharacterClass.Inquisitor CombatTier.GrandMaster
   let createGrandMasterDuelist () = TierFactory.createClassTier CharacterClass.Duelist CombatTier.GrandMaster
+  let createGrandMasterAssassin () = TierFactory.createClassTier CharacterClass.Assassin CombatTier.GrandMaster
   let createGrandMasterMesmer () = TierFactory.createClassTier CharacterClass.Mesmer CombatTier.GrandMaster
+  let createGrandMasterWarden () = TierFactory.createClassTier CharacterClass.Warden CombatTier.GrandMaster
   let createGrandMasterJusticar () = TierFactory.createClassTier CharacterClass.Justicar CombatTier.GrandMaster
-  let createGrandMasterStrategist () = TierFactory.createClassTier CharacterClass.Strategist CombatTier.GrandMaster
+  let createGrandMasterRanger () = TierFactory.createClassTier CharacterClass.Ranger CombatTier.GrandMaster
+  let createGrandMasterAbjurer () = TierFactory.createClassTier CharacterClass.Abjurer CombatTier.GrandMaster
+  let createGrandMasterStrategist = createGrandMasterAbjurer
 
   let createGrandmasterBerserker = createGrandMasterBerserker
+  let createGrandmasterJuggernaut = createGrandMasterJuggernaut
   let createGrandmasterTitan = createGrandMasterBerserker
   let createGrandmasterInquisitor = createGrandMasterInquisitor
   let createGrandmasterDuelist = createGrandMasterDuelist
+  let createGrandmasterAssassin = createGrandMasterAssassin
   let createGrandmasterMesmer = createGrandMasterMesmer
+  let createGrandmasterWarden = createGrandMasterWarden
   let createGrandmasterJusticar = createGrandMasterJusticar
-  let createGrandmasterStrategist = createGrandMasterStrategist
+  let createGrandmasterRanger = createGrandMasterRanger
+  let createGrandmasterAbjurer = createGrandMasterAbjurer
+  let createGrandmasterStrategist = createGrandMasterAbjurer
+
+  let createClassTier (cls: CharacterClass) (tier: CombatTier) () =
+    TierFactory.createClassTier cls tier
 
   // =========================================================================
   // Generic NPC Archetypes (Novice Tier, Level 1, Zero Preparations)
@@ -244,9 +257,11 @@ module Archetypes =
         Acuity, 15; Intuition, 15
         Acumen, 15; Composure, 15
       ]
-    { Combatant.createWithClass id "Assassin" 650 450 stats CharacterClass.Assassin 1 with
+    { Combatant.createWithClass id "Assassin" 650 450 stats CharacterClass.Rogue 1 with
         Armor = ArmorIntegrity.Create 25
         Stance = CombatStance.AgilityStance }
+
+  let createNoviceRogue = createNoviceAssassin
 
   let createNoviceSoldier () =
     let id = CombatantId.New()
@@ -337,6 +352,30 @@ module Archetypes =
       Description = "Aristocratic orator dismantling composure with procedural leverage."
       Factory = createLadyVane }
 
+    { Name = "Veteran Warden"
+      Tier = Veteran
+      Discipline = CombatMode.Physical
+      Description = "Discipline/Power/Agility bastion knight commanding Bastion Zone Control."
+      Factory = createClassTier CharacterClass.Warden CombatTier.Veteran }
+
+    { Name = "Veteran Juggernaut"
+      Tier = Veteran
+      Discipline = CombatMode.Physical
+      Description = "Power/Discipline/Agility iron colossus with heavy armor and sundering impacts."
+      Factory = createClassTier CharacterClass.Juggernaut CombatTier.Veteran }
+
+    { Name = "Veteran Ranger"
+      Tier = Veteran
+      Discipline = CombatMode.Physical
+      Description = "Discipline/Agility/Power wild sentinel weaving reactive intercepts and skirmishing."
+      Factory = createClassTier CharacterClass.Ranger CombatTier.Veteran }
+
+    { Name = "Veteran Abjurer"
+      Tier = Veteran
+      Discipline = CombatMode.Arcane
+      Description = "Discipline/Mental runic warder commanding ground glyphs and abjuration barriers."
+      Factory = createClassTier CharacterClass.Abjurer CombatTier.Veteran }
+
     { Name = "Grand Warmaster"
       Tier = Master
       Discipline = CombatMode.Physical
@@ -355,6 +394,30 @@ module Archetypes =
       Description = "Formidable court titan who commands unyielding authority and lethal scrutiny."
       Factory = createChancellor }
 
+    { Name = "Master Warden"
+      Tier = Master
+      Discipline = CombatMode.Physical
+      Description = "Discipline/Power/Agility bastion master with impenetrable zone control."
+      Factory = createClassTier CharacterClass.Warden CombatTier.Master }
+
+    { Name = "Master Juggernaut"
+      Tier = Master
+      Discipline = CombatMode.Physical
+      Description = "Power/Discipline/Agility unstoppable colossus with sundering power."
+      Factory = createClassTier CharacterClass.Juggernaut CombatTier.Master }
+
+    { Name = "Master Ranger"
+      Tier = Master
+      Discipline = CombatMode.Physical
+      Description = "Discipline/Agility/Power master scout with fluid reactive defense."
+      Factory = createClassTier CharacterClass.Ranger CombatTier.Master }
+
+    { Name = "Master Abjurer"
+      Tier = Master
+      Discipline = CombatMode.Arcane
+      Description = "Discipline/Mental grand abjurer placing destabilizing wards and composure barriers."
+      Factory = createClassTier CharacterClass.Abjurer CombatTier.Master }
+
     // =========================================================================
     // GrandMaster Tier (Level 200, 6 Preparations, Max Stats 840+)
     // =========================================================================
@@ -362,8 +425,14 @@ module Archetypes =
     { Name = "Grandmaster Berserker"
       Tier = GrandMaster
       Discipline = CombatMode.Physical
-      Description = "Power/Physical GrandMaster: kinetic juggernaut wielding Shockwave Slam and Cleaves."
+      Description = "Power/Agility/Discipline (1.0 : 0.75 : 0.50): kinetic slayer wielding wild momentum and cleaves."
       Factory = createGrandMasterBerserker }
+
+    { Name = "Grandmaster Juggernaut"
+      Tier = GrandMaster
+      Discipline = CombatMode.Physical
+      Description = "Power/Discipline/Agility (1.0 : 0.75 : 0.50): iron colossus with heavy armor and sundering impacts."
+      Factory = createGrandMasterJuggernaut }
 
     { Name = "Grandmaster Inquisitor"
       Tier = GrandMaster
@@ -374,25 +443,49 @@ module Archetypes =
     { Name = "Grandmaster Duelist"
       Tier = GrandMaster
       Discipline = CombatMode.Physical
-      Description = "Agility/Physical GrandMaster: vital skirmisher deploying Caltrop Pouches and Concealed Blades."
+      Description = "Agility/Discipline/Power (1.0 : 0.75 : 0.50): technical fencer deploying Caltrop Pouches (2 turns) and parries."
       Factory = createGrandMasterDuelist }
+
+    { Name = "Grandmaster Assassin"
+      Tier = GrandMaster
+      Discipline = CombatMode.Physical
+      Description = "Agility/Power/Discipline (1.0 : 0.75 : 0.50): lethal shadow striker deploying Concealed Blades and burst."
+      Factory = createGrandMasterAssassin }
 
     { Name = "Grandmaster Mesmer"
       Tier = GrandMaster
       Discipline = CombatMode.Arcane
-      Description = "Agility/Mental GrandMaster: phantasmist weaving Mirror Mirages and deadly NeuroToxins."
+      Description = "Agility/Mental GrandMaster: phantasmist weaving Mirror Mirages, decoy swaps, and Prismatic Flares."
       Factory = createGrandMasterMesmer }
+
+    { Name = "Grandmaster Warden"
+      Tier = GrandMaster
+      Discipline = CombatMode.Physical
+      Description = "Discipline/Power/Agility (1.0 : 0.75 : 0.50): bastion knight planting Bastion Zone Control and polearms."
+      Factory = createGrandMasterWarden }
 
     { Name = "Grandmaster Justicar"
       Tier = GrandMaster
       Discipline = CombatMode.Physical
-      Description = "Discipline/Physical GrandMaster: knight warder planting Bastion Zone Control and Parrying Bucklers."
+      Description = "Discipline/Physical GrandMaster (legacy alias for Warden): knight warder planting Bastion Zone Control."
       Factory = createGrandMasterJusticar }
+
+    { Name = "Grandmaster Ranger"
+      Tier = GrandMaster
+      Discipline = CombatMode.Physical
+      Description = "Discipline/Agility/Power (1.0 : 0.75 : 0.50): wild sentinel weaving reactive intercepts and skirmishing."
+      Factory = createGrandMasterRanger }
+
+    { Name = "Grandmaster Abjurer"
+      Tier = GrandMaster
+      Discipline = CombatMode.Arcane
+      Description = "Discipline/Mental GrandMaster: runic warder commanding Heraldic Treatises and destabilizing ground glyphs."
+      Factory = createGrandMasterAbjurer }
 
     { Name = "Grandmaster Strategist"
       Tier = GrandMaster
-      Discipline = CombatMode.Social
-      Description = "Discipline/Mental GrandMaster: dialectician commanding Heraldic Treatises and Socratic Dossiers."
+      Discipline = CombatMode.Arcane
+      Description = "Discipline/Mental GrandMaster (legacy alias for Abjurer): tactical mastermind."
       Factory = createGrandMasterStrategist }
 
     // =========================================================================
@@ -411,6 +504,12 @@ module Archetypes =
       Description = "Generic Finesse NPC: agile skirmisher relying on Finesse and speed (no preparations)."
       Factory = createNoviceAssassin }
 
+    { Name = "Rogue"
+      Tier = Novice
+      Discipline = CombatMode.Physical
+      Description = "Generic Finesse NPC: agile skirmisher relying on Finesse and speed (no preparations)."
+      Factory = createNoviceRogue }
+
     { Name = "Soldier"
       Tier = Novice
       Discipline = CombatMode.Physical
@@ -427,9 +526,10 @@ module Archetypes =
   let findByName (name: string) : ArchetypeInfo option =
     let trimmed = name.Trim().ToLowerInvariant()
     allArchetypes
-    |> List.tryFind (fun a ->
-      a.Name.ToLowerInvariant() = trimmed
-      || a.Name.ToLowerInvariant().Contains(trimmed))
+    |> List.tryFind (fun a -> a.Name.ToLowerInvariant() = trimmed)
+    |> Option.orElseWith (fun () ->
+      allArchetypes
+      |> List.tryFind (fun a -> a.Name.ToLowerInvariant().Contains(trimmed)))
 
   let createCustom (name: string) (hp: int) (morale: int) (armor: int) (stats: (StatId * int) seq) : Combatant =
     let id = CombatantId.New()

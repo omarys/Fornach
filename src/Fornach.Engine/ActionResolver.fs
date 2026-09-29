@@ -20,7 +20,9 @@ module ActionResolver =
     elif netHits = 6 then 2.50
     elif netHits = 7 then 3.00
     elif netHits = 8 then 3.50
-    else 4.00 + (float (netHits - 8) * 0.50)
+    elif netHits = 9 then 4.00
+    elif netHits = 10 then 4.50
+    else Math.Min(12.00, 4.50 + (float (netHits - 10) * 0.50))
 
   /// Applies pool damage, arcane ward barrier soak, armor soak, and massive blow armor shredding
   let private applyDamage
@@ -40,9 +42,20 @@ module ActionResolver =
 
     match plane with
     | Physical ->
-      let absorbed = int (float remAmount * targetWithWard.Armor.AbsorptionRatio)
-      let actualDmg = if remAmount <= 0 then 0 else Math.Max(1, remAmount - absorbed)
+      // Berserk Tincture Enrage: deadens pain receptors, shrugging off physical damage (scales up to 50% with Force)
+      let enrageShrugged =
+        if targetWithWard.HasActivePreparation PreparationType.BerserkTincture && remAmount > 0 then
+          let forceFactor = Math.Min(0.50, 0.35 + (float (targetWithWard.GetStat Force) / 1000.0))
+          Math.Max(1, int (Math.Round(float remAmount * forceFactor)))
+        else 0
+      let postEnrageAmount = remAmount - enrageShrugged
+      let absorbed = int (float postEnrageAmount * targetWithWard.Armor.AbsorptionRatio)
+      let actualDmg = if postEnrageAmount <= 0 then 0 else Math.Max(1, postEnrageAmount - absorbed)
       let updatedPool = targetWithWard.Health.ApplyDelta -actualDmg
+      let enrageEvts =
+        if enrageShrugged > 0 then
+          [ CombatEvent.EnrageDamageShrugged(target.Id, enrageShrugged) ]
+        else []
 
       // Massive blows automatically shred armor durability: shred = max 15 (damageDealt / 3)
       let updatedArmor =
@@ -64,7 +77,7 @@ module ActionResolver =
           IsCritical = isCrit
           IsArmorCompromised = updatedArmor.IsShredded || isCrit }
 
-      updatedTarget, evt, wardEvts
+      updatedTarget, evt, (wardEvts @ enrageEvts)
 
     | Mental ->
       let actualDmg = if remAmount <= 0 then 0 else Math.Max(1, remAmount)
@@ -392,6 +405,7 @@ module ActionResolver =
       let composure = resetActor.GetStat Composure
       let acumen = resetActor.GetStat Acumen
       let reckDrain = composure + 10
+      let fatigueDrain = 15 + (composure / 4)
       let studyGain = Math.Max(1, acumen / 4)
       let profRatio = resetActor.GetArcaneProficiency Discipline
       let wardRestore = int (float acumen * 0.40 * profRatio)
@@ -401,7 +415,8 @@ module ActionResolver =
         |> Combatant.updateMeters (fun m ->
           { m with
               Recklessness = m.Recklessness - reckDrain
-              Confusion = m.Confusion - (composure / 2) })
+              Confusion = m.Confusion - (composure / 2)
+              CognitiveFatigue = m.CognitiveFatigue - fatigueDrain })
         |> Combatant.addStudyStacks studyGain
         |> Combatant.addWard wardRestore
 
@@ -446,13 +461,14 @@ module ActionResolver =
         Contest = None }
     else
       let actorSpent = actor |> Combatant.spendPreparation prepType
+      let duration = prepType.CalculateDuration actorSpent.Progression.Level actorSpent.Progression.PrimaryStat
       match prepType with
       | PreparationType.ShockwaveSlam ->
         let updatedActor =
           actorSpent
-          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ShockwaveSlam None 5)
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ShockwaveSlam None duration)
         let evts = [
-          CombatEvent.PreparationDeployed(actor.Id, prepType, None, "Shockwave Slam prepared for 5 turns: surplus NetHits (>= 3) will spill over as flat kinetic damage to all engaged flankers.")
+          CombatEvent.PreparationDeployed(actor.Id, prepType, None, sprintf "Shockwave Slam prepared for %d turns: surplus NetHits (>= 3) will spill over as flat kinetic damage to all engaged flankers." duration)
         ]
         { Actor = updatedActor; Target = target; Events = evts; Contest = None }
 
@@ -461,95 +477,122 @@ module ActionResolver =
         let updatedActor =
           { actorSpent with Health = actorSpent.Health.ApplyDelta -healthCost }
           |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness + 35 })
-          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.BerserkTincture None 5)
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.BerserkTincture None duration)
         let evts = [
-          CombatEvent.PreparationDeployed(actor.Id, prepType, None, sprintf "Consumed Berserk Tincture (lost %d HP): Recklessness spiked into Fever Pitch (+35) for 5 turns!" healthCost)
+          CombatEvent.PreparationDeployed(actor.Id, prepType, None, sprintf "Consumed Berserk Tincture (lost %d HP): Recklessness spiked into Fever Pitch (+35) for %d turns!" healthCost duration)
           CombatEvent.DamageApplied { TargetId = actor.Id; Plane = Physical; Amount = healthCost; IsCritical = false; IsArmorCompromised = false }
         ]
         { Actor = updatedActor; Target = target; Events = evts; Contest = None }
 
       | PreparationType.DreadWarhorn ->
+        let sonicDmg = Math.Max(20, int (float (actor.GetStat Intellect) * 0.35))
+        let targetAfterDmg, dmgEvt, wardEvts = applyDamage Mental sonicDmg false target
         let updatedTarget =
-          target
+          targetAfterDmg
           |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue + 25 })
           |> Combatant.evaluateCollapse
-        let evts = [
-          CombatEvent.PreparationDeployed(actor.Id, prepType, Some target.Id, "Dread Warhorn sounded! Incurred +25 Cognitive Fatigue on target.")
-        ]
+        let evts =
+          wardEvts
+          @ [
+            CombatEvent.PreparationDeployed(actor.Id, prepType, Some target.Id, sprintf "Dread Warhorn sounded! Blasted target for %d Morale damage and +25 Cognitive Fatigue." sonicDmg)
+            CombatEvent.DamageApplied dmgEvt
+          ]
         { Actor = actorSpent; Target = updatedTarget; Events = evts; Contest = None }
 
       | PreparationType.SynapticBrand ->
         let tgtId = targetIdOpt |> Option.defaultValue target.Id
         let updatedActor =
           actorSpent
-          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.SynapticBrand (Some tgtId) 5)
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.SynapticBrand (Some tgtId) duration)
         let updatedTarget =
           target
-          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.SynapticBrand None 5)
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.SynapticBrand None duration)
         let evts = [
-          CombatEvent.PreparationDeployed(actor.Id, prepType, Some tgtId, "Synaptic Brand inscribed for 5 turns: critical strikes deal 2x Morale damage and inflict Rupture.")
+          CombatEvent.PreparationDeployed(actor.Id, prepType, Some tgtId, sprintf "Synaptic Brand inscribed for %d turns: critical strikes deal 2x Morale damage and inflict Rupture." duration)
         ]
         { Actor = updatedActor; Target = updatedTarget; Events = evts; Contest = None }
 
       | PreparationType.CaltropPouch ->
         let updatedActor =
           actorSpent
-          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.CaltropPouch None 5)
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.CaltropPouch None duration)
         let evts = [
-          CombatEvent.PreparationDeployed(actor.Id, prepType, None, "Caltrops deployed across flanks: secondary flanker multi-opponent penalties stripped for 5 turns.")
+          CombatEvent.PreparationDeployed(actor.Id, prepType, None, sprintf "Caltrop Pouch scattered sharp spikes across the 5 flanking spaces for %d turns!" duration)
         ]
         { Actor = updatedActor; Target = target; Events = evts; Contest = None }
 
       | PreparationType.ConcealedBlade ->
         let updatedActor =
           actorSpent
-          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ConcealedBlade None 5)
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ConcealedBlade None duration)
         let evts = [
-          CombatEvent.PreparationDeployed(actor.Id, prepType, None, "Concealed boot blade readied for 5 turns: prepared to counter-puncture from the Nach!")
+          CombatEvent.PreparationDeployed(actor.Id, prepType, None, sprintf "Concealed boot blade readied for %d turns: prepared to counter-puncture from the Nach!" duration)
         ]
         { Actor = updatedActor; Target = target; Events = evts; Contest = None }
 
       | PreparationType.MirrorMirage ->
+        let maxClones = Math.Clamp(actor.Progression.Level / 40 + 1, 1, 5)
+        let clonesToAdd = Math.Max(0, Math.Min(3, maxClones - actorSpent.MirrorClones))
         let updatedActor =
           actorSpent
-          |> Combatant.addClones 3
-          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.MirrorMirage None 5)
+          |> (if clonesToAdd > 0 then Combatant.addClones clonesToAdd else id)
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.MirrorMirage None duration)
         let evts = [
-          CombatEvent.PreparationDeployed(actor.Id, prepType, None, "Mirror Mirage wove phantasms: secondary flankers hit illusions (+20 Confusion) and multi-opponent penalties ignored for 5 turns.")
+          CombatEvent.PreparationDeployed(actor.Id, prepType, None, sprintf "Mirror Mirage wove phantasms (Active Clones: %d/%d): secondary flankers hit illusions (+20 Confusion) for %d turns." updatedActor.MirrorClones maxClones duration)
         ]
         { Actor = updatedActor; Target = target; Events = evts; Contest = None }
 
-      | PreparationType.NeuroToxin ->
+      | PreparationType.PrismaticFlare ->
         let tgtId = targetIdOpt |> Option.defaultValue target.Id
         let updatedActor =
           actorSpent
-          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.NeuroToxin (Some tgtId) 5)
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.PrismaticFlare (Some tgtId) duration)
         let updatedTarget =
           target
-          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.NeuroToxin None 5)
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.PrismaticFlare None duration)
         let evts = [
-          CombatEvent.PreparationDeployed(actor.Id, prepType, Some tgtId, "Psychic Neurotoxin applied for 5 turns: target suffers escalating Morale drain on Recklessness accumulation.")
+          CombatEvent.PreparationDeployed(actor.Id, prepType, Some tgtId, sprintf "Prismatic Flare inscribed for %d turns: target suffers acute Morale shock and +20 Confusion on Recklessness accumulation." duration)
         ]
         { Actor = updatedActor; Target = updatedTarget; Events = evts; Contest = None }
 
       | PreparationType.BastionZoneControl ->
         let updatedActor =
           actorSpent
-          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.BastionZoneControl None 5)
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.BastionZoneControl None duration)
         let evts = [
           CombatEvent.BastionZoneErected(actor.Id)
-          CombatEvent.PreparationDeployed(actor.Id, prepType, None, "Bastion Zone planted for 5 turns: limits simultaneous attackers strictly to 3 (front three tiles)!")
+          CombatEvent.PreparationDeployed(actor.Id, prepType, None, sprintf "Bastion Zone planted for %d turns: limits simultaneous attackers strictly to 3 (front three tiles)!" duration)
         ]
         { Actor = updatedActor; Target = target; Events = evts; Contest = None }
 
       | PreparationType.ParryingBuckler ->
         let updatedActor =
           actorSpent
-          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ParryingBuckler None 5)
+          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ParryingBuckler None duration)
         let evts = [
-          CombatEvent.PreparationDeployed(actor.Id, prepType, None, "Parrying Buckler braced for 5 turns: Indes threshold reduced by -1, widening the window to seize the Vor!")
+          CombatEvent.PreparationDeployed(actor.Id, prepType, None, sprintf "Parrying Buckler braced for %d turns: Indes threshold reduced by -1, widening the window to seize the Vor!" duration)
         ]
         { Actor = updatedActor; Target = target; Events = evts; Contest = None }
+
+      | PreparationType.AegisOfRetribution ->
+        let tgtId = targetIdOpt |> Option.defaultValue actor.Id
+        let isSelf = tgtId = actor.Id
+        let wardBoost = Math.Max(25, int (float (actor.GetStat Acumen) * 0.40))
+        let updatedActor =
+          actorSpent
+          |> (if isSelf then Combatant.addWard wardBoost else id)
+          |> (if isSelf then Combatant.addActivePreparation (ActivePreparation.create PreparationType.AegisOfRetribution (Some tgtId) duration) else id)
+        let updatedTarget =
+          if not isSelf && target.Id = tgtId then
+            target
+            |> Combatant.addWard wardBoost
+            |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.AegisOfRetribution (Some tgtId) duration)
+          else target
+        let evts = [
+          CombatEvent.ArcaneWardErected(tgtId, wardBoost, (if isSelf then updatedActor.ArcaneWard else updatedTarget.ArcaneWard))
+          CombatEvent.PreparationDeployed(actor.Id, prepType, Some tgtId, sprintf "Aegis of Retribution deployed for %d turns (+%d Ward barrier): damage taken reduced by 35%%, and 50%% reflected back as radiant retribution!" duration wardBoost)
+        ]
+        { Actor = updatedActor; Target = updatedTarget; Events = evts; Contest = None }
 
       | PreparationType.HeraldicTreatise ->
         let updatedActor =
@@ -653,7 +696,9 @@ module ActionResolver =
       | ProwessStrike true -> true, "Martial Gambit: Invitational Bait", 35
       | CalculatedFlawStrike stacks ->
         let actualSpend = Math.Min(currentActor.StudyStacks, Math.Max(2, stacks))
-        currentActor <- currentActor |> Combatant.addStudyStacks -actualSpend
+        let isSameSchoolMaster = currentActor.Class = CharacterClass.Warden || currentActor.Class = CharacterClass.Justicar
+        let retained = if isSameSchoolMaster then actualSpend / 2 else 0
+        currentActor <- currentActor |> Combatant.addStudyStacks -(actualSpend - retained)
         events <- CombatEvent.DisciplineGambitExecuted(currentActor.Id, "Calculated Flaw Strike", actualSpend) :: events
         false, "", 0 // Consumes Study Stacks with 0 Recklessness self-spike!
       | MasterfulDisarm stacks ->
@@ -672,6 +717,9 @@ module ActionResolver =
       | GuileDeception true -> true, "Social Gambit: Confidence Trap", 25
       | AcumenInterrogation true -> true, "Social Gambit: Calculated Sacrilege", 35
       | ArcaneCataclysm true -> true, "Arcane Gambit: Overchanneled Cataclysm", 35
+      | SynapticGlamour true -> true, "Arcane Gambit: Mind Fracture", 25
+      | MirrorIllusion true -> true, "Arcane Gambit: Decoy Swarm", 25
+      | RunicWardTrap true -> true, "Arcane Gambit: Anomalous Glyph", 30
       | DisorientingShockwave true -> true, "Arcane Gambit: Resonant Shockwave", 25
       | TraumaAttack DenialPhaseShift -> true, "Trauma Gambit: Denial Phase Shift", 15
       | TraumaAttack BasaltEruption -> true, "Trauma Gambit: Basalt Eruption", 35
@@ -729,10 +777,15 @@ module ActionResolver =
     // Arcane Spell Preparation Procs (weaving clones or erecting abjuration wards)
     match atk with
     | MirrorIllusion isDecoySwarm ->
+      let actorAcuity = currentActor.GetStat Acuity
+      let maxClones = Math.Clamp(1 + (actorAcuity / 140), 2, 6)
       let baseClones = if isDecoySwarm then 3.0 else 2.0
       let clonesConjured = Math.Max(1, int (Math.Round(baseClones * profRatio)))
-      currentActor <- currentActor |> Combatant.addClones clonesConjured
-      events <- CombatEvent.MirrorClonesConjured(currentActor.Id, clonesConjured, currentActor.MirrorClones) :: events
+      let room = Math.Max(0, maxClones - currentActor.MirrorClones)
+      let actualConjured = Math.Min(clonesConjured, room)
+      if actualConjured > 0 then
+        currentActor <- currentActor |> Combatant.addClones actualConjured
+        events <- CombatEvent.MirrorClonesConjured(currentActor.Id, actualConjured, currentActor.MirrorClones) :: events
     | RunicWardTrap isAnomalousGlyph ->
       let glyphScale = if isAnomalousGlyph then 1.0 else 0.6
       let wardErected = Math.Max(10, int (float (currentActor.GetStat Acumen) * glyphScale * profRatio))
@@ -1082,13 +1135,36 @@ module ActionResolver =
     else
 
     // Calculate effective prior defenses taking into account defensive preparations
-    // BastionZoneControl limits simultaneous attackers to 3 (three tiles in front).
-    // CaltropPouch and MirrorMirage ignore multi-opponent penalties from secondary attackers.
+    // BastionZoneControl and CaltropPouch limit frontline attackers to 3, negating flanking spaces via tactical footwork / sharp ground denial.
     let effectivePriorDefenses =
       if currentTarget.HasActivePreparation PreparationType.BastionZoneControl then Math.Min(2, priorDefenses)
-      elif currentTarget.HasActivePreparation PreparationType.CaltropPouch then 0
-      elif currentTarget.HasActivePreparation PreparationType.MirrorMirage then 0
+      elif currentTarget.HasActivePreparation PreparationType.CaltropPouch then Math.Min(2, priorDefenses)
+      elif currentTarget.HasActivePreparation PreparationType.MirrorMirage then Math.Max(0, priorDefenses - 5)
       else priorDefenses
+
+    // Caltrops: The 5 flanking spaces are nearly impassable because they are sharp and painful.
+    // They do NOT reduce priorDefense to 0, but flankers traversing the caltrop field suffer sharp puncture wounds!
+    let mutable caltropKilledFlanker = false
+    if priorDefenses >= 1 && priorDefenses <= 5 && currentTarget.HasActivePreparation PreparationType.CaltropPouch then
+      let defFinesse = currentTarget.GetStat Finesse
+      let caltropDmg = Math.Max(20, int (float defFinesse * 0.20))
+      let actorAfterCaltrop, caltropDmgEvt, wardEvts = applyDamage Physical caltropDmg false currentActor
+      events <- wardEvts @ (CombatEvent.DamageApplied caltropDmgEvt :: CombatEvent.PreparationDeployed(currentTarget.Id, PreparationType.CaltropPouch, Some currentActor.Id, sprintf "Flanker traversed sharp caltrops, taking %d puncture damage and losing footing (+15 Overwhelm)!" caltropDmg) :: events)
+      currentActor <-
+        actorAfterCaltrop
+        |> Combatant.updateMeters (fun m -> { m with Overwhelm = m.Overwhelm + 15 })
+        |> Combatant.evaluateCollapse
+      if currentActor.Health.IsDepleted || currentActor.Morale.IsDepleted then
+        caltropKilledFlanker <- true
+
+    if caltropKilledFlanker then
+      let finalActor = Combatant.evaluateCollapse currentActor
+      let finalTarget = Combatant.evaluateCollapse currentTarget
+      { Actor = finalActor
+        Target = finalTarget
+        Events = events
+        Contest = None }
+    else
 
     // --- Step B.3.9: Defender Concealed Blade Counter-Puncture from the Nach ---
     let mutable concealedBladeDisrupted = false
@@ -1110,16 +1186,30 @@ module ActionResolver =
         Contest = None }
     else
 
-    // --- Step B.4.1: Defender Mirror Mirage Phantasm Deception ---
+    // --- Step B.4.1: Defender Mirror Mirage Phantasm Deception (Acuity vs. Intuition) ---
+    // Capped at up to 5 flanking spaces per round; priorDefenses penalty removed, limited by stat minus Exhaustion/Recklessness
     let mutable mirrorMirageDeceived = false
-    if priorDefenses >= 1 && currentTarget.HasActivePreparation PreparationType.MirrorMirage then
-      currentActor <-
-        currentActor
-        |> Combatant.updateMeters (fun m -> { m with Confusion = m.Confusion + 20 })
-        |> fun a -> { a with ComboTracker = a.ComboTracker.ResetCombo() }
-      events <- CombatEvent.MirrorMirageDeceived(currentTarget.Id, currentActor.Id, 20) :: events
-      events <- CombatEvent.ComboReset(currentActor.Id, "Strike deceived by Mirror Mirage phantasm; flank attack defused!") :: events
-      mirrorMirageDeceived <- true
+    if priorDefenses >= 1 && priorDefenses <= 5 && currentTarget.HasActivePreparation PreparationType.MirrorMirage then
+      let defAcuity = currentTarget.GetStat Acuity
+      let atkIntuition = currentActor.GetStat Intuition
+      let delta = defAcuity - atkIntuition
+      let rollMargin = (roller 1 6 - roller 1 6) * 3
+      let fatiguePenalty = (currentTarget.Meters.Exhaustion.Value / 4) + (currentTarget.Meters.Recklessness.Value / 4)
+      let slope = if delta >= 0 then 0.8 else 1.4
+      let baseChance = 55.0
+      let deceiveChance = Math.Clamp(int (baseChance + float delta * slope) + rollMargin - fatiguePenalty, 5, 95)
+      if roller 1 100 <= deceiveChance then
+        let blastDamage = Math.Max(15, int (float defAcuity * 0.08))
+        let actorAfterBlast, _, wardEvts = applyDamage Mental blastDamage false currentActor
+        events <- wardEvts @ events
+        events <- CombatEvent.MirrorCloneShattered(currentTarget.Id, currentActor.Id, blastDamage, 0) :: events
+        currentActor <-
+          actorAfterBlast
+          |> Combatant.updateMeters (fun m -> { m with Confusion = m.Confusion + 20; Recklessness = m.Recklessness + 10 })
+          |> fun a -> { a with ComboTracker = a.ComboTracker.ResetCombo() }
+        events <- CombatEvent.MirrorMirageDeceived(currentTarget.Id, currentActor.Id, 20) :: events
+        events <- CombatEvent.ComboReset(currentActor.Id, sprintf "Strike struck Mirror Mirage phantasm! The decoy shattered, blasting flanker for %d Morale damage!" blastDamage) :: events
+        mirrorMirageDeceived <- true
 
     if mirrorMirageDeceived then
       let finalActor = Combatant.evaluateCollapse currentActor
@@ -1183,15 +1273,33 @@ module ActionResolver =
 
           currentActor <- { currentActor with Health = currentActor.Health.ApplyDelta -aooDmg }
 
+          // Risk of exhaustion and recklessness increased on reactive lunges:
+          let aooExhaustionDrain =
+            if delta >= 250 then 1
+            elif delta >= 150 then 1
+            elif delta >= 60 then 2
+            else 3
+
+          let aooRecklessnessGain =
+            if delta >= 250 then 1
+            elif delta >= 150 then 2
+            else 3
+
+          currentTarget <-
+            currentTarget
+            |> Combatant.updateMeters (fun m -> { m with Exhaustion = m.Exhaustion + aooExhaustionDrain; Recklessness = m.Recklessness + aooRecklessnessGain })
+
           if vectorName = "Discipline" then
+            // Discipline masters read their opponent's martial school and gain Study Stacks
             currentTarget <- currentTarget |> Combatant.addStudyStacks 1
           elif vectorName = "Agility" then
             currentActor <- currentActor |> Combatant.updateMeters (fun m -> { m with Overwhelm = m.Overwhelm + 10 })
 
+          // Disruption window tightened:
           let isDisrupted =
             currentActor.Health.IsDepleted
-            || delta >= 100
-            || (delta >= 40 && roller 1 100 <= 50)
+            || delta >= 220
+            || (delta >= 100 && roller 1 100 <= 35)
 
           events <- CombatEvent.AttackOfOpportunityTriggered(currentTarget.Id, currentActor.Id, vectorName, aooDmg, isDisrupted) :: events
           events <- CombatEvent.DamageApplied {
@@ -1217,21 +1325,208 @@ module ActionResolver =
         Contest = None }
     else
 
-    // --- Step B.4.5: Defender Mirror Decoy Clone Interception ---
-    let mutable decoyIntercepted = false
-
-    if currentTarget.MirrorClones > 0 then
-      let atkIntuition = currentActor.GetStat Intuition
+    // --- Step B.4: Magic Class Passive Generators (Once per round on primary engagement, costs focus) ---
+    if priorDefenses = 0 then
+      // A. Mesmer: Passive Clone Weaving based on Intuition against target Acuity, max clones strictly capped at 5
       let defAcuity = currentTarget.GetStat Acuity
-      let delta = defAcuity - atkIntuition
-      let deceiveChance = Math.Clamp(50 + (delta / 2), 20, 85)
+      let defIntuition = currentTarget.GetStat Intuition
+      let atkAcuity = currentActor.GetStat Acuity
+      let currentExhaustion = currentTarget.Meters.Exhaustion.Value
+      let currentFatigue = currentTarget.Meters.CognitiveFatigue.Value
+      let fatigueTolerance = Math.Min(85, 45 + (defIntuition / 12))
+      let maxClones = Math.Clamp(currentTarget.Progression.Level / 40 + 1, 1, 5)
 
-      if roller 1 100 <= deceiveChance then
-        currentTarget <- currentTarget |> Combatant.addClones -1
-        events <- CombatEvent.MirrorCloneDecoyed(currentTarget.Id, currentActor.Id, currentTarget.MirrorClones) :: events
-        currentActor <- { currentActor with ComboTracker = currentActor.ComboTracker.ResetCombo() }
-        events <- CombatEvent.ComboReset(currentActor.Id, "Strike deceived and defused by a phantasmal mirror decoy clone.") :: events
-        decoyIntercepted <- true
+      if currentTarget.Class = CharacterClass.Mesmer && currentTarget.MirrorClones < maxClones && currentFatigue < fatigueTolerance && currentExhaustion < 75 then
+        let statDelta = defIntuition - atkAcuity
+        let fatiguePenalty = (currentFatigue / 4) + (currentExhaustion / 4)
+        let statSlope = if statDelta >= 0 then 0.25 else 0.40
+        let weaveChance = Math.Clamp(int (50.0 + float statDelta * statSlope) - fatiguePenalty, 10, 90)
+        if roller 1 100 <= weaveChance then
+          let atkIntuition = currentActor.GetStat Intuition
+          let disparity = defIntuition - atkIntuition
+          let isOverwhelming = (currentTarget.Progression.Level - currentActor.Progression.Level >= 60) || disparity >= 550
+          let fatigueCost =
+            if isOverwhelming then 0
+            elif disparity >= 200 then 1
+            elif disparity >= 30 then 2
+            else 4
+
+          let clonesToWeave = Math.Max(1, maxClones - currentTarget.MirrorClones)
+          currentTarget <-
+            currentTarget
+            |> Combatant.addClones clonesToWeave
+            |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue + fatigueCost })
+          let costMsg = if fatigueCost > 0 then sprintf "(+%d Fatigue) " fatigueCost else "(Effortless) "
+          events <- CombatEvent.PassiveGenerationTriggered(currentTarget.Id, sprintf "Mesmer intuitively wove ambient mirror clones %s(Active Clones: %d/%d)." costMsg currentTarget.MirrorClones maxClones) :: events
+
+      // B. Abjurer: Passive Composure Abjuration Ward (Disparity-Scaled Cost)
+      if (currentTarget.Class = CharacterClass.Abjurer || currentTarget.Class = CharacterClass.Strategist) then
+        let defComposure = currentTarget.GetStat Composure
+        let atkComposure = currentActor.GetStat Composure
+        let disparity = defComposure - atkComposure
+        let isOverwhelming = (currentTarget.Progression.Level - currentActor.Progression.Level >= 60) || disparity >= 550
+        let fatigueCost =
+          if isOverwhelming then 0
+          elif disparity >= 200 then 1
+          elif disparity >= 30 then 2
+          else 4
+        let fatigueCap = if isOverwhelming then 90 else 65
+        if currentTarget.Meters.CognitiveFatigue.Value < fatigueCap then
+          let wardGen = Math.Max(25, defComposure / 8)
+          currentTarget <-
+            currentTarget
+            |> Combatant.addWard wardGen
+            |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue + fatigueCost })
+          let costMsg = if fatigueCost > 0 then sprintf "(+%d Fatigue) " fatigueCost else "(Effortless) "
+          events <- CombatEvent.PassiveGenerationTriggered(currentTarget.Id, sprintf "Abjurer reinforced composure ward by +%d %s(Active Ward: %d)." wardGen costMsg currentTarget.ArcaneWard) :: events
+
+      // C. Inquisitor: Imposing Dread Presence (Disparity-Scaled Cost)
+      if currentTarget.Class = CharacterClass.Inquisitor && currentActor.Meters.Recklessness.Value < 20 then
+        let defIntellect = currentTarget.GetStat Intellect
+        let atkResolve = currentActor.GetStat Resolve
+        let disparity = defIntellect - atkResolve
+        let isOverwhelming = (currentTarget.Progression.Level - currentActor.Progression.Level >= 60) || disparity >= 550
+        let fatigueCost =
+          if isOverwhelming then 0
+          elif disparity >= 200 then 1
+          elif disparity >= 30 then 2
+          else 4
+        let fatigueCap = if isOverwhelming then 90 else 60
+        if currentTarget.Meters.CognitiveFatigue.Value < fatigueCap then
+          let dreadSpike = 12
+          currentActor <- currentActor |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness + dreadSpike })
+          currentTarget <- currentTarget |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue + fatigueCost })
+          let costMsg = if fatigueCost > 0 then sprintf "(+%d Fatigue) " fatigueCost else ""
+          events <- CombatEvent.PassiveGenerationTriggered(currentTarget.Id, sprintf "Inquisitor's imposing psychic presence %sunsettled the attacker (+%d Recklessness)!" costMsg dreadSpike) :: events
+
+    // --- Step B.4.5: Magic & Tactical Nach/Indes Counter-Reactions ---
+    let mutable decoyIntercepted = false
+    let mutable attackDamageMitigation = 1.0
+
+    // A. Mesmer / Mirror Weavers: Phantasmal Decoy Swap (Acuity vs. Intuition)
+    // Capped at up to 5 flanking spaces; priorDefenses penalty removed, limited by stat minus Exhaustion/Recklessness
+    if not decoyIntercepted && currentTarget.MirrorClones > 0 then
+      let defAcuity = currentTarget.GetStat Acuity
+      let atkIntuition = currentActor.GetStat Intuition
+      let delta = defAcuity - atkIntuition
+      let disparity = delta
+      let isOverwhelming = (currentTarget.Progression.Level - currentActor.Progression.Level >= 60) || disparity >= 550
+      let fatigueCap = if isOverwhelming then 90 else 75
+      if currentTarget.Meters.CognitiveFatigue.Value < fatigueCap then
+        let rollMargin = (roller 1 6 - roller 1 6) * 3
+        let fatiguePenalty = (currentTarget.Meters.Exhaustion.Value / 4) + (currentTarget.Meters.Recklessness.Value / 4)
+        let slope = if delta >= 0 then 0.8 else 1.4
+        let baseChance = 55.0
+        let swapChance = Math.Clamp(int (baseChance + float delta * slope) + rollMargin - fatiguePenalty, 5, 95)
+        if priorDefenses < 5 && roller 1 100 <= swapChance then
+          let fatigueCost, exhaustionCost =
+            if isOverwhelming then 0, 0
+            elif disparity >= 200 then 1, 1
+            elif disparity >= 30 then 3, 2
+            else 5, 3
+          currentTarget <-
+            currentTarget
+            |> Combatant.addClones -1
+            |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue + fatigueCost; Exhaustion = m.Exhaustion + exhaustionCost })
+          let costMsg = if fatigueCost > 0 || exhaustionCost > 0 then sprintf " (+%d Fatigue, +%d Exhaustion)" fatigueCost exhaustionCost else " (Effortless)"
+
+          // The clone SHATTERS as soon as it is attacked!
+          let blastDamage = Math.Max(30, int (float defAcuity * 0.18))
+          let actorAfterBlast, _, wardEvts = applyDamage Mental blastDamage false currentActor
+          events <- wardEvts @ events
+          events <- CombatEvent.MirrorCloneShattered(currentTarget.Id, currentActor.Id, blastDamage, currentTarget.MirrorClones) :: events
+          events <- CombatEvent.PhantasmalSwapExecuted(currentTarget.Id, currentActor.Id, true, sprintf "Mesmer actively swapped places with a decoy clone! The decoy SHATTERED upon impact, blasting the attacker for %d Morale damage%s!" blastDamage costMsg) :: events
+          events <- CombatEvent.MirrorCloneDecoyed(currentTarget.Id, currentActor.Id, currentTarget.MirrorClones) :: events
+          currentActor <-
+            actorAfterBlast
+            |> fun a -> { a with ComboTracker = a.ComboTracker.ResetCombo() }
+            |> Combatant.updateMeters (fun m -> { m with Confusion = m.Confusion + 25; Recklessness = m.Recklessness + 15 })
+          events <- CombatEvent.ComboReset(currentActor.Id, "Attacker blasted off-balance by shattered mirror clone.") :: events
+          decoyIntercepted <- true
+        elif priorDefenses < 5 then
+          events <- CombatEvent.PhantasmalSwapExecuted(currentTarget.Id, currentActor.Id, false, "Attacker saw through the mirror swap mid-motion!") :: events
+
+    // B. Abjurer: Destabilizing Ground Ward (Acumen vs. Poise)
+    // Capped at up to 5 flanking spaces; priorDefenses penalty removed, limited by stat minus Exhaustion/Recklessness
+    if not decoyIntercepted && (currentTarget.Class = CharacterClass.Abjurer || currentTarget.Class = CharacterClass.Strategist) then
+      let defAcumen = currentTarget.GetStat Acumen
+      let atkPoise = currentActor.GetStat Poise
+      let disparity = defAcumen - atkPoise
+      let isOverwhelming = (currentTarget.Progression.Level - currentActor.Progression.Level >= 60) || disparity >= 550
+      let fatigueCap = if isOverwhelming then 90 else 75
+      if currentTarget.Meters.CognitiveFatigue.Value < fatigueCap then
+        let fatiguePenalty = (currentTarget.Meters.Exhaustion.Value / 4) + (currentTarget.Meters.Recklessness.Value / 4)
+        let acumenMargin = (defAcumen / 20) - (atkPoise / 15) - fatiguePenalty + (roller 1 6 - roller 1 6)
+        if acumenMargin >= 3 && priorDefenses < 5 then
+          let fatigueCost, exhaustionCost =
+            if isOverwhelming then 0, 0
+            elif disparity >= 200 then 2, 1
+            elif disparity >= 30 then 5, 2
+            else 8, 4
+          currentTarget <- currentTarget |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue + fatigueCost; Exhaustion = m.Exhaustion + exhaustionCost })
+          let costMsg = if fatigueCost > 0 || exhaustionCost > 0 then sprintf " (+%d Fatigue, +%d Exhaustion)" fatigueCost exhaustionCost else " (Effortless)"
+          let desc = sprintf "Abjurer projected a ground ward under the attacker mid-swing! The attacker stumbled and fell%s!" costMsg
+          events <- CombatEvent.DestabilizingWardTriggered(currentTarget.Id, currentActor.Id, desc, 1.0) :: events
+
+          // Heavy Frustration and kinetic impact damage from tripping on destabilizing ward:
+          let frustSpike = Math.Max(35, 40 + (disparity / 15))
+          let impactDmg = Math.Max(25, int (float defAcumen * 0.20))
+          let actorAfterImpact, impactDmgEvt, wardEvts = applyDamage Mental impactDmg false currentActor
+          events <- wardEvts @ (CombatEvent.DamageApplied impactDmgEvt :: CombatEvent.DestabilizingWardTripped(currentTarget.Id, currentActor.Id, impactDmg, frustSpike) :: events)
+          currentActor <-
+            actorAfterImpact
+            |> fun a -> { a with ComboTracker = a.ComboTracker.ResetCombo() }
+            |> Combatant.updateMeters (fun m -> { m with Frustration = m.Frustration + frustSpike; Overwhelm = m.Overwhelm + 25; Exhaustion = m.Exhaustion + 15 })
+          events <- CombatEvent.ComboReset(currentActor.Id, "Attacker lost footing on destabilizing ground ward.") :: events
+          decoyIntercepted <- true
+        elif acumenMargin >= 0 && priorDefenses < 5 then
+          let fatigueCost =
+            if isOverwhelming then 0
+            elif disparity >= 200 then 1
+            elif disparity >= 30 then 2
+            else 4
+          currentTarget <- currentTarget |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue + fatigueCost })
+          let costMsg = if fatigueCost > 0 then sprintf " (+%d Fatigue)" fatigueCost else " (Effortless)"
+          let desc = sprintf "Destabilizing ground ward disrupted attacker's stance! Incoming strike glanced (-50%% damage)%s." costMsg
+          events <- CombatEvent.DestabilizingWardTriggered(currentTarget.Id, currentActor.Id, desc, 0.5) :: events
+          currentActor <- currentActor |> Combatant.updateMeters (fun m -> { m with Frustration = m.Frustration + 20 })
+          attackDamageMitigation <- 0.50
+
+    // C. Inquisitor: Synaptic Mind-Shock (Intellect vs. Fortitude)
+    // Capped at up to 5 flanking spaces; priorDefenses penalty removed, limited by stat minus Exhaustion/Recklessness
+    if not decoyIntercepted && currentTarget.Class = CharacterClass.Inquisitor then
+      let defIntellect = float (currentTarget.GetStat Intellect)
+      let atkFortitude = float (currentActor.GetStat Fortitude)
+      let disparity = int defIntellect - int atkFortitude
+      let isOverwhelming = (currentTarget.Progression.Level - currentActor.Progression.Level >= 60) || disparity >= 550
+      let fatigueCap = if isOverwhelming then 90 else 75
+      if currentTarget.Meters.CognitiveFatigue.Value < fatigueCap then
+        let ratio = defIntellect / Math.Max(1.0, atkFortitude)
+        let fatiguePenalty = float ((currentTarget.Meters.Exhaustion.Value / 4) + (currentTarget.Meters.Recklessness.Value / 4)) * 0.2
+        let shockMargin = (ratio * 2.5) - 1.5 - fatiguePenalty + float (roller 1 6 - roller 1 6)
+        if shockMargin >= 2.5 && priorDefenses < 5 then
+          let fatigueCost =
+            if isOverwhelming then 0
+            elif disparity >= 200 then 2
+            elif disparity >= 30 then 5
+            else 10
+          currentTarget <- currentTarget |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue + fatigueCost })
+          events <- CombatEvent.SynapticMindShockDisrupted(currentTarget.Id, currentActor.Id, 30, true) :: events
+          currentActor <-
+            { currentActor with ComboTracker = currentActor.ComboTracker.ResetCombo() }
+            |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue + 30; Frustration = m.Frustration + 15 })
+          events <- CombatEvent.ComboReset(currentActor.Id, "Attacker's focus shattered by synaptic mind-shock.") :: events
+          decoyIntercepted <- true
+        elif shockMargin >= 0.0 && priorDefenses < 5 then
+          let fatigueCost =
+            if isOverwhelming then 0
+            elif disparity >= 200 then 1
+            elif disparity >= 30 then 2
+            else 5
+          currentTarget <- currentTarget |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue + fatigueCost })
+          events <- CombatEvent.SynapticMindShockDisrupted(currentTarget.Id, currentActor.Id, 15, false) :: events
+          currentActor <- currentActor |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue + 15 })
+          attackDamageMitigation <- Math.Min(attackDamageMitigation, 0.70)
 
     if decoyIntercepted then
       let finalActor = Combatant.evaluateCollapse currentActor
@@ -1350,7 +1645,12 @@ module ActionResolver =
       if contest.EncirclementPenalty > 0 then
         let rawRatio = float offStat / Math.Max(1.0, float defStat)
         let effectiveRatio = if rawRatio < 1.0 then Math.Pow(rawRatio, 2.0) else rawRatio
-        let flankOverwhelm = int (Math.Round(float (contest.EncirclementPenalty / 2) * effectiveRatio))
+        let rawFlankOverwhelm = int (Math.Round(float (contest.EncirclementPenalty / 2) * effectiveRatio))
+        let flankOverwhelm =
+          if currentTarget.HasActivePreparation PreparationType.BerserkTincture then
+            rawFlankOverwhelm / 2
+          else
+            rawFlankOverwhelm
         if flankOverwhelm > 0 then
           currentTarget <- Combatant.updateMeters (fun m -> { m with Overwhelm = m.Overwhelm + flankOverwhelm }) currentTarget
 
@@ -1368,9 +1668,16 @@ module ActionResolver =
 
       let isCrit = contest.IsCritical || agilityCritRolled
       let critDmgMult = if isCrit && isAgilityAtk then 3.2 elif isCrit then 1.5 else 1.0
-      let rawDmg =
+      let baseRawDmg =
         if classMult <= 0.0 then 0
-        else Math.Max(1, int (float baseDamage * tierMult * gambitMult * classMult * weaponEff * critDmgMult * berserkMult))
+        else Math.Max(1, int (float baseDamage * tierMult * gambitMult * classMult * weaponEff * critDmgMult * berserkMult * attackDamageMitigation))
+
+      // Aegis of Retribution: 35% damage reduction applied to recipient
+      let rawDmg =
+        if currentTarget.HasActivePreparation PreparationType.AegisOfRetribution then
+          Math.Max(1, int (Math.Round(float baseRawDmg * 0.65)))
+        else
+          baseRawDmg
 
       // Track Recklessness before updates for Neurotoxin check
       let reckBefore = currentTarget.Meters.Recklessness.Value
@@ -1381,18 +1688,34 @@ module ActionResolver =
       let reckAfter = currentTarget.Meters.Recklessness.Value
       let reckDelta = reckAfter - reckBefore
 
-      // NeuroToxin Psychic Venom: drains Morale when target gains Recklessness
-      if reckDelta > 0 && (currentTarget.HasActivePreparation PreparationType.NeuroToxin || currentActor.HasActivePreparationAgainst PreparationType.NeuroToxin currentTarget.Id) then
-        let toxinDrain = reckDelta * 2
-        let toxinTarget, toxinDmgEvt, _ = applyDamage Mental toxinDrain false currentTarget
-        currentTarget <- toxinTarget
-        events <- CombatEvent.NeuroToxinDrained(currentTarget.Id, reckDelta, toxinDrain) :: events
-        events <- CombatEvent.DamageApplied toxinDmgEvt :: events
+      // Prismatic Flare: detonates when target gains Recklessness, dealing Morale shock and Confusion
+      if reckDelta > 0 && (currentTarget.HasActivePreparation PreparationType.PrismaticFlare || currentActor.HasActivePreparationAgainst PreparationType.PrismaticFlare currentTarget.Id) then
+        let flareDrain = reckDelta * 2 + (currentActor.GetStat Acuity / 25)
+        let flareTarget, flareDmgEvt, _ = applyDamage Mental flareDrain false currentTarget
+        currentTarget <-
+          flareTarget
+          |> Combatant.updateMeters (fun m -> { m with Confusion = m.Confusion + 20 })
+        events <- CombatEvent.PrismaticFlareBlinded(currentTarget.Id, reckDelta, flareDrain) :: events
+        events <- CombatEvent.DamageApplied flareDmgEvt :: events
 
       // Apply core pool damage and potential armor shred
       let updatedTarget, dmgEvt, wardEvts = applyDamage plane rawDmg isCrit currentTarget
       currentTarget <- updatedTarget
       events <- wardEvts @ (CombatEvent.DamageApplied dmgEvt :: events)
+
+      // Aegis of Retribution / Retribution Ward: reflects incoming damage back to attacker as radiant retribution + Frustration
+      let hasRetributionAegis = currentTarget.HasActivePreparation PreparationType.AegisOfRetribution
+      let hasAbjurerWard = (currentTarget.Class = CharacterClass.Abjurer || currentTarget.Class = CharacterClass.Strategist) && (wardEvts |> List.exists (function CombatEvent.ArcaneWardAbsorbed _ -> true | _ -> false))
+      if (hasRetributionAegis || hasAbjurerWard) && baseRawDmg > 0 then
+        let reflectRatio = if hasRetributionAegis then 0.50 else 0.25
+        let reflectDmg = Math.Max(12, int (Math.Round(float baseRawDmg * reflectRatio)))
+        let frustSpike = if hasRetributionAegis then 15 else 10
+        let actorAfterReflect, reflectDmgEvt, reflectWardEvts = applyDamage Mental reflectDmg false currentActor
+        currentActor <-
+          actorAfterReflect
+          |> Combatant.updateMeters (fun m -> { m with Frustration = m.Frustration + frustSpike })
+          |> Combatant.evaluateCollapse
+        events <- reflectWardEvts @ (CombatEvent.DamageApplied reflectDmgEvt :: CombatEvent.RetributionReflected(currentTarget.Id, currentActor.Id, reflectDmg, frustSpike) :: events)
 
       // Severe Mental Stat Disparity: Cranial Hemorrhage (Psychic Bleeding)
       if plane = Mental && rawDmg > 0 then
@@ -1533,18 +1856,24 @@ module ActionResolver =
     // 2. Handle group-wide deployment of preparations
     match intent with
     | DeployPreparation (PreparationType.DreadWarhorn, _) when not adjacentTargets.IsEmpty ->
+      let sonicDmg = Math.Max(20, int (float (currentActor.GetStat Intellect) * 0.35))
       let mutable dreadEvents = []
       let processedDread =
         adjacentTargets
         |> List.map (fun secTarget ->
+          let targetAfterDmg, dmgEvt, wardEvts = applyDamage Mental sonicDmg false secTarget
           let targetAfterHit =
-            secTarget
+            targetAfterDmg
             |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue + 25 })
             |> Combatant.evaluateCollapse
 
           dreadEvents <-
             dreadEvents
-            @ [ CombatEvent.PreparationDeployed(currentActor.Id, PreparationType.DreadWarhorn, Some secTarget.Id, "Dread Warhorn echoed across secondary flankers (+25 Cognitive Fatigue)!") ]
+            @ wardEvts
+            @ [
+              CombatEvent.PreparationDeployed(currentActor.Id, PreparationType.DreadWarhorn, Some secTarget.Id, sprintf "Dread Warhorn echoed across secondary flankers (%d Morale damage, +25 Cognitive Fatigue)!" sonicDmg)
+              CombatEvent.DamageApplied dmgEvt
+            ]
 
           if CollapseState.isCollapsed targetAfterHit.Collapse && not (CollapseState.isCollapsed secTarget.Collapse) then
             match targetAfterHit.Collapse with
@@ -1645,8 +1974,8 @@ module ActionResolver =
         | _ -> false
 
       if isLandedArcaneCataclysm && not currentAdjacent.IsEmpty then
-        // Arcane Cataclysm: Destructive mental burst splashes to up to 2 adjacent targets
-        let splashCandidates = currentAdjacent |> List.truncate 2
+        // Arcane Cataclysm: Destructive mental burst splashes to up to 5 adjacent targets (the 5 flanking spaces)
+        let splashCandidates = currentAdjacent |> List.truncate 5
         let unengaged = currentAdjacent |> List.skip splashCandidates.Length
         let mutable splashEvents = []
 
@@ -1656,7 +1985,7 @@ module ActionResolver =
           |> List.tryHead
           |> Option.defaultValue (Math.Max(20, currentActor.GetStat Intellect))
 
-        let rawSplashDmg = Math.Max(10, int (float primaryDmg * 0.50))
+        let rawSplashDmg = Math.Max(15, int (float primaryDmg * 0.80))
 
         let processedSplash =
           splashCandidates
@@ -1690,8 +2019,8 @@ module ActionResolver =
           Events = allEvents @ splashEvents }
 
       elif isLandedDisorientingShockwave && not currentAdjacent.IsEmpty then
-        // Disorienting Shockwave: Multi-target crowd control pulsing outward across up to 3 adjacent targets
-        let shockCandidates = currentAdjacent |> List.truncate 3
+        // Disorienting Shockwave: Multi-target crowd control pulsing outward across up to 5 adjacent targets
+        let shockCandidates = currentAdjacent |> List.truncate 5
         let unengaged = currentAdjacent |> List.skip shockCandidates.Length
         let mutable shockEvents = []
 
@@ -1701,7 +2030,7 @@ module ActionResolver =
           |> List.tryHead
           |> Option.defaultValue (Math.Max(15, currentActor.GetStat Acumen))
 
-        let rawShockDmg = Math.Max(8, int (float primaryDmg * 0.50))
+        let rawShockDmg = Math.Max(15, int (float primaryDmg * 0.75))
 
         let processedShock =
           shockCandidates
@@ -1709,7 +2038,7 @@ module ActionResolver =
             let targetAfterDmg, dmgEvt, wardEvts = applyDamage Mental rawShockDmg false secTarget
             let targetAfterHit =
               { targetAfterDmg with ComboTracker = targetAfterDmg.ComboTracker.ResetCombo() }
-              |> Combatant.updateMeters (fun m -> { m with Confusion = m.Confusion + 15; Provoke = m.Provoke + 10 })
+              |> Combatant.updateMeters (fun m -> { m with Confusion = m.Confusion + 15; Provoke = m.Provoke + 15; Frustration = m.Frustration + 25 })
               |> Combatant.evaluateCollapse
 
             shockEvents <-
@@ -1821,9 +2150,21 @@ module ActionResolver =
           || currentActor.Stance = CombatStance.PowerStance
 
         if isCleaving then
-          // Power Stance & Berserker Cleave: Cleave up to 2 adjacent targets
-          // Cleave incurs a Recklessness penalty based on stat disparity:
-          let cleaveCandidates = currentAdjacent |> List.truncate 2
+          // Power Stance & Berserker Cleave:
+          // Dynamic cleave targets scaling with Force / Tier + preparation bonuses
+          let baseCleave =
+            if currentActor.Class = CharacterClass.Berserker then
+              Math.Min(5, Math.Max(2, currentActor.GetStat Force / 35))
+            else
+              2
+
+          let prepCleaveBonus =
+            let shockwaveBonus = if currentActor.HasActivePreparation PreparationType.ShockwaveSlam then 2 else 0
+            let berserkBonus = if currentActor.HasActivePreparation PreparationType.BerserkTincture then 1 else 0
+            shockwaveBonus + berserkBonus
+
+          let maxCleave = Math.Min(currentAdjacent.Length, baseCleave + prepCleaveBonus)
+          let cleaveCandidates = currentAdjacent |> List.truncate maxCleave
           let unengaged = currentAdjacent |> List.skip cleaveCandidates.Length
           let mutable cleaveEvents = []
 
@@ -1833,7 +2174,12 @@ module ActionResolver =
             |> List.tryHead
             |> Option.defaultValue (Math.Max(20, currentActor.GetStat Force))
 
-          let rawCleaveDmg = Math.Max(10, int (float primaryDmg * 0.60))
+          let hasKineticBuff =
+            currentActor.HasActivePreparation PreparationType.ShockwaveSlam
+            || currentActor.HasActivePreparation PreparationType.BerserkTincture
+
+          let cleaveRatio = if hasKineticBuff then 0.75 else 0.60
+          let rawCleaveDmg = Math.Max(10, int (float primaryDmg * cleaveRatio))
 
           let processedCleaves =
             cleaveCandidates
@@ -1843,7 +2189,12 @@ module ActionResolver =
 
               // Recklessness penalty scaled by disparity ratio:
               let disparityRatio = float defFort / Math.Max(1.0, float offForce)
-              let reckSpike = Math.Max(3, int (Math.Round(25.0 * disparityRatio)))
+              let rawReckSpike = Math.Max(3, int (Math.Round(25.0 * disparityRatio)))
+              let reckSpike =
+                if currentActor.HasActivePreparation PreparationType.BerserkTincture then
+                  Math.Max(1, rawReckSpike / 2)
+                else
+                  rawReckSpike
 
               // Apply armor mitigation
               let soakedDmg = Math.Max(5, int (Math.Round(float rawCleaveDmg * (1.0 - secTarget.Armor.AbsorptionRatio))))

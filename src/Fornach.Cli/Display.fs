@@ -289,6 +289,10 @@ module Display =
     | CombatEvent.MirrorCloneDecoyed (_, _, remaining) ->
       AnsiConsole.MarkupLine(sprintf "  [bold %s]🪞 DECOY SHATTERED:[/] Incoming strike was deceived and absorbed by a mirror clone! (Remaining: [bold %s]%d[/])" Theme.Cyan Theme.Purple remaining)
 
+    | CombatEvent.MirrorCloneShattered (_, _, blastDamage, remaining) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]💥 DECOY SHATTERED:[/] Mirror clone shattered violently upon contact, blasting attacker for [bold %s]%d Morale damage[/]! (Remaining: [bold %s]%d[/])" Theme.Orange Theme.Yellow blastDamage Theme.Purple remaining)
+
+
     | CombatEvent.ArcaneWardErected (_, added, total) ->
       AnsiConsole.MarkupLine(sprintf "  [bold %s]🛡️ ARCANE WARD:[/] Abjuration barrier reinforced by [bold %s]+%d[/] (Active Barrier: [bold %s]%d[/])." Theme.Cyan Theme.Green added Theme.Cyan total)
 
@@ -314,8 +318,8 @@ module Display =
       let statusStr = if disrupted then sprintf " [bold %s](Incoming strike intercepted & defused!)[/]" Theme.Green else ""
       AnsiConsole.MarkupLine(sprintf "  [bold %s]🗡️ CONCEALED BLADE:[/] Quick-draw boot blade counter punctured for [bold %s]%d damage[/]!%s" Theme.Yellow Theme.Red dmg statusStr)
 
-    | CombatEvent.NeuroToxinDrained (_, reckSpike, drain) ->
-      AnsiConsole.MarkupLine(sprintf "  [bold %s]🧪 NEUROTOXIN VENOM:[/] Recklessness spike (+%d) triggered [bold %s]%d Morale drain[/]!" Theme.Green reckSpike Theme.Pink drain)
+    | CombatEvent.PrismaticFlareBlinded (_, reckSpike, drain) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]✨ PRISMATIC FLARE:[/] Recklessness spike (+%d) ignited a blinding burst for [bold %s]%d Morale shock[/] (+20 Confusion)!" Theme.Yellow reckSpike Theme.Pink drain)
 
     | CombatEvent.MirrorMirageDeceived (_, _, confusion) ->
       AnsiConsole.MarkupLine(sprintf "  [bold %s]🪞 MIRROR MIRAGE:[/] Flanker struck an illusion! Incurred [bold %s]+%d Confusion[/] and lost action!" Theme.Cyan Theme.Purple confusion)
@@ -337,3 +341,29 @@ module Display =
 
     | CombatEvent.PsychicShockwaveResonated (_, _, dmg) ->
       AnsiConsole.MarkupLine(sprintf "  [bold %s]🔮 PSYCHIC RESONANCE:[/] Overwhelming mental shockwave resonated into flanker for [bold %s]%d damage[/]!" Theme.Purple Theme.Cyan dmg)
+
+    | CombatEvent.PhantasmalSwapExecuted (_, _, success, note) ->
+      let color = if success then Theme.Cyan else Theme.Orange
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🪞 PHANTASMAL SWAP:[/] %s" color note)
+
+    | CombatEvent.DestabilizingWardTriggered (_, _, outcome, _) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🛡️ DESTABILIZING WARD:[/] %s" Theme.Yellow outcome)
+
+    | CombatEvent.SynapticMindShockDisrupted (_, _, fatigue, disrupted) ->
+      let statusStr = if disrupted then " [bold #ff5555](Incoming strike completely shattered!)[/]" else ""
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🧠 SYNAPTIC MIND-SHOCK:[/] Mind-shock disrupted attacker's focus! Inflicted [bold %s]+%d Cognitive Fatigue[/]!%s" Theme.Purple Theme.Pink fatigue statusStr)
+
+    | CombatEvent.PassiveGenerationTriggered (_, desc) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]✦ CLASS MASTERY:[/] %s" Theme.Green desc)
+
+    | CombatEvent.RetributionReflected (_, _, dmg, frust) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]⚔️ RETRIBUTION AURA:[/] Barrier reflected [bold %s]%d radiant damage[/] back to attacker! Inflicted [bold %s]+%d Frustration[/]!" Theme.Yellow Theme.Cyan dmg Theme.Orange frust)
+
+    | CombatEvent.DestabilizingWardTripped (_, _, dmg, frust) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]⚡ RUNIC INSTABILITY:[/] Attacker stumbled onto destabilizing ward! Suffered [bold %s]%d impact damage[/] and [bold %s]+%d Frustration[/]!" Theme.Orange Theme.Red dmg Theme.Orange frust)
+
+    | CombatEvent.EnrageDamageShrugged (_, ignored) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🩸 ENRAGE SHRUG:[/] Pain deadened by stimulant! Shrugged off [bold %s]%d physical damage[/]!" Theme.Red Theme.Yellow ignored)
+
+    | CombatEvent.FrenzyStrikeExecuted (_, _) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]⚡ FRENZY ATTACK:[/] Enraged bloodlust triggered an immediate savage follow-up swing!" Theme.Orange)

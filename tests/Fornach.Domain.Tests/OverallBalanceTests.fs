@@ -22,14 +22,17 @@ module OverallBalanceTests =
 
   let private getTacticalObservations (cls: CharacterClass) (tier: CombatTier) : string =
     match cls, tier with
+    | CharacterClass.Warden, GrandMaster
     | CharacterClass.Justicar, GrandMaster ->
       "BastionZoneControl limits frontline to 3; Prowess disparity triggers massive AoOs; resilient against swarms."
+    | CharacterClass.Warden, Master
     | CharacterClass.Justicar, Master ->
       "BastionZoneControl limits frontline to 3; exceptional defense soak against physical hordes."
+    | CharacterClass.Warden, _
     | CharacterClass.Justicar, _ ->
       "Discipline posture & bastion geometry resist early encirclement penalties."
     | CharacterClass.Berserker, GrandMaster ->
-      "Catastrophic Shockwave Slam & cleaves wipe out clusters; breaks only under extreme encirclement."
+      "Berserk Tincture deadens 35% physical damage & unleashes Frenzy bonus swings; cleaves up to 5 adjacent foes."
     | CharacterClass.Berserker, _ ->
       "Brute kinetic Force & high HP pool; vulnerable to compounding flank penalties over prolonged duels."
     | CharacterClass.Duelist, GrandMaster ->
@@ -41,18 +44,21 @@ module OverallBalanceTests =
     | CharacterClass.Inquisitor, _ ->
       "Formidable mental dominance; vulnerable if physical brute force bypasses lower physical armor."
     | CharacterClass.Mesmer, GrandMaster ->
-      "Mirror Mirage forces flankers to attack decoys; NeuroToxin punishes enemy recklessness."
+      "Mirror Mirage forces flankers to attack decoys; Prismatic Flare punishes enemy recklessness."
     | CharacterClass.Mesmer, _ ->
       "Deceptive sensory phantasms disrupt attackers; susceptible to dogpiling once illusions exhaust."
+    | CharacterClass.Abjurer, GrandMaster
     | CharacterClass.Strategist, GrandMaster ->
-      "Heraldic Treatise seeds instant study stacks; Socratic Dossier converts high recklessness to morale collapse."
+      "Aegis of Retribution reduces damage by 35% and reflects 50% back; destabilizing ground wards trip flankers with heavy Frustration."
+    | CharacterClass.Abjurer, _
     | CharacterClass.Strategist, _ ->
-      "Calculated tactical interrogation; balances composure and defense through procedural attrition."
+      "Runic composure wards & destabilizing ground glyphs disrupt oncoming attackers through calculated attrition."
     | _ -> "Standard archetype profile."
 
   let private getDisplayClassName (cls: CharacterClass) : string =
     match cls with
-    | CharacterClass.Justicar -> "Tactician (Justicar)"
+    | CharacterClass.Warden -> "Warden"
+    | CharacterClass.Justicar -> "Warden (Justicar)"
     | _ -> cls.Name
 
   // =========================================================================
@@ -71,10 +77,10 @@ module OverallBalanceTests =
       let championClasses = [
         CharacterClass.Berserker
         CharacterClass.Duelist
-        CharacterClass.Justicar
+        CharacterClass.Warden
         CharacterClass.Inquisitor
         CharacterClass.Mesmer
-        CharacterClass.Strategist
+        CharacterClass.Abjurer
       ]
 
       let tiers = [
@@ -157,10 +163,10 @@ module OverallBalanceTests =
         Assert.True(gmRow.MageTippingPoint.Value >= noviceRow.MageTippingPoint.Value,
           sprintf "%s GrandMaster Mage tipping point (%d) must be >= Novice (%d)" cls.Name gmRow.MageTippingPoint.Value noviceRow.MageTippingPoint.Value)
 
-      // 3. Tactician (Justicar) GrandMaster Bastion Zone Control verification: Impenetrable to at least 50+ Warriors
-      let justicarGM = rows |> Seq.find (fun r -> r.Class = CharacterClass.Justicar && r.Tier = CombatTier.GrandMaster)
-      Assert.True(justicarGM.WarriorTippingPoint.Value >= 50,
-        sprintf "GrandMaster Justicar with Bastion Zone Control should hold against 50+ Warriors (Actual: %s)" (justicarGM.WarriorTippingPoint.ToString()))
+      // 3. Warden GrandMaster Bastion Zone Control verification: Impenetrable to at least 50+ Warriors
+      let wardenGM = rows |> Seq.find (fun r -> r.Class = CharacterClass.Warden && r.Tier = CombatTier.GrandMaster)
+      Assert.True(wardenGM.WarriorTippingPoint.Value >= 50,
+        sprintf "GrandMaster Warden with Bastion Zone Control should hold against 50+ Warriors (Actual: %s)" (wardenGM.WarriorTippingPoint.ToString()))
 
     [<Fact>]
     let ``Berserker: Swarm endurance scales with tier and is most vulnerable to Arcane Mages`` () =
@@ -179,15 +185,15 @@ module OverallBalanceTests =
       Assert.True(tpGMWarrior.Value > tpGMMage.Value, "Berserker should be more vulnerable to Arcane Mages targeting Mental plane than to Physical Warriors.")
 
     [<Fact>]
-    let ``Tactician (Justicar): Bastion Zone Control completely nullifies compounding encirclement against physical hordes`` () =
+    let ``Warden: Bastion Zone Control completely nullifies compounding encirclement against physical hordes`` () =
       let rng = Random(456)
       let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
-      let gmJusticar = fun () -> TierFactory.createClassTier CharacterClass.Justicar CombatTier.GrandMaster
+      let gmWarden = fun () -> TierFactory.createClassTier CharacterClass.Warden CombatTier.GrandMaster
       let warriorMob = fun () -> TierFactory.createClassTier CharacterClass.Warrior CombatTier.Novice
 
-      // GrandMaster Justicar vs 80 Warriors should achieve 0% swarm win rate
-      let mobWinRate = Simulation.evaluateMobWinRate gmJusticar warriorMob 80 10 roller
-      Assert.True(mobWinRate <= 0.10, sprintf "Swarm win rate should be <= 10%% against GrandMaster Justicar (Actual: %.1f%%)" (mobWinRate * 100.0))
+      // GrandMaster Warden vs 80 Warriors should achieve 0% swarm win rate
+      let mobWinRate = Simulation.evaluateMobWinRate gmWarden warriorMob 80 10 roller
+      Assert.True(mobWinRate <= 0.10, sprintf "Swarm win rate should be <= 10%% against GrandMaster Warden (Actual: %.1f%%)" (mobWinRate * 100.0))
 
     [<Fact>]
     let ``Duelist: Superior Agility disparity and Caltrops punish agile Assassin mobs`` () =

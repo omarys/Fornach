@@ -192,8 +192,13 @@ module Simulation =
     configTable.AddRow("Max HP (Physical)", sprintf "[%s]%d[/]" Theme.Red sampleA.Health.Maximum, sprintf "[%s]%d[/]" Theme.Red sampleB.Health.Maximum) |> ignore
     configTable.AddRow("Max Morale (Mental)", sprintf "[%s]%d[/]" Theme.Cyan sampleA.Morale.Maximum, sprintf "[%s]%d[/]" Theme.Cyan sampleB.Morale.Maximum) |> ignore
     configTable.AddRow("Armor Durability / Soak", sprintf "[%s]%d (%.0f%%)[/]" Theme.Yellow sampleA.Armor.Max (sampleA.Armor.AbsorptionRatio * 100.0), sprintf "[%s]%d (%.0f%%)[/]" Theme.Yellow sampleB.Armor.Max (sampleB.Armor.AbsorptionRatio * 100.0)) |> ignore
-    configTable.AddRow("Top Phys Stat (Force/Prowess)", sprintf "%d / %d" (sampleA.GetStat Force) (sampleA.GetStat Prowess), sprintf "%d / %d" (sampleB.GetStat Force) (sampleB.GetStat Prowess)) |> ignore
-    configTable.AddRow("Top Mental Stat (Intellect/Acumen)", sprintf "%d / %d" (sampleA.GetStat Intellect) (sampleA.GetStat Acumen), sprintf "%d / %d" (sampleB.GetStat Intellect) (sampleB.GetStat Acumen)) |> ignore
+    let topPhysOff (c: Combatant) = [ c.GetStat Force; c.GetStat Finesse; c.GetStat Prowess ] |> List.max
+    let topPhysDef (c: Combatant) = [ c.GetStat Fortitude; c.GetStat Reflex; c.GetStat Poise ] |> List.max
+    let topMentalOff (c: Combatant) = [ c.GetStat Intellect; c.GetStat Acuity; c.GetStat Acumen ] |> List.max
+    let topMentalDef (c: Combatant) = [ c.GetStat Resolve; c.GetStat Intuition; c.GetStat Composure ] |> List.max
+
+    configTable.AddRow("Top Phys Stat (Off / Def)", sprintf "%d / %d" (topPhysOff sampleA) (topPhysDef sampleA), sprintf "%d / %d" (topPhysOff sampleB) (topPhysDef sampleB)) |> ignore
+    configTable.AddRow("Top Mental Stat (Off / Def)", sprintf "%d / %d" (topMentalOff sampleA) (topMentalDef sampleA), sprintf "%d / %d" (topMentalOff sampleB) (topMentalDef sampleB)) |> ignore
     AnsiConsole.Write(configTable)
     AnsiConsole.WriteLine()
 
@@ -313,6 +318,34 @@ module Simulation =
             && not m.Health.IsDepleted
             && not m.Morale.IsDepleted)
 
+        // Enraged Berserker Frenzy Attack: Berserk Tincture unleashes an immediate savage follow-up swing!
+        if solo.HasActivePreparation PreparationType.BerserkTincture && not mob.IsEmpty && not solo.Health.IsDepleted && not solo.Morale.IsDepleted then
+          let frenzyTarget = AI.chooseGroupTarget solo mob
+          let frenzyAdjacent = mob |> List.filter (fun m -> m.Id <> frenzyTarget.Id)
+          let frenzyIntent = StandardAttack (ForceStrike false)
+          let frenzyRes = ActionResolver.resolveGroupTurn roller frenzyIntent solo frenzyTarget frenzyAdjacent
+          solo <- frenzyRes.Actor
+
+          let frenzyCleaves = frenzyRes.Events |> List.filter (function CombatEvent.CleaveExecuted _ -> true | _ -> false) |> List.length
+          totalCleaves <- totalCleaves + frenzyCleaves
+
+          let frenzyExecutedIds =
+            frenzyRes.Events
+            |> List.choose (function CombatEvent.Executed (_, tid, _) -> Some tid | _ -> None)
+            |> Set.ofList
+
+          let allFrenzyResolved = frenzyRes.PrimaryTarget :: frenzyRes.SecondaryTargets
+
+          mob <-
+            allFrenzyResolved
+            |> List.map (fun m ->
+              let up, _ = ActionResolver.applyTurnUpkeep m
+              up)
+            |> List.filter (fun m ->
+              not (Set.contains m.Id frenzyExecutedIds)
+              && not m.Health.IsDepleted
+              && not m.Morale.IsDepleted)
+
       // Check win/loss after solo attack
       if mob.IsEmpty then
         winnerIsSolo <- Some true
@@ -325,20 +358,33 @@ module Simulation =
         condition <- MoraleDepleted
       else
         // Phase 2: Swarm Turn (All surviving mob members attack Solo concurrently)
-        // When BastionZoneControl is active, only the 3 frontline tiles in front of the Tactician can swing this round.
-        let maxSwingsThisRound =
+        // When BastionZoneControl is active, only the 3 frontline tiles in front of the Warden can swing this round.
+        // For Mesmer, at most 8 enemies can attack per round (the 8 surrounding tiles).
+        // Each clone that vanishes/shatters blocks that tile space until the end of the round!
+        let initialMaxSwings =
           if solo.HasActivePreparation PreparationType.BastionZoneControl then 3
+          elif solo.Class = CharacterClass.Mesmer then 8
           else mob.Length
+
+        let mutable availableSwings = initialMaxSwings
         let mutable priorDefenses = 0
         let mutable mobIdx = 0
         let mutable swingsCount = 0
-        while mobIdx < mob.Length && swingsCount < maxSwingsThisRound && winnerIsSolo.IsNone do
+
+        while mobIdx < mob.Length && swingsCount < availableSwings && winnerIsSolo.IsNone do
           let attacker = mob.[mobIdx]
           let intentMob = AI.chooseIntent attacker solo
           let mobRes = ActionResolver.resolveEx roller intentMob attacker solo priorDefenses
           let newAttacker = mobRes.Actor
           solo <- mobRes.Target
           swingsCount <- swingsCount + 1
+
+          // If a mirror clone was shattered/deceived, that tile is blocked by the dissipating phantasm for the rest of the round!
+          let cloneShattered =
+            mobRes.Events
+            |> List.exists (function CombatEvent.MirrorCloneShattered _ | CombatEvent.MirrorMirageDeceived _ -> true | _ -> false)
+          if cloneShattered && solo.Class = CharacterClass.Mesmer then
+            availableSwings <- Math.Max(0, availableSwings - 1)
 
           let aooHits = mobRes.Events |> List.filter (function CombatEvent.AttackOfOpportunityTriggered _ -> true | _ -> false) |> List.length
           totalAoOs <- totalAoOs + aooHits
@@ -361,9 +407,12 @@ module Simulation =
             winnerIsSolo <- Some false
             condition <- MoraleDepleted
 
-          // Handle if attacker died to an Attack of Opportunity or reactive riposte counter
-          let attackerDefeated = newAttacker.Health.IsDepleted || newAttacker.Morale.IsDepleted
+          // Handle if attacker died to an Attack of Opportunity, caltrops, reactive retribution, or collapsed from Frustration/meters
+          let attackerDefeated = newAttacker.Health.IsDepleted || newAttacker.Morale.IsDepleted || CollapseState.isCollapsed newAttacker.Collapse
           if attackerDefeated then
+            if solo.Class = CharacterClass.Warden || solo.Class = CharacterClass.Justicar then
+              // Reading the School: Neutralizing a student of this martial school yields persistent Study Stacks
+              solo <- solo |> Combatant.addStudyStacks 1
             mob <- mob |> List.filter (fun m -> m.Id <> newAttacker.Id)
           else
             mob <- mob |> List.mapi (fun i m -> if i = mobIdx then newAttacker else m)
@@ -372,13 +421,12 @@ module Simulation =
 
         // Phase 3: Solo Upkeep at end of round
         if winnerIsSolo.IsNone then
-          let soloUpkeep, _ = ActionResolver.applyTurnUpkeep solo
           let swarmExertion = if mob.Length >= 3 then 1 else 0
           solo <-
             if swarmExertion > 0 then
-              soloUpkeep |> Combatant.updateMeters (fun m -> { m with Exhaustion = m.Exhaustion + swarmExertion })
+              solo |> Combatant.updateMeters (fun m -> { m with Exhaustion = m.Exhaustion + swarmExertion })
             else
-              soloUpkeep
+              solo
           if solo.Health.IsDepleted then
             winnerIsSolo <- Some false
             condition <- HealthDepleted
@@ -677,10 +725,10 @@ module Simulation =
     let championClasses = [
       CharacterClass.Berserker
       CharacterClass.Duelist
-      CharacterClass.Justicar
+      CharacterClass.Warden
       CharacterClass.Inquisitor
       CharacterClass.Mesmer
-      CharacterClass.Strategist
+      CharacterClass.Abjurer
     ]
 
     let tiers = [
@@ -725,7 +773,8 @@ module Simulation =
 
             let displayName =
               match cls with
-              | CharacterClass.Justicar -> "Tactician (Justicar)"
+              | CharacterClass.Warden -> "Warden"
+              | CharacterClass.Justicar -> "Warden (Justicar)"
               | _ -> cls.Name
 
             let tierColor =
@@ -744,19 +793,24 @@ module Simulation =
 
             let notes =
               match cls, tier with
+              | CharacterClass.Warden, GrandMaster
               | CharacterClass.Justicar, GrandMaster -> "BastionZoneControl limits frontline to 3; Prowess disparity triggers massive AoOs; resilient against swarms."
+              | CharacterClass.Warden, Master
               | CharacterClass.Justicar, Master -> "BastionZoneControl limits frontline to 3; exceptional defense soak against physical hordes."
+              | CharacterClass.Warden, _
               | CharacterClass.Justicar, _ -> "Discipline posture & bastion geometry resist early encirclement penalties."
-              | CharacterClass.Berserker, GrandMaster -> "Shockwave Slam & cleaves wipe out clusters; breaks only under extreme encirclement."
+              | CharacterClass.Berserker, GrandMaster -> "Berserk Tincture deadens 35% physical damage & unleashes Frenzy bonus swings; cleaves up to 5 adjacent foes."
               | CharacterClass.Berserker, _ -> "Brute kinetic Force & high HP pool; vulnerable to compounding flank penalties over prolonged duels."
-              | CharacterClass.Duelist, GrandMaster -> "Caltrop Pouch strips flank penalties for 5 turns; Agility disparity triggers lethal AoO counters."
+              | CharacterClass.Duelist, GrandMaster -> "Caltrop Pouch strips flank penalties for 2 turns; Agility disparity triggers lethal AoO counters."
               | CharacterClass.Duelist, _ -> "High Finesse & Reflex dodge initial attacks; overwhelmed once caltrops expire against large mobs."
               | CharacterClass.Inquisitor, GrandMaster -> "Dread Warhorn inflicts +25 Cognitive Fatigue on all attackers; devastates Mage morale & triggers mental routs."
               | CharacterClass.Inquisitor, _ -> "Formidable mental dominance; vulnerable if physical brute force bypasses lower physical armor."
-              | CharacterClass.Mesmer, GrandMaster -> "Mirror Mirage forces flankers to attack decoys; NeuroToxin punishes enemy recklessness."
+              | CharacterClass.Mesmer, GrandMaster -> "Mirror Mirage forces flankers to attack decoys; Prismatic Flare punishes enemy recklessness."
               | CharacterClass.Mesmer, _ -> "Deceptive sensory phantasms disrupt attackers; susceptible to dogpiling once illusions exhaust."
-              | CharacterClass.Strategist, GrandMaster -> "Heraldic Treatise seeds instant study stacks; Socratic Dossier converts high recklessness to morale collapse."
-              | CharacterClass.Strategist, _ -> "Calculated tactical interrogation; balances composure and defense through procedural attrition."
+              | CharacterClass.Abjurer, GrandMaster
+              | CharacterClass.Strategist, GrandMaster -> "Aegis of Retribution reduces damage by 35% and reflects 50% back; destabilizing ground wards trip flankers with heavy Frustration."
+              | CharacterClass.Abjurer, _
+              | CharacterClass.Strategist, _ -> "Runic composure wards & destabilizing ground glyphs disrupt oncoming attackers through calculated attrition."
               | _ -> "Standard archetype profile."
 
             matrixTable.AddRow(

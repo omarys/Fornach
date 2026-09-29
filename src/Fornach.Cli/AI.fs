@@ -99,13 +99,7 @@ module AI =
         elif wantsPower && self.Stance <> CombatStance.PowerStance then
           ShiftStance CombatStance.PowerStance
         elif self.Stance = CombatStance.DisciplineStance then
-          let oppPoise = opponent.GetStat Poise
-          let canDisarm = prowess >= int (Math.Round(float oppPoise * 0.75))
-          let reqDisarmStacks = Math.Max(3, int (Math.Ceiling((float oppPoise / Math.Max(1.0, float prowess)) * 3.5)))
-
-          if canDisarm && self.StudyStacks >= reqDisarmStacks && opponent.WeaponCondition <> WeaponCondition.Broken then
-            StandardAttack (MasterfulDisarm reqDisarmStacks)
-          elif self.StudyStacks >= 3 then
+          if self.StudyStacks >= 3 then
             StandardAttack (CalculatedFlawStrike self.StudyStacks)
           else
             StandardAttack (ProwessStrike isGambit)
@@ -137,56 +131,78 @@ module AI =
           let canDisarm = prowess >= int (Math.Round(float oppPoise * 0.75))
           let reqDisarmStacks = Math.Max(3, int (Math.Ceiling((float oppPoise / Math.Max(1.0, float prowess)) * 3.5)))
 
-          if canDisarm && self.StudyStacks >= reqDisarmStacks && opponent.WeaponCondition <> WeaponCondition.Broken then
+          if surroundingOpponents < 2 && canDisarm && self.StudyStacks >= reqDisarmStacks && opponent.WeaponCondition <> WeaponCondition.Broken then
             StandardAttack (MasterfulDisarm reqDisarmStacks)
           elif self.StudyStacks >= 3 then
             StandardAttack (CalculatedFlawStrike self.StudyStacks)
           else
             StandardAttack (ProwessStrike isGambit)
     else
-      // Mental discipline (select Arcane vs Social based on opponent armor or slight randomization)
-      let isSocialPreferred = opponent.Armor.Current > 30 || opponent.Meters.Confusion.Value > 20
+      // Mental discipline (combat AI strictly utilizes Arcane/mental attacks; social verbal sparring is reserved for social encounters)
       if intellect >= acuity && intellect >= acumen then
-        if isSocialPreferred then
-          StandardAttack (AuthorityDecree isGambit)
-        else
-          StandardAttack (ArcaneCataclysm isGambit)
+        StandardAttack (ArcaneCataclysm isGambit)
       elif acuity >= acumen then
-        if isSocialPreferred then
-          StandardAttack (GuileDeception isGambit)
+        // Guile/Trickery specialist: if without clones, conjure mirror decoys first!
+        if self.MirrorClones = 0 then
+          StandardAttack (MirrorIllusion isGambit)
         else
-          // Guile/Trickery specialist: if without clones, conjure mirror decoys first!
-          if self.MirrorClones = 0 then
-            StandardAttack (MirrorIllusion isGambit)
-          else
-            StandardAttack (SynapticGlamour isGambit)
+          StandardAttack (SynapticGlamour isGambit)
       else
-        if isSocialPreferred then
-          StandardAttack (AcumenInterrogation isGambit)
+        // Defensive/CC specialist: if mobbed or opponent has combo momentum, disorient them! If ward low, erect ward!
+        if surroundingOpponents >= 2 || opponent.ComboTracker.ConsecutiveHits >= 2 then
+          StandardAttack (DisorientingShockwave isGambit)
+        elif self.ArcaneWard < 25 then
+          StandardAttack (RunicWardTrap isGambit)
         else
-          // Defensive/CC specialist: if mobbed or opponent has combo momentum, disorient them! If ward low, erect ward!
-          if surroundingOpponents >= 2 || opponent.ComboTracker.ConsecutiveHits >= 2 then
-            StandardAttack (DisorientingShockwave isGambit)
-          elif self.ArcaneWard < 25 then
-            StandardAttack (RunicWardTrap isGambit)
-          else
-            StandardAttack (DisorientingShockwave isGambit)
+          StandardAttack (DisorientingShockwave isGambit)
 
   /// Top-level tactical decision evaluator for autonomous combatants with surrounding opponent count
   let chooseIntentWithContext (self: Combatant) (opponent: Combatant) (surroundingOpponents: int) : ActionIntent =
     // 0. Tactical Preparations Deployment
     let prepIntentOpt =
       if surroundingOpponents >= 2 then
-        // Multi-opponent Swarm: deploy available Crowd Control preparation if not active
-        self.Preparations
-        |> List.tryFind (fun slot ->
-          slot.Category = CrowdControl
-          && slot.RemainingUses > 0
-          && not (self.HasActivePreparation slot.Type))
-        |> Option.bind (fun slot ->
-          match slot.Type with
-          | PreparationType.HeraldicTreatise when self.StudyStacks >= 6 -> None
-          | prepType -> Some (DeployPreparation (prepType, None)))
+        // Multi-opponent Swarm:
+        // For Berserker, enraging via Berserk Tincture deadens incoming physical damage and unleashes Frenzy strikes immediately
+        let berserkPrep =
+          if self.Class = CharacterClass.Berserker && not (self.HasActivePreparation PreparationType.BerserkTincture) then
+            self.Preparations
+            |> List.tryFind (fun slot -> slot.Type = PreparationType.BerserkTincture && slot.RemainingUses > 0)
+            |> Option.bind (fun slot ->
+              if self.Health.Current > 30 && self.Meters.Recklessness.Value < 75 then
+                Some (DeployPreparation (PreparationType.BerserkTincture, None))
+              else None)
+          else None
+
+        match berserkPrep with
+        | Some p -> Some p
+        | None ->
+          // Deploy available Crowd Control preparation if not active
+          let crowdPrep =
+            self.Preparations
+            |> List.tryFind (fun slot ->
+              slot.Category = CrowdControl
+              && slot.RemainingUses > 0
+              && (match self.ActivePreparations |> List.tryFind (fun a -> a.Type = slot.Type) with
+                  | Some active -> active.DurationTurns <= 1
+                  | None -> true))
+            |> Option.bind (fun slot ->
+              match slot.Type with
+              | PreparationType.HeraldicTreatise when self.StudyStacks >= 6 -> None
+              | prepType -> Some (DeployPreparation (prepType, None)))
+
+          match crowdPrep with
+          | Some p -> Some p
+          | None ->
+            // In swarms, also deploy BerserkTincture to enrage or AegisOfRetribution if available
+            self.Preparations
+            |> List.tryFind (fun slot ->
+              slot.RemainingUses > 0
+              && not (self.HasActivePreparation slot.Type)
+              && (slot.Type = PreparationType.BerserkTincture || slot.Type = PreparationType.AegisOfRetribution))
+            |> Option.bind (fun slot ->
+              match slot.Type with
+              | PreparationType.BerserkTincture when self.Health.Current < (self.Health.Maximum / 3) || self.Meters.Recklessness.Value >= 70 -> None
+              | prepType -> Some (DeployPreparation (prepType, None)))
       else
         // 1-on-1 Duel: deploy available Single-Target preparation
         self.Preparations

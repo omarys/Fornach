@@ -5,28 +5,38 @@ namespace Fornach.Domain
 type CharacterClass =
   // --- Specialized Player Archetypes (with Tactical Preparations) ---
   // Power Vector (Force & Intellect)
-  /// Physical: Juggernaut/Golem, massive kinetic momentum, cleaves
+  /// Physical: Power/Agility/Discipline (1.0 : 0.75 : 0.50), relentless kinetic momentum, cleaves
   | Berserker
+  /// Physical: Power/Discipline/Agility (1.0 : 0.75 : 0.50), heavy armor, unstoppable poise, sundering
+  | Juggernaut
   /// Mental: Dread Arcanist/Psychic, raw cognitive dominance, mind-shock
   | Inquisitor
 
   // Agility Vector (Finesse & Acuity)
-  /// Physical: Skirmisher/Rapier specialist, vital punctures, evasion
+  /// Physical: Agility/Discipline/Power (1.0 : 0.75 : 0.50), technical precision, parry/riposte
   | Duelist
-  /// Mental: Phantasmist/Illusionist, sensory static, feedback traps
+  /// Physical: Agility/Power/Discipline (1.0 : 0.75 : 0.50), lethal burst speed, ambush cadence
+  | Assassin
+  /// Mental: Phantasmist/Illusionist, sensory static, feedback traps, mirror decoy swaps
   | Mesmer
 
   // Discipline Vector (Prowess & Acumen)
-  /// Physical: Knight/Warder, polearm mastery, tight guard, bastion
+  /// Physical: Discipline/Power/Agility (1.0 : 0.75 : 0.50), heavy bastion polearm, zone control
+  | Warden
+  /// Physical: Discipline/Power/Agility (legacy alias for Warden)
   | Justicar
-  /// Mental: Dialectician/Judge, Socratic traps, composure breakdowns
+  /// Physical: Discipline/Agility/Power (1.0 : 0.75 : 0.50), fluid skirmishing, reactive intercepts
+  | Ranger
+  /// Mental: Abjuration/Wards, composure-woven barriers, destabilizing ground runes
+  | Abjurer
+  /// Mental: Dialectician/Judge (legacy alias for Abjurer)
   | Strategist
 
   // --- Generic NPC Classes (without specialized player preparations) ---
   /// Generic Power NPC class: Kinetic brute, front-line shock troop
   | Warrior
-  /// Generic Finesse NPC class: Agile skirmisher, silent puncture specialist
-  | Assassin
+  /// Generic Agility NPC class: Agile skirmisher, silent puncture specialist
+  | Rogue
   /// Generic Discipline NPC class: Rank-and-file martial guard, tight line formation
   | Soldier
   /// Generic Magic NPC class: Arcane channeler across elemental/psychic vectors
@@ -35,8 +45,8 @@ type CharacterClass =
   /// True if this is a generic non-player character class without specialized preparations
   member this.IsGeneric : bool =
     match this with
-    | Warrior | Assassin | Soldier | Mage -> true
-    | Berserker | Inquisitor | Duelist | Mesmer | Justicar | Strategist -> false
+    | Warrior | Rogue | Soldier | Mage -> true
+    | Berserker | Juggernaut | Inquisitor | Duelist | Assassin | Mesmer | Warden | Justicar | Ranger | Abjurer | Strategist -> false
 
   /// True if this is a specialized player archetype equipped with tactical preparations
   member this.IsPlayerClass : bool = not this.IsGeneric
@@ -44,74 +54,89 @@ type CharacterClass =
   /// The underlying stat Vector (Power, Agility, or Discipline)
   member this.Vector : Vector =
     match this with
-    | Berserker | Inquisitor | Warrior -> Power
-    | Duelist | Mesmer | Assassin -> Agility
-    | Justicar | Strategist | Soldier -> Discipline
+    | Berserker | Juggernaut | Inquisitor | Warrior -> Power
+    | Duelist | Assassin | Rogue | Mesmer -> Agility
+    | Warden | Justicar | Ranger | Abjurer | Strategist | Soldier -> Discipline
     | Mage -> Power // Baseline vector; arcane casting dynamically specializes based on stats
 
   /// The primary governing attribute of this class archetype
   member this.PrimaryStat : StatId =
     match this with
-    | Berserker | Warrior -> Force
+    | Berserker | Juggernaut | Warrior -> Force
     | Inquisitor | Mage -> Intellect
-    | Duelist | Assassin -> Finesse
+    | Duelist | Assassin | Rogue -> Finesse
     | Mesmer -> Acuity
-    | Justicar | Soldier -> Prowess
-    | Strategist -> Acumen
+    | Warden | Justicar | Ranger | Soldier -> Prowess
+    | Abjurer | Strategist -> Acumen
 
   /// The operative combat Plane (Physical or Mental)
   member this.Plane : Plane =
     match this with
-    | Berserker | Duelist | Justicar | Warrior | Assassin | Soldier -> Physical
-    | Inquisitor | Mesmer | Strategist | Mage -> Mental
+    | Berserker | Juggernaut | Duelist | Assassin | Rogue | Warden | Justicar | Ranger | Warrior | Soldier -> Physical
+    | Inquisitor | Mesmer | Abjurer | Strategist | Mage -> Mental
 
   /// Display name of the character class
   member this.Name : string =
     match this with
     | Berserker -> "Berserker"
+    | Juggernaut -> "Juggernaut"
     | Inquisitor -> "Inquisitor"
     | Duelist -> "Duelist"
-    | Mesmer -> "Mesmer"
-    | Justicar -> "Justicar"
-    | Strategist -> "Strategist"
-    | Warrior -> "Warrior"
     | Assassin -> "Assassin"
+    | Mesmer -> "Mesmer"
+    | Warden -> "Warden"
+    | Justicar -> "Justicar"
+    | Ranger -> "Ranger"
+    | Abjurer -> "Abjurer"
+    | Strategist -> "Abjurer"
+    | Warrior -> "Warrior"
+    | Rogue -> "Rogue"
     | Soldier -> "Soldier"
     | Mage -> "Mage"
 
   /// Full descriptive title including archetype flavor
   member this.Title : string =
     match this with
-    | Berserker -> "Berserker (Kinetic Juggernaut)"
+    | Berserker -> "Berserker (Kinetic Slayer)"
+    | Juggernaut -> "Juggernaut (Iron Colossus)"
     | Inquisitor -> "Inquisitor (Dread Arcanist)"
-    | Duelist -> "Duelist (Vital Skirmisher)"
+    | Duelist -> "Duelist (Master Fencer)"
+    | Assassin -> "Assassin (Shadow Striker)"
     | Mesmer -> "Mesmer (Phantasmist)"
+    | Warden -> "Warden (Bastion Knight)"
     | Justicar -> "Justicar (Knight Warder)"
-    | Strategist -> "Strategist (Dialectician)"
+    | Ranger -> "Ranger (Wild Sentinel)"
+    | Abjurer
+    | Strategist -> "Abjurer (Runic Warder)"
     | Warrior -> "Warrior (Generic Power NPC)"
-    | Assassin -> "Assassin (Generic Finesse NPC)"
+    | Rogue -> "Rogue (Generic Finesse NPC)"
     | Soldier -> "Soldier (Generic Discipline NPC)"
     | Mage -> "Mage (Generic Arcane NPC)"
 
   /// Narrative description of combat specialization
   member this.Description : string =
     match this with
-    | Berserker -> "Massive kinetic momentum, devastating cleaves, and reckless fever pitch."
-    | Inquisitor -> "Raw cognitive dominance, psychic warhorns, and synaptic branding."
-    | Duelist -> "Rapid probing cadences, vital punctures, and quick-draw concealed counters."
-    | Mesmer -> "Sensory static, feedback traps, phantasmal mirages, and psychic neurotoxins."
-    | Justicar -> "Impenetrable bastion guard, zone control polearms, and precision parrying."
-    | Strategist -> "Dialectical traps, heraldic treatises, and Socratic exposure of hypocrisy."
+    | Berserker -> "Massive kinetic momentum, devastating cleaves, and reckless wild follow-through."
+    | Juggernaut -> "Unstoppable heavy armor soak, iron posture, and weapon-sundering impacts."
+    | Inquisitor -> "Raw cognitive dominance, imposing psychic presence, and synaptic mind-shocks."
+    | Duelist -> "Rapid probing cadences, technical parries, and lethal precision punctures."
+    | Assassin -> "High-velocity physical burst, lethal ambush strikes, and quick-draw concealed blades."
+    | Mesmer -> "Intuitive mirror clones, sensory static, and acuteness-based phantasmal decoy swaps."
+    | Warden -> "Impenetrable bastion guard, zone control polearms, and unyielding line defense."
+    | Justicar -> "Defensive bastion tactics and precision ripostes."
+    | Ranger -> "Fluid agility and disciplined footwork, weaving reactive counters and opportunist strikes."
+    | Abjurer
+    | Strategist -> "Composure-woven wards, destabilizing tactical ground runes, and protective abjuration barriers."
     | Warrior -> "Standard brute relying on kinetic Force and physical Fortitude without specialized preparations."
-    | Assassin -> "Skirmisher relying on Finesse and Reflex without specialized dueling preparations."
+    | Rogue -> "Skirmisher relying on Finesse and Reflex without specialized dueling preparations."
     | Soldier -> "Disciplined rank-and-file fighter maintaining guard and Prowess without specialized preparations."
     | Mage -> "Generic arcane practitioner channeling mental energies without specialized preparation assets."
 
-  /// All 6 specialized player class archetypes
-  static member PlayerClasses = [ Berserker; Inquisitor; Duelist; Mesmer; Justicar; Strategist ]
+  /// All specialized player class archetypes
+  static member PlayerClasses = [ Berserker; Juggernaut; Inquisitor; Duelist; Assassin; Mesmer; Warden; Justicar; Ranger; Abjurer ]
 
-  /// All 4 generic NPC classes
-  static member GenericClasses = [ Warrior; Assassin; Soldier; Mage ]
+  /// All generic NPC classes
+  static member GenericClasses = [ Warrior; Rogue; Soldier; Mage ]
 
-  /// All 10 character classes
+  /// All character classes
   static member All = CharacterClass.PlayerClasses @ CharacterClass.GenericClasses
