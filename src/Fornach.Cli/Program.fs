@@ -4,6 +4,7 @@ open System
 open Spectre.Console
 open Fornach.Domain
 open Fornach.Engine
+open Fornach.Story
 
 module Program =
 
@@ -97,6 +98,16 @@ module Program =
       StandardAttack (CalculatedFlawStrike 3)
     elif choice.Contains("Masterful Disarm") then
       StandardAttack (MasterfulDisarm 3)
+    elif choice.Contains("Trauma: Denial Phase Shift") then
+      StandardAttack (TraumaAttack DenialPhaseShift)
+    elif choice.Contains("Trauma: Basalt Eruption") then
+      StandardAttack (TraumaAttack BasaltEruption)
+    elif choice.Contains("Trauma: Coercive Bargain") then
+      StandardAttack (TraumaAttack CoerciveBargain)
+    elif choice.Contains("Trauma: Apathy Doldrums") then
+      StandardAttack (TraumaAttack ApathyDoldrums)
+    elif choice.Contains("Trauma: Serene Resolution") then
+      StandardAttack (TraumaAttack SereneResolution)
     elif choice.Contains("Steady Form") then
       RecoveryAction SteadyForm
     elif choice.Contains("Center Mind") then
@@ -109,6 +120,13 @@ module Program =
       if enemy.IsExecuteEligible then
         sprintf "☠️  [bold blink %s]EXECUTE FINISHER (Physical Strike)[/]" Theme.Red
         sprintf "☠️  [bold blink %s]EXECUTE FINISHER (Mental Strike)[/]" Theme.Red
+
+      // Psychological Trauma Gambits
+      sprintf "🕊️  [bold %s]Trauma: Serene Resolution[/] (Pacifist Release: Drain Recklessness, restore Morale)" Theme.Cyan
+      sprintf "🌫️  [bold %s]Trauma: Denial Phase Shift[/] (Agility Gambit: Conjure Mirror Clone, inflict Confusion)" Theme.Green
+      sprintf "🌋 [bold %s]Trauma: Basalt Eruption[/] (Power Gambit: Massive Damage, shred 25 Armor)" Theme.Red
+      sprintf "⚖️  [bold %s]Trauma: Coercive Bargain[/] (Discipline Gambit: Steal 35 Morale to restore Health)" Theme.Purple
+      sprintf "⚓ [bold %s]Trauma: Apathy Doldrums[/] (Discipline Gambit: Inflict 40 Cognitive Fatigue)" Theme.Comment
 
       // Physical Martial Strikes
       sprintf "⚔️  [%s]Force Strike: Standard Cleave[/] (Power - Cleave vs. Fortitude)" Theme.Red
@@ -416,6 +434,227 @@ module Program =
         RunSimulation(arch1, arch2, iters)
 
 
+  let private runStoryDuel (player: Combatant) (boss: Combatant) : CombatOutcome * Combatant =
+    let rng = Random()
+    let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
+
+    let mutable currentCombatant = player
+    let mutable currentBoss = boss
+    let mutable round = 1
+    let mutable combatOver = false
+    let mutable outcome = CombatOutcome.PlayerDefeated
+
+    while not combatOver do
+      Display.renderHUD currentCombatant currentBoss round
+
+      // 1. Choose Player Action
+      let choices = buildActionChoices currentCombatant currentBoss
+      let choice =
+        AnsiConsole.Prompt(
+          SelectionPrompt<string>()
+            .Title(sprintf "[bold %s]Round %d - Tactical Action against %s:[/]" Theme.Yellow round currentBoss.Name)
+            .PageSize(10)
+            .AddChoices(choices)
+        )
+
+      let playerIntent = parseActionChoice choice
+
+      AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes %s...[/]" Theme.Green currentCombatant.Name choice)
+      let playerResult = ActionResolver.resolve roller playerIntent currentCombatant currentBoss
+      currentCombatant <- playerResult.Actor
+      currentBoss <- playerResult.Target
+
+      Display.renderRollBreakdown choice currentCombatant.Name playerResult.Contest
+      playerResult.Events |> List.iter Display.logEvent
+
+      let playerExecutedEnemy =
+        playerResult.Events
+        |> List.exists (function CombatEvent.Executed _ -> true | _ -> false)
+
+      if playerExecutedEnemy || currentBoss.Health.IsDepleted || currentBoss.Morale.IsDepleted then
+        combatOver <- true
+        outcome <- CombatOutcome.PlayerVictorious
+        AnsiConsole.WriteLine()
+        AnsiConsole.Write(
+          Rule(sprintf "[bold %s]★★★ MANIFESTATION RESOLVED: %s PREVAILED! ★★★[/]" Theme.Green currentCombatant.Name)
+            .Centered()
+            .RuleStyle(Theme.StyleGreen)
+        )
+      else
+        // 2. Enemy AI Turn
+        AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s lashes out with psychological fury...[/]" Theme.Pink currentBoss.Name)
+        let enemyIntent = AI.chooseIntent currentBoss currentCombatant
+        let enemyResult = ActionResolver.resolve roller enemyIntent currentBoss currentCombatant
+        currentBoss <- enemyResult.Actor
+        currentCombatant <- enemyResult.Target
+
+        let intentDesc = sprintf "%A" enemyIntent
+        Display.renderRollBreakdown intentDesc currentBoss.Name enemyResult.Contest
+        enemyResult.Events |> List.iter Display.logEvent
+
+        let enemyExecutedPlayer =
+          enemyResult.Events
+          |> List.exists (function CombatEvent.Executed _ -> true | _ -> false)
+
+        if enemyExecutedPlayer || currentCombatant.Health.IsDepleted || currentCombatant.Morale.IsDepleted then
+          combatOver <- true
+          outcome <- CombatOutcome.PlayerDefeated
+          AnsiConsole.WriteLine()
+          AnsiConsole.Write(
+            Rule(sprintf "[bold %s]☠☠☠ DEFEATED BY TRAUMA: %s HAS FALLEN! ☠☠☠[/]" Theme.Red currentCombatant.Name)
+              .Centered()
+              .RuleStyle(Theme.StyleRed)
+          )
+
+      if not combatOver then
+        AnsiConsole.WriteLine()
+        AnsiConsole.Markup(sprintf "[%s]Press any key to proceed to next round...[/]" Theme.Comment)
+        Console.ReadKey(true) |> ignore
+        round <- round + 1
+
+    outcome, currentCombatant
+
+  let private runInteractiveStory () =
+    AnsiConsole.Clear()
+    AnsiConsole.Write(
+      Rule(sprintf "[bold %s]FORNACH: THE TRAUMA LOOP & THE INFINITE TOWER[/]" Theme.Yellow)
+        .Centered()
+        .RuleStyle(Theme.StylePurple)
+    )
+    AnsiConsole.WriteLine()
+
+    // Create Protagonist Combatant
+    let stats =
+      StatBlock.Create
+        [ StatId.Force, 80
+          StatId.Fortitude, 75
+          StatId.Finesse, 80
+          StatId.Reflex, 75
+          StatId.Prowess, 70
+          StatId.Poise, 70
+          StatId.Intellect, 65
+          StatId.Resolve, 85
+          StatId.Acuity, 65
+          StatId.Intuition, 70
+          StatId.Acumen, 65
+          StatId.Composure, 60 ]
+
+    let mutable player = Combatant.create (CombatantId.New()) "Protagonist" 280 220 stats
+
+    let sword =
+      { Name = "Notched Iron Broadsword"
+        Slot = EquipmentSlot.Weapon
+        Description = "A blade found in the quarry mud. Heavy, worn, but sturdy."
+        StatModifiers = [ StatId.Force, 10 ]
+        HealthBonus = 0
+        MoraleBonus = 0
+        StartingRecklessnessDelta = 0
+        Triggers = [] }
+
+    player <- { player with EquippedItems = [ sword ] }
+
+    let inkJson = StoryRunner.LoadPrologueJson()
+    let runner =
+      StoryRunner(
+        inkJson,
+        player,
+        onDeathAnimation = DeathAnimation.playTruckReplay,
+        onMemoryAwarded = (fun mem ->
+          let panel =
+            Panel(Markup(sprintf "[bold gold1]★ MEMORY UNLOCKED:[/] [bold white]%s[/]\n[italic grey]%s[/]" mem.Name mem.Description))
+              .Border(BoxBorder.Heavy)
+              .BorderStyle(Style(foreground = Nullable Color.Gold1))
+          AnsiConsole.WriteLine()
+          AnsiConsole.Write(panel)
+          AnsiConsole.WriteLine())
+      )
+
+    let mutable storyActive = true
+
+    while storyActive do
+      let events = runner.ContinueToNextEvent()
+
+      for ev in events do
+        match ev with
+        | StoryEvent.TextProduced text ->
+          if text.Contains("crosswalk") && text.Contains("The Tower") then
+            EnvironmentScenes.playCrosswalkTowerTransition()
+          else
+            let panel =
+              Panel(Markup(sprintf "[bold %s]%s[/]" Theme.Foreground text))
+                .Border(BoxBorder.Rounded)
+                .BorderStyle(Style(foreground = Nullable Theme.ColorComment))
+            AnsiConsole.Write(panel)
+            AnsiConsole.WriteLine()
+
+        | StoryEvent.CombatInitiated(enemyId, boss) ->
+          let scene = EnvironmentScenes.getSceneForEnemy enemyId
+          AnsiConsole.WriteLine()
+          AnsiConsole.Write(EnvironmentScenes.renderSceneHeader scene)
+          AnsiConsole.WriteLine()
+          AnsiConsole.Write(EnvironmentScenes.renderBossEncounterCard boss scene)
+          AnsiConsole.WriteLine()
+
+          let combatChoice =
+            AnsiConsole.Prompt(
+              SelectionPrompt<string>()
+                .Title("[bold red]Face the Manifestation:[/]")
+                .AddChoices([
+                  "⚔️ Enter Tactical Combat Duel"
+                  "⚡ Quick Resolve Encounter"
+                ])
+            )
+
+          let outcome, updatedPlayer =
+            if combatChoice.Contains("Quick Resolve") then
+              AnsiConsole.MarkupLine("[bold green]With focused resolve, you cut through the emotional fog![/]")
+              CombatOutcome.PlayerVictorious, player
+            else
+              runStoryDuel player boss
+
+          player <- updatedPlayer
+
+          match outcome with
+          | CombatOutcome.PlayerVictorious ->
+            let nextKnot =
+              match enemyId.ToLowerInvariant() with
+              | "guilt_aspect" | "guiltaspect" -> "post_combat"
+              | "denial_aspect" | "denialaspect" | "denial" -> "post_denial"
+              | "anger_aspect" | "angeraspect" | "anger" -> "post_anger"
+              | "bargaining_aspect" | "bargainingaspect" | "bargaining" -> "post_bargaining"
+              | "depression_aspect" | "depressionaspect" | "depression" -> "post_depression"
+              | "acceptance_aspect" | "acceptanceaspect" | "acceptance" -> "post_acceptance"
+              | _ -> "post_combat"
+
+            runner.ResolveCombat(CombatOutcome.PlayerVictorious, nextKnot)
+          | CombatOutcome.PlayerDefeated ->
+            runner.ResolveCombat CombatOutcome.PlayerDefeated
+
+        | _ -> ()
+
+      if runner.CurrentChoices.Length > 0 then
+        let choiceTexts = runner.CurrentChoices |> List.map snd
+        let selectedText =
+          AnsiConsole.Prompt(
+            SelectionPrompt<string>()
+              .Title(sprintf "[bold %s]Choose your response:[/]" Theme.Yellow)
+              .AddChoices(choiceTexts)
+          )
+        let selectedIdx = runner.CurrentChoices |> List.findIndex (fun (_, t) -> t = selectedText)
+        runner.ChooseChoice selectedIdx
+      elif not runner.CanContinue then
+        storyActive <- false
+
+    AnsiConsole.WriteLine()
+    AnsiConsole.MarkupLine(sprintf "[bold %s]Narrative chapter completed. The gates of the Infinite Tower stand open before you.[/]" Theme.Yellow)
+    let enterTower =
+      AnsiConsole.Confirm(sprintf "[bold %s]Step through the threshold and begin ascending the Infinite Tower?[/]" Theme.Cyan, true)
+    if enterTower then
+      TowerDisplay.runTowerCrawl player 1 runStoryDuel DeathAnimation.playTruckReplay
+    else
+      AnsiConsole.MarkupLine(sprintf "[%s]Press any key to return to menu...[/]" Theme.Comment)
+      Console.ReadKey(true) |> ignore
+
   [<EntryPoint>]
   let main (args: string array) =
     match parseCliArgs args with
@@ -466,8 +705,10 @@ module Program =
           AnsiConsole.Prompt(
             SelectionPrompt<string>()
               .Title(sprintf "[bold %s]Select Mode:[/]" Theme.Yellow)
-              .PageSize(8)
+              .PageSize(9)
               .AddChoices([
+                sprintf "📖  [bold %s]Interactive Story Mode (5 Grief Stages & The Tower)[/]" Theme.Cyan
+                sprintf "🗼  [bold %s]Ascend The Infinite Tower (Roguelike Dungeon Crawl)[/]" Theme.Yellow
                 sprintf "⚔️   [bold %s]Interactive Duel Arena[/]" Theme.Green
                 sprintf "📊  [bold %s]Monte-Carlo Balance Simulator (1 vs 1)[/]" Theme.Cyan
                 sprintf "👥  [bold %s]1 vs N Encirclement Swarm Simulator[/]" Theme.Pink
@@ -478,7 +719,13 @@ module Program =
               ])
           )
 
-        if choice.Contains("Interactive Duel Arena") then
+        if choice.Contains("Interactive Story Mode") then
+          runInteractiveStory ()
+        elif choice.Contains("Ascend The Infinite Tower") then
+          let playerArch = promptSelectArchetype (sprintf "[bold %s]Select Expedition Champion:[/]" Theme.Yellow)
+          let player = playerArch.Factory()
+          TowerDisplay.runTowerCrawl player 1 runStoryDuel DeathAnimation.playTruckReplay
+        elif choice.Contains("Interactive Duel Arena") then
           let playerArch = promptSelectArchetype (sprintf "[bold %s]Select Player Combatant:[/]" Theme.Green)
           let enemyArch = promptSelectArchetype (sprintf "[bold %s]Select Opponent Combatant:[/]" Theme.Pink)
           runInteractiveDuel playerArch enemyArch

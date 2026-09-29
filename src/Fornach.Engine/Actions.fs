@@ -2,6 +2,19 @@ namespace Fornach.Engine
 
 open Fornach.Domain
 
+/// Psychological Trauma Gambits and specialized boss manifestations
+type TraumaGambit =
+  /// Denial (Agility/Mental): Asserts reality never happened; conjures a mirror clone, evades, and inflicts Confusion
+  | DenialPhaseShift
+  /// Anger (Power/Physical): Volcanic fury that smashes molten basalt into the target, shredding armor and inflicting Overwhelm
+  | BasaltEruption
+  /// Bargaining (Discipline/Mental): A predatory transaction stealing Morale to restore vitality, inflicting Provoke and Frustration
+  | CoerciveBargain
+  /// Depression (Discipline/Mental): The crushing weight of apathy dragging the spirit under; inflicts deep Cognitive Fatigue and Exhaustion
+  | ApathyDoldrums
+  /// Acceptance (Discipline/Mental): Peaceful surrender of hostility; calms Recklessness to 0 and restores Morale to both combatants
+  | SereneResolution
+
 /// Classifies offensive actions across Physical, Social, and Arcane disciplines
 type AttackClassification =
   // -------------------------------------------------------------------------
@@ -42,6 +55,12 @@ type AttackClassification =
   /// Arcane Discipline (Acumen vs. Composure): Disorienting shockwave that disrupts enemy balance and stance tempo
   | DisorientingShockwave of isStaggeringPulse: bool
 
+  // -------------------------------------------------------------------------
+  // 4. Psychological Trauma Gambits (Boss / Manifestation Mechanics)
+  // -------------------------------------------------------------------------
+  /// Specialized psychological trauma mechanics mapping the 5 stages of grief
+  | TraumaAttack of TraumaGambit
+
   /// Identifies the CombatMode (Physical, Social, or Arcane)
   member this.Mode : CombatMode =
     match this with
@@ -58,23 +77,29 @@ type AttackClassification =
     | MirrorIllusion _
     | RunicWardTrap _
     | DisorientingShockwave _ -> CombatMode.Arcane
+    | TraumaAttack BasaltEruption -> CombatMode.Physical
+    | TraumaAttack (CoerciveBargain | ApathyDoldrums | SereneResolution) -> CombatMode.Social
+    | TraumaAttack DenialPhaseShift -> CombatMode.Arcane
 
   /// Identifies the underlying stat Vector (Power, Agility, or Discipline)
   member this.Vector : Vector =
     match this with
     | ForceStrike _
     | AuthorityDecree _
-    | ArcaneCataclysm _ -> Power
+    | ArcaneCataclysm _
+    | TraumaAttack BasaltEruption -> Power
     | FinesseCadence _
     | GuileDeception _
     | SynapticGlamour _
-    | MirrorIllusion _ -> Agility
+    | MirrorIllusion _
+    | TraumaAttack DenialPhaseShift -> Agility
     | ProwessStrike _
     | CalculatedFlawStrike _
     | MasterfulDisarm _
     | AcumenInterrogation _
     | RunicWardTrap _
-    | DisorientingShockwave _ -> Discipline
+    | DisorientingShockwave _
+    | TraumaAttack (CoerciveBargain | ApathyDoldrums | SereneResolution) -> Discipline
 
   /// Identifies the target Plane (Physical or Mental)
   member this.Plane : Plane =
@@ -83,7 +108,8 @@ type AttackClassification =
     | FinesseCadence _
     | ProwessStrike _
     | CalculatedFlawStrike _
-    | MasterfulDisarm _ -> Physical
+    | MasterfulDisarm _
+    | TraumaAttack BasaltEruption -> Physical
     | AuthorityDecree _
     | GuileDeception _
     | AcumenInterrogation _
@@ -91,7 +117,8 @@ type AttackClassification =
     | SynapticGlamour _
     | MirrorIllusion _
     | RunicWardTrap _
-    | DisorientingShockwave _ -> Mental
+    | DisorientingShockwave _
+    | TraumaAttack (DenialPhaseShift | CoerciveBargain | ApathyDoldrums | SereneResolution) -> Mental
 
 /// Defensive recoveries used to bleed accumulated Recklessness and re-center posture
 type DefensiveReset =

@@ -10,6 +10,8 @@
     <Compile Include="Actions.fs" />
     <Compile Include="IndesResolver.fs" />
     <Compile Include="ActionResolver.fs" />
+    <Compile Include="TowerGenerator.fs" />
+    <Compile Include="TowerSession.fs" />
   </ItemGroup>
 
   <ItemGroup>

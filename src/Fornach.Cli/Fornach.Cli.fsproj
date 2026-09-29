@@ -10,8 +10,11 @@
     <Compile Include="Archetypes.fs" />
     <Compile Include="AI.fs" />
     <Compile Include="Theme.fs" />
+    <Compile Include="EnvironmentScenes.fs" />
     <Compile Include="Display.fs" />
+    <Compile Include="DeathAnimation.fs" />
     <Compile Include="Simulation.fs" />
+    <Compile Include="TowerDisplay.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
@@ -22,6 +25,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Fornach.Domain\Fornach.Domain.fsproj" />
     <ProjectReference Include="..\Fornach.Engine\Fornach.Engine.fsproj" />
+    <ProjectReference Include="..\Fornach.Story\Fornach.Story.fsproj" />
   </ItemGroup>
 
 </Project>

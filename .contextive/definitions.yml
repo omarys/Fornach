@@ -40,7 +40,7 @@ contexts:
         aliases: ["MartialCraft", "Technique"]
 
       - name: "Poise"
-        definition: "Defensive Martial Discipline attribute. Represents physical balance, footwork stability, and posture equilibrium under pressure. Acts as the primary brake to bleed off Recklessness."
+        definition: "Defensive Martial Discipline attribute. Represents physical balance, footwork stability, and posture equilibrium under pressure. Acts as the primary brake to bleed off Recklessness and accelerates visual dilation."
         examples:
           - "Steady Form reduces Recklessness by (Poise + 10) and generates Study Stacks."
         aliases: ["Balance", "StanceEquilibrium"]
@@ -172,3 +172,70 @@ contexts:
       - name: "NetHits"
         definition: "The net hit differential (Attacker Total Hits minus Defender Total Hits) in an opposed dice pool contest. Directly determines the tiered damage multiplier (≤0 whiff, 1–2 glancing, 3–5 dominance, 6+ blowout)."
         aliases: ["ContestMargin", "MarginOfSuccess"]
+
+      # --- Tactical Timing (German School: Liechtenauer Tradition) ---
+      - name: "Vor"
+        definition: "Tactical timing state representing active initiative and tempo ownership. The combatant in the Vor dictates the exchange, forcing opponents to react."
+        aliases: ["Before", "Initiative", "ProactiveTiming"]
+
+      - name: "Nach"
+        definition: "Tactical timing state representing reactive defense. The combatant in the Nach responds, parries, or absorbs an attack already set in motion."
+        aliases: ["After", "ReactiveTiming"]
+
+      - name: "Indes"
+        definition: "Simultaneous midpoint interception timing. Occurs in the instant of contact where a defender in the Nach exploits the attacker's commitment to seize the Vor."
+        examples:
+          - "A defender scoring +3 net defense hits over an attacker triggers Indes, seizing the Vor."
+        aliases: ["Meanwhile", "SimultaneousCounter", "TempoSeizure"]
+
+      # --- Multi-Opponent & Swarm Dynamics ---
+      - name: "Encirclement"
+        definition: "A compounding defensive penalty applied to combatants defending against sequential attacks in the same round without dedicated perimeter preparations."
+        examples:
+          - "A novice defender at priorDefenses = 3 suffers steep dice pool penalties unless protected by Caltrop Pouch."
+        aliases: ["FlankPenalty", "SwarmPenalty"]
+
+      - name: "Cleave"
+        definition: "Physical area-of-effect splash damage dealt to adjacent flankers on successful heavy hits, inherent to Berserkers and accessible via Power Stance."
+        aliases: ["SplashDamage", "SweepingStrike"]
+
+      - name: "PsychicShockwave"
+        definition: "Mental area-of-effect morale resonance emitted during high-disparity mental strikes, splashing secondary targets with cognitive static."
+        aliases: ["MentalResonance", "PsychicSplash"]
+
+      - name: "CombatTier"
+        definition: "Mastery progression classification (Novice, Adept, Veteran, Master, GrandMaster) governing uncapped stat baselines, floor hit floors, and swarm resilience."
+        aliases: ["MasteryTier", "Rank"]
+
+      - name: "TacticalPreparation"
+        definition: "A consumable or tactical deployable (Caltrop Pouch, Mirror Mirage, Dread Warhorn, Heraldic Treatise, Arcane Ward, Parrying Buckler) modifying turn dynamics and countering swarm or tempo tactics."
+        aliases: ["Preparation", "Deployable"]
+
+  - name: "SpatialDomain"
+    description: "Grid topology, directional shadowcasting, line of sight, and dynamic visual aperture rules."
+    rules:
+      - path: "**/Fornach.Spatial/**"
+      - path: "**/Fornach.Domain/Vision.fs"
+      - path: "**/*Spatial*/**"
+    terms:
+      - name: "VisionCone"
+        definition: "A parametric geometric viewing envelope defined by Origin, Facing, ArcDegrees (30° to 360°), and MaxRadius."
+        aliases: ["ViewEnvelope", "FieldOfViewCone"]
+
+      - name: "DirectionalShadowcasting"
+        definition: "Octant-based line-of-sight obstacle occlusion algorithm pruned to an active angular viewing arc."
+        aliases: ["ConicalShadowcasting", "FOV"]
+
+      - name: "Dilation"
+        definition: "The gradual angular expansion of a combatant's vision cone back to 360° awareness upon remaining stationary, accelerated by Poise and Composure."
+        examples:
+          - "GrandMasters with high Poise dilate to 360° awareness in 1-2 turns."
+        aliases: ["AwarenessRecovery", "FieldExpansion"]
+
+      - name: "TunnelVision"
+        definition: "The narrowing of a combatant's vision arc during high-speed locomotion (sprinting) or intense combat stress (Overwhelm and Recklessness), resisted by Discipline and softened by Agility."
+        aliases: ["VisualConstriction", "AdrenalineAperture"]
+
+      - name: "DijkstraMap"
+        definition: "A multi-source breadth-first scalar distance field radiating from designated goals, enabling concurrent flocking, hunting, and fleeing for multiple actors without per-actor A* calls."
+        aliases: ["FlowField", "DistanceField"]

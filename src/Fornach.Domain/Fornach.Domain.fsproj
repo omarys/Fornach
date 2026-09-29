@@ -39,6 +39,9 @@
 
     <!-- 9. Dynamic Vision and Locomotion Domain Resolver -->
     <Compile Include="Vision.fs" />
+
+    <!-- 10. The Infinite Roguelike Tower Domain Model -->
+    <Compile Include="TowerModel.fs" />
   </ItemGroup>
 
   <ItemGroup>

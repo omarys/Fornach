@@ -672,10 +672,12 @@ module ActionResolver =
       | GuileDeception true -> true, "Social Gambit: Confidence Trap", 25
       | AcumenInterrogation true -> true, "Social Gambit: Calculated Sacrilege", 35
       | ArcaneCataclysm true -> true, "Arcane Gambit: Overchanneled Cataclysm", 35
-      | SynapticGlamour true -> true, "Arcane Gambit: Neural Fracture", 30
-      | MirrorIllusion true -> true, "Arcane Gambit: Phantasmal Swarm", 25
-      | RunicWardTrap true -> true, "Arcane Gambit: Anomalous Glyph", 30
       | DisorientingShockwave true -> true, "Arcane Gambit: Resonant Shockwave", 25
+      | TraumaAttack DenialPhaseShift -> true, "Trauma Gambit: Denial Phase Shift", 15
+      | TraumaAttack BasaltEruption -> true, "Trauma Gambit: Basalt Eruption", 35
+      | TraumaAttack CoerciveBargain -> true, "Trauma Gambit: Coercive Bargain", 20
+      | TraumaAttack ApathyDoldrums -> true, "Trauma Gambit: Apathy Doldrums", 10
+      | TraumaAttack SereneResolution -> false, "", 0
       | _ -> false, "", 0
 
     if isGambit then
@@ -715,6 +717,11 @@ module ActionResolver =
         | MirrorIllusion _ -> "Mirror Illusion"
         | RunicWardTrap _ -> "Runic Ward Trap"
         | DisorientingShockwave _ -> "Disorienting Shockwave"
+        | TraumaAttack DenialPhaseShift -> "Denial Phase Shift"
+        | TraumaAttack BasaltEruption -> "Basalt Eruption"
+        | TraumaAttack CoerciveBargain -> "Coercive Bargain"
+        | TraumaAttack ApathyDoldrums -> "Apathy Doldrums"
+        | TraumaAttack SereneResolution -> "Serene Resolution"
         | _ -> "Arcane Spell"
       currentActor <- currentActor |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue + strain })
       events <- CombatEvent.ArcaneStrainIncurred(currentActor.Id, spellName, strain, profPct) :: events
@@ -731,6 +738,12 @@ module ActionResolver =
       let wardErected = Math.Max(10, int (float (currentActor.GetStat Acumen) * glyphScale * profRatio))
       currentActor <- currentActor |> Combatant.addWard wardErected
       events <- CombatEvent.ArcaneWardErected(currentActor.Id, wardErected, currentActor.ArcaneWard) :: events
+    | TraumaAttack DenialPhaseShift ->
+      currentActor <- currentActor |> Combatant.addClones 1
+      events <- CombatEvent.MirrorClonesConjured(currentActor.Id, 1, currentActor.MirrorClones) :: events
+    | TraumaAttack SereneResolution ->
+      currentActor <- currentActor |> Combatant.updateMeters (fun m -> { m with Recklessness = Meter.Zero })
+      currentTarget <- currentTarget |> Combatant.updateMeters (fun m -> { m with Recklessness = Meter.Zero })
     | _ -> ()
 
     let offStat, defStat, classMult, disparityFactory, meterUpdates =
@@ -974,6 +987,67 @@ module ActionResolver =
               Recklessness = m.Recklessness + 20 + disparityReck }
 
         off, def, (studyMult * pulseMult * profMult), disp, upd
+
+      | TraumaAttack DenialPhaseShift ->
+        let off = currentActor.GetStat Finesse
+        let def = currentTarget.GetStat Intuition
+        let disparity = Math.Max(0, off - def)
+        let disp = fun isCrit -> if isCrit then Some DialecticalParalysis else None
+        let upd isCrit (m: StatusMeters) =
+          { m with
+              Confusion = m.Confusion + 25 + (disparity / 15)
+              Frustration = m.Frustration - 15 }
+        off, def, 1.25, disp, upd
+
+      | TraumaAttack BasaltEruption ->
+        let off = currentActor.GetStat Force
+        let def = currentTarget.GetStat Fortitude
+        let disparity = Math.Max(0, off - def)
+        let disp = fun isCrit -> if isCrit then Some(CrushingBlow(35 + (disparity / 10))) else None
+        let upd isCrit (m: StatusMeters) =
+          { m with
+              Overwhelm = m.Overwhelm + 30
+              Exhaustion = m.Exhaustion + 20
+              Recklessness = m.Recklessness + 25 }
+        currentTarget <- { currentTarget with Armor = currentTarget.Armor.Shred 25 }
+        off, def, 1.50, disp, upd
+
+      | TraumaAttack CoerciveBargain ->
+        let off = currentActor.GetStat Acumen
+        let def = currentTarget.GetStat Resolve
+        let disparity = Math.Max(0, off - def)
+        let disp = fun isCrit -> if isCrit then Some DialecticalParalysis else None
+        let upd isCrit (m: StatusMeters) =
+          { m with
+              Provoke = m.Provoke + 25
+              Frustration = m.Frustration + 20 }
+        currentTarget <- { currentTarget with Morale = currentTarget.Morale.ApplyDelta -35 }
+        currentActor <- { currentActor with Health = currentActor.Health.ApplyDelta 25 }
+        off, def, 1.15, disp, upd
+
+      | TraumaAttack ApathyDoldrums ->
+        let off = currentActor.GetStat Fortitude
+        let def = currentTarget.GetStat Composure
+        let disparity = Math.Max(0, off - def)
+        let disp = fun isCrit -> if isCrit then Some(CognitiveRupture(40)) else None
+        let upd isCrit (m: StatusMeters) =
+          { m with
+              CognitiveFatigue = m.CognitiveFatigue + 40 + (disparity / 10)
+              Exhaustion = m.Exhaustion + 25 }
+        off, def, 0.70, disp, upd
+
+      | TraumaAttack SereneResolution ->
+        let off = currentActor.GetStat Composure
+        let def = currentTarget.GetStat Resolve
+        let disp = fun _ -> None
+        let upd _ (m: StatusMeters) =
+          { m with
+              Recklessness = Meter.Zero
+              Frustration = Meter.Zero
+              Provoke = Meter.Zero }
+        currentActor <- { currentActor with Morale = currentActor.Morale.ApplyDelta 50 }
+        currentTarget <- { currentTarget with Morale = currentTarget.Morale.ApplyDelta 50 }
+        off, def, 0.0, disp, upd
 
     // Check if an offensive MasterfulDisarm was declared but conditions were not met
     let disarmFailedEarly =
@@ -1294,7 +1368,9 @@ module ActionResolver =
 
       let isCrit = contest.IsCritical || agilityCritRolled
       let critDmgMult = if isCrit && isAgilityAtk then 3.2 elif isCrit then 1.5 else 1.0
-      let rawDmg = Math.Max(1, int (float baseDamage * tierMult * gambitMult * classMult * weaponEff * critDmgMult * berserkMult))
+      let rawDmg =
+        if classMult <= 0.0 then 0
+        else Math.Max(1, int (float baseDamage * tierMult * gambitMult * classMult * weaponEff * critDmgMult * berserkMult))
 
       // Track Recklessness before updates for Neurotoxin check
       let reckBefore = currentTarget.Meters.Recklessness.Value
@@ -1319,7 +1395,7 @@ module ActionResolver =
       events <- wardEvts @ (CombatEvent.DamageApplied dmgEvt :: events)
 
       // Severe Mental Stat Disparity: Cranial Hemorrhage (Psychic Bleeding)
-      if plane = Mental then
+      if plane = Mental && rawDmg > 0 then
         let mentalDisparity = offStat - defStat
         if mentalDisparity >= 30 || contest.NetHits >= 4 then
           let bleedStacks =

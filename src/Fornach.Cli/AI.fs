@@ -49,7 +49,32 @@ module AI =
     let bestPhysical = Math.Max(force, Math.Max(finesse, prowess))
     let bestMental = Math.Max(intellect, Math.Max(acuity, acumen))
 
-    if self.Class = CharacterClass.Berserker then
+    // -------------------------------------------------------------------------
+    // Boss Grief Aspect AI Behaviors
+    // -------------------------------------------------------------------------
+    if self.Name.Contains("Denial") then
+      if self.MirrorClones < 2 && self.Meters.Recklessness.Value < 70 then
+        StandardAttack (TraumaAttack DenialPhaseShift)
+      else
+        StandardAttack (FinesseCadence isGambit)
+    elif self.Name.Contains("Anger") then
+      if self.Meters.Recklessness.Value < 65 then
+        StandardAttack (TraumaAttack BasaltEruption)
+      else
+        StandardAttack (ForceStrike true)
+    elif self.Name.Contains("Bargaining") then
+      if opponent.Morale.Current > 40 && self.Meters.Recklessness.Value < 65 then
+        StandardAttack (TraumaAttack CoerciveBargain)
+      else
+        StandardAttack (AcumenInterrogation isGambit)
+    elif self.Name.Contains("Depression") then
+      if opponent.Meters.CognitiveFatigue.Value < 80 then
+        StandardAttack (TraumaAttack ApathyDoldrums)
+      else
+        StandardAttack (ProwessStrike false)
+    elif self.Name.Contains("Acceptance") then
+      StandardAttack (TraumaAttack SereneResolution)
+    elif self.Class = CharacterClass.Berserker then
       // Berserkers embody kinetic juggernaut momentum: stay in Power Stance, unleash Force strikes, and always cleave
       if self.Stance <> CombatStance.PowerStance && self.Meters.Recklessness.Value < 50 then
         ShiftStance CombatStance.PowerStance
@@ -183,7 +208,7 @@ module AI =
         ExecuteStrike (chooseExecutePlane opponent)
 
       // 2. If self is reaching dangerous entropy or status debuff levels, bleed Recklessness
-      elif self.Meters.Recklessness.Value >= 40
+      elif (if self.Name.Contains("Anger") then self.Meters.Recklessness.Value >= 85 else self.Meters.Recklessness.Value >= 40)
            || self.Meters.Exhaustion.Value >= 65
            || self.Meters.Overwhelm.Value >= 65
            || self.Meters.CognitiveFatigue.Value >= 65
