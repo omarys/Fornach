@@ -9,16 +9,38 @@ open Fornach.Story
 module Program =
 
   let private printBanner () =
+    let termWidth = Math.Max(80, AnsiConsole.Profile.Width)
+    let termHeight =
+      if Console.IsOutputRedirected || Console.WindowHeight <= 0 then 30
+      else Console.WindowHeight
+
     AnsiConsole.Write(
       FigletText("FORNACH")
         .Centered()
         .Color(Theme.ColorPurple)
     )
-    AnsiConsole.Write(
-      Rule(sprintf "[bold %s]Tactical Multi-Plane Combat Engine & Balance Workbench[/]" Theme.Yellow)
-        .Centered()
-        .RuleStyle(Theme.StyleCurrentLine)
-    )
+
+    let telemetryGrid = Grid()
+    telemetryGrid.AddColumn(GridColumn().Centered()) |> ignore
+    telemetryGrid.AddColumn(GridColumn().Centered()) |> ignore
+    telemetryGrid.AddColumn(GridColumn().Centered()) |> ignore
+    telemetryGrid.AddColumn(GridColumn().Centered()) |> ignore
+    telemetryGrid.AddRow(
+      Markup(sprintf "[grey]󰍹 Screen:[/] [bold %s]%dx%d[/]" Theme.Cyan termWidth termHeight),
+      Markup(sprintf "[grey]󰘚 Engine:[/] [bold %s]v0.3.0 Turbo[/]" Theme.Green),
+      Markup(sprintf "[grey]󰀝 Roster:[/] [bold %s]24 Archetypes[/]" Theme.Yellow),
+      Markup(sprintf "[grey]󰌌 Input:[/] [bold %s]Vim (j/k/h/l) + Pad[/]" Theme.Pink)
+    ) |> ignore
+    telemetryGrid.Expand <- true
+
+    let telemetryPanel =
+      Panel(telemetryGrid)
+        .Border(BoxBorder.Rounded)
+        .BorderStyle(Theme.StyleCurrentLine)
+        .Header(sprintf "[bold %s] 󰒋 COMMAND COCKPIT & SYSTEM TELEMETRY [/]" Theme.Yellow)
+        .Expand()
+
+    AnsiConsole.Write(telemetryPanel)
     AnsiConsole.WriteLine()
 
   let private promptSelectArchetype (title: string) : ArchetypeInfo =
@@ -33,7 +55,7 @@ module Program =
             | Veteran -> Theme.Cyan
             | Master -> Theme.Yellow
             | GrandMaster -> Theme.Purple
-          sprintf "[bold %s][[%A]][/] [bold %s]%-22s[/] ([%s]%A[/]) - [%s]%s[/]"
+          sprintf "[bold %s][[%A]][/] [bold %s]󰀝 %-22s[/] ([%s]%A[/]) ── [%s]%s[/]"
             tierColor a.Tier Theme.Foreground a.Name Theme.Pink a.Discipline Theme.Comment a.Description)
 
     prompt.AddChoices(Archetypes.allArchetypes) |> ignore
@@ -695,15 +717,15 @@ module Program =
         printBanner()
 
         let termWidth = Math.Max(80, AnsiConsole.Profile.Width)
-        let contentWidth = 78
+        let contentWidth = Math.Min(96, termWidth - 4)
         let margin = Math.Max(0, (termWidth - contentWidth) / 2)
         let pad = String(' ', margin)
 
         let formatMenuItem icon title desc color =
-          sprintf "%s%s [bold %s]%-38s[/] [italic %s]── %s[/]" pad icon color title Theme.Comment desc
+          sprintf "%s%s [bold %s]%-40s[/] [italic %s]── %s[/]" pad icon color title Theme.Comment desc
 
         let promptTitle =
-          sprintf "%s[bold %s]══════════ SELECT EXPEDITION OR BENCHMARK MODE ══════════[/]\n%s[grey]      (Navigate: [bold white]↑/↓[/] or [bold white]j/k[/]  •  Select: [bold white]Enter[/]  •  Quit: [bold white]Exit[/])[/]\n"
+          sprintf "%s[bold %s]══════════ 󰒋 SELECT EXPEDITION OR BENCHMARK MODE ══════════[/]\n%s[grey]      (󰌌 Navigate: [bold white]↑/↓[/] or [bold white]j/k[/]  •  󰌑 Select: [bold white]Enter[/]  •  󰗼 Quit: [bold white]Exit[/])[/]\n"
             pad Theme.Yellow pad
 
         let choice =
@@ -712,15 +734,15 @@ module Program =
               .Title(promptTitle)
               .PageSize(9)
               .AddChoices([
-                formatMenuItem "📖 " "Interactive Story Mode" "Narrative prologue & aspect battles" Theme.Cyan
-                formatMenuItem "🗼 " "Ascend The Infinite Tower" "Roguelike procedural dungeon crawl" Theme.Yellow
-                formatMenuItem "⚔️  " "Interactive Duel Arena" "Tactical turn-based combat duel" Theme.Green
-                formatMenuItem "📊 " "Monte-Carlo Balance Simulator (1 vs 1)" "Statistical win-rate analysis" Theme.Cyan
-                formatMenuItem "👥 " "1 vs N Encirclement Swarm Simulator" "Swarm overwhelm stress test" Theme.Pink
-                formatMenuItem "🛠️  " "Custom Combatant Builder" "Interactive stat & stance forge" Theme.Orange
-                formatMenuItem "📜 " "View Archetype Roster" "Inspect 24 mastery archetypes" Theme.Purple
-                formatMenuItem "📈 " "Swarm Tipping Point Balance Matrix" "96-matchup macro balance benchmark" Theme.Yellow
-                formatMenuItem "🚪 " "Exit" "Close the Fornach Arena" Theme.Red
+                formatMenuItem "󰈙 " "Interactive Story Mode" "Narrative prologue & aspect battles" Theme.Cyan
+                formatMenuItem "󰒋 " "Ascend The Infinite Tower" "Roguelike procedural dungeon crawl" Theme.Yellow
+                formatMenuItem "󰓥 " "Interactive Duel Arena" "Tactical turn-based combat duel" Theme.Green
+                formatMenuItem "󰓎 " "Monte-Carlo Balance Simulator (1 vs 1)" "Statistical win-rate analysis" Theme.Cyan
+                formatMenuItem " " "1 vs N Encirclement Swarm Simulator" "Swarm overwhelm stress test" Theme.Pink
+                formatMenuItem " " "Custom Combatant Builder" "Interactive stat & stance forge" Theme.Orange
+                formatMenuItem "󰂺 " "View Archetype Roster" "Inspect 24 mastery archetypes" Theme.Purple
+                formatMenuItem "󰈷 " "Swarm Tipping Point Balance Matrix" "96-matchup macro balance benchmark" Theme.Yellow
+                formatMenuItem "󰗼 " "Exit" "Close the Fornach Arena" Theme.Red
               ])
           )
 

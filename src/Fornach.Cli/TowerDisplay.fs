@@ -110,7 +110,7 @@ module TowerDisplay =
         sb.AppendLine() |> ignore
 
     let headerText =
-      sprintf "[bold %s]%s[/] [grey]| Pos: (%d, %d)[/]"
+      sprintf "[bold %s]󰒋 %s[/] [grey]| 󰍹 Pos: (%d, %d)[/]"
         theme.ColorHex
         theme.Name
         state.PlayerPosition.X
@@ -120,6 +120,7 @@ module TowerDisplay =
       .Header(headerText)
       .Border(BoxBorder.Heavy)
       .BorderStyle(Style(foreground = Nullable (themeColor theme)))
+      .Expand()
 
   /// Renders the side HUD panel detailing player vitals, ascension status, and inventory
   let renderHud (state: TowerRunState) : Panel =
@@ -129,10 +130,10 @@ module TowerDisplay =
     let p = state.Player
 
     // 1. Vitals
-    grid.AddRow(Markup(sprintf "[bold %s]─── TACTICAL VITALS ───[/]" Theme.Yellow)) |> ignore
-    grid.AddRow(Markup(Display.renderBar "Health" p.Health.Current p.Health.Maximum Theme.Red)) |> ignore
-    grid.AddRow(Markup(Display.renderBar "Morale" p.Morale.Current p.Morale.Maximum Theme.Cyan)) |> ignore
-    let armorText = sprintf "%-18s [%s]%d / %d[/] [%s](%d%% soak)[/]" "Armor Integrity" Theme.Comment p.Armor.Current p.Armor.Max Theme.Yellow (int (p.Armor.AbsorptionRatio * 100.0))
+    grid.AddRow(Markup(sprintf "[bold %s]─── 󰓥 TACTICAL VITALS ───[/]" Theme.Yellow)) |> ignore
+    grid.AddRow(Markup(Display.renderBar "󰋑 Health" p.Health.Current p.Health.Maximum Theme.Red)) |> ignore
+    grid.AddRow(Markup(Display.renderBar "󰧑 Morale" p.Morale.Current p.Morale.Maximum Theme.Cyan)) |> ignore
+    let armorText = sprintf "%-22s [%s]%d / %d[/] [%s](%d%% soak)[/]" " Armor Integrity" Theme.Comment p.Armor.Current p.Armor.Max Theme.Yellow (int (p.Armor.AbsorptionRatio * 100.0))
     grid.AddRow(Markup(armorText)) |> ignore
 
     // Stance & Weapon
@@ -141,14 +142,14 @@ module TowerDisplay =
       | CombatStance.PowerStance -> Theme.Red
       | CombatStance.AgilityStance -> Theme.Green
       | CombatStance.DisciplineStance -> Theme.Purple
-    grid.AddRow(Markup(sprintf "%-18s [bold %s]%A[/]" "Combat Stance" stanceColor p.Stance)) |> ignore
+    grid.AddRow(Markup(sprintf "%-22s [bold %s]%A[/]" "󰓥 Combat Stance" stanceColor p.Stance)) |> ignore
 
     // Emotional Meters
-    grid.AddRow(Markup(Display.renderMeter "Recklessness" p.Meters.Recklessness Theme.Red)) |> ignore
-    grid.AddRow(Markup(Display.renderMeter "Overwhelm" p.Meters.Overwhelm Theme.Yellow)) |> ignore
-    grid.AddRow(Markup(Display.renderMeter "Exhaustion" p.Meters.Exhaustion Theme.Purple)) |> ignore
+    grid.AddRow(Markup(Display.renderMeter "󰈸 Recklessness" p.Meters.Recklessness Theme.Red)) |> ignore
+    grid.AddRow(Markup(Display.renderMeter "󰓎 Overwhelm" p.Meters.Overwhelm Theme.Yellow)) |> ignore
+    grid.AddRow(Markup(Display.renderMeter "󰒓 Exhaustion" p.Meters.Exhaustion Theme.Purple)) |> ignore
 
-    grid.AddRow(Markup(sprintf "[bold %s]─── ASCENSION STATUS ───[/]" Theme.Cyan)) |> ignore
+    grid.AddRow(Markup(sprintf "[bold %s]─── 󰒋 ASCENSION STATUS ───[/]" Theme.Cyan)) |> ignore
     let doorState =
       match Map.tryFind state.CurrentFloor.StairwayLocation state.CurrentFloor.Tiles with
       | Some (StairwayPortal ds) -> ds
@@ -156,13 +157,13 @@ module TowerDisplay =
 
     match doorState with
     | DoorState.Open ->
-      grid.AddRow(Markup(sprintf "Portal: [bold %s]UNLOCKED (Stairway to Floor %d Ready)[/]" Theme.Green (state.CurrentFloor.FloorNumber + 1))) |> ignore
+      grid.AddRow(Markup(sprintf "󰁝 Portal: [bold %s]UNLOCKED (Floor %d Stairs Ready)[/]" Theme.Green (state.CurrentFloor.FloorNumber + 1))) |> ignore
     | DoorState.LockedByKey(_, keyName, hint) ->
-      grid.AddRow(Markup(sprintf "Portal: [bold %s]SEALED (Requires: %s)[/]" Theme.Orange keyName)) |> ignore
-      grid.AddRow(Markup(sprintf "        [italic %s]%s[/]" Theme.Comment hint)) |> ignore
+      grid.AddRow(Markup(sprintf "󰌆 Portal: [bold %s]SEALED (Requires: %s)[/]" Theme.Orange keyName)) |> ignore
+      grid.AddRow(Markup(sprintf "          [italic %s]%s[/]" Theme.Comment hint)) |> ignore
     | DoorState.LockedByQuest(_, questTitle, req) ->
-      grid.AddRow(Markup(sprintf "Portal: [bold %s]BARRED (Trial: %s)[/]" Theme.Purple questTitle)) |> ignore
-      grid.AddRow(Markup(sprintf "        [italic %s]%s[/]" Theme.Comment req)) |> ignore
+      grid.AddRow(Markup(sprintf "󱁕 Portal: [bold %s]BARRED (Trial: %s)[/]" Theme.Purple questTitle)) |> ignore
+      grid.AddRow(Markup(sprintf "          [italic %s]%s[/]" Theme.Comment req)) |> ignore
 
     // Keys & Relics
     let keysDisplay =
@@ -170,7 +171,7 @@ module TowerDisplay =
         sprintf "[%s]None[/]" Theme.Comment
       else
         state.CollectedKeys
-        |> Seq.map (sprintf "[bold %s]%s[/]" Theme.Yellow)
+        |> Seq.map (sprintf "[bold %s]󰌆 %s[/]" Theme.Yellow)
         |> String.concat ", "
     grid.AddRow(Markup(sprintf "Vault Keys: %s" keysDisplay)) |> ignore
 
@@ -179,13 +180,13 @@ module TowerDisplay =
         sprintf "[%s]None[/]" Theme.Comment
       else
         state.InventoryItems
-        |> List.map (fun it -> sprintf "[bold %s]%s[/]" Theme.Pink it.Name)
+        |> List.map (fun it -> sprintf "[bold %s]󰆧 %s[/]" Theme.Pink it.Name)
         |> String.concat ", "
     grid.AddRow(Markup(sprintf "Relics: %s" relicsDisplay)) |> ignore
 
     // Active Quests
     if not state.CurrentFloor.ActiveQuests.IsEmpty then
-      grid.AddRow(Markup(sprintf "[bold %s]─── ACTIVE TRIALS ───[/]" Theme.Purple)) |> ignore
+      grid.AddRow(Markup(sprintf "[bold %s]─── 󱁕 ACTIVE TRIALS ───[/]" Theme.Purple)) |> ignore
       for q in state.CurrentFloor.ActiveQuests do
         let status =
           if q.IsCompleted then sprintf "[bold %s][COMPLETED][/]" Theme.Green
@@ -193,15 +194,16 @@ module TowerDisplay =
         grid.AddRow(Markup(sprintf "• %s: %s" q.Title status)) |> ignore
 
     // Legend
-    grid.AddRow(Markup(sprintf "[bold %s]─── ARCHITECTURAL LEGEND ───[/]" Theme.Comment)) |> ignore
+    grid.AddRow(Markup(sprintf "[bold %s]─── 󰋜 ARCHITECTURAL LEGEND ───[/]" Theme.Comment)) |> ignore
     grid.AddRow(Markup(sprintf "[bold %s]@[/] You  [bold %s]![/] Enemy  [bold %s]?[/] NPC  [bold %s]⌹[/] Chest  [bold %s]†[/] Shrine  [bold %s]▲[/] Stairs"
       Theme.Yellow Theme.Red Theme.Cyan Theme.Yellow Theme.Green Theme.Green)) |> ignore
-    grid.AddRow(Markup(sprintf "[%s]Move: W/A/S/D or Arrows | Rest: Space | Help: H | Quit: Q[/]" Theme.Comment)) |> ignore
+    grid.AddRow(Markup(sprintf "[%s]󰌌 Keys: H/J/K/L/Y/U/B/N or Arrows | Space: Wait | ?: Help | Q: Quit[/]" Theme.Comment)) |> ignore
 
     Panel(grid)
-      .Header(sprintf "[bold %s]CHAMBER OBSERVATIONS[/]" Theme.Yellow)
+      .Header(sprintf "[bold %s]󰍹 CHAMBER OBSERVATIONS[/]" Theme.Yellow)
       .Border(BoxBorder.Rounded)
       .BorderStyle(Theme.StyleCurrentLine)
+      .Expand()
 
   /// Renders recent messages in a chronicle panel
   let renderMessageLog (state: TowerRunState) (maxLines: int) : Panel =
@@ -213,13 +215,14 @@ module TowerDisplay =
 
     let logText =
       recent
-      |> List.map (sprintf "[%s]›[/] [bold %s]%s[/]" Theme.Pink Theme.Foreground)
+      |> List.map (sprintf "[%s]󰁔[/] [bold %s]%s[/]" Theme.Pink Theme.Foreground)
       |> String.concat "\n"
 
     Panel(Markup(logText))
-      .Header(sprintf "[bold %s]Chronicle Log[/]" Theme.Foreground)
+      .Header(sprintf "[bold %s]󰈙 Chronicle Log[/]" Theme.Foreground)
       .Border(BoxBorder.Square)
       .BorderStyle(Theme.StyleComment)
+      .Expand()
 
   /// Displays an interactive modal dialog when speaking to an NPC
   let showNpcDialog (npc: TowerNpc) =
@@ -256,9 +259,9 @@ module TowerDisplay =
     let grid = Grid()
     grid.AddColumn(GridColumn()) |> ignore
 
-    grid.AddRow(Markup(sprintf "[bold %s]THE INFINITE ROGUELIKE TOWER: EXPEDITION MANUAL[/]" Theme.Yellow)) |> ignore
+    grid.AddRow(Markup(sprintf "[bold %s]󰒋 THE INFINITE ROGUELIKE TOWER: EXPEDITION MANUAL[/]" Theme.Yellow)) |> ignore
     grid.AddRow(Rule().RuleStyle(Theme.StylePurple)) |> ignore
-    grid.AddRow(Markup(sprintf "[bold %s]Movement & Exploration:[/]" Theme.Cyan)) |> ignore
+    grid.AddRow(Markup(sprintf "[bold %s]󰌌 Movement & Exploration:[/]" Theme.Cyan)) |> ignore
     grid.AddRow(Markup("  [bold white]K / W / UpArrow / Keypad 8[/]    : Move North")) |> ignore
     grid.AddRow(Markup("  [bold white]J / S / DownArrow / Keypad 2[/]  : Move South")) |> ignore
     grid.AddRow(Markup("  [bold white]H / A / LeftArrow / Keypad 4[/]  : Move West")) |> ignore
@@ -267,7 +270,7 @@ module TowerDisplay =
     grid.AddRow(Markup("  [bold white]Spacebar / Period (.)[/]         : Stand ground / Wait a turn")) |> ignore
     grid.AddRow(Markup("  [bold white]? / F1[/]                        : Open this manual")) |> ignore
     grid.AddRow(Markup("  [bold white]Q / Escape[/]                     : Retreat to Main Menu")) |> ignore
-    grid.AddRow(Markup(sprintf "\n[bold %s]Architecture & Encounters:[/]" Theme.Green)) |> ignore
+    grid.AddRow(Markup(sprintf "\n[bold %s]󰞁 Architecture & Encounters:[/]" Theme.Green)) |> ignore
     grid.AddRow(Markup("  • [bold red]![/] Guardians   : Step into their space to initiate tactical combat.")) |> ignore
     grid.AddRow(Markup("  • [bold cyan]?[/] Inhabitants : Walk into them to commune, learn lore, or receive trials.")) |> ignore
     grid.AddRow(Markup("  • [bold gold1]⌹[/] Vault Chest : Walk into chests to recover keys and powerful relics.")) |> ignore
@@ -281,6 +284,7 @@ module TowerDisplay =
       Panel(grid)
         .Border(BoxBorder.Double)
         .BorderStyle(Theme.StylePurple)
+        .Expand()
 
     AnsiConsole.Clear()
     AnsiConsole.Write(panel)
@@ -301,9 +305,14 @@ module TowerDisplay =
     while sessionActive do
       AnsiConsole.Clear()
 
+      let termW = Math.Max(80, AnsiConsole.Profile.Width)
+      let termH =
+        if Console.IsOutputRedirected || Console.WindowHeight <= 0 then 30
+        else Console.WindowHeight
+
       // Header rule
       let floorRule =
-        Rule(sprintf "[bold %s]FORNACH: THE INFINITE TOWER ── FLOOR %d: %s[/]"
+        Rule(sprintf "[bold %s]󰒋 FORNACH: THE INFINITE TOWER ── FLOOR %d: %s[/]"
           state.CurrentFloor.Theme.ColorHex
           state.CurrentFloor.FloorNumber
           state.CurrentFloor.Theme.Name)
@@ -312,15 +321,26 @@ module TowerDisplay =
       AnsiConsole.Write(floorRule)
       AnsiConsole.MarkupLine(sprintf "[italic %s]%s[/]\n" Theme.Comment state.CurrentFloor.Theme.Description)
 
-      // Layout: Left (Viewport 45x21), Right (HUD)
-      let viewportPanel = renderViewport state 45 21
+      // Dynamic viewport calculation to fill the terminal window
+      let hudW = 58
+      let availableW = termW - hudW - 4
+      let viewW = Math.Clamp(availableW, 45, state.CurrentFloor.Width)
+
+      // Vertical space: header (~4 rows) + log (4-8 rows) + borders/margins (~6 rows)
+      let logLines = if termH >= 45 then 8 elif termH >= 35 then 6 else 4
+      let availableH = termH - 4 - logLines - 6
+      let viewH = Math.Clamp(availableH, 21, state.CurrentFloor.Height)
+
+      // Layout: Left (Viewport), Right (HUD)
+      let viewportPanel = renderViewport state viewW viewH
       let hudPanel = renderHud state
-      let logPanel = renderMessageLog state 4
+      let logPanel = renderMessageLog state logLines
 
       let grid = Grid()
-      grid.AddColumn(GridColumn().NoWrap()) |> ignore
+      grid.AddColumn(GridColumn()) |> ignore
       grid.AddColumn(GridColumn().NoWrap()) |> ignore
       grid.AddRow(viewportPanel, hudPanel) |> ignore
+      grid.Expand <- true
 
       AnsiConsole.Write(grid)
       AnsiConsole.Write(logPanel)
@@ -352,9 +372,9 @@ module TowerDisplay =
             let choice =
               Display.promptWithVim(
                 SelectionPrompt<string>()
-                  .Title(sprintf "[bold red]A formidable foe blocks your path: %s![/]" enemy.Name)
+                  .Title(sprintf "[bold red]󰈸 A formidable foe blocks your path: %s![/]" enemy.Name)
                   .AddChoices([
-                    "⚔️  Engage in Tactical Dueling Combat"
+                    "󰓥  Engage in Tactical Dueling Combat"
                     "⚡  Quick Resolve (Overcome with Standard Prowess)"
                     "🏃  Step Back / Disengage"
                   ])

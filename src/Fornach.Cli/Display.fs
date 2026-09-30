@@ -75,7 +75,7 @@ module Display =
     let pct = Math.Clamp(int (Math.Round((float safeCurr / float safeMax) * 20.0)), 0, 20)
     let filled = String('█', pct)
     let empty = String('░', 20 - pct)
-    sprintf "%-18s [%s]%s[/][%s]%s[/] [bold %s]%5d[/] [%s]/[/] [%s]%-5d[/]"
+    sprintf "%-22s [%s]%s[/][%s]%s[/] [bold %s]%5d[/] [%s]/[/] [%s]%-5d[/]"
       label colorHex filled Theme.CurrentLine empty Theme.Foreground safeCurr Theme.Comment Theme.Comment safeMax
 
   let renderMeter (label: string) (m: Meter) (colorHex: string) =
@@ -86,7 +86,7 @@ module Display =
       if m.Value >= 75 then Theme.Red
       elif m.Value >= 40 then Theme.Yellow
       else colorHex
-    sprintf "%-18s [%s]%s[/][%s]%s[/] [bold %s]%3d%%[/]"
+    sprintf "%-22s [%s]%s[/][%s]%s[/] [bold %s]%3d%%[/]"
       label warnColor filled Theme.CurrentLine empty Theme.Foreground m.Value
 
   let createCombatantPanel (c: Combatant) (borderColor: Color) (headerColor: string) =
@@ -104,7 +104,7 @@ module Display =
       | CombatStance.PowerStance -> "Power Stance (Force)"
       | CombatStance.AgilityStance -> "Agility Stance (Finesse)"
       | CombatStance.DisciplineStance -> "Discipline Stance (Prowess)"
-    grid.AddRow(Markup(sprintf "%-18s [bold %s]%s[/]" "Active Stance" stanceColor stanceName)) |> ignore
+    grid.AddRow(Markup(sprintf "%-22s [bold %s]%s[/]" "󰓥 Active Stance" stanceColor stanceName)) |> ignore
 
     let weaponCondColor, weaponCondDesc =
       match c.WeaponCondition with
@@ -112,11 +112,11 @@ module Display =
       | WeaponCondition.Notched -> Theme.Yellow, "Notched (-10% dmg)"
       | WeaponCondition.Damaged -> Theme.Orange, "Damaged (-25% dmg)"
       | WeaponCondition.Broken -> Theme.Red, "Broken (-50% dmg)"
-    grid.AddRow(Markup(sprintf "%-18s [bold %s]%s[/]" "Weapon Integrity" weaponCondColor weaponCondDesc)) |> ignore
+    grid.AddRow(Markup(sprintf "%-22s [bold %s]%s[/]" "󰚌 Weapon Integrity" weaponCondColor weaponCondDesc)) |> ignore
 
     // Health & Morale pools
-    grid.AddRow(Markup(renderBar "HP (Physical)" c.Health.Current c.Health.Maximum Theme.Red)) |> ignore
-    grid.AddRow(Markup(renderBar "Morale (Mental)" c.Morale.Current c.Morale.Maximum Theme.Cyan)) |> ignore
+    grid.AddRow(Markup(renderBar "󰋑 HP (Physical)" c.Health.Current c.Health.Maximum Theme.Red)) |> ignore
+    grid.AddRow(Markup(renderBar "󰧑 Morale (Mental)" c.Morale.Current c.Morale.Maximum Theme.Cyan)) |> ignore
 
     // Armor durability & Soak
     let armorPct = int (c.Armor.AbsorptionRatio * 100.0)
@@ -125,38 +125,38 @@ module Display =
         sprintf "[bold %s]SHREDDED (0%% soak)[/]" Theme.Red
       else
         sprintf "[%s]%d / %d[/] [%s](%d%% soak)[/]" Theme.Comment c.Armor.Current c.Armor.Max Theme.Yellow armorPct
-    grid.AddRow(Markup(sprintf "%-18s %s" "Armor Integrity" armorText)) |> ignore
+    grid.AddRow(Markup(sprintf "%-22s %s" " Armor Integrity" armorText)) |> ignore
 
     if c.BleedStacks > 0 || c.LimbDebuff > 0 || c.ArcaneWard > 0 || c.MirrorClones > 0 then
       let bleedText = if c.BleedStacks > 0 then sprintf "[bold %s]%d Bleed Stacks[/] " Theme.Red c.BleedStacks else ""
       let limbText = if c.LimbDebuff > 0 then sprintf "[%s]-%d Reflex (Crippled)[/] " Theme.Orange c.LimbDebuff else ""
       let wardText = if c.ArcaneWard > 0 then sprintf "[bold %s]🛡️ %d Arcane Ward[/] " Theme.Cyan c.ArcaneWard else ""
       let cloneText = if c.MirrorClones > 0 then sprintf "[bold %s]🪞 %d Mirror Clones[/] " Theme.Purple c.MirrorClones else ""
-      grid.AddRow(Markup(sprintf "%-18s %s%s%s%s" "Special State" wardText cloneText bleedText limbText)) |> ignore
+      grid.AddRow(Markup(sprintf "%-22s %s%s%s%s" "󱁕 Special State" wardText cloneText bleedText limbText)) |> ignore
 
     grid.AddRow(Rule().RuleStyle(Theme.StyleCurrentLine)) |> ignore
 
     // Shared Entropy & Momentum
-    grid.AddRow(Markup(renderMeter "Recklessness" c.Meters.Recklessness Theme.Orange)) |> ignore
+    grid.AddRow(Markup(renderMeter "󰈸 Recklessness" c.Meters.Recklessness Theme.Orange)) |> ignore
     let comboText = sprintf "[%s]%d study stacks[/] | [%s]%d combo[/]" Theme.Purple c.StudyStacks Theme.Pink c.ComboTracker.ConsecutiveHits
-    grid.AddRow(Markup(sprintf "%-18s %s" "Tactical Stance" comboText)) |> ignore
+    grid.AddRow(Markup(sprintf "%-22s %s" "󰓥 Tactical Combo" comboText)) |> ignore
     grid.AddRow(Rule().RuleStyle(Theme.StyleCurrentLine)) |> ignore
 
     // Physical Status Meters
-    grid.AddRow(Markup(renderMeter "Exhaustion" c.Meters.Exhaustion Theme.Yellow)) |> ignore
-    grid.AddRow(Markup(renderMeter "Overwhelm" c.Meters.Overwhelm Theme.Pink)) |> ignore
-    grid.AddRow(Markup(renderMeter "Frustration" c.Meters.Frustration Theme.Orange)) |> ignore
+    grid.AddRow(Markup(renderMeter "󰒓 Exhaustion" c.Meters.Exhaustion Theme.Yellow)) |> ignore
+    grid.AddRow(Markup(renderMeter "󰓎 Overwhelm" c.Meters.Overwhelm Theme.Pink)) |> ignore
+    grid.AddRow(Markup(renderMeter "󰞷 Frustration" c.Meters.Frustration Theme.Orange)) |> ignore
     grid.AddRow(Rule().RuleStyle(Theme.StyleCurrentLine)) |> ignore
 
     // Mental / Social Status Meters
-    grid.AddRow(Markup(renderMeter "Cognitive Fatigue" c.Meters.CognitiveFatigue Theme.Purple)) |> ignore
-    grid.AddRow(Markup(renderMeter "Confusion" c.Meters.Confusion Theme.Comment)) |> ignore
-    grid.AddRow(Markup(renderMeter "Provoke" c.Meters.Provoke Theme.Red)) |> ignore
+    grid.AddRow(Markup(renderMeter "󰧑 Cognitive Fatigue" c.Meters.CognitiveFatigue Theme.Purple)) |> ignore
+    grid.AddRow(Markup(renderMeter "󰘚 Confusion" c.Meters.Confusion Theme.Comment)) |> ignore
+    grid.AddRow(Markup(renderMeter "󰈸 Provoke" c.Meters.Provoke Theme.Red)) |> ignore
 
     // Collapse Indicator
     match c.Collapse with
     | CollapseState.Collapsed reason ->
-      grid.AddRow(Rule(sprintf "[bold %s on %s] COLLAPSE: %A [/]" Theme.Foreground Theme.Red reason).RuleStyle(Theme.StyleRed)) |> ignore
+      grid.AddRow(Rule(sprintf "[bold %s on %s] 󰚌 COLLAPSE: %A [/]" Theme.Foreground Theme.Red reason).RuleStyle(Theme.StyleRed)) |> ignore
       grid.AddRow(Markup(sprintf "[bold blink %s]*** TARGET IS EXECUTE ELIGIBLE (75%% Defense Drop) ***[/]" Theme.Red)) |> ignore
     | CollapseState.Stable -> ()
 
@@ -164,18 +164,23 @@ module Display =
       .Header(sprintf "[bold %s] %s [/]" headerColor c.Name)
       .Border(BoxBorder.Rounded)
       .BorderColor(borderColor)
+      .Expand()
 
   let renderHUD (player: Combatant) (enemy: Combatant) (roundNumber: int) =
     let pnlPlayer = createCombatantPanel player Theme.ColorGreen Theme.Green
     let pnlEnemy = createCombatantPanel enemy Theme.ColorPink Theme.Pink
-    let columns = Columns([| pnlPlayer :> IRenderable; pnlEnemy :> IRenderable |])
+    let grid = Grid()
+    grid.AddColumn(GridColumn()) |> ignore
+    grid.AddColumn(GridColumn()) |> ignore
+    grid.AddRow(pnlPlayer, pnlEnemy) |> ignore
+    grid.Expand <- true
     AnsiConsole.Clear()
     AnsiConsole.Write(
-      Rule(sprintf "[bold %s]Fornach Duel Arena: Round %d[/]" Theme.Yellow roundNumber)
+      Rule(sprintf "[bold %s]󰓥 Fornach Duel Arena ── Round %d[/]" Theme.Yellow roundNumber)
         .LeftJustified()
         .RuleStyle(Theme.StylePurple)
     )
-    AnsiConsole.Write(columns :> IRenderable)
+    AnsiConsole.Write(grid)
     AnsiConsole.WriteLine()
 
   let renderRollBreakdown (actionName: string) (actorName: string) (contestOpt: ContestResult option) =
@@ -186,7 +191,7 @@ module Display =
       let def = contest.Defender
       let tierMult = ActionResolver.computeTierMultiplier contest.NetHits
 
-      let table = Table().Border(TableBorder.Rounded).BorderColor(Theme.ColorCurrentLine)
+      let table = Table().Border(TableBorder.Rounded).BorderColor(Theme.ColorCurrentLine).Expand()
       table.AddColumn(TableColumn(sprintf "[bold %s]Participant[/]" Theme.Foreground)) |> ignore
       table.AddColumn(TableColumn(sprintf "[bold %s]Stat Value[/]" Theme.Foreground)) |> ignore
       table.AddColumn(TableColumn(sprintf "[bold %s]Dice Rolled[/]" Theme.Foreground)) |> ignore
@@ -241,9 +246,10 @@ module Display =
 
       let summaryPanel =
         Panel(panelContent)
-          .Header(sprintf "[bold %s] Tactical Contest Inspection [/]" Theme.Purple)
+          .Header(sprintf "[bold %s] 󰓥 Tactical Contest Inspection [/]" Theme.Purple)
           .Border(BoxBorder.Rounded)
           .BorderColor(Theme.ColorCurrentLine)
+          .Expand()
 
       AnsiConsole.Write(summaryPanel :> IRenderable)
       AnsiConsole.WriteLine()
@@ -254,20 +260,20 @@ module Display =
       let color = if d.Plane = Physical then Theme.Red else Theme.Cyan
       let critText = if d.IsCritical then sprintf " [bold %s]** CRITICAL STRIKE **[/]" Theme.Yellow else ""
       let armorText = if d.IsArmorCompromised then sprintf " [italic %s](Armor Compromised)[/]" Theme.Orange else ""
-      AnsiConsole.MarkupLine(sprintf "  [bold %s]>[/] Dealt [bold %s]%d %A damage[/]%s%s" color color d.Amount d.Plane critText armorText)
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]󰁔[/] Dealt [bold %s]%d %A damage[/]%s%s" color color d.Amount d.Plane critText armorText)
 
     | CombatEvent.DisparityTriggered (_, _, outcome) ->
       match outcome with
       | CrushingBlow bonus ->
-        AnsiConsole.MarkupLine(sprintf "  [bold %s]>> DISPARITY:[/] Crushing Blow! Target suffered [bold %s]+%d Exhaustion[/] and is staggered!" Theme.Yellow Theme.Yellow bonus)
+        AnsiConsole.MarkupLine(sprintf "  [bold %s]󰈸 DISPARITY:[/] Crushing Blow! Target suffered [bold %s]+%d Exhaustion[/] and is staggered!" Theme.Yellow Theme.Yellow bonus)
       | ArterialRupture bonus ->
-        AnsiConsole.MarkupLine(sprintf "  [bold %s]>> DISPARITY:[/] Arterial Rupture! Target suffered [bold %s]+%d Overwhelm / Hemorrhage[/]!" Theme.Pink Theme.Pink bonus)
+        AnsiConsole.MarkupLine(sprintf "  [bold %s]󰈸 DISPARITY:[/] Arterial Rupture! Target suffered [bold %s]+%d Overwhelm / Hemorrhage[/]!" Theme.Pink Theme.Pink bonus)
       | DisarmOrLimbDisable ->
-        AnsiConsole.MarkupLine(sprintf "  [bold %s]>> DISPARITY:[/] Disarm & Disable! Target's weapon arm posture compromised!" Theme.Orange)
+        AnsiConsole.MarkupLine(sprintf "  [bold %s]󰈸 DISPARITY:[/] Disarm & Disable! Target's weapon arm posture compromised!" Theme.Orange)
       | CognitiveRupture bonus ->
-        AnsiConsole.MarkupLine(sprintf "  [bold %s]>> DISPARITY:[/] Cognitive Rupture! Target's psychic ward collapsed (+%d Fatigue)!" Theme.Purple bonus)
+        AnsiConsole.MarkupLine(sprintf "  [bold %s]󰈸 DISPARITY:[/] Cognitive Rupture! Target's psychic ward collapsed (+%d Fatigue)!" Theme.Purple bonus)
       | DialecticalParalysis ->
-        AnsiConsole.MarkupLine(sprintf "  [bold %s]>> DISPARITY:[/] Dialectical Paralysis! Target is locked in logical contradiction!" Theme.Purple)
+        AnsiConsole.MarkupLine(sprintf "  [bold %s]󰈸 DISPARITY:[/] Dialectical Paralysis! Target is locked in logical contradiction!" Theme.Purple)
       | StrippedCredibility bonus ->
         AnsiConsole.MarkupLine(sprintf "  [bold %s]>> DISPARITY:[/] Stripped Credibility! Target's pride shattered (+%d Provoke)!" Theme.Red bonus)
 
