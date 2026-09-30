@@ -182,3 +182,6 @@ Recommended specifically for the performance work in §4:
 - **`diagnosing-bugs`**: Its performance-regression loop is the right structure for validating the §4.4 changes against the §4.1 determinism guard.
 - **`fsharp-testing`**: For the guard and benchmark-support tests around the `StatBlock` representation change.
 - **No skill covers F#/.NET performance or concurrency.** That gap was searched for and confirmed empty, so use the measured profile in §4 rather than reaching for a skill on this axis.
+
+Recommended for content expansion:
+- **`domain-modeling` & `roguelike`**: The architecture for the Monster Bestiary, ecological traits, dynamic Tower encounters, and main story memory fragments is specified in [`docs/adr/0004-monster-bestiary-and-world-encounters.md`](file:///home/omary/Dev/fornach/docs/adr/0004-monster-bestiary-and-world-encounters.md) and tracked in [`TODO.md`](file:///home/omary/Dev/fornach/TODO.md).
