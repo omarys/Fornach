@@ -116,9 +116,33 @@ module Simulation =
       TotalWhiffs = whiffs
       TotalCrits = crits }
 
+  /// Fixed base seed: a given matchup must replay identically across runs.
+  /// A balance workbench that drifts between invocations is not a workbench.
+  let private batchBaseSeed = 20240517
+
+  /// Fans a pure per-iteration body across the thread pool.
+  ///
+  /// Each iteration draws its own `Random` from a serially-generated seed list, so
+  /// results are race-free AND scheduling-independent: iteration `i` rolls the same
+  /// numbers no matter which thread picked it up. A single shared `Random` cannot be
+  /// parallelised at all — `System.Random` is not thread-safe, and concurrent `Next`
+  /// calls corrupt its internal seed state.
+  let private runParallelBatch
+    (baseSeed: int)
+    (iterations: int)
+    (onProgress: unit -> unit)
+    (body: DiceRoller -> 'r)
+    : 'r[] =
+    let seedSource = Random(baseSeed)
+    let seeds = Array.init iterations (fun _ -> seedSource.Next())
+
+    Array.Parallel.init iterations (fun i ->
+      let rng = Random(seeds[i])
+      let result = body (fun min max -> rng.Next(min, max + 1))
+      onProgress ()
+      result)
+
   let runBatch (archetypeA: ArchetypeInfo) (archetypeB: ArchetypeInfo) (iterations: int) : SimulationSummary =
-    let rng = Random()
-    let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
     let maxRoundsPerMatch = 60
 
     let sampleA = archetypeA.Factory()
@@ -135,12 +159,16 @@ module Simulation =
         |])
         .Start(fun ctx ->
           let task = ctx.AddTask(sprintf "[bold %s]Simulating %s vs %s...[/]" Theme.Green archetypeA.Name archetypeB.Name, maxValue = float iterations)
-          let acc = ResizeArray<SingleCombatResult>(iterations)
-          for _ in 1 .. iterations do
-            let res = runSingleMatch roller archetypeA.Factory archetypeB.Factory maxRoundsPerMatch
-            acc.Add res
-            task.Increment 1.0
-          acc |> Seq.toList
+          // Spectre's ProgressTask mutation is not documented as thread-safe, so
+          // serialise the ticks. Contention is irrelevant next to a combat sim.
+          let gate = obj()
+
+          runParallelBatch
+            batchBaseSeed
+            iterations
+            (fun () -> lock gate (fun () -> task.Increment 1.0))
+            (fun roller -> runSingleMatch roller archetypeA.Factory archetypeB.Factory maxRoundsPerMatch)
+          |> Array.toList
         )
 
     let totalWinsA = results |> List.filter (fun r -> r.WinnerIsA = Some true) |> List.length
@@ -470,8 +498,6 @@ module Simulation =
       runSingleGroupMatch roller soloFactory mobFactory mobCount maxRounds)
 
   let runGroupBatch (soloArch: ArchetypeInfo) (mobArch: ArchetypeInfo) (mobCount: int) (iterations: int) : GroupSimulationSummary =
-    let rng = Random()
-    let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
     let maxRoundsPerMatch = Math.Max(60, mobCount + 20)
 
     let results =
@@ -485,12 +511,14 @@ module Simulation =
         |])
         .Start(fun ctx ->
           let task = ctx.AddTask(sprintf "[bold %s]Simulating 1 vs %d: %s vs %s swarm...[/]" Theme.Cyan mobCount soloArch.Name mobArch.Name, maxValue = float iterations)
-          let acc = ResizeArray<GroupSingleResult>(iterations)
-          for _ in 1 .. iterations do
-            let res = runSingleGroupMatch roller soloArch.Factory mobArch.Factory mobCount maxRoundsPerMatch
-            acc.Add res
-            task.Increment 1.0
-          acc |> Seq.toList
+          let gate = obj()
+
+          runParallelBatch
+            batchBaseSeed
+            iterations
+            (fun () -> lock gate (fun () -> task.Increment 1.0))
+            (fun roller -> runSingleGroupMatch roller soloArch.Factory mobArch.Factory mobCount maxRoundsPerMatch)
+          |> Array.toList
         )
 
     let soloWins = results |> List.filter (fun r -> r.SoloWon) |> List.length

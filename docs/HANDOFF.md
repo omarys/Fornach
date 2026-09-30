@@ -1,8 +1,8 @@
 # Fornach Balance, Combat Mechanics & Class Progression Handoff
 
-## Status: 176 Tests Passing (0 Warnings across 3 Projects)
+## Status: 178 Tests Passing (0 Warnings across 3 Projects)
 
-This document provides a comprehensive handoff of the recent combat balance tuning, archetype progression overhauls, tactical preparation enhancements, and swarm simulation refinements completed in the `Fornach` codebase.
+This document provides a comprehensive handoff of the recent combat balance tuning, archetype progression overhauls, tactical preparation enhancements, swarm simulation refinements, and a solution-wide performance profile (see §4) completed in the `Fornach` codebase.
 
 ---
 
@@ -84,7 +84,80 @@ Results from `rtk dotnet run --project src/Fornach.Cli -- --balance-matrix`:
 
 ---
 
-## 4. Next Session TODO List
+## 4. Performance Findings & Optimisation Opportunities
+
+**Method:** Release binaries, purpose-built `#r` harness against the built DLLs, tiered compilation disabled for micro-benchmarks, median-of-5. No profiler was available on this machine (`dotnet-counters`/`-trace`/`-gcdump` all absent).
+
+### 4.1 Already shipped — parallel Monte-Carlo batches
+
+The batch loops in [`Simulation.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/Simulation.fs) now run through `runParallelBatch` (`Array.Parallel.init` + per-iteration `Random(seeds[i])`). This is **scheduling-independent**: iteration `i` rolls identical numbers on any thread, so `--sim` and `--group` output is unchanged.
+
+| n = 200 000, 8 cores | serial | parallel | `DOTNET_gcServer=1` |
+| :--- | :---: | :---: | :---: |
+| wall time | 2.62 s | 1.77 s (1.6×) | 1.29 s (**2.6×**) |
+
+The parallel run burns **3.1× more CPU** than the simulation work requires — the gap is GC contention across allocating threads, not the progress lock. That is the direct motivation for §4.3.
+
+Regression guard: [`ParallelDeterminismTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Domain.Tests/ParallelDeterminismTests.fs) fails if a shared `Random` is reintroduced (verified to have teeth: reverting diverges 10.6% vs 19.2% on a matchup that should be ~63/37).
+
+**Constraint — do not parallelise by calling these from multiple threads:** `runBatch` / `runGroupBatch` are **not safe to call concurrently**. Spectre.Console permits only one live progress display per process (`InvalidOperationException: Trying to run one or more interactive functions concurrently`). Parallelise *inside* them; test modules that invoke them share `[<Collection("SimulationBatch")>]`.
+
+Thread-safety vs reproducibility (a `lock`-wrapped shared `Random` or `Random.Shared` is thread-safe but **not** reproducible — the multiset of rolls is stable while the per-matchup assignment drifts) was measured and rejected in favour of per-iteration seeding.
+
+### 4.2 Measured profile — setup dominates, not the combat loop
+
+A duel against Iron Recruit averages **1.00 rounds** (range 1–3), so the inner loop is fast and setup is effectively all of the work. Per duel: **20 KB allocated / 13.1 µs serial**; **20,155 B per match** end-to-end.
+
+| Component | Time | Allocated |
+| :--- | ---: | ---: |
+| `StatBlock.Create` (per combatant) | 3,652 ns | **6,553 B** |
+| `createIronRecruit` (archetype) | 3,892 ns | 6,136 B |
+| `StatBlock.Baseline` (property) | 1,481 ns | **2,648 B** |
+| `createGrandMasterBerserker` | 43 µs | 21,926 B |
+| `Combatant.create` | 170 ns | 296 B |
+| `ProgressionProfile.create` | 45 ns | 72 B |
+| `CombatantId.New` | 354 ns | 16 B |
+
+Two independent measurement lines agree that `StatBlock` is the bottleneck: **60% of duel time** (7.8 µs of 13.1 µs) and **61% of duel allocation** (12.3 KB of 20.2 KB).
+
+### 4.3 Root cause — `StatBlock` is a `Map`
+
+[`src/Fornach.Domain/Attributes.fs`](file:///home/omary/Dev/fornach/src/Fornach.Domain/Attributes.fs) stores core stats as `Map<StatId, int>`. A `Map` is an immutable balanced tree: every read is a tree walk, and `Create` seeds twelve defaults through a twelve-step `Map.add` chain that allocates tree nodes on every combatant.
+
+| Lookup route | ns/op | B/op |
+| :--- | ---: | ---: |
+| `bs.Get StatId.Might` (seeded) | 65.31 | 0 |
+| `bs.Get StatId.Composure` (unseeded → default) | 88.14 | 0 |
+| `c.Stats.Get StatId.Composure` | 65.31 | 0 |
+| `c.GetStat StatId.Might` ([`Combatant.fs`](file:///home/omary/Dev/fornach/src/Fornach.Domain/Combatant.fs), `GetStat` line 97) | 68.47 | 0 |
+| bare `Map.tryFind \|> Option.defaultValue` | 63.60 | 0 |
+| **`array.[0]` control** | **1.75** | **0** |
+
+≈**40× gap** on the base lookup, plus 6.5 KB per construction (2 M reads, median-of-5). `Attributes.fs` already documents the `Map` as an approximation, implying the representation was never meant to be load-bearing.
+
+### 4.4 Ranked recommendations
+
+| # | Change | Location | Expected win | Risk |
+| :--- | :--- | :--- | :--- | :--- |
+| 1 | `StatBlock` → array-backed (`int[]` indexed by `StatId`, explicit `Set` for unseeded stats) | [`Attributes.fs`](file:///home/omary/Dev/fornach/src/Fornach.Domain/Attributes.fs) | `Get` 65 ns → ~2 ns; construction 3.9 µs → ~1 µs; duel 20 KB → under 8 KB | **Low** — the only read seam is [`Combatant.fs`](file:///home/omary/Dev/fornach/src/Fornach.Domain/Combatant.fs) `GetStat` (line 97); `ToMap()` and `.All` have no callers outside `Attributes.fs` |
+| 2 | `StatBlock.Baseline` → cached static (it rebuilds a whole `Map` on every access today) | [`Attributes.fs`](file:///home/omary/Dev/fornach/src/Fornach.Domain/Attributes.fs) | 1,481 ns / 2,648 B → 0 | Free once #1 lands; no callers outside `Attributes.fs` |
+| 3 | Sim-local `CombatantId` counter (`Interlocked.Increment`) instead of `Guid.NewGuid()` | [`Identifiers.fs`](file:///home/omary/Dev/fornach/src/Fornach.Domain/Identifiers.fs), [`Simulation.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/Simulation.fs) | ~5% of per-duel allocation | Must stay **in the sim**, not the domain, or identity for save/load breaks |
+| 4 | Parallelise the 96-matchup balance matrix via `runParallelBatch` | [`Simulation.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/Simulation.fs) (`renderBalanceMatrix`, ~line 744) | ~4–6× on the sweep | `matrixTable.AddRow` must be restructured; observe the §4.1 constraint |
+
+Cheapest safe sequence: #1 → #2 (near-free once #1 lands) → #3 → #4. Note that none of this changes balance numbers: #1 and #2 are representation-only and the determinism guard in §4.1 protects them.
+
+### 4.5 Checked and *not* hot
+
+- **Rendering** — [`Display.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/Display.fs), [`TowerDisplay.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/TowerDisplay.fs): interactive-only, absent from the measured CPU path.
+- **`descriptorOf`** (allocates a 7-field record per call; used by `ByPlane`, `byVector`, `socialNameOf`, `displayNameFor`, `tryParse`): rendering and parsing only, never combat.
+- **`ActionResolver.fs`** (2,312 lines, 93 `GetStat` call sites): all route through the single `Combatant.GetStat` seam, so they inherit recommendation #1 with no per-site edits.
+- **Status maps on `Combatant`** (`Map<StatusId,StatusInstance>`, `Map<string,int>`): small and short-lived; not allocation leaders.
+
+**Explicitly not recommended:** replacing `System.Random` with a hand-rolled `splitmix64` struct PRNG. It is correct and reproducible, but the benchmarks contradicted each other by ~3.6× on identical code paths (80 M draws: 212 ms vs 105 ms *slower*; 100 M draws: 58 ms vs 199 ms *faster*). `Array.Parallel.init` over tiny work items is dispatch/GC-bound and cannot resolve the question. A verdict needs BenchmarkDotNet, not `Stopwatch` around a parallel fan-out.
+
+---
+
+## 5. Next Session TODO List
 
 - [ ] **1. Juggernaut & Ranger Evaluation**:
   - Benchmark and tune `Juggernaut` (Power / Discipline) and `Ranger` (Agility / Discipline) progression in [`MonteCarloSwarmTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Domain.Tests/MonteCarloSwarmTests.fs) and `--balance-matrix`.
@@ -95,7 +168,7 @@ Results from `rtk dotnet run --project src/Fornach.Cli -- --balance-matrix`:
 
 ---
 
-## 5. Suggested Skills
+## 6. Suggested Skills
 
 The next agent should consider using the following skills for future tasks:
 - **`fsharp-testing`**: For writing or extending xUnit, FsUnit, and FsCheck property-based tests in F#.
@@ -103,3 +176,9 @@ The next agent should consider using the following skills for future tasks:
 - **`tdd`**: When introducing new preparation mechanics, status meter interactions, or combat actions test-first.
 - **`roguelike`**: When integrating spatial grid combat, line of sight, and dungeon crawls with the combat engine.
 - **`unslop`**: Always active to ensure clean, direct writing and documentation.
+
+Recommended specifically for the performance work in §4:
+- **`domain-modeling`**: Changing `StatBlock`'s representation (§4.4 #1) is a domain-model decision — it may warrant an ADR alongside [`docs/adr/0001-decoupled-spatial-engine-and-dynamic-fov.md`](file:///home/omary/Dev/fornach/docs/adr/0001-decoupled-spatial-engine-and-dynamic-fov.md).
+- **`diagnosing-bugs`**: Its performance-regression loop is the right structure for validating the §4.4 changes against the §4.1 determinism guard.
+- **`fsharp-testing`**: For the guard and benchmark-support tests around the `StatBlock` representation change.
+- **No skill covers F#/.NET performance or concurrency.** That gap was searched for and confirmed empty, so use the measured profile in §4 rather than reaching for a skill on this axis.

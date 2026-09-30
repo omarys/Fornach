@@ -6,6 +6,10 @@ open Fornach.Domain
 open Fornach.Engine
 open Fornach.Cli
 
+// Spectre.Console allows only ONE live progress display per process, and throws
+// InvalidOperationException if a second one starts concurrently. runGroupBatch opens such
+// a display, so every test module that calls it must share this collection to stay serial.
+[<Collection("SimulationBatch")>]
 module MonteCarloSwarmTests =
 
   [<Fact>]
