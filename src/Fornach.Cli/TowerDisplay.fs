@@ -259,13 +259,14 @@ module TowerDisplay =
     grid.AddRow(Markup(sprintf "[bold %s]THE INFINITE ROGUELIKE TOWER: EXPEDITION MANUAL[/]" Theme.Yellow)) |> ignore
     grid.AddRow(Rule().RuleStyle(Theme.StylePurple)) |> ignore
     grid.AddRow(Markup(sprintf "[bold %s]Movement & Exploration:[/]" Theme.Cyan)) |> ignore
-    grid.AddRow(Markup("  [bold white]W / UpArrow / Keypad 8[/]    : Move North")) |> ignore
-    grid.AddRow(Markup("  [bold white]S / DownArrow / Keypad 2[/]  : Move South")) |> ignore
-    grid.AddRow(Markup("  [bold white]A / LeftArrow / Keypad 4[/]  : Move West")) |> ignore
-    grid.AddRow(Markup("  [bold white]D / RightArrow / Keypad 6[/] : Move East")) |> ignore
-    grid.AddRow(Markup("  [bold white]Spacebar / Period (.)[/]     : Stand ground / Wait a turn")) |> ignore
-    grid.AddRow(Markup("  [bold white]H[/]                          : Open this manual")) |> ignore
-    grid.AddRow(Markup("  [bold white]Q / Escape[/]                 : Retreat to Main Menu")) |> ignore
+    grid.AddRow(Markup("  [bold white]K / W / UpArrow / Keypad 8[/]    : Move North")) |> ignore
+    grid.AddRow(Markup("  [bold white]J / S / DownArrow / Keypad 2[/]  : Move South")) |> ignore
+    grid.AddRow(Markup("  [bold white]H / A / LeftArrow / Keypad 4[/]  : Move West")) |> ignore
+    grid.AddRow(Markup("  [bold white]L / D / RightArrow / Keypad 6[/] : Move East")) |> ignore
+    grid.AddRow(Markup("  [bold white]Y / U / B / N (Keypad 7/9/1/3)[/] : Diagonal Movement (NW, NE, SW, SE)")) |> ignore
+    grid.AddRow(Markup("  [bold white]Spacebar / Period (.)[/]         : Stand ground / Wait a turn")) |> ignore
+    grid.AddRow(Markup("  [bold white]? / F1[/]                        : Open this manual")) |> ignore
+    grid.AddRow(Markup("  [bold white]Q / Escape[/]                     : Retreat to Main Menu")) |> ignore
     grid.AddRow(Markup(sprintf "\n[bold %s]Architecture & Encounters:[/]" Theme.Green)) |> ignore
     grid.AddRow(Markup("  • [bold red]![/] Guardians   : Step into their space to initiate tactical combat.")) |> ignore
     grid.AddRow(Markup("  • [bold cyan]?[/] Inhabitants : Walk into them to commune, learn lore, or receive trials.")) |> ignore
@@ -329,14 +330,14 @@ module TowerDisplay =
 
       let dirOpt =
         match key.Key with
-        | ConsoleKey.UpArrow | ConsoleKey.W | ConsoleKey.NumPad8 -> Some Direction.North
-        | ConsoleKey.DownArrow | ConsoleKey.S | ConsoleKey.NumPad2 -> Some Direction.South
-        | ConsoleKey.LeftArrow | ConsoleKey.A | ConsoleKey.NumPad4 -> Some Direction.West
-        | ConsoleKey.RightArrow | ConsoleKey.D | ConsoleKey.NumPad6 -> Some Direction.East
-        | ConsoleKey.NumPad7 -> Some Direction.NorthWest
-        | ConsoleKey.NumPad9 -> Some Direction.NorthEast
-        | ConsoleKey.NumPad1 -> Some Direction.SouthWest
-        | ConsoleKey.NumPad3 -> Some Direction.SouthEast
+        | ConsoleKey.UpArrow | ConsoleKey.W | ConsoleKey.K | ConsoleKey.NumPad8 -> Some Direction.North
+        | ConsoleKey.DownArrow | ConsoleKey.S | ConsoleKey.J | ConsoleKey.NumPad2 -> Some Direction.South
+        | ConsoleKey.LeftArrow | ConsoleKey.A | ConsoleKey.H | ConsoleKey.NumPad4 -> Some Direction.West
+        | ConsoleKey.RightArrow | ConsoleKey.D | ConsoleKey.L | ConsoleKey.NumPad6 -> Some Direction.East
+        | ConsoleKey.Y | ConsoleKey.NumPad7 -> Some Direction.NorthWest
+        | ConsoleKey.U | ConsoleKey.NumPad9 -> Some Direction.NorthEast
+        | ConsoleKey.B | ConsoleKey.NumPad1 -> Some Direction.SouthWest
+        | ConsoleKey.N | ConsoleKey.NumPad3 -> Some Direction.SouthEast
         | _ -> None
 
       match dirOpt with
@@ -349,7 +350,7 @@ module TowerDisplay =
           | TowerEvent.CombatTriggered enemy ->
             AnsiConsole.WriteLine()
             let choice =
-              AnsiConsole.Prompt(
+              Display.promptWithVim(
                 SelectionPrompt<string>()
                   .Title(sprintf "[bold red]A formidable foe blocks your path: %s![/]" enemy.Name)
                   .AddChoices([
@@ -416,7 +417,7 @@ module TowerDisplay =
           let logMsg = "You steady your stance and observe the ambient flow of the chamber."
           state <- { state with MessageLog = logMsg :: state.MessageLog }
 
-        | ConsoleKey.H ->
+        | ConsoleKey.F1 ->
           showHelpManual ()
 
         | ConsoleKey.Q | ConsoleKey.Escape ->
@@ -424,5 +425,8 @@ module TowerDisplay =
             AnsiConsole.Confirm(sprintf "[bold %s]Do you wish to retreat from the Tower and return to the main menu?[/]" Theme.Yellow, false)
           if confirm then
             sessionActive <- false
+
+        | _ when key.KeyChar = '?' ->
+          showHelpManual ()
 
         | _ -> ()

@@ -37,7 +37,7 @@ module Program =
             tierColor a.Tier Theme.Foreground a.Name Theme.Pink a.Discipline Theme.Comment a.Description)
 
     prompt.AddChoices(Archetypes.allArchetypes) |> ignore
-    AnsiConsole.Prompt(prompt)
+    Display.promptWithVim prompt
 
   let private parseActionChoice (choice: string) : ActionIntent =
     if choice.Contains("EXECUTE FINISHER (Physical") then
@@ -191,7 +191,7 @@ module Program =
       // 1. Choose Player Action
       let choices = buildActionChoices player enemy
       let choice =
-        AnsiConsole.Prompt(
+        Display.promptWithVim(
           SelectionPrompt<string>()
             .Title(sprintf "[bold %s]Round %d - Select Tactical Action for %s:[/]" Theme.Yellow round player.Name)
             .PageSize(10)
@@ -257,7 +257,7 @@ module Program =
 
   let private runBalanceSimulator (archA: ArchetypeInfo) (archB: ArchetypeInfo) =
     let iterations =
-      AnsiConsole.Prompt(
+      Display.promptWithVim(
         SelectionPrompt<int>()
           .Title(sprintf "[bold %s]Select number of simulation iterations:[/]" Theme.Yellow)
           .AddChoices([ 50; 100; 250; 500; 1000 ])
@@ -271,14 +271,14 @@ module Program =
 
   let private runGroupBalanceSimulator (soloArch: ArchetypeInfo) (mobArch: ArchetypeInfo) =
     let mobCount =
-      AnsiConsole.Prompt(
+      Display.promptWithVim(
         SelectionPrompt<int>()
           .Title(sprintf "[bold %s]Select Swarm Size (Number of Opponents fighting simultaneously):[/]" Theme.Yellow)
           .AddChoices([ 2; 3; 4; 5; 6; 8; 10; 20; 50; 100 ])
       )
 
     let iterations =
-      AnsiConsole.Prompt(
+      Display.promptWithVim(
         SelectionPrompt<int>()
           .Title(sprintf "[bold %s]Select number of simulation iterations:[/]" Theme.Yellow)
           .AddChoices([ 50; 100; 250; 500; 1000 ])
@@ -443,7 +443,7 @@ module Program =
       // 1. Choose Player Action
       let choices = buildActionChoices currentCombatant currentBoss
       let choice =
-        AnsiConsole.Prompt(
+        Display.promptWithVim(
           SelectionPrompt<string>()
             .Title(sprintf "[bold %s]Round %d - Tactical Action against %s:[/]" Theme.Yellow round currentBoss.Name)
             .PageSize(10)
@@ -589,7 +589,7 @@ module Program =
           AnsiConsole.WriteLine()
 
           let combatChoice =
-            AnsiConsole.Prompt(
+            Display.promptWithVim(
               SelectionPrompt<string>()
                 .Title("[bold red]Face the Manifestation:[/]")
                 .AddChoices([
@@ -628,7 +628,7 @@ module Program =
       if runner.CurrentChoices.Length > 0 then
         let choiceTexts = runner.CurrentChoices |> List.map snd
         let selectedText =
-          AnsiConsole.Prompt(
+          Display.promptWithVim(
             SelectionPrompt<string>()
               .Title(sprintf "[bold %s]Choose your response:[/]" Theme.Yellow)
               .AddChoices(choiceTexts)
@@ -694,21 +694,33 @@ module Program =
         AnsiConsole.Clear()
         printBanner()
 
+        let termWidth = Math.Max(80, AnsiConsole.Profile.Width)
+        let contentWidth = 78
+        let margin = Math.Max(0, (termWidth - contentWidth) / 2)
+        let pad = String(' ', margin)
+
+        let formatMenuItem icon title desc color =
+          sprintf "%s%s [bold %s]%-38s[/] [italic %s]── %s[/]" pad icon color title Theme.Comment desc
+
+        let promptTitle =
+          sprintf "%s[bold %s]══════════ SELECT EXPEDITION OR BENCHMARK MODE ══════════[/]\n%s[grey]      (Navigate: [bold white]↑/↓[/] or [bold white]j/k[/]  •  Select: [bold white]Enter[/]  •  Quit: [bold white]Exit[/])[/]\n"
+            pad Theme.Yellow pad
+
         let choice =
-          AnsiConsole.Prompt(
+          Display.promptWithVim(
             SelectionPrompt<string>()
-              .Title(sprintf "[bold %s]Select Mode:[/]" Theme.Yellow)
+              .Title(promptTitle)
               .PageSize(9)
               .AddChoices([
-                sprintf "📖  [bold %s]Interactive Story Mode[/]" Theme.Cyan
-                sprintf "🗼  [bold %s]Ascend The Infinite Tower (Roguelike Dungeon Crawl)[/]" Theme.Yellow
-                sprintf "⚔️   [bold %s]Interactive Duel Arena[/]" Theme.Green
-                sprintf "📊  [bold %s]Monte-Carlo Balance Simulator (1 vs 1)[/]" Theme.Cyan
-                sprintf "👥  [bold %s]1 vs N Encirclement Swarm Simulator[/]" Theme.Pink
-                sprintf "🛠️   [bold %s]Custom Combatant Builder[/]" Theme.Orange
-                sprintf "📜  [bold %s]View Archetype Roster[/]" Theme.Purple
-                sprintf "📈  [bold %s]Swarm Tipping Point Balance Matrix (96 Matchups)[/]" Theme.Yellow
-                sprintf "🚪  [bold %s]Exit[/]" Theme.Red
+                formatMenuItem "📖 " "Interactive Story Mode" "Narrative prologue & aspect battles" Theme.Cyan
+                formatMenuItem "🗼 " "Ascend The Infinite Tower" "Roguelike procedural dungeon crawl" Theme.Yellow
+                formatMenuItem "⚔️  " "Interactive Duel Arena" "Tactical turn-based combat duel" Theme.Green
+                formatMenuItem "📊 " "Monte-Carlo Balance Simulator (1 vs 1)" "Statistical win-rate analysis" Theme.Cyan
+                formatMenuItem "👥 " "1 vs N Encirclement Swarm Simulator" "Swarm overwhelm stress test" Theme.Pink
+                formatMenuItem "🛠️  " "Custom Combatant Builder" "Interactive stat & stance forge" Theme.Orange
+                formatMenuItem "📜 " "View Archetype Roster" "Inspect 24 mastery archetypes" Theme.Purple
+                formatMenuItem "📈 " "Swarm Tipping Point Balance Matrix" "96-matchup macro balance benchmark" Theme.Yellow
+                formatMenuItem "🚪 " "Exit" "Close the Fornach Arena" Theme.Red
               ])
           )
 

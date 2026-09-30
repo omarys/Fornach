@@ -178,7 +178,7 @@ The next agent should consider using the following skills for future tasks:
 - **`unslop`**: Always active to ensure clean, direct writing and documentation.
 
 Recommended specifically for the performance work in §4:
-- **`domain-modeling`**: Changing `StatBlock`'s representation (§4.4 #1) is a domain-model decision — it may warrant an ADR alongside [`docs/adr/0001-decoupled-spatial-engine-and-dynamic-fov.md`](file:///home/omary/Dev/fornach/docs/adr/0001-decoupled-spatial-engine-and-dynamic-fov.md).
+- **`domain-modeling`**: The architecture and empirical benchmarks for changing `StatBlock`'s representation (§4.4 #1 & #2) and multi-threading simulation sweeps (§4.4 #4) are recorded in [`docs/adr/0002-array-backed-statblock-and-static-baseline.md`](file:///home/omary/Dev/fornach/docs/adr/0002-array-backed-statblock-and-static-baseline.md) and [`docs/adr/0003-deterministic-parallel-simulation-and-balance-matrix.md`](file:///home/omary/Dev/fornach/docs/adr/0003-deterministic-parallel-simulation-and-balance-matrix.md).
 - **`diagnosing-bugs`**: Its performance-regression loop is the right structure for validating the §4.4 changes against the §4.1 determinism guard.
 - **`fsharp-testing`**: For the guard and benchmark-support tests around the `StatBlock` representation change.
 - **No skill covers F#/.NET performance or concurrency.** That gap was searched for and confirmed empty, so use the measured profile in §4 rather than reaching for a skill on this axis.

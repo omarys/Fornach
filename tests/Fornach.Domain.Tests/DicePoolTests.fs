@@ -37,6 +37,7 @@ module DicePoolTests =
     // Roll deterministic sequence: [6; 5; 4; 3; 2; 1]
     let rolls = [| 6; 5; 4; 3; 2; 1 |]
     let mutable idx = 0
+
     let roller _ _ =
       let r = rolls.[idx % rolls.Length]
       idx <- idx + 1
@@ -53,6 +54,7 @@ module DicePoolTests =
   let ``Agility vector hits on 4, 5, and 6`` () =
     let rolls = [| 6; 5; 4; 3; 2; 1 |]
     let mutable idx = 0
+
     let roller _ _ =
       let r = rolls.[idx % rolls.Length]
       idx <- idx + 1
@@ -69,6 +71,7 @@ module DicePoolTests =
     // Initial dice: two 1s, followed by reroll results 5 and 6
     let sequence = [| 1; 1; 4; 3; 2; 2; 5; 6 |]
     let mutable idx = 0
+
     let roller _ _ =
       let r = sequence.[idx % sequence.Length]
       idx <- idx + 1
@@ -88,12 +91,12 @@ module DicePoolTests =
   let ``Contest results identify critical strikes and whiffs`` () =
     // Attacker rolls all 6s, Defender rolls all 1s
     let mutable critRollCount = 0
+
     let critRoller _ _ =
       critRollCount <- critRollCount + 1
       if critRollCount <= 10 then 6 else 1
 
-    let critResult =
-      DicePool.resolveContest critRoller Vector.Power 100 0 100 0
+    let critResult = DicePool.resolveContest critRoller Vector.Power 100 0 100 0
 
     Assert.True(critResult.IsCritical)
     Assert.False(critResult.IsWhiff)
@@ -101,12 +104,12 @@ module DicePoolTests =
 
     // Attacker rolls 1s, Defender rolls 6s
     let mutable whiffRollCount = 0
+
     let whiffRoller _ _ =
       whiffRollCount <- whiffRollCount + 1
       if whiffRollCount <= 10 then 1 else 6
 
-    let whiffResult =
-      DicePool.resolveContest whiffRoller Vector.Power 30 0 100 0
+    let whiffResult = DicePool.resolveContest whiffRoller Vector.Power 30 0 100 0
 
     Assert.True(whiffResult.IsWhiff)
     Assert.False(whiffResult.IsCritical)
@@ -144,6 +147,7 @@ module DicePoolTests =
       |> List.exists (function
         | CombatEvent.ComboReset _ -> true
         | _ -> false)
+
     Assert.True(hasComboReset)
 
   [<Fact>]
@@ -160,3 +164,18 @@ module DicePoolTests =
 
     Assert.True(result.Target.Armor.Current < initialArmor, "Target armor was not shredded")
     Assert.True(result.Target.Health.Current < defender.Health.Current, "Target health did not take damage")
+
+  [<Fact>]
+  let ``StatBlock.Baseline is cached and allocates zero bytes on read`` () =
+    let first = StatBlock.Baseline
+    let second = StatBlock.Baseline
+    Assert.True(obj.ReferenceEquals(first, second), "Baseline must be a cached static reference")
+
+    let bytesBefore = GC.GetAllocatedBytesForCurrentThread()
+
+    for _ in 1..1000 do
+      let _ = StatBlock.Baseline
+      ()
+
+    let bytesAfter = GC.GetAllocatedBytesForCurrentThread()
+    Assert.Equal(0L, bytesAfter - bytesBefore)

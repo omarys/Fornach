@@ -168,8 +168,7 @@ module Attributes =
 
       desc.CanonicalName.ToLowerInvariant() = clean
       || desc.SocialName.ToLowerInvariant() = clean
-      || (desc.SocialAliases
-          |> List.exists (fun a -> a.ToLowerInvariant() = clean)))
+      || (desc.SocialAliases |> List.exists (fun a -> a.ToLowerInvariant() = clean)))
 
   let counterparts =
     function
@@ -186,43 +185,72 @@ module Attributes =
     | Acumen -> Prowess
     | Composure -> Poise
 
+  let inline statIndex stat =
+    match stat with
+    | Force -> 0
+    | Fortitude -> 1
+    | Finesse -> 2
+    | Reflex -> 3
+    | Prowess -> 4
+    | Poise -> 5
+    | Intellect -> 6
+    | Resolve -> 7
+    | Acuity -> 8
+    | Intuition -> 9
+    | Acumen -> 10
+    | Composure -> 11
+
 [<CustomEquality; NoComparison>]
 type StatBlock =
   private
-  | StatBlock of Map<StatId, int>
+  | StatBlock of values: int[] * explicitMask: int
 
   /// Primary lookup: retrieves effective attribute value (defaults to 10 if missing)
   member this.Get(stat: StatId) =
     match this with
-    | StatBlock m -> Map.tryFind stat m |> Option.defaultValue 10
+    | StatBlock (arr, _) -> arr[Attributes.statIndex stat]
 
   /// Returns all 12 attributes and their values as a sequence
   member this.All =
     match this with
-    | StatBlock m -> Attributes.all |> Seq.map (fun s -> s, this.Get s)
+    | StatBlock (arr, _) -> Attributes.all |> Seq.mapi (fun i s -> s, arr[i])
 
   /// Exports the underlying immutable map for inspection or serialization
   member this.ToMap() =
     match this with
-    | StatBlock m -> m
+    | StatBlock (arr, _) ->
+      Attributes.all
+      |> List.mapi (fun i s -> s, arr[i])
+      |> Map.ofList
 
   /// Returns a new StatBlock with a single stat set to an absolute value (clamped to minimum 1)
   member this.With(stat: StatId, value: int) =
     match this with
-    | StatBlock m -> StatBlock(Map.add stat (System.Math.Max(1, value)) m)
+    | StatBlock (arr, mask) ->
+      let copy = Array.copy arr
+      let idx = Attributes.statIndex stat
+      copy[idx] <- System.Math.Max(1, value)
+      StatBlock(copy, mask ||| (1 <<< idx))
 
   /// Returns a new StatBlock with an offset delta applied to an existing stat (clamped to minimum 1)
   member this.Modify(stat: StatId, delta: int) = this.With(stat, this.Get stat + delta)
 
   /// Applies a batch of additive modifiers (e.g. from Equipment or Buffs)
   member this.ApplyModifiers(modifiers: (StatId * int) seq) =
-    modifiers
-    |> Seq.fold (fun (acc: StatBlock) (stat, delta) -> acc.Modify(stat, delta)) this
+    match this with
+    | StatBlock (arr, mask) ->
+      let copy = Array.copy arr
+      let mutable newMask = mask
+      for (stat, delta) in modifiers do
+        let idx = Attributes.statIndex stat
+        copy[idx] <- System.Math.Max(1, copy[idx] + delta)
+        newMask <- newMask ||| (1 <<< idx)
+      StatBlock(copy, newMask)
 
   /// Verifies if a specific stat was explicitly defined rather than defaulted
   member this.ContainsExplicit(stat: StatId) =
     match this with
-    | StatBlock m -> Map.containsKey stat m
+    | StatBlock (_, mask) -> (mask &&& (1 <<< Attributes.statIndex stat)) <> 0
 
   /// Formats all 12 stats into a clean multiline debug or CLI string
   override this.ToString() =
@@ -233,20 +261,35 @@ type StatBlock =
 
   override this.Equals(other) =
     match other with
-    | :? StatBlock as o -> this.ToMap() = o.ToMap()
+    | :? StatBlock as o ->
+      match this, o with
+      | StatBlock (a, _), StatBlock (b, _) ->
+        let mutable eq = true
+        let mutable i = 0
+        while eq && i < 12 do
+          if a[i] <> b[i] then eq <- false
+          i <- i + 1
+        eq
     | _ -> false
 
-  override this.GetHashCode() = this.ToMap().GetHashCode()
+  override this.GetHashCode() =
+    match this with
+    | StatBlock (arr, _) ->
+      let mutable hash = 17
+      for i in 0 .. 11 do
+        hash <- hash * 31 + arr[i]
+      hash
 
   /// Creates a complete StatBlock, pre-seeding all 12 stats with a default of 10
   static member Create(values: (StatId * int) seq) =
-    let initial = Attributes.all |> List.map (fun s -> s, 10) |> Map.ofList
+    let arr = Array.create 12 10
+    let mutable mask = 0
+    for (stat, v) in values do
+      let idx = Attributes.statIndex stat
+      arr[idx] <- System.Math.Max(1, v)
+      mask <- mask ||| (1 <<< idx)
 
-    let populated =
-      values
-      |> Seq.fold (fun m (stat, v) -> Map.add stat (System.Math.Max(1, v)) m) initial
+    StatBlock(arr, mask)
 
-    StatBlock populated
-
-  /// Empty / Baseline StatBlock where every stat is exactly 10
-  static member Baseline = StatBlock.Create Seq.empty
+  /// Empty / Baseline StatBlock where every stat is exactly 10 (cached static instance)
+  static member val Baseline = StatBlock.Create Seq.empty

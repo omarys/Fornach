@@ -1,12 +1,73 @@
 namespace Fornach.Cli
 
 open System
+open System.Threading
+open System.Threading.Tasks
 open Spectre.Console
 open Spectre.Console.Rendering
 open Fornach.Domain
 open Fornach.Engine
 
+type VimInput(inner: IAnsiConsoleInput) =
+  interface IAnsiConsoleInput with
+    member this.IsKeyAvailable() = inner.IsKeyAvailable()
+    member this.ReadKey(intercept: bool) =
+      let n = inner.ReadKey(intercept)
+      if n.HasValue then
+        let k = n.Value
+        let translated =
+          match k.Key with
+          | ConsoleKey.J -> ConsoleKeyInfo(char 0, ConsoleKey.DownArrow, false, false, false)
+          | ConsoleKey.K -> ConsoleKeyInfo(char 0, ConsoleKey.UpArrow, false, false, false)
+          | _ ->
+            match k.KeyChar with
+            | 'j' | 'J' -> ConsoleKeyInfo(char 0, ConsoleKey.DownArrow, false, false, false)
+            | 'k' | 'K' -> ConsoleKeyInfo(char 0, ConsoleKey.UpArrow, false, false, false)
+            | _ -> k
+        Nullable translated
+      else
+        Nullable()
+
+    member this.ReadKeyAsync(intercept: bool, ct: CancellationToken) =
+      task {
+        let! n = inner.ReadKeyAsync(intercept, ct)
+        if n.HasValue then
+          let k = n.Value
+          let translated =
+            match k.Key with
+            | ConsoleKey.J -> ConsoleKeyInfo(char 0, ConsoleKey.DownArrow, false, false, false)
+            | ConsoleKey.K -> ConsoleKeyInfo(char 0, ConsoleKey.UpArrow, false, false, false)
+            | _ ->
+              match k.KeyChar with
+              | 'j' | 'J' -> ConsoleKeyInfo(char 0, ConsoleKey.DownArrow, false, false, false)
+              | 'k' | 'K' -> ConsoleKeyInfo(char 0, ConsoleKey.UpArrow, false, false, false)
+              | _ -> k
+          return Nullable translated
+        else
+          return Nullable()
+      }
+
+type VimConsole(inner: IAnsiConsole) =
+  let vimInput = VimInput(inner.Input)
+  interface IAnsiConsole with
+    member this.Profile = inner.Profile
+    member this.Cursor = inner.Cursor
+    member this.Input = vimInput :> IAnsiConsoleInput
+    member this.ExclusivityMode = inner.ExclusivityMode
+    member this.Pipeline = inner.Pipeline
+    member this.Clear(home) = inner.Clear(home)
+    member this.Write(renderable: IRenderable) = inner.Write(renderable)
+
 module Display =
+
+  /// Executes a prompt with Vim-style navigation enabled (j/J = down, k/K = up)
+  let promptWithVim (prompt: IPrompt<'T>) : 'T =
+    let prev = AnsiConsole.Console
+    try
+      AnsiConsole.Console <- VimConsole(prev)
+      AnsiConsole.Prompt(prompt)
+    finally
+      AnsiConsole.Console <- prev
 
   let renderBar (label: string) (current: int) (maxVal: int) (colorHex: string) =
     let safeMax = Math.Max(1, maxVal)
