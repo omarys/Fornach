@@ -124,18 +124,18 @@ let ``Inquisitor Synaptic Mind-Shock disrupts attacker focus in the Nach`` () =
   Assert.True(shockEvent.Value > 0)
 
 [<Fact>]
-let ``ActionResolver computeTierMultiplier is normalized with diminishing returns and soft-capped at 12.0x`` () =
+let ``ActionResolver computeTierMultiplier is normalized with diminishing returns and soft-capped at 5.0x`` () =
   Assert.Equal(0.0, ActionResolver.computeTierMultiplier 0)
   Assert.Equal(1.50, ActionResolver.computeTierMultiplier 3)
   Assert.Equal(3.50, ActionResolver.computeTierMultiplier 8)
 
-  // NetHits = 18: previously was 9.0x, now capped/smooth at 8.5x
+  // NetHits = 18: smoothly scales with diminishing returns
   let mult18 = ActionResolver.computeTierMultiplier 18
-  Assert.True(mult18 <= 12.00)
+  Assert.True(mult18 <= 5.00)
 
-  // NetHits = 36: previously was 18.0x, now strictly soft-capped at 12.00x
+  // NetHits = 36: strictly soft-capped at 5.00x to prevent high-tier one-shot kills
   let mult36 = ActionResolver.computeTierMultiplier 36
-  Assert.Equal(12.00, mult36)
+  Assert.Equal(5.00, mult36)
 
 [<Fact>]
 let ``Grandmaster Mesmer fends off Novice Warrior with zero fatigue and zero exhaustion (Spherical Chicken)`` () =
@@ -242,3 +242,223 @@ let ``Mesmer mirror decoy shatters upon being attacked, inflicting retaliatory M
   // Attacker gained confusion and combo reset from shatter shockwave
   Assert.True(result.Actor.Meters.Confusion.Value > 0)
   Assert.Equal(0, result.Actor.ComboTracker.ConsecutiveHits)
+
+[<Fact>]
+let ``Physical character cannot execute magic attacks and action is blocked`` () =
+  let roller : DiceRoller = fun _ _ -> 4
+  let berserker = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
+  let mesmer = TierFactory.createClassTier CharacterClass.Mesmer CombatTier.GrandMaster
+
+  let attack = AttackClassification.ArcaneCataclysm false
+  let intent = ActionIntent.StandardAttack attack
+  let result = ActionResolver.resolve roller intent berserker mesmer
+
+  Assert.True(result.Contest.IsNone, "Blocked attack must not produce a contest.")
+  let resetEvent =
+    result.Events
+    |> List.tryPick (function
+      | CombatEvent.ComboReset (_, reason) when reason.Contains("cannot execute magic attacks") -> Some reason
+      | _ -> None)
+  Assert.True(resetEvent.IsSome, "Must emit ComboReset indicating magic attacks are disabled for physical characters.")
+
+[<Fact>]
+let ``Magic character cannot execute physical martial attacks and action is blocked`` () =
+  let roller : DiceRoller = fun _ _ -> 4
+  let mesmer = TierFactory.createClassTier CharacterClass.Mesmer CombatTier.GrandMaster
+  let berserker = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
+
+  let attack = AttackClassification.ForceStrike false
+  let intent = ActionIntent.StandardAttack attack
+  let result = ActionResolver.resolve roller intent mesmer berserker
+
+  Assert.True(result.Contest.IsNone, "Blocked attack must not produce a contest.")
+  let resetEvent =
+    result.Events
+    |> List.tryPick (function
+      | CombatEvent.ComboReset (_, reason) when reason.Contains("cannot execute physical martial attacks") -> Some reason
+      | _ -> None)
+  Assert.True(resetEvent.IsSome, "Must emit ComboReset indicating physical attacks are disabled for magic characters.")
+
+[<Fact>]
+let ``Physical character successfully executes physical strike and produces contest`` () =
+  let roller : DiceRoller = fun _ _ -> 4
+  let berserker = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
+  let juggernaut = TierFactory.createClassTier CharacterClass.Juggernaut CombatTier.GrandMaster
+
+  let attack = AttackClassification.ForceStrike false
+  let intent = ActionIntent.StandardAttack attack
+  let result = ActionResolver.resolve roller intent berserker juggernaut
+
+  Assert.True(result.Contest.IsSome, "Valid physical attack must produce contest.")
+
+[<Fact>]
+let ``Magic character successfully executes magic strike and produces contest`` () =
+  let roller : DiceRoller = fun _ _ -> 4
+  let mesmer = TierFactory.createClassTier CharacterClass.Mesmer CombatTier.GrandMaster
+  let berserker = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
+
+  let attack = AttackClassification.SynapticGlamour false
+  let intent = ActionIntent.StandardAttack attack
+  let result = ActionResolver.resolve roller intent mesmer berserker
+
+  Assert.True(result.Contest.IsSome, "Valid magic attack must produce contest.")
+
+[<Fact>]
+let ``Mental character can thread complex forms and emits ComplexFormThreaded event`` () =
+  let roller : DiceRoller = fun _ _ -> 4
+  let inquisitor = TierFactory.createClassTier CharacterClass.Inquisitor CombatTier.GrandMaster
+  let enemy = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
+
+  let intent = ActionIntent.ThreadComplexForm ComplexForm.AegisLattice
+  let result = ActionResolver.resolve roller intent inquisitor enemy
+
+  Assert.Equal(Some ComplexForm.AegisLattice, result.Actor.ComplexForm)
+  let threadedEvt =
+    result.Events
+    |> List.tryPick (function
+      | CombatEvent.ComplexFormThreaded (_, oldForm, newForm) -> Some (oldForm, newForm)
+      | _ -> None)
+  Assert.True(threadedEvt.IsSome, "Must emit ComplexFormThreaded event.")
+  let oldOpt, newF = threadedEvt.Value
+  Assert.Equal(Some ComplexForm.ResonanceSpike, oldOpt)
+  Assert.Equal(ComplexForm.AegisLattice, newF)
+
+[<Fact>]
+let ``Physical character cannot thread complex forms and action is blocked`` () =
+  let roller : DiceRoller = fun _ _ -> 4
+  let berserker = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
+  let enemy = TierFactory.createClassTier CharacterClass.Mesmer CombatTier.GrandMaster
+
+  let intent = ActionIntent.ThreadComplexForm ComplexForm.ResonanceSpike
+  let result = ActionResolver.resolve roller intent berserker enemy
+
+  Assert.True(result.Contest.IsNone, "Blocked form threading must not produce contest.")
+  let resetEvt =
+    result.Events
+    |> List.tryPick (function
+      | CombatEvent.ComboReset (_, reason) when reason.Contains("cannot thread mental complex forms") -> Some reason
+      | _ -> None)
+  Assert.True(resetEvt.IsSome, "Must emit ComboReset indicating complex forms are mental only.")
+
+[<Fact>]
+let ``Mental character cannot shift physical martial stances and action is blocked`` () =
+  let roller : DiceRoller = fun _ _ -> 4
+  let inquisitor = TierFactory.createClassTier CharacterClass.Inquisitor CombatTier.GrandMaster
+  let enemy = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
+
+  let intent = ActionIntent.ShiftStance CombatStance.PowerStance
+  let result = ActionResolver.resolve roller intent inquisitor enemy
+
+  Assert.True(result.Contest.IsNone, "Blocked stance shift must not produce contest.")
+  let resetEvt =
+    result.Events
+    |> List.tryPick (function
+      | CombatEvent.ComboReset (_, reason) when reason.Contains("cannot shift physical martial stances") -> Some reason
+      | _ -> None)
+  Assert.True(resetEvt.IsSome, "Must emit ComboReset indicating martial stances are physical only.")
+
+[<Fact>]
+let ``Resonance Spike boosts arcane spell damage and inflicts Fading drain and extra cognitive fatigue`` () =
+  let roller : DiceRoller = fun _ _ -> 5
+  let inquisitor = TierFactory.createClassTier CharacterClass.Inquisitor CombatTier.GrandMaster
+  let enemy = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
+
+  // Inquisitor defaults to ResonanceSpike
+  Assert.Equal(Some ComplexForm.ResonanceSpike, inquisitor.ComplexForm)
+
+  let intent = ActionIntent.StandardAttack (AttackClassification.ArcaneCataclysm false)
+  let result = ActionResolver.resolve roller intent inquisitor enemy
+
+  // Verify Fading drain suffered by caster
+  let fadingEvt =
+    result.Events
+    |> List.tryPick (function
+      | CombatEvent.FadingDrainSuffered (_, name, fatDrain, reckSpike) -> Some (name, fatDrain, reckSpike)
+      | _ -> None)
+  Assert.True(fadingEvt.IsSome, "Resonance Spike must emit FadingDrainSuffered event.")
+  let name, fatDrain, reckSpike = fadingEvt.Value
+  Assert.Equal("Resonance Spike", name)
+  Assert.Equal(10, fatDrain)
+  Assert.Equal(15, reckSpike)
+  Assert.True(result.Actor.Meters.CognitiveFatigue.Value >= 10, "Caster must suffer fatigue from Fading drain.")
+  Assert.True(result.Actor.Meters.Recklessness.Value >= 15, "Caster must suffer recklessness from Fading drain.")
+
+  // Verify extra cognitive fatigue inflicted on target
+  Assert.True(result.Target.Meters.CognitiveFatigue.Value >= 20, "Target must suffer extra cognitive fatigue from Resonance Spike.")
+
+[<Fact>]
+let ``Aegis Lattice regenerates +15 Arcane Ward on turn upkeep`` () =
+  let inquisitor =
+    TierFactory.createClassTier CharacterClass.Inquisitor CombatTier.GrandMaster
+    |> Combatant.setComplexForm (Some ComplexForm.AegisLattice)
+    |> fun c -> { c with ArcaneWard = 20 }
+
+  let updated, events = ActionResolver.applyTurnUpkeep inquisitor
+
+  Assert.Equal(35, updated.ArcaneWard)
+  let wardEvt =
+    events
+    |> List.tryPick (function
+      | CombatEvent.ArcaneWardErected (_, added, total) -> Some (added, total)
+      | _ -> None)
+  Assert.True(wardEvt.IsSome, "Must emit ArcaneWardErected event during turn upkeep.")
+  Assert.Equal((15, 35), wardEvt.Value)
+
+[<Fact>]
+let ``Phantasmal Diffusion passively replenishes mirror clones during turn upkeep`` () =
+  let mesmer =
+    TierFactory.createClassTier CharacterClass.Mesmer CombatTier.GrandMaster
+    |> fun c -> { c with MirrorClones = 0; ComplexForm = Some ComplexForm.PhantasmalDiffusion }
+
+  let updated, events = ActionResolver.applyTurnUpkeep mesmer
+
+  Assert.Equal(1, updated.MirrorClones)
+  let cloneEvt =
+    events
+    |> List.tryPick (function
+      | CombatEvent.MirrorClonesConjured (_, added, total) -> Some (added, total)
+      | _ -> None)
+  Assert.True(cloneEvt.IsSome, "Must emit MirrorClonesConjured during turn upkeep.")
+  Assert.Equal((1, 1), cloneEvt.Value)
+
+[<Fact>]
+let ``Aegis Lattice grounds Overchannel back to standard cast`` () =
+  let roller : DiceRoller = fun _ _ -> 4
+  let inquisitor =
+    TierFactory.createClassTier CharacterClass.Inquisitor CombatTier.GrandMaster
+    |> Combatant.setComplexForm (Some ComplexForm.AegisLattice)
+  let enemy = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
+
+  let intent = ActionIntent.StandardAttack (AttackClassification.ArcaneCataclysm true)
+  let result = ActionResolver.resolve roller intent inquisitor enemy
+
+  let gambitDeclared =
+    result.Events
+    |> List.exists (function
+      | CombatEvent.GambitDeclared (_, name, _) when name.Contains("Overchanneled") -> true
+      | _ -> false)
+  Assert.False(gambitDeclared, "Aegis Lattice must prevent Overchannel gambit declaration.")
+  Assert.True(result.Actor.Meters.Recklessness.Value < 35, "Must not suffer the +35 Recklessness gambit penalty.")
+
+[<Fact>]
+let ``Aegis Lattice reflects 50% damage and 15 Frustration when Arcane Ward absorbs incoming damage`` () =
+  let roller : DiceRoller = fun _ _ -> 4
+  let berserker = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
+  let inquisitor =
+    TierFactory.createClassTier CharacterClass.Inquisitor CombatTier.GrandMaster
+    |> Combatant.setComplexForm (Some ComplexForm.AegisLattice)
+    |> fun c -> { c with ArcaneWard = 100 }
+
+  let intent = ActionIntent.StandardAttack (AttackClassification.ForceStrike false)
+  let result = ActionResolver.resolve roller intent berserker inquisitor
+
+  let reflectEvt =
+    result.Events
+    |> List.tryPick (function
+      | CombatEvent.RetributionReflected (_, _, reflectDmg, frust) -> Some (reflectDmg, frust)
+      | _ -> None)
+  Assert.True(reflectEvt.IsSome, "Aegis Lattice ward absorption must reflect damage.")
+  let reflectDmg, frust = reflectEvt.Value
+  Assert.True(reflectDmg > 0, "Reflected damage must be positive.")
+  Assert.Equal(15, frust)
+  Assert.True(result.Actor.Meters.Frustration.Value >= 15, "Attacker must suffer +15 Frustration from Aegis Lattice reflection.")

@@ -29,7 +29,7 @@ repos:
 
       - id: sim-check
         name: balance simulation sanity check
-        entry: dotnet run --project src/Fornach.Cli -c Release -- --sim -a1 "Iron Vanguard" -a2 "Thought-Weaver" -n 25
+        entry: dotnet run --project src/Fornach.Cli -c Release -- --sim -a1 "Veteran Juggernaut" -a2 "Veteran Inquisitor" -n 25
         language: system
         pass_filenames: false
         stages: [pre-push]

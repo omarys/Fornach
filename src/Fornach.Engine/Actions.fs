@@ -120,6 +120,15 @@ type AttackClassification =
     | DisorientingShockwave _
     | TraumaAttack (DenialPhaseShift | CoerciveBargain | ApathyDoldrums | SereneResolution) -> Mental
 
+  /// Verifies if this attack classification is permitted for the combatant's operative plane
+  member this.IsAllowedFor (actor: Combatant) : bool =
+    match this with
+    | TraumaAttack _ -> true
+    | _ ->
+      match actor.Plane with
+      | Physical -> this.Plane = Physical
+      | Mental -> this.Plane = Mental
+
 /// Defensive recoveries used to bleed accumulated Recklessness and re-center posture
 type DefensiveReset =
   /// Physical reset: uses Poise to bleed Recklessness and generates Study Stacks
@@ -137,6 +146,8 @@ type ActionIntent =
   | ExecuteStrike of Plane
   /// Shifting active tactical stance (Power, Agility, Discipline)
   | ShiftStance of CombatStance
+  /// Threading or shifting active mental Complex Form (Resonance Spike, Phantasmal Diffusion, Aegis Lattice)
+  | ThreadComplexForm of ComplexForm
   /// Deploying a class-specific tactical preparation asset
   | DeployPreparation of preparation: PreparationType * targetId: CombatantId option
 

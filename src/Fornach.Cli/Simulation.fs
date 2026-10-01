@@ -744,7 +744,7 @@ module Simulation =
   let renderBalanceMatrix () =
     AnsiConsole.WriteLine()
     AnsiConsole.Write(
-      Rule(sprintf "[bold %s]FORNACH ARCHETYPE BALANCE BENCHMARK: 96 MATCHUP MATRIX[/]" Theme.Purple)
+      Rule(sprintf "[bold %s]FORNACH ARCHETYPE BALANCE BENCHMARK: 128 MATCHUP MATRIX[/]" Theme.Purple)
         .Centered()
         .RuleStyle(Theme.StyleCurrentLine)
     )
@@ -752,11 +752,13 @@ module Simulation =
 
     let championClasses = [
       CharacterClass.Berserker
+      CharacterClass.Juggernaut
       CharacterClass.Duelist
       CharacterClass.Warden
       CharacterClass.Inquisitor
       CharacterClass.Mesmer
       CharacterClass.Abjurer
+      CharacterClass.Ranger
     ]
 
     let tiers = [
@@ -789,7 +791,7 @@ module Simulation =
         RemainingTimeColumn() :> ProgressColumn
       |])
       .Start(fun ctx ->
-        let task = ctx.AddTask(sprintf "[bold %s]Sweeping 24 Archetype Tiers across 4 Base Classes (96 Matchups)...[/]" Theme.Cyan, maxValue = 24.0)
+        let task = ctx.AddTask(sprintf "[bold %s]Sweeping 32 Archetype Tiers across 4 Base Classes (128 Matchups)...[/]" Theme.Cyan, maxValue = 32.0)
 
         for cls in championClasses do
           for tier in tiers do
@@ -829,6 +831,8 @@ module Simulation =
               | CharacterClass.Justicar, _ -> "Discipline posture & bastion geometry resist early encirclement penalties."
               | CharacterClass.Berserker, GrandMaster -> "Berserk Tincture deadens 35% physical damage & unleashes Frenzy bonus swings; cleaves up to 5 adjacent foes."
               | CharacterClass.Berserker, _ -> "Brute kinetic Force & high HP pool; vulnerable to compounding flank penalties over prolonged duels."
+              | CharacterClass.Juggernaut, GrandMaster -> "Iron Colossus armor soak & Shockwave Slam shatter enemy formations; massive Force & Fortitude outlast physical swarms."
+              | CharacterClass.Juggernaut, _ -> "Power & Discipline juggernaut; high physical armor absorption with Shockwave Slam cleave reinforcement."
               | CharacterClass.Duelist, GrandMaster -> "Caltrop Pouch strips flank penalties for 2 turns; Agility disparity triggers lethal AoO counters."
               | CharacterClass.Duelist, _ -> "High Finesse & Reflex dodge initial attacks; overwhelmed once caltrops expire against large mobs."
               | CharacterClass.Inquisitor, GrandMaster -> "Dread Warhorn inflicts +25 Cognitive Fatigue on all attackers; devastates Mage morale & triggers mental routs."
@@ -839,6 +843,8 @@ module Simulation =
               | CharacterClass.Strategist, GrandMaster -> "Aegis of Retribution reduces damage by 35% and reflects 50% back; destabilizing ground wards trip flankers with heavy Frustration."
               | CharacterClass.Abjurer, _
               | CharacterClass.Strategist, _ -> "Runic composure wards & destabilizing ground glyphs disrupt oncoming attackers through calculated attrition."
+              | CharacterClass.Ranger, GrandMaster -> "Caltrop Pouch & fluid skirmishing punish advancing flankers; high Prowess & Finesse maintain reactive AoO zone."
+              | CharacterClass.Ranger, _ -> "Discipline & Agility skirmisher; relies on Caltrop Pouch and opportunist reactive counters against mobs."
               | _ -> "Standard archetype profile."
 
             matrixTable.AddRow(

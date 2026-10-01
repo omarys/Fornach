@@ -28,7 +28,7 @@ module Program =
     telemetryGrid.AddRow(
       Markup(sprintf "[grey]󰍹 Screen:[/] [bold %s]%dx%d[/]" Theme.Cyan termWidth termHeight),
       Markup(sprintf "[grey]󰘚 Engine:[/] [bold %s]v0.3.0 Turbo[/]" Theme.Green),
-      Markup(sprintf "[grey]󰀝 Roster:[/] [bold %s]24 Archetypes[/]" Theme.Yellow),
+      Markup(sprintf "[grey]󰀝 Roster:[/] [bold %s]%d Archetypes[/]" Theme.Yellow Archetypes.allArchetypes.Length),
       Markup(sprintf "[grey]󰌌 Input:[/] [bold %s]Vim (j/k/h/l) + Pad[/]" Theme.Pink)
     ) |> ignore
     telemetryGrid.Expand <- true
@@ -130,6 +130,12 @@ module Program =
       StandardAttack (TraumaAttack ApathyDoldrums)
     elif choice.Contains("Trauma: Serene Resolution") then
       StandardAttack (TraumaAttack SereneResolution)
+    elif choice.Contains("Thread Form: Resonance Spike") then
+      ThreadComplexForm ComplexForm.ResonanceSpike
+    elif choice.Contains("Thread Form: Phantasmal Diffusion") then
+      ThreadComplexForm ComplexForm.PhantasmalDiffusion
+    elif choice.Contains("Thread Form: Aegis Lattice") then
+      ThreadComplexForm ComplexForm.AegisLattice
     elif choice.Contains("Steady Form") then
       RecoveryAction SteadyForm
     elif choice.Contains("Center Mind") then
@@ -139,63 +145,83 @@ module Program =
 
   let private buildActionChoices (player: Combatant) (enemy: Combatant) : string list =
     [
+      // Finisher (only for the player's operative discipline)
       if enemy.IsExecuteEligible then
-        sprintf "☠️  [bold blink %s]EXECUTE FINISHER (Physical Strike)[/]" Theme.Red
-        sprintf "☠️  [bold blink %s]EXECUTE FINISHER (Mental Strike)[/]" Theme.Red
+        if player.Plane = Physical then
+          sprintf "☠️  [bold blink %s]EXECUTE FINISHER (Physical Strike)[/]" Theme.Red
+        else
+          sprintf "☠️  [bold blink %s]EXECUTE FINISHER (Mental Strike)[/]" Theme.Red
 
-      // Psychological Trauma Gambits
-      sprintf "🕊️  [bold %s]Trauma: Serene Resolution[/] (Pacifist Release: Drain Recklessness, restore Morale)" Theme.Cyan
-      sprintf "🌫️  [bold %s]Trauma: Denial Phase Shift[/] (Agility Gambit: Conjure Mirror Clone, inflict Confusion)" Theme.Green
-      sprintf "🌋 [bold %s]Trauma: Basalt Eruption[/] (Power Gambit: Massive Damage, shred 25 Armor)" Theme.Red
-      sprintf "⚖️  [bold %s]Trauma: Coercive Bargain[/] (Discipline Gambit: Steal 35 Morale to restore Health)" Theme.Purple
-      sprintf "⚓ [bold %s]Trauma: Apathy Doldrums[/] (Discipline Gambit: Inflict 40 Cognitive Fatigue)" Theme.Comment
+      // Psychological Trauma Gambits (only when relevant to boss encounter or manifestation)
+      if enemy.Name.Contains("Acceptance") || player.Name.Contains("Acceptance") then
+        sprintf "🕊️  [bold %s]Trauma: Serene Resolution[/] (Pacifist Release: Drain Recklessness, restore Morale)" Theme.Cyan
+      elif player.Name.Contains("Denial") then
+        sprintf "🌫️  [bold %s]Trauma: Denial Phase Shift[/] (Agility Gambit: Conjure Mirror Clone, inflict Confusion)" Theme.Green
+      elif player.Name.Contains("Anger") then
+        sprintf "🌋 [bold %s]Trauma: Basalt Eruption[/] (Power Gambit: Massive Damage, shred 25 Armor)" Theme.Red
+      elif player.Name.Contains("Bargaining") then
+        sprintf "⚖️  [bold %s]Trauma: Coercive Bargain[/] (Discipline Gambit: Steal 35 Morale to restore Health)" Theme.Purple
+      elif player.Name.Contains("Depression") then
+        sprintf "⚓ [bold %s]Trauma: Apathy Doldrums[/] (Discipline Gambit: Inflict 40 Cognitive Fatigue)" Theme.Comment
 
-      // Physical Martial Strikes
-      sprintf "⚔️  [%s]Force Strike: Standard Cleave[/] (Power - Cleave vs. Fortitude)" Theme.Red
-      sprintf "⚡ [bold %s]Force Strike: Wild Blow[/] (Power Gambit: +30 Recklessness, 1.5x Dmg)" Theme.Red
-      sprintf "⚔️  [%s]Finesse Cadence: Rapid Probing[/] (Agility - Probing Cadence vs. Reflex)" Theme.Green
-      sprintf "⚡ [bold %s]Finesse Cadence: Relentless Blitz[/] (Agility Gambit: +25 Recklessness)" Theme.Green
-      sprintf "⚔️  [%s]Prowess Strike: Stance Pressure[/] (Discipline - Study Stacks vs. Poise)" Theme.Purple
-      sprintf "⚡ [bold %s]Prowess Strike: Invitational Bait[/] (Discipline Gambit: +35 Recklessness)" Theme.Purple
+      if player.Plane = Physical then
+        // Physical Martial Strikes
+        sprintf "⚔️  [%s]Force Strike: Standard Cleave[/] (Power - Cleave vs. Fortitude)" Theme.Red
+        sprintf "⚡ [bold %s]Force Strike: Wild Blow[/] (Power Gambit: +30 Recklessness, 1.5x Dmg)" Theme.Red
+        sprintf "⚔️  [%s]Finesse Cadence: Rapid Probing[/] (Agility - Probing Cadence vs. Reflex)" Theme.Green
+        sprintf "⚡ [bold %s]Finesse Cadence: Relentless Blitz[/] (Agility Gambit: +25 Recklessness)" Theme.Green
+        sprintf "⚔️  [%s]Prowess Strike: Stance Pressure[/] (Discipline - Study Stacks vs. Poise)" Theme.Purple
+        sprintf "⚡ [bold %s]Prowess Strike: Invitational Bait[/] (Discipline Gambit: +35 Recklessness)" Theme.Purple
 
-      // Dedicated Discipline Gambits (cost Study Stacks with 0 Recklessness!)
-      if player.StudyStacks >= 2 then
-        sprintf "🎯 [bold %s]Calculated Flaw Strike[/] (Discipline Gambit: Spend Study Stacks for Vital Opening, 0 Recklessness)" Theme.Purple
-      if player.StudyStacks >= 3 then
-        sprintf "⚔️  [bold %s]Masterful Disarm[/] (Discipline Gambit: Spend Study Stacks to Degrade Opponent Weapon, 0 Recklessness)" Theme.Purple
+        // Dedicated Discipline Gambits (cost Study Stacks with 0 Recklessness!)
+        if player.StudyStacks >= 2 then
+          sprintf "🎯 [bold %s]Calculated Flaw Strike[/] (Discipline Gambit: Spend Study Stacks for Vital Opening, 0 Recklessness)" Theme.Purple
+        if player.StudyStacks >= 3 then
+          sprintf "⚔️  [bold %s]Masterful Disarm[/] (Discipline Gambit: Spend Study Stacks to Degrade Opponent Weapon, 0 Recklessness)" Theme.Purple
 
-      // Tactical Stance Shifts
-      if player.Stance <> CombatStance.PowerStance then
-        sprintf "↺ [bold %s]Shift Stance: Power Stance[/] (Sweeping Cleaves & Sunder Armor/Weapon)" Theme.Red
-      if player.Stance <> CombatStance.AgilityStance then
-        sprintf "↺ [bold %s]Shift Stance: Agility Stance[/] (Probing Cadence & Overwhelm Crits; -20%% AoO vs Flanks)" Theme.Green
-      if player.Stance <> CombatStance.DisciplineStance then
-        sprintf "↺ [bold %s]Shift Stance: Discipline Stance[/] (Chained Strikes, Study Stacks & Unpenalized AoO)" Theme.Purple
+        // Tactical Stance Shifts
+        if player.Stance <> CombatStance.PowerStance then
+          sprintf "↺ [bold %s]Shift Stance: Power Stance[/] (Sweeping Cleaves & Sunder Armor/Weapon)" Theme.Red
+        if player.Stance <> CombatStance.AgilityStance then
+          sprintf "↺ [bold %s]Shift Stance: Agility Stance[/] (Probing Cadence & Overwhelm Crits; -20%% AoO vs Flanks)" Theme.Green
+        if player.Stance <> CombatStance.DisciplineStance then
+          sprintf "↺ [bold %s]Shift Stance: Discipline Stance[/] (Chained Strikes, Study Stacks & Unpenalized AoO)" Theme.Purple
 
+        // Physical Defensive Reset
+        sprintf "🛡️  [%s]Steady Form[/] (Physical Reset: Drain Recklessness via Poise, build Study)" Theme.Green
 
-      // Arcane Spellcraft (Universal Casting scaled by Mental Vector Proficiency)
-      let powProf = int (Math.Round(player.GetArcaneProficiency Power * 100.0))
-      let agiProf = int (Math.Round(player.GetArcaneProficiency Agility * 100.0))
-      let disProf = int (Math.Round(player.GetArcaneProficiency Discipline * 100.0))
+      else
+        // Arcane Spellcraft (Mental Characters)
+        let powProf = int (Math.Round(player.GetArcaneProficiency Power * 100.0))
+        let agiProf = int (Math.Round(player.GetArcaneProficiency Agility * 100.0))
+        let disProf = int (Math.Round(player.GetArcaneProficiency Discipline * 100.0))
 
-      let strainTag (prof: int) =
-        if prof < 85 then sprintf " [%s](%d%% Prof - Off-School Strain)[/]" Theme.Comment prof
-        else sprintf " [bold %s](%d%% Prof - Specialization)[/]" Theme.Green prof
+        let strainTag (prof: int) =
+          if prof < 85 then sprintf " [%s](%d%% Prof - Off-School Strain)[/]" Theme.Comment prof
+          else sprintf " [bold %s](%d%% Prof - Specialization)[/]" Theme.Green prof
 
-      sprintf "✨ [%s]Arcane Cataclysm: Elemental Blast[/] (Power - Intellect vs. Resolve)%s" Theme.Pink (strainTag powProf)
-      sprintf "⚡ [bold %s]Arcane Cataclysm: Overchannel[/] (Power Gambit: +35 Recklessness, Splash)%s" Theme.Pink (strainTag powProf)
-      sprintf "✨ [%s]Synaptic Glamour: Neural Static[/] (Agility - Acuity vs. Intuition)%s" Theme.Purple (strainTag agiProf)
-      sprintf "⚡ [bold %s]Synaptic Glamour: Mind Fracture[/] (Agility Gambit: +25 Recklessness)%s" Theme.Purple (strainTag agiProf)
-      sprintf "🪞 [%s]Mirror Illusion: Phantasmal Decoys[/] (Agility - Weave Mirror Clones)%s" Theme.Purple (strainTag agiProf)
-      sprintf "⚡ [bold %s]Mirror Illusion: Decoy Swarm[/] (Agility Gambit: +25 Recklessness, Extra Clones)%s" Theme.Purple (strainTag agiProf)
-      sprintf "🛡️  [%s]Runic Ward Trap: Abjuration Glyph[/] (Discipline - Acumen vs. Composure, Ward)%s" Theme.Cyan (strainTag disProf)
-      sprintf "⚡ [bold %s]Runic Ward Trap: Anomalous Glyph[/] (Discipline Gambit: +30 Recklessness, Heavy Ward)%s" Theme.Cyan (strainTag disProf)
-      sprintf "🌀 [%s]Disorienting Shockwave: Balance Disruption[/] (Discipline - Break Posture & Tempo)%s" Theme.Orange (strainTag disProf)
-      sprintf "⚡ [bold %s]Disorienting Shockwave: Staggering Pulse[/] (Discipline Gambit: +25 Recklessness, Swarm Pulse)%s" Theme.Orange (strainTag disProf)
+        sprintf "✨ [%s]Arcane Cataclysm: Elemental Blast[/] (Power - Intellect vs. Resolve)%s" Theme.Pink (strainTag powProf)
+        if player.ComplexForm <> Some ComplexForm.AegisLattice then
+          sprintf "⚡ [bold %s]Arcane Cataclysm: Overchannel[/] (Power Gambit: +35 Recklessness, Splash)%s" Theme.Pink (strainTag powProf)
+        sprintf "✨ [%s]Synaptic Glamour: Neural Static[/] (Agility - Acuity vs. Intuition)%s" Theme.Purple (strainTag agiProf)
+        sprintf "⚡ [bold %s]Synaptic Glamour: Mind Fracture[/] (Agility Gambit: +25 Recklessness)%s" Theme.Purple (strainTag agiProf)
+        sprintf "🪞 [%s]Mirror Illusion: Phantasmal Decoys[/] (Agility - Weave Mirror Clones)%s" Theme.Purple (strainTag agiProf)
+        sprintf "⚡ [bold %s]Mirror Illusion: Decoy Swarm[/] (Agility Gambit: +25 Recklessness, Extra Clones)%s" Theme.Purple (strainTag agiProf)
+        sprintf "🛡️  [%s]Runic Ward Trap: Abjuration Glyph[/] (Discipline - Acumen vs. Composure, Ward)%s" Theme.Cyan (strainTag disProf)
+        sprintf "⚡ [bold %s]Runic Ward Trap: Anomalous Glyph[/] (Discipline Gambit: +30 Recklessness, Heavy Ward)%s" Theme.Cyan (strainTag disProf)
+        sprintf "🌀 [%s]Disorienting Shockwave: Balance Disruption[/] (Discipline - Break Posture & Tempo)%s" Theme.Orange (strainTag disProf)
+        sprintf "⚡ [bold %s]Disorienting Shockwave: Staggering Pulse[/] (Discipline Gambit: +25 Recklessness, Swarm Pulse)%s" Theme.Orange (strainTag disProf)
 
-      // Defensive Resets
-      sprintf "🛡️  [%s]Steady Form[/] (Physical Reset: Drain Recklessness via Poise, build Study)" Theme.Green
-      sprintf "🧠 [%s]Center Mind[/] (Mental Reset: Drain Recklessness, clear Confusion, restore Arcane Ward)" Theme.Cyan
+        // Tactical Complex Form Threading (Mental Stance Shifts)
+        if player.ComplexForm <> Some ComplexForm.ResonanceSpike then
+          sprintf "🧵 [bold %s]Thread Form: Resonance Spike[/] (+25%% Spell Dmg & Fatigue; Fading Drain)" Theme.Pink
+        if player.ComplexForm <> Some ComplexForm.PhantasmalDiffusion then
+          sprintf "🧵 [bold %s]Thread Form: Phantasmal Diffusion[/] (Decoy Evasion Swap, Passive Clones; -15%% Dmg)" Theme.Green
+        if player.ComplexForm <> Some ComplexForm.AegisLattice then
+          sprintf "🧵 [bold %s]Thread Form: Aegis Lattice[/] (+15 Ward/turn, Retribution Ward; Locks Overchannel)" Theme.Cyan
+
+        // Mental Defensive Reset
+        sprintf "🧠 [%s]Center Mind[/] (Mental Reset: Drain Recklessness, clear Confusion, restore Arcane Ward)" Theme.Cyan
     ]
 
   let private runInteractiveDuel (playerArch: ArchetypeInfo) (enemyArch: ArchetypeInfo) =
@@ -434,8 +460,8 @@ module Program =
     elif not isSim then
       InteractiveMenu
     else
-      let arch1 = findArg ["--solo"; "-s"; "-a1"; "--archetype1"] "Iron Vanguard"
-      let arch2 = findArg ["--mob"; "--enemy"; "-e"; "-a2"; "--archetype2"] "Thought-Weaver"
+      let arch1 = findArg ["--solo"; "-s"; "-a1"; "--archetype1"] "Veteran Juggernaut"
+      let arch2 = findArg ["--mob"; "--enemy"; "-e"; "-a2"; "--archetype2"] "Veteran Inquisitor"
       let itersStr = findArg ["-n"; "--iterations"] "100"
       let iters = match Int32.TryParse itersStr with true, v -> Math.Max(1, v) | _ -> 100
 
@@ -724,9 +750,20 @@ module Program =
         let formatMenuItem icon title desc color =
           sprintf "%s%s [bold %s]%-40s[/] [italic %s]── %s[/]" pad icon color title Theme.Comment desc
 
+        // Center the header and hint on the full terminal width; `pad` is the
+        // menu margin, which is narrower than the terminal whenever contentWidth
+        // (96) is capped below the terminal width. Count codepoints, not UTF-16
+        // units: the Nerd Font icons are non-BMP and occupy a single cell.
+        let centerPad (text: string) =
+          let visible = (Markup.Remove text).EnumerateRunes() |> Seq.length
+          String(' ', Math.Max(0, (termWidth - visible) / 2))
+
+        let promptHeader = "══════════ 󰒋 SELECT EXPEDITION OR BENCHMARK MODE ══════════"
+        let promptHint = "      (󰌌 Navigate: [bold white]↑/↓[/] or [bold white]j/k[/]  •  󰌑 Select: [bold white]Enter[/]  •  󰗼 Quit: [bold white]Exit[/])"
+
         let promptTitle =
-          sprintf "%s[bold %s]══════════ 󰒋 SELECT EXPEDITION OR BENCHMARK MODE ══════════[/]\n%s[grey]      (󰌌 Navigate: [bold white]↑/↓[/] or [bold white]j/k[/]  •  󰌑 Select: [bold white]Enter[/]  •  󰗼 Quit: [bold white]Exit[/])[/]\n"
-            pad Theme.Yellow pad
+          sprintf "%s[bold %s]%s[/]\n%s[grey]%s[/]\n"
+            (centerPad promptHeader) Theme.Yellow promptHeader (centerPad promptHint) promptHint
 
         let choice =
           Display.promptWithVim(
@@ -740,8 +777,8 @@ module Program =
                 formatMenuItem "󰓎 " "Monte-Carlo Balance Simulator (1 vs 1)" "Statistical win-rate analysis" Theme.Cyan
                 formatMenuItem " " "1 vs N Encirclement Swarm Simulator" "Swarm overwhelm stress test" Theme.Pink
                 formatMenuItem " " "Custom Combatant Builder" "Interactive stat & stance forge" Theme.Orange
-                formatMenuItem "󰂺 " "View Archetype Roster" "Inspect 24 mastery archetypes" Theme.Purple
-                formatMenuItem "󰈷 " "Swarm Tipping Point Balance Matrix" "96-matchup macro balance benchmark" Theme.Yellow
+                formatMenuItem "󰂺 " "View Archetype Roster" (sprintf "Inspect %d mastery archetypes" Archetypes.allArchetypes.Length) Theme.Purple
+                formatMenuItem "󰈷 " "Swarm Tipping Point Balance Matrix" "128-matchup macro balance benchmark" Theme.Yellow
                 formatMenuItem "󰗼 " "Exit" "Close the Fornach Arena" Theme.Red
               ])
           )

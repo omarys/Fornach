@@ -6,57 +6,10 @@ open Fornach.Domain
 module Archetypes =
 
   // =========================================================================
-  // Novice Tier (Stats 35–50, HP/Morale 400–650)
-  // =========================================================================
-
-  let createIronRecruit () =
-    let id = CombatantId.New()
-    let stats =
-      StatBlock.Create [
-        Force, 45; Fortitude, 40
-        Finesse, 25; Reflex, 25
-        Prowess, 30; Poise, 30
-        Intellect, 15; Resolve, 20
-        Acuity, 15; Intuition, 15
-        Acumen, 15; Composure, 20
-      ]
-    { Combatant.create id "Iron Recruit" 600 400 stats with
-        Armor = ArmorIntegrity.Create 25 }
-
-  let createCourtScribe () =
-    let id = CombatantId.New()
-    let stats =
-      StatBlock.Create [
-        Force, 15; Fortitude, 20
-        Finesse, 20; Reflex, 20
-        Prowess, 15; Poise, 20
-        Intellect, 25; Resolve, 30
-        Acuity, 45; Intuition, 40
-        Acumen, 30; Composure, 35
-      ]
-    { Combatant.create id "Court Scribe" 400 650 stats with
-        Armor = ArmorIntegrity.Create 10 }
-
-  let createHedgeMage () =
-    let id = CombatantId.New()
-    let stats =
-      StatBlock.Create [
-        Force, 15; Fortitude, 15
-        Finesse, 20; Reflex, 20
-        Prowess, 15; Poise, 20
-        Intellect, 45; Resolve, 30
-        Acuity, 25; Intuition, 25
-        Acumen, 40; Composure, 35
-      ]
-    { Combatant.create id "Hedge Mage" 450 600 stats with
-        Armor = ArmorIntegrity.Create 15 }
-
-  // =========================================================================
-  // =========================================================================
   // Veteran Tier (Level 40: Stats ~200, HP/Morale 2400–3600, Armor 55–85)
   // =========================================================================
 
-  let createTheron () =
+  let createVeteranJuggernaut () =
     let id = CombatantId.New()
     let stats =
       StatBlock.Create [
@@ -67,11 +20,12 @@ module Archetypes =
         Acuity, 74; Intuition, 74
         Acumen, 74; Composure, 74
       ]
-    { Combatant.create id "Theron (Iron Vanguard)" 3575 2400 stats with
+    { Combatant.create id "Veteran Juggernaut" 3575 2400 stats with
+        Class = CharacterClass.Juggernaut
         Armor = ArmorIntegrity.Create 84
         Stance = CombatStance.PowerStance }
 
-  let createSilverFencer () =
+  let createVeteranDuelist () =
     let id = CombatantId.New()
     let stats =
       StatBlock.Create [
@@ -82,11 +36,12 @@ module Archetypes =
         Acuity, 74; Intuition, 74
         Acumen, 74; Composure, 74
       ]
-    { Combatant.create id "Lyra (Silver Fencer)" 3575 2400 stats with
+    { Combatant.create id "Veteran Duelist" 3575 2400 stats with
+        Class = CharacterClass.Duelist
         Armor = ArmorIntegrity.Create 84
         Stance = CombatStance.AgilityStance }
 
-  let createAurelius () =
+  let createVeteranInquisitor () =
     let id = CombatantId.New()
     let stats =
       StatBlock.Create [
@@ -97,26 +52,12 @@ module Archetypes =
         Finesse, 74; Reflex, 74
         Prowess, 74; Poise, 74
       ]
-    { Combatant.create id "Aurelius (Thought-Weaver)" 2400 3575 stats with
+    { Combatant.create id "Veteran Inquisitor" 2400 3575 stats with
+        Class = CharacterClass.Inquisitor
         Armor = ArmorIntegrity.Create 54
         Stance = CombatStance.AgilityStance }
 
-  let createLadyVane () =
-    let id = CombatantId.New()
-    let stats =
-      StatBlock.Create [
-        Acumen, 201; Composure, 201
-        Intellect, 123; Resolve, 123
-        Force, 74; Fortitude, 74
-        Finesse, 74; Reflex, 74
-        Prowess, 74; Poise, 74
-        Acuity, 74; Intuition, 74
-      ]
-    { Combatant.create id "Lady Vane (High Magistrate)" 2400 3575 stats with
-        Armor = ArmorIntegrity.Create 54
-        Stance = CombatStance.DisciplineStance }
-
-  let createMirageWeaver () =
+  let createVeteranMesmer () =
     let id = CombatantId.New()
     let stats =
       StatBlock.Create [
@@ -127,11 +68,12 @@ module Archetypes =
         Prowess, 74; Poise, 74
         Acumen, 74; Composure, 74
       ]
-    { Combatant.create id "Seraphina (Mirage Weaver)" 2400 3575 stats with
+    { Combatant.create id "Veteran Mesmer" 2400 3575 stats with
+        Class = CharacterClass.Mesmer
         Armor = ArmorIntegrity.Create 54
         Stance = CombatStance.AgilityStance }
 
-  let createRunicAbjurer () =
+  let createVeteranAbjurer () =
     let id = CombatantId.New()
     let stats =
       StatBlock.Create [
@@ -142,7 +84,8 @@ module Archetypes =
         Intellect, 74; Resolve, 74
         Acuity, 74; Intuition, 74
       ]
-    { Combatant.create id "Kaelen (Runic Abjurer)" 2400 3575 stats with
+    { Combatant.create id "Veteran Abjurer" 2400 3575 stats with
+        Class = CharacterClass.Abjurer
         Armor = ArmorIntegrity.Create 54
         Stance = CombatStance.DisciplineStance }
 
@@ -150,7 +93,7 @@ module Archetypes =
   // Master Tier (Level 100: Stats ~440, HP/Morale 5400–8100, Armor 114–174)
   // =========================================================================
 
-  let createWarmaster () =
+  let createMasterJuggernaut () =
     let id = CombatantId.New()
     let stats =
       StatBlock.Create [
@@ -161,11 +104,12 @@ module Archetypes =
         Acuity, 164; Intuition, 164
         Acumen, 164; Composure, 164
       ]
-    { Combatant.create id "Valerius (Grand Warmaster)" 8075 5400 stats with
+    { Combatant.create id "Master Juggernaut" 8075 5400 stats with
+        Class = CharacterClass.Juggernaut
         Armor = ArmorIntegrity.Create 174
         Stance = CombatStance.PowerStance }
 
-  let createArchDiviner () =
+  let createMasterInquisitor () =
     let id = CombatantId.New()
     let stats =
       StatBlock.Create [
@@ -176,24 +120,10 @@ module Archetypes =
         Finesse, 164; Reflex, 164
         Prowess, 164; Poise, 164
       ]
-    { Combatant.create id "Ignis (Arch-Diviner)" 5400 8075 stats with
+    { Combatant.create id "Master Inquisitor" 5400 8075 stats with
+        Class = CharacterClass.Inquisitor
         Armor = ArmorIntegrity.Create 114
         Stance = CombatStance.PowerStance }
-
-  let createChancellor () =
-    let id = CombatantId.New()
-    let stats =
-      StatBlock.Create [
-        Acumen, 441; Composure, 441
-        Intellect, 273; Intuition, 273
-        Force, 164; Fortitude, 164
-        Finesse, 164; Reflex, 164
-        Prowess, 164; Poise, 164
-        Acuity, 164; Resolve, 164
-      ]
-    { Combatant.create id "Chancellor Malakor" 5400 8075 stats with
-        Armor = ArmorIntegrity.Create 114
-        Stance = CombatStance.DisciplineStance }
 
   // =========================================================================
   // GrandMaster Tier (Level 200, 6 Preparations, Max Stats 840+)
@@ -232,125 +162,55 @@ module Archetypes =
   // =========================================================================
 
   let createNoviceWarrior () =
-    let id = CombatantId.New()
-    let stats =
-      StatBlock.Create [
-        Force, 45; Fortitude, 45
-        Prowess, 25; Poise, 25
-        Finesse, 15; Reflex, 15
-        Intellect, 15; Resolve, 15
-        Acuity, 15; Intuition, 15
-        Acumen, 15; Composure, 15
-      ]
-    { Combatant.createWithClass id "Warrior" 650 450 stats CharacterClass.Warrior 1 with
-        Armor = ArmorIntegrity.Create 25
-        Stance = CombatStance.PowerStance }
+    let c = TierFactory.createClassLevel CharacterClass.Warrior 1
+    { c with Name = "Warrior" }
 
-  let createNoviceAssassin () =
-    let id = CombatantId.New()
-    let stats =
-      StatBlock.Create [
-        Finesse, 45; Reflex, 45
-        Prowess, 25; Poise, 25
-        Force, 15; Fortitude, 15
-        Intellect, 15; Resolve, 15
-        Acuity, 15; Intuition, 15
-        Acumen, 15; Composure, 15
-      ]
-    { Combatant.createWithClass id "Assassin" 650 450 stats CharacterClass.Rogue 1 with
-        Armor = ArmorIntegrity.Create 25
-        Stance = CombatStance.AgilityStance }
-
-  let createNoviceRogue = createNoviceAssassin
+  let createNoviceRogue () =
+    let c = TierFactory.createClassLevel CharacterClass.Rogue 1
+    { c with Name = "Rogue" }
 
   let createNoviceSoldier () =
-    let id = CombatantId.New()
-    let stats =
-      StatBlock.Create [
-        Prowess, 45; Poise, 45
-        Fortitude, 25; Force, 25
-        Finesse, 15; Reflex, 15
-        Intellect, 15; Resolve, 15
-        Acuity, 15; Intuition, 15
-        Acumen, 15; Composure, 15
-      ]
-    { Combatant.createWithClass id "Soldier" 650 450 stats CharacterClass.Soldier 1 with
-        Armor = ArmorIntegrity.Create 25
-        Stance = CombatStance.DisciplineStance }
+    let c = TierFactory.createClassLevel CharacterClass.Soldier 1
+    { c with Name = "Soldier" }
 
   let createNoviceMage () =
-    let id = CombatantId.New()
-    let stats =
-      StatBlock.Create [
-        Intellect, 45; Resolve, 45
-        Acumen, 25; Composure, 25
-        Force, 15; Fortitude, 15
-        Finesse, 15; Reflex, 15
-        Prowess, 15; Poise, 15
-        Acuity, 15; Intuition, 15
-      ]
-    { Combatant.createWithClass id "Mage" 450 650 stats CharacterClass.Mage 1 with
-        Armor = ArmorIntegrity.Create 15
-        Stance = CombatStance.PowerStance }
+    let c = TierFactory.createClassLevel CharacterClass.Mage 1
+    { c with Name = "Mage" }
 
   // =========================================================================
   // Roster Registry
   // =========================================================================
 
   let allArchetypes : ArchetypeInfo list = [
-    { Name = "Iron Recruit"
-      Tier = Novice
-      Discipline = CombatMode.Physical
-      Description = "Novice soldier with baseline kinetic cleave and shield work."
-      Factory = createIronRecruit }
-
-    { Name = "Court Scribe"
-      Tier = Novice
-      Discipline = CombatMode.Social
-      Description = "Adept at rhetorical fencing, spotting telltale contradictions."
-      Factory = createCourtScribe }
-
-    { Name = "Hedge Mage"
-      Tier = Novice
-      Discipline = CombatMode.Arcane
-      Description = "Apprentice channeler utilizing direct mental static and basic wards."
-      Factory = createHedgeMage }
-
-    { Name = "Iron Vanguard"
+    { Name = "Veteran Juggernaut"
       Tier = Veteran
       Discipline = CombatMode.Physical
       Description = "Seasoned martial warrior commanding heavy Force and stance pressure."
-      Factory = createTheron }
+      Factory = createVeteranJuggernaut }
 
-    { Name = "Silver Fencer"
+    { Name = "Veteran Duelist"
       Tier = Veteran
       Discipline = CombatMode.Physical
       Description = "Agile fencer executing probing Finesse strikes, seeking critical vital openings."
-      Factory = createSilverFencer }
+      Factory = createVeteranDuelist }
 
-    { Name = "Thought-Weaver"
+    { Name = "Veteran Inquisitor"
       Tier = Veteran
       Discipline = CombatMode.Arcane
       Description = "Psionic mystic shredding mental defenses via raw Intellect and Acuity."
-      Factory = createAurelius }
+      Factory = createVeteranInquisitor }
 
-    { Name = "Mirage Weaver"
+    { Name = "Veteran Mesmer"
       Tier = Veteran
       Discipline = CombatMode.Arcane
       Description = "Guile illusionist conjuring decoy mirror swarms and disorienting glamours."
-      Factory = createMirageWeaver }
+      Factory = createVeteranMesmer }
 
-    { Name = "Runic Abjurer"
+    { Name = "Veteran Abjurer"
       Tier = Veteran
       Discipline = CombatMode.Arcane
       Description = "Discipline abjurer commanding defensive wards and posture-shattering shockwaves."
-      Factory = createRunicAbjurer }
-
-    { Name = "High Magistrate"
-      Tier = Veteran
-      Discipline = CombatMode.Social
-      Description = "Aristocratic orator dismantling composure with procedural leverage."
-      Factory = createLadyVane }
+      Factory = createVeteranAbjurer }
 
     { Name = "Veteran Warden"
       Tier = Veteran
@@ -358,53 +218,29 @@ module Archetypes =
       Description = "Discipline/Power/Agility bastion knight commanding Bastion Zone Control."
       Factory = createClassTier CharacterClass.Warden CombatTier.Veteran }
 
-    { Name = "Veteran Juggernaut"
-      Tier = Veteran
-      Discipline = CombatMode.Physical
-      Description = "Power/Discipline/Agility iron colossus with heavy armor and sundering impacts."
-      Factory = createClassTier CharacterClass.Juggernaut CombatTier.Veteran }
-
     { Name = "Veteran Ranger"
       Tier = Veteran
       Discipline = CombatMode.Physical
       Description = "Discipline/Agility/Power wild sentinel weaving reactive intercepts and skirmishing."
       Factory = createClassTier CharacterClass.Ranger CombatTier.Veteran }
 
-    { Name = "Veteran Abjurer"
-      Tier = Veteran
-      Discipline = CombatMode.Arcane
-      Description = "Discipline/Mental runic warder commanding ground glyphs and abjuration barriers."
-      Factory = createClassTier CharacterClass.Abjurer CombatTier.Veteran }
-
-    { Name = "Grand Warmaster"
+    { Name = "Master Juggernaut"
       Tier = Master
       Discipline = CombatMode.Physical
       Description = "Uncapped martial behemoth capable of crushing even expert shields in one blow."
-      Factory = createWarmaster }
+      Factory = createMasterJuggernaut }
 
-    { Name = "Arch-Diviner"
+    { Name = "Master Inquisitor"
       Tier = Master
       Discipline = CombatMode.Arcane
       Description = "Ascendant psion with staggering psychic projection and cataclysmic surges."
-      Factory = createArchDiviner }
-
-    { Name = "Chancellor Malakor"
-      Tier = Master
-      Discipline = CombatMode.Social
-      Description = "Formidable court titan who commands unyielding authority and lethal scrutiny."
-      Factory = createChancellor }
+      Factory = createMasterInquisitor }
 
     { Name = "Master Warden"
       Tier = Master
       Discipline = CombatMode.Physical
       Description = "Discipline/Power/Agility bastion master with impenetrable zone control."
       Factory = createClassTier CharacterClass.Warden CombatTier.Master }
-
-    { Name = "Master Juggernaut"
-      Tier = Master
-      Discipline = CombatMode.Physical
-      Description = "Power/Discipline/Agility unstoppable colossus with sundering power."
-      Factory = createClassTier CharacterClass.Juggernaut CombatTier.Master }
 
     { Name = "Master Ranger"
       Tier = Master
@@ -497,12 +333,6 @@ module Archetypes =
       Discipline = CombatMode.Physical
       Description = "Generic Power NPC: front-line brute with kinetic Force and fortitude (no preparations)."
       Factory = createNoviceWarrior }
-
-    { Name = "Assassin"
-      Tier = Novice
-      Discipline = CombatMode.Physical
-      Description = "Generic Finesse NPC: agile skirmisher relying on Finesse and speed (no preparations)."
-      Factory = createNoviceAssassin }
 
     { Name = "Rogue"
       Tier = Novice

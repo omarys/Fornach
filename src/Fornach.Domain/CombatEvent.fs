@@ -65,6 +65,12 @@ type CombatEvent =
   /// Combatant shifted their active tactical stance
   | StanceShifted of combatantId: CombatantId * oldStance: CombatStance * newStance: CombatStance
 
+  /// Magic combatant threaded or shifted their active mental Complex Form
+  | ComplexFormThreaded of combatantId: CombatantId * oldForm: ComplexForm option * newForm: ComplexForm
+
+  /// Magic combatant suffered somatic Fading / drain from channeling high-resonance forms
+  | FadingDrainSuffered of combatantId: CombatantId * formName: string * fatigueDrain: int * recklessnessSpike: int
+
   /// Reactive counter-strike triggered by accumulated Study Stacks in Discipline stance
   | RiposteExecuted of defenderId: CombatantId * attackerId: CombatantId * counterDamage: int
 

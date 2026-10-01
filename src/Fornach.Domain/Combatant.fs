@@ -60,6 +60,7 @@ type Combatant =
     Armor: ArmorIntegrity
     WeaponCondition: WeaponCondition
     Stance: CombatStance
+    ComplexForm: ComplexForm option
     BleedStacks: int
     LimbDebuff: int
     ArcaneWard: int
@@ -70,6 +71,19 @@ type Combatant =
     Progression: ProgressionProfile
     Preparations: PreparationSlot list
     ActivePreparations: ActivePreparation list }
+
+  /// Combatant level derived from progression profile
+  member this.Level = this.Progression.Level
+
+  /// Operative combat plane (Physical or Mental).
+  /// Respects character class plane, or detects dominance for untyped combatants.
+  member this.Plane : Plane =
+    let physTotal = this.Stats.Get Force + this.Stats.Get Finesse + this.Stats.Get Prowess
+    let mentTotal = this.Stats.Get Intellect + this.Stats.Get Acuity + this.Stats.Get Acumen
+    if this.Class = CharacterClass.Warrior && mentTotal > physTotal then
+      Plane.Mental
+    else
+      this.Class.Plane
 
   /// Indicates if this combatant has collapsed and is vulnerable to an instant ExecuteStrike
   member this.IsExecuteEligible = CollapseState.isCollapsed this.Collapse
@@ -138,6 +152,7 @@ type Combatant =
       Armor = ArmorIntegrity.Create 50
       WeaponCondition = WeaponCondition.Pristine
       Stance = CombatStance.PowerStance
+      ComplexForm = None
       BleedStacks = 0
       LimbDebuff = 0
       ArcaneWard = 0
@@ -158,6 +173,13 @@ type Combatant =
       | Power -> CombatStance.PowerStance
       | Agility -> CombatStance.AgilityStance
       | Discipline -> CombatStance.DisciplineStance
+    let defaultForm =
+      if cls.Plane = Mental then
+        match cls.Vector with
+        | Power -> Some ComplexForm.ResonanceSpike
+        | Agility -> Some ComplexForm.PhantasmalDiffusion
+        | Discipline -> Some ComplexForm.AegisLattice
+      else None
     { Id = id
       Name = name
       Health = Pool.Create maxHealth
@@ -169,6 +191,7 @@ type Combatant =
       Armor = ArmorIntegrity.Create 50
       WeaponCondition = WeaponCondition.Pristine
       Stance = defaultStance
+      ComplexForm = defaultForm
       BleedStacks = 0
       LimbDebuff = 0
       ArcaneWard = 0
@@ -228,6 +251,10 @@ type Combatant =
   /// Shifts active tactical stance
   static member setStance stance (c: Combatant) =
     { c with Stance = stance }
+
+  /// Shifts active mental Complex Form
+  static member setComplexForm form (c: Combatant) =
+    { c with ComplexForm = form }
 
   /// Degrades weapon condition down one progressive stage
   static member degradeWeapon (c: Combatant) =

@@ -53,6 +53,14 @@ module OverallBalanceTests =
     | CharacterClass.Abjurer, _
     | CharacterClass.Strategist, _ ->
       "Runic composure wards & destabilizing ground glyphs disrupt oncoming attackers through calculated attrition."
+    | CharacterClass.Juggernaut, GrandMaster ->
+      "Iron Colossus armor soak & Shockwave Slam shatter enemy formations; massive Force & Fortitude outlast physical swarms."
+    | CharacterClass.Juggernaut, _ ->
+      "Power & Discipline juggernaut; high physical armor absorption with Shockwave Slam cleave reinforcement."
+    | CharacterClass.Ranger, GrandMaster ->
+      "Caltrop Pouch & fluid skirmishing punish advancing flankers; high Prowess & Finesse maintain reactive AoO zone."
+    | CharacterClass.Ranger, _ ->
+      "Discipline & Agility skirmisher; relies on Caltrop Pouch and opportunist reactive counters against mobs."
     | _ -> "Standard archetype profile."
 
   let private getDisplayClassName (cls: CharacterClass) : string =
@@ -68,7 +76,7 @@ module OverallBalanceTests =
   type OverallBalanceFixture(output: ITestOutputHelper) =
 
     [<Fact>]
-    let ``Overall Balance Matrix: Determine average base class swarm required to defeat each tier of all 6 archetypes`` () =
+    let ``Overall Balance Matrix: Determine average base class swarm required to defeat each tier of all 8 archetypes`` () =
       let rng = Random(42)
       let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
       let iterationsPerProbe = 10
@@ -76,11 +84,13 @@ module OverallBalanceTests =
 
       let championClasses = [
         CharacterClass.Berserker
+        CharacterClass.Juggernaut
         CharacterClass.Duelist
         CharacterClass.Warden
         CharacterClass.Inquisitor
         CharacterClass.Mesmer
         CharacterClass.Abjurer
+        CharacterClass.Ranger
       ]
 
       let tiers = [
@@ -218,3 +228,33 @@ module OverallBalanceTests =
 
       Assert.True(tpGMMage.Value >= 20, sprintf "GrandMaster Inquisitor should withstand 20+ Mages (Actual: %d)" tpGMMage.Value)
       Assert.True(tpGMMage.Value >= tpGMWarrior.Value, "Inquisitor should endure more Mages on the Mental plane than physical Warriors bypassing armor.")
+
+    [<Fact>]
+    let ``Juggernaut: Iron Colossus endurance holds against physical hordes while vulnerable to Arcane Mages`` () =
+      let rng = Random(202)
+      let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
+      let gmJuggernaut = fun () -> TierFactory.createClassTier CharacterClass.Juggernaut CombatTier.GrandMaster
+      let warriorMob = fun () -> TierFactory.createClassTier CharacterClass.Warrior CombatTier.Novice
+      let mageMob = fun () -> TierFactory.createClassTier CharacterClass.Mage CombatTier.Novice
+
+      let tpGMWarrior = Simulation.findSwarmTippingPoint gmJuggernaut warriorMob 50 10 roller
+      let tpGMMage = Simulation.findSwarmTippingPoint gmJuggernaut mageMob 50 10 roller
+
+      Assert.True(tpGMWarrior.Value >= 40, sprintf "GrandMaster Juggernaut should withstand 40+ Warriors (Actual: %d)" tpGMWarrior.Value)
+      Assert.True(tpGMWarrior.Value > tpGMMage.Value, "Juggernaut physical armor soak should endure significantly more Warriors than Arcane Mages.")
+
+    [<Fact>]
+    let ``Ranger: Caltrop Pouch and opportunist agility dismantle advancing physical flankers`` () =
+      let rng = Random(303)
+      let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
+      let gmRanger = fun () -> TierFactory.createClassTier CharacterClass.Ranger CombatTier.GrandMaster
+      let masterRanger = fun () -> TierFactory.createClassTier CharacterClass.Ranger CombatTier.Master
+      let soldierMob = fun () -> TierFactory.createClassTier CharacterClass.Soldier CombatTier.Novice
+      let mageMob = fun () -> TierFactory.createClassTier CharacterClass.Mage CombatTier.Novice
+
+      let tpGMSoldier = Simulation.findSwarmTippingPoint gmRanger soldierMob 50 10 roller
+      let tpMasterSoldier = Simulation.findSwarmTippingPoint masterRanger soldierMob 50 10 roller
+      let tpMasterMage = Simulation.findSwarmTippingPoint masterRanger mageMob 50 10 roller
+
+      Assert.True(tpGMSoldier.Value >= 40, sprintf "GrandMaster Ranger should withstand 40+ Soldiers (Actual: %d)" tpGMSoldier.Value)
+      Assert.True(tpMasterSoldier.Value > tpMasterMage.Value, "At Master tier, Ranger physical mobility and Caltrops should endure more Soldiers than Arcane Mages.")

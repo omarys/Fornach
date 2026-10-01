@@ -20,9 +20,9 @@ module ActionResolver =
     elif netHits = 6 then 2.50
     elif netHits = 7 then 3.00
     elif netHits = 8 then 3.50
-    elif netHits = 9 then 4.00
-    elif netHits = 10 then 4.50
-    else Math.Min(12.00, 4.50 + (float (netHits - 10) * 0.50))
+    elif netHits = 9 then 3.80
+    elif netHits = 10 then 4.00
+    else Math.Min(5.00, 4.00 + (float (netHits - 10) * 0.05))
 
   /// Applies pool damage, arcane ward barrier soak, armor soak, and massive blow armor shredding
   let private applyDamage
@@ -57,10 +57,11 @@ module ActionResolver =
           [ CombatEvent.EnrageDamageShrugged(target.Id, enrageShrugged) ]
         else []
 
-      // Massive blows automatically shred armor durability: shred = max 15 (damageDealt / 3)
+      // Massive blows automatically shred armor durability: shred up to 25% of max armor per blow
       let updatedArmor =
         if actualDmg > 0 && (isCrit || actualDmg >= 40) then
-          let shredAmount = Math.Max(15, actualDmg / 3)
+          let maxShred = Math.Max(15, targetWithWard.Armor.Max / 4)
+          let shredAmount = Math.Clamp(actualDmg / 15, 10, maxShred)
           targetWithWard.Armor.Shred shredAmount
         else
           targetWithWard.Armor
@@ -431,22 +432,52 @@ module ActionResolver =
         Contest = None }
 
   let private resolveShiftStance (newStance: CombatStance) (actor: Combatant) (target: Combatant) : ActionResult =
-    let oldStance = actor.Stance
-    let resetActor =
-      { actor with
-          Stance = newStance
-          ComboTracker = actor.ComboTracker.ResetCombo() }
-      |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness - 10 })
+    if actor.Plane <> Physical then
+      { Actor = actor
+        Target = target
+        Events = [ CombatEvent.ComboReset(actor.Id, sprintf "%s cannot shift physical martial stances (Physical discipline only)." actor.Name) ]
+        Contest = None }
+    else
+      let oldStance = actor.Stance
+      let resetActor =
+        { actor with
+            Stance = newStance
+            ComboTracker = actor.ComboTracker.ResetCombo() }
+        |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness - 10 })
 
-    let evts = [
-      CombatEvent.StanceShifted(actor.Id, oldStance, newStance)
-      CombatEvent.ComboReset(actor.Id, "Stance shifted; combo momentum cleared.")
-    ]
+      let evts = [
+        CombatEvent.StanceShifted(actor.Id, oldStance, newStance)
+        CombatEvent.ComboReset(actor.Id, "Stance shifted; combo momentum cleared.")
+      ]
 
-    { Actor = resetActor
-      Target = target
-      Events = evts
-      Contest = None }
+      { Actor = resetActor
+        Target = target
+        Events = evts
+        Contest = None }
+
+  let private resolveThreadComplexForm (newForm: ComplexForm) (actor: Combatant) (target: Combatant) : ActionResult =
+    if actor.Plane <> Mental then
+      { Actor = actor
+        Target = target
+        Events = [ CombatEvent.ComboReset(actor.Id, sprintf "%s cannot thread mental complex forms (Arcane/Mental discipline only)." actor.Name) ]
+        Contest = None }
+    else
+      let oldForm = actor.ComplexForm
+      let resetActor =
+        { actor with
+            ComplexForm = Some newForm
+            ComboTracker = actor.ComboTracker.ResetCombo() }
+        |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness - 5 })
+
+      let evts = [
+        CombatEvent.ComplexFormThreaded(actor.Id, oldForm, newForm)
+        CombatEvent.ComboReset(actor.Id, sprintf "Threaded %s complex form; psychic focus re-aligned." newForm.Name)
+      ]
+
+      { Actor = resetActor
+        Target = target
+        Events = evts
+        Contest = None }
 
   let private resolveDeployPreparation
     (prepType: PreparationType)
@@ -643,14 +674,29 @@ module ActionResolver =
       else
         c, []
 
+    // Complex Form Upkeep:
+    // - Aegis Lattice: +15 Arcane Ward per turn
+    // - Phantasmal Diffusion: Weaves 1 mirror clone per turn (up to 4)
+    let formUpdated, formEvents =
+      match baseUpdated.ComplexForm with
+      | Some ComplexForm.AegisLattice ->
+        let wardGain = 15
+        let updated = baseUpdated |> Combatant.addWard wardGain
+        updated, [ CombatEvent.ArcaneWardErected(baseUpdated.Id, wardGain, updated.ArcaneWard) ]
+      | Some ComplexForm.PhantasmalDiffusion when baseUpdated.MirrorClones < 4 ->
+        let updated = baseUpdated |> Combatant.addClones 1
+        updated, [ CombatEvent.MirrorClonesConjured(baseUpdated.Id, 1, updated.MirrorClones) ]
+      | _ ->
+        baseUpdated, []
+
     // Natural combat exertion in prolonged battle (+1 Exhaustion per active round)
     // Decrement active preparation timers and remove expired ones
     let withExertion =
-      baseUpdated
+      formUpdated
       |> Combatant.updateMeters (fun m -> { m with Exhaustion = m.Exhaustion + 1 })
       |> Combatant.decrementActivePreparations
 
-    withExertion, baseEvents
+    withExertion, (baseEvents @ formEvents)
 
 
   let private resolveExecute (plane: Plane) (actor: Combatant) (target: Combatant) : ActionResult =
@@ -687,6 +733,13 @@ module ActionResolver =
     let mutable currentActor = actor
     let mutable currentTarget = target
     let mutable events = []
+
+    // Aegis Lattice grounds Overchannel back to standard stable cast
+    let atk =
+      match atk with
+      | ArcaneCataclysm true when currentActor.ComplexForm = Some ComplexForm.AegisLattice ->
+        ArcaneCataclysm false
+      | other -> other
 
     // --- Step A: Identify Gambit Properties ---
     let isGambit, gambitName, selfReckSpike =
@@ -1403,9 +1456,10 @@ module ActionResolver =
     let mutable decoyIntercepted = false
     let mutable attackDamageMitigation = 1.0
 
-    // A. Mesmer / Mirror Weavers: Phantasmal Decoy Swap (Acuity vs. Intuition)
+    // A. Mesmer / Mirror Weavers / Phantasmal Diffusion: Decoy Swap (Acuity vs. Intuition)
     // Capped at up to 5 flanking spaces; priorDefenses penalty removed, limited by stat minus Exhaustion/Recklessness
-    if not decoyIntercepted && currentTarget.MirrorClones > 0 then
+    let hasDiffusion = currentTarget.ComplexForm = Some ComplexForm.PhantasmalDiffusion
+    if not decoyIntercepted && (currentTarget.MirrorClones > 0 || hasDiffusion) then
       let defAcuity = currentTarget.GetStat Acuity
       let atkIntuition = currentActor.GetStat Intuition
       let delta = defAcuity - atkIntuition
@@ -1416,7 +1470,7 @@ module ActionResolver =
         let rollMargin = (roller 1 6 - roller 1 6) * 3
         let fatiguePenalty = (currentTarget.Meters.Exhaustion.Value / 4) + (currentTarget.Meters.Recklessness.Value / 4)
         let slope = if delta >= 0 then 0.8 else 1.4
-        let baseChance = 55.0
+        let baseChance = if hasDiffusion then 95.0 else 55.0
         let swapChance = Math.Clamp(int (baseChance + float delta * slope) + rollMargin - fatiguePenalty, 5, 95)
         if priorDefenses < 5 && roller 1 100 <= swapChance then
           let fatigueCost, exhaustionCost =
@@ -1424,9 +1478,10 @@ module ActionResolver =
             elif disparity >= 200 then 1, 1
             elif disparity >= 30 then 3, 2
             else 5, 3
+          let cloneChange = if currentTarget.MirrorClones > 0 then -1 else 0
           currentTarget <-
             currentTarget
-            |> Combatant.addClones -1
+            |> Combatant.addClones cloneChange
             |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue + fatigueCost; Exhaustion = m.Exhaustion + exhaustionCost })
           let costMsg = if fatigueCost > 0 || exhaustionCost > 0 then sprintf " (+%d Fatigue, +%d Exhaustion)" fatigueCost exhaustionCost else " (Effortless)"
 
@@ -1435,7 +1490,12 @@ module ActionResolver =
           let actorAfterBlast, _, wardEvts = applyDamage Mental blastDamage false currentActor
           events <- wardEvts @ events
           events <- CombatEvent.MirrorCloneShattered(currentTarget.Id, currentActor.Id, blastDamage, currentTarget.MirrorClones) :: events
-          events <- CombatEvent.PhantasmalSwapExecuted(currentTarget.Id, currentActor.Id, true, sprintf "Mesmer actively swapped places with a decoy clone! The decoy SHATTERED upon impact, blasting the attacker for %d Morale damage%s!" blastDamage costMsg) :: events
+          let swapMsg =
+            if hasDiffusion && cloneChange = 0 then
+              sprintf "%s diffused into sensory static and phased through a decoy clone! The decoy SHATTERED upon impact, blasting the attacker for %d Morale damage%s!" currentTarget.Name blastDamage costMsg
+            else
+              sprintf "%s actively swapped places with a decoy clone! The decoy SHATTERED upon impact, blasting the attacker for %d Morale damage%s!" currentTarget.Name blastDamage costMsg
+          events <- CombatEvent.PhantasmalSwapExecuted(currentTarget.Id, currentActor.Id, true, swapMsg) :: events
           events <- CombatEvent.MirrorCloneDecoyed(currentTarget.Id, currentActor.Id, currentTarget.MirrorClones) :: events
           currentActor <-
             actorAfterBlast
@@ -1632,10 +1692,10 @@ module ActionResolver =
       // Landed Strike: Scaled Tiered NetHits Damage & Weapon Degradation Multiplier
       let baseDamage =
         if plane = Mental then
-          // Cognitive and psychic strikes scale superlinearly with raw mental dominance
-          int (float offStat * 3.0) + (offStat * offStat / 180)
+          // Cognitive and psychic strikes scale with raw mental dominance
+          int (float offStat * 1.15)
         else
-          offStat * 2
+          int (float offStat * 1.50)
       let tierMult = computeTierMultiplier contest.NetHits
       let gambitMult = if isGambit then 1.5 else 1.0
       let weaponEff = if plane = Mental then 1.0 else WeaponCondition.effectiveness currentActor.WeaponCondition
@@ -1667,10 +1727,19 @@ module ActionResolver =
           false
 
       let isCrit = contest.IsCritical || agilityCritRolled
-      let critDmgMult = if isCrit && isAgilityAtk then 3.2 elif isCrit then 1.5 else 1.0
+      let critDmgMult = if isCrit && isAgilityAtk then 1.85 elif isCrit then 1.5 else 1.0
+
+      let formDmgMult =
+        if plane = Mental then
+          match currentActor.ComplexForm with
+          | Some ComplexForm.ResonanceSpike -> 1.25
+          | Some ComplexForm.PhantasmalDiffusion -> 0.85
+          | _ -> 1.0
+        else 1.0
+
       let baseRawDmg =
         if classMult <= 0.0 then 0
-        else Math.Max(1, int (float baseDamage * tierMult * gambitMult * classMult * weaponEff * critDmgMult * berserkMult * attackDamageMitigation))
+        else Math.Max(1, int (float baseDamage * tierMult * gambitMult * classMult * weaponEff * critDmgMult * berserkMult * formDmgMult * attackDamageMitigation))
 
       // Aegis of Retribution: 35% damage reduction applied to recipient
       let rawDmg =
@@ -1684,6 +1753,19 @@ module ActionResolver =
 
       // Apply dynamic status meters to target
       currentTarget <- Combatant.updateMeters (meterUpdates isCrit) currentTarget
+
+      // Resonance Spike: volatile overclocking inflicts +20 Cognitive Fatigue on the target
+      if plane = Mental && currentActor.ComplexForm = Some ComplexForm.ResonanceSpike then
+        currentTarget <- currentTarget |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue + 20 })
+
+      // Resonance Spike Fading Drain: somatic drain (+10 Cognitive Fatigue, +15 Recklessness to caster)
+      if plane = Mental && currentActor.ComplexForm = Some ComplexForm.ResonanceSpike then
+        let fadingFatigue = 10
+        let fadingReck = 15
+        currentActor <-
+          currentActor
+          |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue + fadingFatigue; Recklessness = m.Recklessness + fadingReck })
+        events <- CombatEvent.FadingDrainSuffered(currentActor.Id, "Resonance Spike", fadingFatigue, fadingReck) :: events
 
       let reckAfter = currentTarget.Meters.Recklessness.Value
       let reckDelta = reckAfter - reckBefore
@@ -1703,13 +1785,14 @@ module ActionResolver =
       currentTarget <- updatedTarget
       events <- wardEvts @ (CombatEvent.DamageApplied dmgEvt :: events)
 
-      // Aegis of Retribution / Retribution Ward: reflects incoming damage back to attacker as radiant retribution + Frustration
+      // Aegis of Retribution / Retribution Ward / Aegis Lattice: reflects incoming damage back to attacker as radiant retribution + Frustration
       let hasRetributionAegis = currentTarget.HasActivePreparation PreparationType.AegisOfRetribution
+      let hasAegisLattice = currentTarget.ComplexForm = Some ComplexForm.AegisLattice && (wardEvts |> List.exists (function CombatEvent.ArcaneWardAbsorbed _ -> true | _ -> false))
       let hasAbjurerWard = (currentTarget.Class = CharacterClass.Abjurer || currentTarget.Class = CharacterClass.Strategist) && (wardEvts |> List.exists (function CombatEvent.ArcaneWardAbsorbed _ -> true | _ -> false))
-      if (hasRetributionAegis || hasAbjurerWard) && baseRawDmg > 0 then
-        let reflectRatio = if hasRetributionAegis then 0.50 else 0.25
+      if (hasRetributionAegis || hasAegisLattice || hasAbjurerWard) && baseRawDmg > 0 then
+        let reflectRatio = if hasRetributionAegis || hasAegisLattice then 0.50 else 0.25
         let reflectDmg = Math.Max(12, int (Math.Round(float baseRawDmg * reflectRatio)))
-        let frustSpike = if hasRetributionAegis then 15 else 10
+        let frustSpike = if hasRetributionAegis || hasAegisLattice then 15 else 10
         let actorAfterReflect, reflectDmgEvt, reflectWardEvts = applyDamage Mental reflectDmg false currentActor
         currentActor <-
           actorAfterReflect
@@ -1830,6 +1913,17 @@ module ActionResolver =
         | RecoveryAction reset -> resolveRecovery reset upkeepActor target
         | ExecuteStrike plane -> resolveExecute plane upkeepActor target
         | ShiftStance stance -> resolveShiftStance stance upkeepActor target
+        | ThreadComplexForm form -> resolveThreadComplexForm form upkeepActor target
+        | StandardAttack atk when not (atk.IsAllowedFor upkeepActor) ->
+          let msg =
+            if upkeepActor.Plane = Physical then
+              sprintf "%s cannot execute magic attacks (Physical martial discipline only)." upkeepActor.Name
+            else
+              sprintf "%s cannot execute physical martial attacks (Arcane/Mental discipline only)." upkeepActor.Name
+          { Actor = upkeepActor
+            Target = target
+            Events = [ CombatEvent.ComboReset(upkeepActor.Id, msg) ]
+            Contest = None }
         | StandardAttack atk -> resolveAttack roller atk upkeepActor target priorDefenses
         | DeployPreparation (prep, targetIdOpt) -> resolveDeployPreparation prep targetIdOpt upkeepActor target
 
@@ -2066,7 +2160,8 @@ module ActionResolver =
 
       elif isLandedMentalHit && not currentAdjacent.IsEmpty then
         // Mental attacks with stat disparity cause resonant Area of Effect psychic damage across adjacent flankers
-        let splashCandidates = currentAdjacent |> List.truncate 2
+        let splashCount = if currentActor.ComplexForm = Some ComplexForm.ResonanceSpike then 4 else 2
+        let splashCandidates = currentAdjacent |> List.truncate splashCount
         let unengaged = currentAdjacent |> List.skip splashCandidates.Length
         let mutable splashEvents = []
 
@@ -2076,7 +2171,8 @@ module ActionResolver =
           |> List.tryHead
           |> Option.defaultValue (Math.Max(20, currentActor.GetStat Intellect))
 
-        let rawSplashDmg = Math.Max(10, int (float primaryDmg * 0.50))
+        let splashRatio = if currentActor.ComplexForm = Some ComplexForm.ResonanceSpike then 0.65 else 0.50
+        let rawSplashDmg = Math.Max(10, int (float primaryDmg * splashRatio))
 
         let processedSplash =
           splashCandidates

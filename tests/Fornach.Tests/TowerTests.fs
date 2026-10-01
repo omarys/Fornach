@@ -285,3 +285,130 @@ let ``TowerDisplay rendering components smoke test`` () =
   // Message log rendering
   let log = TowerDisplay.renderMessageLog state 5
   Assert.NotNull(log)
+
+[<Fact>]
+let ``TowerDisplay inspectTile correctly inspects player position, AcidSlag hazard, unopened chest, and dark fog`` () =
+  let player = createTestPlayer ()
+  let baseState = TowerSession.initSession player 42 1
+  let playerPos = baseState.PlayerPosition
+  let hazardPos = { X = playerPos.X + 1; Y = playerPos.Y }
+  let chestPos = { X = playerPos.X; Y = playerPos.Y + 1 }
+  let fogPos = { X = playerPos.X + 15; Y = playerPos.Y + 15 }
+
+  let testChest =
+    EntityChest
+      { Id = "test-chest-1"
+        Description = "Ancient iron vault chest"
+        LootKeyId = None
+        ItemReward = None
+        IsOpen = false }
+
+  let floorWithDetails =
+    { baseState.CurrentFloor with
+        Tiles =
+          baseState.CurrentFloor.Tiles
+          |> Map.add hazardPos (Hazard HazardType.AcidSlag)
+          |> Map.add chestPos (Floor SurfaceType.PavedStone)
+        Entities =
+          baseState.CurrentFloor.Entities
+          |> Map.add chestPos testChest
+        Explored =
+          baseState.CurrentFloor.Explored
+          |> Set.add playerPos
+          |> Set.add hazardPos
+          |> Set.add chestPos
+          |> Set.remove fogPos }
+
+  let state = { baseState with CurrentFloor = floorWithDetails }
+
+  // 1. Inspect player tile
+  let playerInspect = TowerDisplay.inspectTile state playerPos
+  Assert.Equal(0, playerInspect.Distance)
+  Assert.Contains("Within Active Vision", playerInspect.VisibilityText)
+  Assert.True(playerInspect.EntitySummary.IsSome)
+  Assert.Contains("@ YOU", playerInspect.EntitySummary.Value)
+  Assert.Contains("Explorer", playerInspect.EntitySummary.Value)
+
+  // 2. Inspect AcidSlag hazard
+  let hazardInspect = TowerDisplay.inspectTile state hazardPos
+  Assert.Equal(1, hazardInspect.Distance)
+  Assert.Contains("≈", hazardInspect.TileGlyph)
+  Assert.Equal("Corrosive Acid Slag", hazardInspect.TileName)
+  Assert.Contains("toxic acidic runoff", hazardInspect.TileDescription)
+  Assert.True(hazardInspect.HazardWarning.IsSome)
+  Assert.Contains("CAUTION:", hazardInspect.HazardWarning.Value)
+  Assert.Contains("-15 Armor durability", hazardInspect.HazardWarning.Value)
+
+  // 3. Inspect unopened chest
+  let chestInspect = TowerDisplay.inspectTile state chestPos
+  Assert.Equal(1, chestInspect.Distance)
+  Assert.True(chestInspect.EntitySummary.IsSome)
+  Assert.Contains("VAULT CHEST", chestInspect.EntitySummary.Value)
+  Assert.Contains("Unopened", chestInspect.EntitySummary.Value)
+
+  // 4. Inspect distant fog of war
+  let fogInspect = TowerDisplay.inspectTile state fogPos
+  Assert.Equal("?", fogInspect.TileGlyph)
+  Assert.Equal("Unexplored Darkness", fogInspect.TileName)
+  Assert.Contains("Shrouded in Darkness", fogInspect.VisibilityText)
+  Assert.True(fogInspect.HazardWarning.IsNone)
+  Assert.True(fogInspect.EntitySummary.IsNone)
+
+  // 5. Inspect hostile guardian in direct line-of-sight
+  let enemyPos = { X = playerPos.X; Y = playerPos.Y - 1 }
+  let enemyCombatant = TierFactory.createClassLevel CharacterClass.Berserker 5
+  let testEnemy =
+    EntityEnemy
+      { Id = "enemy1"
+        Name = "Plaza Sentinel"
+        Combatant = enemyCombatant
+        DropsKeyId = None
+        IsDefeated = false }
+  let stateWithEnemy =
+    { state with
+        CurrentFloor =
+          { state.CurrentFloor with
+              Tiles = state.CurrentFloor.Tiles |> Map.add enemyPos (Floor SurfaceType.PavedStone)
+              Entities = state.CurrentFloor.Entities |> Map.add enemyPos testEnemy
+              Visible = state.CurrentFloor.Visible |> Set.add enemyPos } }
+  let enemyInspect = TowerDisplay.inspectTile stateWithEnemy enemyPos
+  Assert.True(enemyInspect.EntitySummary.IsSome)
+  Assert.Contains("HOSTILE GUARDIAN: Plaza Sentinel", enemyInspect.EntitySummary.Value)
+  Assert.Contains("Lv.5 Berserker", enemyInspect.EntitySummary.Value)
+
+[<Fact>]
+let ``TowerDisplay inspectTile identifies all distinct hazard types and provides tactical warning`` () =
+  let player = createTestPlayer ()
+  let baseState = TowerSession.initSession player 42 1
+  let origin = baseState.PlayerPosition
+
+  let hazardCases =
+    [ HazardType.AcidSlag, "Corrosive Acid Slag", "-15 Armor durability"
+      HazardType.LavaRift, "Molten Lava Rift", "-15 direct Health"
+      HazardType.DeepCurrent, "Deep Floodwater Current", "+15 Exhaustion"
+      HazardType.CalmingSpores, "Calming Spore Blossom", "resets Recklessness to 0" ]
+
+  for (hazardType, expectedName, expectedWarning) in hazardCases do
+    let hazardPos = { X = origin.X + 1; Y = origin.Y }
+    let state =
+      { baseState with
+          CurrentFloor =
+            { baseState.CurrentFloor with
+                Tiles = baseState.CurrentFloor.Tiles |> Map.add hazardPos (Hazard hazardType)
+                Explored = baseState.CurrentFloor.Explored |> Set.add hazardPos } }
+
+    let detail = TowerDisplay.inspectTile state hazardPos
+    Assert.Equal(expectedName, detail.TileName)
+    Assert.True(detail.HazardWarning.IsSome, sprintf "Expected warning for %A" hazardType)
+    Assert.Contains(expectedWarning, detail.HazardWarning.Value)
+
+[<Fact>]
+let ``TowerDisplay renderInspectionPanel and renderViewportWithCursor execute cleanly`` () =
+  let player = createTestPlayer ()
+  let state = TowerSession.initSession player 42 1
+
+  let panel = TowerDisplay.renderInspectionPanel state state.PlayerPosition
+  Assert.NotNull(panel)
+
+  let cursorViewport = TowerDisplay.renderViewportWithCursor state (Some state.PlayerPosition) 45 21
+  Assert.NotNull(cursorViewport)

@@ -19,8 +19,8 @@ module ParallelDeterminismTests =
 
   [<Fact>]
   let ``runBatch: repeated invocations produce identical summaries`` () =
-    let archA = Archetypes.findByName "Iron Recruit" |> Option.get
-    let archB = Archetypes.findByName "Hedge Mage" |> Option.get
+    let archA = Archetypes.findByName "Warrior" |> Option.get
+    let archB = Archetypes.findByName "Mage" |> Option.get
 
     let first = Simulation.runBatch archA archB 200
     let second = Simulation.runBatch archA archB 200

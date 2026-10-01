@@ -88,7 +88,7 @@ Dev/combat/
 │   │
 │   └── Fornach.Cli/             # Spectre.Console terminal UI & test harness
 │       ├── Types.fs             # Simulation types and CLI models
-│       ├── Archetypes.fs        # Preset tiers (Novice, Adept, Master) & custom factory
+│       ├── Archetypes.fs        # Preset tiers (Novice, Veteran, Master, GrandMaster) & custom factory
 │       ├── AI.fs                # Tactical heuristic AI evaluator
 │       ├── Display.fs           # ANSI HUD, resource bars, roll breakdown, event logger
 │       ├── Simulation.fs        # Headless Monte-Carlo runner & dashboard tables
@@ -143,26 +143,26 @@ The menu provides:
 1. ⚔️ **Interactive Duel Arena**: Playable turn-by-turn combat with categorized menus (Physical, Social, Arcane, Recovery, Finisher), dynamic ANSI health/morale meters, tactical roll breakdown, and combat event logs.
 2. 📊 **Monte-Carlo Balance Simulator**: Select any two combatants and simulate 50 to 1000 iterations to evaluate statistical balance and round pacing.
 3. 🛠️ **Custom Combatant Builder**: Design combatants with custom stat allotments and immediately test them in combat.
-4. 📜 **View Archetype Roster**: Inspect preset character sheets across Novice, Adept, and Master tiers.
+4. 📜 **View Archetype Roster**: Inspect preset character sheets across Novice, Veteran, Master, and GrandMaster tiers.
 
 ### 2. Headless Simulation Mode (Scriptable / CI)
 Run batch simulations directly from the command line:
 
 ```bash
-# Balanced tactical duel (Adept vs. Adept)
-dotnet run --project src/Fornach.Cli -- --sim -a1 "High Magistrate" -a2 "Thought-Weaver" -n 100
+# Balanced tactical duel (Veteran vs. Veteran)
+dotnet run --project src/Fornach.Cli -- --sim -a1 "Veteran Inquisitor" -a2 "Veteran Duelist" -n 100
 
-# Skewed matchup verification (Master vs. Novice)
-dotnet run --project src/Fornach.Cli -- --sim -a1 "Grand Warmaster" -a2 "Iron Recruit" -n 50
+# Skewed matchup verification (GrandMaster vs. Novice)
+dotnet run --project src/Fornach.Cli -- --sim -a1 "Grandmaster Berserker" -a2 "Soldier" -n 50
 
 # Mirror match balance check
-dotnet run --project src/Fornach.Cli -- --sim -a1 "Iron Vanguard" -a2 "Iron Vanguard" -n 100
+dotnet run --project src/Fornach.Cli -- --sim -a1 "Veteran Juggernaut" -a2 "Veteran Juggernaut" -n 100
 ```
 
 #### CLI Simulation Flags:
 - `--sim` / `-s`: Run in headless simulation mode (skips interactive menu).
-- `-a1` / `--archetype1 <name>`: First combatant name (default: `"Iron Vanguard"`).
-- `-a2` / `--archetype2 <name>`: Second combatant name (default: `"Thought-Weaver"`).
+- `-a1` / `--archetype1 <name>`: First combatant name (default: `"Veteran Juggernaut"`).
+- `-a2` / `--archetype2 <name>`: Second combatant name (default: `"Veteran Inquisitor"`).
 - `-n` / `--iterations <count>`: Number of simulated duels (default: `100`).
 
 ---

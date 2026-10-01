@@ -1,6 +1,6 @@
 # Fornach Balance, Combat Mechanics & Class Progression Handoff
 
-## Status: 178 Tests Passing (0 Warnings across 3 Projects)
+## Status: 202 Tests Passing (0 Warnings across 3 Projects)
 
 This document provides a comprehensive handoff of the recent combat balance tuning, archetype progression overhauls, tactical preparation enhancements, swarm simulation refinements, and a solution-wide performance profile (see §4) completed in the `Fornach` codebase.
 
@@ -29,9 +29,59 @@ This document provides a comprehensive handoff of the recent combat balance tuni
 - **Warden Bastion Zone Control**: Limits frontline attackers to 3. Reading the martial school grants persistent Study Stacks when defeating students of the same style.
 - **Attacks of Opportunity (AoO)**: Window tightened, critical damage window tuned, and reactive lunge risks balanced.
 
+### E. Juggernaut & Ranger (Power & Discipline Physical Specialists)
+- **Juggernaut**: Evaluated across all tiers. Employs heavy armor absorption and [`ShockwaveSlam`](file:///home/omary/Dev/fornach/src/Fornach.Domain/Preparations.fs) for area disruption. GrandMaster reaches 100+ vs Warriors and 81 vs Soldiers; Mages (29) serve as an intended mental check.
+- **Ranger**: Evaluated across all tiers. Skirmishes with [`CaltropPouch`](file:///home/omary/Dev/fornach/src/Fornach.Domain/Preparations.fs), turning flank zones into puncture fields while capitalizing on high Prowess and Finesse for opportunist AoO strikes, reaching 100+ against all physical mobs at GrandMaster.
+
+### F. Tower Tile & Hazard Inspection Mode
+- **Interactive Inspect / Look Reticle**: Toggled via `x` / `X` / `;` in [`TowerDisplay.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/TowerDisplay.fs). Allows free-panning the viewport with Vim (`h/j/k/l/y/u/b/n`) and arrow keys to examine tiles across visible and explored memory.
+- **Environmental Hazard Diagnostics**: Highlights tactical warnings for environmental terrain:
+  - *Corrosive Acid Slag*: Dissolves -15 Armor durability upon stepping.
+  - *Molten Lava Rift*: Scorches player for -15 direct HP.
+  - *Deep Floodwater Current*: Inflicts +15 Exhaustion drag.
+  - *Calming Spore Blossom*: Resets Recklessness to 0.
+- **Entity Intelligence**: Displays occupant summaries for player `@ YOU`, active guardians with Lv/HP/Morale/Stance, dialogue NPCs, chests (unopened vs looted), and runic shrines. Explored memory retains remembered chest/shrine locations. Verified with unit tests in [`TowerTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Tests/TowerTests.fs).
+
+### G. Combat Pacing & One-Shot Elimination (All Tiers)
+- **Problem Diagnosed**: High-tier (Grandmaster) duels previously devolved into "rocket tag" where the first character to land a hit dealt 20,000–65,000 damage against 9,000–15,500 HP/Morale pools, ending duels in Round 1. Concurrently, Novice duels across mismatched classes had paper-thin off-plane defensive stats (15) and shallow pools (420–450), also collapsing in Round 1.
+- **Structural Normalization**:
+  - `computeTierMultiplier` soft-capped at 5.0x with diminishing returns (previously 12.0x).
+  - Scaled base damage: Physical to `int (float offStat * 1.50)` and Mental to `int (float offStat * 1.15)` (eliminating the quadratic `offStat^2 / 180` term that caused mental damage blowouts).
+  - Tuned Agility crit multiplier from 3.2x to 1.85x.
+  - Capped per-strike armor shredding to at most 25% of max armor durability (`Math.Max(15, target.Armor.Max / 4)`), allowing armor to protect over 3–5 tactical rounds rather than disintegrating on Turn 1.
+  - Raised baseline Level 1 pool floors in [`TierFactory.fs`](file:///home/omary/Dev/fornach/src/Fornach.Domain/TierFactory.fs) (Physical: 750 HP / 600 Morale / 30 Armor; Magic: 600 HP / 750 Morale / 20 Armor) and unified generic NPC archetypes in [`Archetypes.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/Archetypes.fs) with canonical `TierFactory` stat curves.
+- **Results**: Both Novice and Grandmaster non-mirror duels now reliably last **3 to 6 tactical rounds**, turning duels into true strategic contests.
+
+### H. Higher-Level Enemy Swarm Waves
+- **Wave Scaling**: Expanded [`MonteCarloSwarmTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Domain.Tests/MonteCarloSwarmTests.fs) with higher-level multi-enemy encounters:
+  - *Veteran Squads (Lv. 40)*: Justicar vs. 3× Veteran Juggernauts; Berserker vs. 3× Veteran Duelists.
+  - *Master Pairs (Lv. 100)*: Berserker vs. 2× Master Juggernauts.
+  - *Grandmaster Multi-Enemy Encounters (Lv. 200)*: Justicar vs. 2× Grandmaster Berserkers (sustaining 4.4 rounds of tactical combat).
+
+### I. Discipline Attack Separation & Duel Menu Decluttering
+- **Engine-Level Validation**: In [`Actions.fs`](file:///home/omary/Dev/fornach/src/Fornach.Engine/Actions.fs) and [`ActionResolver.fs`](file:///home/omary/Dev/fornach/src/Fornach.Engine/ActionResolver.fs), characters are strictly bound to their operative combat plane (`actor.Plane`):
+  - Physical combatants cannot execute magic/arcane attacks (`ArcaneCataclysm`, `SynapticGlamour`, `MirrorIllusion`, `RunicWardTrap`, `DisorientingShockwave`).
+  - Magic combatants cannot execute physical martial strikes (`ForceStrike`, `FinesseCadence`, `ProwessStrike`, `CalculatedFlawStrike`, `MasterfulDisarm`).
+  - Attempting an off-discipline attack safely halts the action and emits a explanatory `CombatEvent.ComboReset` without producing an invalid contest.
+  - Boss `TraumaAttack` gambits remain permissible for boss manifestations.
+- **Duel Menu Decluttering**: In [`Program.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/Program.fs) (`buildActionChoices`), menu choices are cleanly segmented by player plane:
+  - Physical combatants see exclusively physical martial strikes, stance shifts, and `Steady Form` (~9–10 choices).
+  - Magic combatants see exclusively arcane spellcraft with proficiency tags and `Center Mind` (~11 choices).
+  - Grief boss trauma gambits only appear when facing or controlling Grief manifestations.
+- **AI Decision Alignment**: In [`AI.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/AI.fs), autonomous combatants select offensive attacks, recovery resets, and finishers matching their discipline.
+
+### J. Magic Complex Forms System (Occult Mental Stances)
+- **Domain Modeling**: Designed Shadowrun Technomancer-inspired *"Weaving Complex Forms"* for mental/arcane combatants, decoupling mental magic from physical martial stances:
+  - **`Resonance Spike`** (Power / Intellect Vector): Volatile psychic overclocking. Grants **+25% spell damage**, inflicts **+20 extra Cognitive Fatigue** on targets, and expands group splash radius up to 4 targets at 65% damage. Incurs somatic **Fading Drain** on the caster (+10 Cognitive Fatigue and +15 Recklessness per cast), emitting [`CombatEvent.FadingDrainSuffered`](file:///home/omary/Dev/fornach/src/Fornach.Domain/CombatEvent.fs). If fatigue/recklessness hits 100%, existing threshold collapses fire naturally.
+  - **`Phantasmal Diffusion`** (Agility / Acuity Vector): Sensory static and perceptual jitter. Passively weaves +1 Mirror Clone per turn during upkeep up to 4, grants a **+40% decoy evasion swap bonus** on incoming attacks, and allows emergency phasing even with 0 initial clones. Incurs a **-15% direct damage reduction**.
+  - **`Aegis Lattice`** (Discipline / Acumen Vector): Sacred geometric abjuration web. Passively restores **+15 Arcane Ward per turn** during upkeep, locks `ArcaneCataclysm: Overchannel` (grounding it back to standard cast with 0 Recklessness penalty), and reflects **50% damage back to attacker + 15 Frustration** whenever the Arcane Ward absorbs incoming damage.
+- **Cross-Discipline Boundaries**: Physical combatants can only shift physical `CombatStance` (`PowerStance`, `AgilityStance`, `DisciplineStance`); mental combatants can only thread mental `ComplexForm`. Attempting the wrong discipline blocks the action with a `ComboReset` event.
+- **Autonomous AI & Duel Menus**: In [`AI.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/AI.fs), magic combatants evaluate their preferred form and panic-shift into `AegisLattice` to stabilize if reckless entropy or cognitive fatigue nears dangerous levels. Duel menus in [`Program.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/Program.fs) and HUD panels in [`Display.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/Display.fs) and [`TowerDisplay.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/TowerDisplay.fs) render active Complex Forms for all mental characters.
+- **Verification**: Verified with 8 dedicated unit tests in [`ClassBalanceTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Tests/ClassBalanceTests.fs) (202 tests passing, 0 warnings across solution) and verified against 128-matchup `--balance-matrix`.
+
 ---
 
-## 2. 96-Matchup Balance Benchmark Snapshot
+## 2. 128-Matchup Balance Benchmark Snapshot
 
 Results from `rtk dotnet run --project src/Fornach.Cli -- --balance-matrix`:
 
@@ -41,6 +91,10 @@ Results from `rtk dotnet run --project src/Fornach.Cli -- --balance-matrix`:
 | | Veteran | 21 | 28 | 16 | 12 | Kinetic slugger |
 | | Master | 56 | 50 | 28 | 20 | High-power crowd clear |
 | | GrandMaster | **73** | **86** | **49** | **36** | Huge physical endurance; Mages remain primary threat |
+| **Juggernaut** | Novice | 1 | 1 | 1 | 1 | Iron Colossus baseline |
+| | Veteran | 16 | 8 | 14 | 4 | Heavy armor soak |
+| | Master | 46 | 25 | 34 | 12 | Shockwave Slam formation disrupt |
+| | GrandMaster | **100+** | **53** | **81** | **29** | Heavy physical endurance; Mages check lower mental resolve |
 | **Duelist** | Novice | 2 | 2 | 2 | 2 | Fragile early |
 | | Veteran | 22 | 100+ | 100+ | 7 | High Finesse evasion |
 | | Master | 100+ | 100+ | 100+ | 100+ | Caltrops & lethal AoO counters |
@@ -61,6 +115,10 @@ Results from `rtk dotnet run --project src/Fornach.Cli -- --balance-matrix`:
 | | Veteran | 8 | 13 | 10 | 10 | Ground glyphs & wards |
 | | Master | 20 | 28 | 29 | 27 | Consistent tanking |
 | | GrandMaster | **41** | **48** | **63** | **66** | Aegis of Retribution + ground wards trip flankers |
+| **Ranger** | Novice | 1 | 1 | 1 | 1 | Skirmisher baseline |
+| | Veteran | 27 | 32 | 32 | 12 | Caltrop Pouch crowd control |
+| | Master | 100+ | 97 | 100+ | 36 | Opportunist agility & reactive counters |
+| | GrandMaster | **100+** | **100+** | **100+** | **100+** | Fluid zone control & reactive counters |
 
 ---
 
@@ -88,6 +146,8 @@ Results from `rtk dotnet run --project src/Fornach.Cli -- --balance-matrix`:
 
 **Method:** Release binaries, purpose-built `#r` harness against the built DLLs, tiered compilation disabled for micro-benchmarks, median-of-5. No profiler was available on this machine (`dotnet-counters`/`-trace`/`-gcdump` all absent).
 
+**Currency:** §4.1–§4.5 were measured *before* the `StatBlock` rework of [ADR 0002](file:///home/omary/Dev/fornach/docs/adr/0002-array-backed-statblock-and-static-baseline.md) landed. §4.2's `StatBlock` / `Baseline` / `createGrandMasterBerserker` rows and the §4.4 ranking are superseded by **§4.6**, which is the current profile.
+
 ### 4.1 Already shipped — parallel Monte-Carlo batches
 
 The batch loops in [`Simulation.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/Simulation.fs) now run through `runParallelBatch` (`Array.Parallel.init` + per-iteration `Random(seeds[i])`). This is **scheduling-independent**: iteration `i` rolls identical numbers on any thread, so `--sim` and `--group` output is unchanged.
@@ -106,7 +166,7 @@ Thread-safety vs reproducibility (a `lock`-wrapped shared `Random` or `Random.Sh
 
 ### 4.2 Measured profile — setup dominates, not the combat loop
 
-A duel against Iron Recruit averages **1.00 rounds** (range 1–3), so the inner loop is fast and setup is effectively all of the work. Per duel: **20 KB allocated / 13.1 µs serial**; **20,155 B per match** end-to-end.
+A duel against Iron Recruit (a Novice soldier archetype, retired from the roster in the archetype cleanup) averages **1.00 rounds** (range 1–3), so the inner loop is fast and setup is effectively all of the work. Per duel: **20 KB allocated / 13.1 µs serial**; **20,155 B per match** end-to-end.
 
 | Component | Time | Allocated |
 | :--- | ---: | ---: |
@@ -155,12 +215,41 @@ Cheapest safe sequence: #1 → #2 (near-free once #1 lands) → #3 → #4. Note 
 
 **Explicitly not recommended:** replacing `System.Random` with a hand-rolled `splitmix64` struct PRNG. It is correct and reproducible, but the benchmarks contradicted each other by ~3.6× on identical code paths (80 M draws: 212 ms vs 105 ms *slower*; 100 M draws: 58 ms vs 199 ms *faster*). `Array.Parallel.init` over tiny work items is dispatch/GC-bound and cannot resolve the question. A verdict needs BenchmarkDotNet, not `Stopwatch` around a parallel fan-out.
 
+### 4.6 Second-pass review — union `ToString()` in match setup
+
+Taken after the ADR 0002 work landed, on scratch copies (the working tree was not modified). Method as in §4, plus before/after instrumentation of `Fornach.Cli --balance-matrix` (96 matchups, 9,580 matches / 75,736 rounds) with identical instrumentation on both sides. Full evidence and the decision: [ADR 0005](file:///home/omary/Dev/fornach/docs/adr/0005-hand-written-name-members-instead-of-union-tostring.md).
+
+**Dominant finding:** [`TierFactory.fs:238`](file:///home/omary/Dev/fornach/src/Fornach.Domain/TierFactory.fs#L238) built the archetype name with `sprintf "%s %s" (tier.ToString()) cls.Name`. The compiler-generated union `ToString()` goes through reflective structured formatting: **40,093 ns / 15,026 B per call**, against **3.4 ns / 0 B** for the hand-written `CharacterClass.Name` ([`Classes.fs:79`](file:///home/omary/Dev/fornach/src/Fornach.Domain/Classes.fs#L79)) and 7.9 ns for the `int.ToString()` control. Every union in `Fornach.Domain` pays this printer (`CharacterClass` 63 µs, `CollapseReason` 46 µs, `WeaponCondition` 42 µs, `CombatMode` 41 µs, `Plane` 36 µs).
+
+| `--balance-matrix` | baseline | with a `CombatTier.Name` member |
+| :--- | ---: | ---: |
+| wall clock (2 runs) | 9.39 s / 10.05 s | **2.28 s / 2.30 s** (~4.3×) |
+| match setup | 7,604 ms (80%) | 306 ms (14%) |
+| allocated | 7.27 GB | 3.94 GB |
+| balance table | — byte-identical after ANSI strip — | |
+| `dotnet test -c Release` | — 179 / 179 pass, 0 warnings — | |
+
+This also fully explains the `createGrandMasterBerserker` row of §4.2 (43 µs / 21,926 B) — it is the `ToString()` call, not level scaling: `createClassLevel` alone is 1,073 ns / 1,920 B.
+
+**Ranking after this pass:**
+
+| # | Change | Expected win | Status |
+| :--- | :--- | :--- | :--- |
+| 1 | `member CombatTier.Name` on the union, used at `TierFactory.fs:238` (ADR 0005) | ~4.3× on the matrix sweep; −3.3 GB | Proposed, validated; 8-line patch |
+| 2 | Stop rebuilding the mob list per swing — `List.mapi` at [`Simulation.fs:446`](file:///home/omary/Dev/fornach/src/Fornach.Cli/Simulation.fs#L446) rebuilds all n elements on *every* swing (O(n²) list rebuilds per round), and `:444` rebuilds again on elimination | 86% of post-fix runtime: 1,808 ms / 3.55 GB, ~24 µs and ~47 KB per round | **Not measured** — mechanism only |
+| 3 | Sim-local `CombatantId` counter (was §4.4 #3) | ~3% of runtime now that setup is cheap | Still valid |
+| 4 | Parallelise the matrix sweep (was §4.4 #4) | less attractive at a 2.3 s total | Still valid, subject to the §4.1 Spectre constraint |
+
+**Recommendation #2 in detail:** make `mob` a match-local array, replace the per-swing rebuild with an index write (`mobArr.[mobIdx] <- newAttacker`), and compact once per round rather than once per swing. Keep the compaction **order-preserving** — `AI.chooseGroupTarget` and enchainment order depend on list order, so a swap-remove would move balance numbers even though the outcome distribution should not change.
+
+**Now not worth doing:** anything on the creation path (`StatBlock.Create`, template/`statList` caching, the record copies inside `createClassTier`) has a 306 ms ceiling (14%). `StatBlock.Get` measures 9.2 ns and `StatBlock.Baseline` 4.5 ns / 0 B, confirming §4.4 #1 and #2 landed as intended (realised lookup cost is ~9–12 ns rather than the ~2 ns projected).
+
 ---
 
 ## 5. Next Session TODO List
 
-- [ ] **1. Juggernaut & Ranger Evaluation**:
-  - Benchmark and tune `Juggernaut` (Power / Discipline) and `Ranger` (Agility / Discipline) progression in [`MonteCarloSwarmTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Domain.Tests/MonteCarloSwarmTests.fs) and `--balance-matrix`.
+- [x] **1. Juggernaut & Ranger Evaluation**:
+  - Benchmark and tune `Juggernaut` (Power / Discipline) and `Ranger` (Agility / Discipline) progression in [`MonteCarloSwarmTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Domain.Tests/MonteCarloSwarmTests.fs), [`OverallBalanceTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Domain.Tests/OverallBalanceTests.fs), and `--balance-matrix` (expanded to 128 matchups).
 - [ ] **2. Infinite Tower Boss Scaling**:
   - Verify Grief Aspect bosses in [`docs/STORY_AND_TOWER.md`](file:///home/omary/Dev/fornach/docs/STORY_AND_TOWER.md) against the revised preparations and meter interactions.
 - [ ] **3. Spatial Grid Integration**:
@@ -179,6 +268,7 @@ The next agent should consider using the following skills for future tasks:
 
 Recommended specifically for the performance work in §4:
 - **`domain-modeling`**: The architecture and empirical benchmarks for changing `StatBlock`'s representation (§4.4 #1 & #2) and multi-threading simulation sweeps (§4.4 #4) are recorded in [`docs/adr/0002-array-backed-statblock-and-static-baseline.md`](file:///home/omary/Dev/fornach/docs/adr/0002-array-backed-statblock-and-static-baseline.md) and [`docs/adr/0003-deterministic-parallel-simulation-and-balance-matrix.md`](file:///home/omary/Dev/fornach/docs/adr/0003-deterministic-parallel-simulation-and-balance-matrix.md).
+- **`domain-modeling`**: The second-pass measurements (§4.6) and the decision to hand-write name members instead of formatting unions reflectively are recorded in [`docs/adr/0005-hand-written-name-members-instead-of-union-tostring.md`](file:///home/omary/Dev/fornach/docs/adr/0005-hand-written-name-members-instead-of-union-tostring.md).
 - **`diagnosing-bugs`**: Its performance-regression loop is the right structure for validating the §4.4 changes against the §4.1 determinism guard.
 - **`fsharp-testing`**: For the guard and benchmark-support tests around the `StatBlock` representation change.
 - **No skill covers F#/.NET performance or concurrency.** That gap was searched for and confirmed empty, so use the measured profile in §4 rather than reaching for a skill on this axis.

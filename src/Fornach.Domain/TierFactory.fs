@@ -60,15 +60,15 @@ module ProgressionScale =
     let l = Math.Max(1, level)
     let delta = l - 1
     if plane = Physical then
-      let hp = 650 + delta * 75
-      let morale = 450 + delta * 50
-      let armor = 25 + int (Math.Round(float delta * 1.5))
+      let hp = 750 + delta * 75
+      let morale = 600 + delta * 50
+      let armor = 30 + int (Math.Round(float delta * 1.5))
       (hp, morale, armor)
     else
       // Magic users have slightly less physical HP but higher Morale and balanced wards
-      let hp = 420 + delta * 45
-      let morale = 700 + delta * 80
-      let armor = 15 + int (Math.Round(float delta * 1.0))
+      let hp = 600 + delta * 45
+      let morale = 750 + delta * 80
+      let armor = 20 + int (Math.Round(float delta * 1.0))
       (hp, morale, armor)
 
 module TierFactory =

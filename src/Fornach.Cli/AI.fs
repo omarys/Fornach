@@ -6,29 +6,13 @@ open Fornach.Engine
 
 module AI =
 
-  /// Selects the execution plane based on opponent collapse reason or depleted pool
-  let private chooseExecutePlane (opponent: Combatant) : Plane =
-    match opponent.Collapse with
-    | CollapseState.Collapsed reason ->
-      match reason with
-      | SomaticAnoxia
-      | Exsanguination
-      | StanceFailure -> Physical
-      | CatatonicStupor
-      | ContradictionLock
-      | HystericalMeltdown -> Mental
-      | RecklessExposure ->
-        if opponent.Health.Current < opponent.Morale.Current then Physical else Mental
-    | CollapseState.Stable ->
-      if opponent.Health.Current < opponent.Morale.Current then Physical else Mental
+  /// Selects the execution plane based on the actor's operative discipline
+  let private chooseExecutePlane (actor: Combatant) : Plane =
+    actor.Plane
 
   /// Evaluates an actor's specialization and chooses the optimal defensive reset
   let private chooseRecovery (self: Combatant) : ActionIntent =
-    let poise = self.GetStat Poise
-    let composure = self.GetStat Composure
-    if self.ArcaneFocus = Discipline && self.ArcaneWard < 40 then
-      RecoveryAction CenterMind
-    elif poise >= composure then
+    if self.Plane = Physical then
       RecoveryAction SteadyForm
     else
       RecoveryAction CenterMind
@@ -80,7 +64,7 @@ module AI =
         ShiftStance CombatStance.PowerStance
       else
         StandardAttack (ForceStrike isGambit)
-    elif bestPhysical >= bestMental then
+    elif self.Plane = Physical then
       // Tactical Stance Evaluation:
       // When facing multiple opponents (surroundingOpponents >= 2):
       // - Prowess (Discipline Stance) is tactically superior: chains attacks with 0 Recklessness,
@@ -139,22 +123,43 @@ module AI =
             StandardAttack (ProwessStrike isGambit)
     else
       // Mental discipline (combat AI strictly utilizes Arcane/mental attacks; social verbal sparring is reserved for social encounters)
-      if intellect >= acuity && intellect >= acumen then
-        StandardAttack (ArcaneCataclysm isGambit)
-      elif acuity >= acumen then
-        // Guile/Trickery specialist: if without clones, conjure mirror decoys first!
-        if self.MirrorClones = 0 then
-          StandardAttack (MirrorIllusion isGambit)
+      let preferredForm =
+        if intellect >= acuity && intellect >= acumen then ComplexForm.ResonanceSpike
+        elif acuity >= acumen then ComplexForm.PhantasmalDiffusion
+        else ComplexForm.AegisLattice
+
+      // If actor is in ResonanceSpike but Recklessness or Cognitive Fatigue is high (>= 60), switch to AegisLattice to stabilize!
+      let formToThread =
+        if self.ComplexForm = Some ComplexForm.ResonanceSpike && (self.Meters.Recklessness.Value >= 60 || self.Meters.CognitiveFatigue.Value >= 65) then
+          Some ComplexForm.AegisLattice
+        elif self.ComplexForm.IsNone then
+          Some preferredForm
+        elif self.ComplexForm <> Some preferredForm && self.Meters.Recklessness.Value < 30 then
+          Some preferredForm
         else
-          StandardAttack (SynapticGlamour isGambit)
-      else
-        // Defensive/CC specialist: if mobbed or opponent has combo momentum, disorient them! If ward low, erect ward!
-        if surroundingOpponents >= 2 || opponent.ComboTracker.ConsecutiveHits >= 2 then
-          StandardAttack (DisorientingShockwave isGambit)
-        elif self.ArcaneWard < 25 then
-          StandardAttack (RunicWardTrap isGambit)
+          None
+
+      match formToThread with
+      | Some form when self.ComplexForm <> Some form ->
+        ThreadComplexForm form
+      | _ ->
+        if intellect >= acuity && intellect >= acumen then
+          let isSafeForOverchannel = isGambit && self.ComplexForm <> Some ComplexForm.AegisLattice
+          StandardAttack (ArcaneCataclysm isSafeForOverchannel)
+        elif acuity >= acumen then
+          // Guile/Trickery specialist: if without clones and not passively generating them, conjure mirror decoys first!
+          if self.MirrorClones = 0 && self.ComplexForm <> Some ComplexForm.PhantasmalDiffusion then
+            StandardAttack (MirrorIllusion isGambit)
+          else
+            StandardAttack (SynapticGlamour isGambit)
         else
-          StandardAttack (DisorientingShockwave isGambit)
+          // Defensive/CC specialist: if mobbed or opponent has combo momentum, disorient them! If ward low, erect ward!
+          if surroundingOpponents >= 2 || opponent.ComboTracker.ConsecutiveHits >= 2 then
+            StandardAttack (DisorientingShockwave isGambit)
+          elif self.ArcaneWard < 25 then
+            StandardAttack (RunicWardTrap isGambit)
+          else
+            StandardAttack (DisorientingShockwave isGambit)
 
   /// Top-level tactical decision evaluator for autonomous combatants with surrounding opponent count
   let chooseIntentWithContext (self: Combatant) (opponent: Combatant) (surroundingOpponents: int) : ActionIntent =
@@ -221,7 +226,7 @@ module AI =
     | None ->
       // 1. If opponent is in a Collapsed threshold state, seize the moment with an Execution finisher
       if opponent.IsExecuteEligible then
-        ExecuteStrike (chooseExecutePlane opponent)
+        ExecuteStrike (chooseExecutePlane self)
 
       // 2. If self is reaching dangerous entropy or status debuff levels, bleed Recklessness
       elif (if self.Name.Contains("Anger") then self.Meters.Recklessness.Value >= 85 else self.Meters.Recklessness.Value >= 40)

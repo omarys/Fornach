@@ -57,6 +57,7 @@ type VimConsole(inner: IAnsiConsole) =
     member this.Pipeline = inner.Pipeline
     member this.Clear(home) = inner.Clear(home)
     member this.Write(renderable: IRenderable) = inner.Write(renderable)
+    member this.WriteAnsi(action: System.Action<AnsiWriter>) = inner.WriteAnsi(action)
 
 module Display =
 
@@ -93,18 +94,27 @@ module Display =
     let grid = Grid()
     grid.AddColumn(GridColumn()) |> ignore
 
-    // Active Tactical Stance & Weapon Condition
-    let stanceColor =
-      match c.Stance with
-      | CombatStance.PowerStance -> Theme.Red
-      | CombatStance.AgilityStance -> Theme.Green
-      | CombatStance.DisciplineStance -> Theme.Purple
-    let stanceName =
-      match c.Stance with
-      | CombatStance.PowerStance -> "Power Stance (Force)"
-      | CombatStance.AgilityStance -> "Agility Stance (Finesse)"
-      | CombatStance.DisciplineStance -> "Discipline Stance (Prowess)"
-    grid.AddRow(Markup(sprintf "%-22s [bold %s]%s[/]" "󰓥 Active Stance" stanceColor stanceName)) |> ignore
+    if c.Plane = Mental then
+      let formColor, formName =
+        match c.ComplexForm with
+        | Some ComplexForm.ResonanceSpike -> Theme.Pink, "Resonance Spike (Power)"
+        | Some ComplexForm.PhantasmalDiffusion -> Theme.Green, "Phantasmal Diffusion (Agility)"
+        | Some ComplexForm.AegisLattice -> Theme.Cyan, "Aegis Lattice (Discipline)"
+        | None -> Theme.Comment, "Unthreaded"
+      grid.AddRow(Markup(sprintf "%-22s [bold %s]%s[/]" "🧵 Complex Form" formColor formName)) |> ignore
+    else
+      // Active Tactical Stance & Weapon Condition
+      let stanceColor =
+        match c.Stance with
+        | CombatStance.PowerStance -> Theme.Red
+        | CombatStance.AgilityStance -> Theme.Green
+        | CombatStance.DisciplineStance -> Theme.Purple
+      let stanceName =
+        match c.Stance with
+        | CombatStance.PowerStance -> "Power Stance (Force)"
+        | CombatStance.AgilityStance -> "Agility Stance (Finesse)"
+        | CombatStance.DisciplineStance -> "Discipline Stance (Prowess)"
+      grid.AddRow(Markup(sprintf "%-22s [bold %s]%s[/]" "󰓥 Active Stance" stanceColor stanceName)) |> ignore
 
     let weaponCondColor, weaponCondDesc =
       match c.WeaponCondition with
@@ -434,3 +444,10 @@ module Display =
 
     | CombatEvent.FrenzyStrikeExecuted (_, _) ->
       AnsiConsole.MarkupLine(sprintf "  [bold %s]⚡ FRENZY ATTACK:[/] Enraged bloodlust triggered an immediate savage follow-up swing!" Theme.Orange)
+
+    | CombatEvent.ComplexFormThreaded (_, oldFormOpt, newForm) ->
+      let oldName = oldFormOpt |> Option.map (fun f -> f.Name) |> Option.defaultValue "None"
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🧵 COMPLEX FORM:[/] Threaded [bold underline %s]%s[/] (Previous: %s)." Theme.Cyan Theme.Pink newForm.Name oldName)
+
+    | CombatEvent.FadingDrainSuffered (_, formName, fatigueDrain, reckSpike) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]⚡ FADING DRAIN:[/] Channeling [bold %s]%s[/] burned through mental reserves (+%d Cognitive Fatigue, +%d Recklessness)!" Theme.Purple Theme.Cyan formName fatigueDrain reckSpike)

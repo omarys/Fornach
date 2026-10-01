@@ -26,12 +26,12 @@ description = "Launch the interactive Spectre.Console CLI arena"
 run = "dotnet run --project src/Fornach.Cli"
 
 [tasks.sim]
-description = "Run the headless balance simulation harness; pass args, e.g. `mise run sim -- -a1 'Iron Vanguard' -a2 'Thought-Weaver' -n 500`"
+description = "Run the headless balance simulation harness; pass args, e.g. `mise run sim -- -a1 'Veteran Juggernaut' -a2 'Veteran Inquisitor' -n 500`"
 run = "dotnet run --project src/Fornach.Cli -c Release -- --sim"
 
 [tasks.benchmark]
 description = "Run standard balance benchmarks across representative archetype matchups"
-run = "dotnet run --project src/Fornach.Cli -c Release -- --sim -a1 'High Magistrate' -a2 'Thought-Weaver' -n 100"
+run = "dotnet run --project src/Fornach.Cli -c Release -- --sim -a1 'Veteran Inquisitor' -a2 'Veteran Duelist' -n 100"
 
 [tasks.fmt]
 description = "Format all F# files using fantomas"
