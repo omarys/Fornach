@@ -23,7 +23,7 @@ module ProgressionScale =
     | Master -> 100
     | GrandMaster -> 200
 
-  /// Computes (primary, secondary, tertiary, minor, offDefensive, offOffensive) for physical classes based on 1.0 : 0.75 : 0.50 ratio
+  /// Computes (primary, secondary, tertiary, minor, offDefensive, offOffensive) for physical classes based on 1.0 : 0.75 : 0.75 ratio
   let physicalStatsForLevel (level: int) : int * int * int * int * int * int =
     let l = Math.Max(1, level)
     let delta = l - 1
@@ -76,92 +76,75 @@ module TierFactory =
   /// Creates a fully equipped combatant for a designated class archetype and exact level
   let createClassLevel (cls: CharacterClass) (level: int) : Combatant =
     let id = CombatantId.New()
-    let health, morale, armor = ProgressionScale.poolsForLevel cls.Plane level
+    let health, baseMorale, baseArmor = ProgressionScale.poolsForLevel cls.Plane level
+    let morale, armor =
+      match cls with
+      | CharacterClass.Warden
+      | CharacterClass.Justicar ->
+        int (Math.Round(float baseMorale * 1.15)),
+        int (Math.Round(float baseArmor * 1.15))
+      | _ -> baseMorale, baseArmor
 
     let statMap =
       if cls.Plane = Physical then
         let prim, sec, tert, min, offDef, offOff = ProgressionScale.physicalStatsForLevel level
         match cls with
         | CharacterClass.Berserker ->
-          // Power / Agility / Discipline (1.0 : 0.75 : 0.50)
+          // Power Primary (1.0 : 0.75 : 0.75): Power 1.0, Agility 0.75, Discipline 0.75
           // Power Archetype: Composure (defensive discipline), Acumen (tactical reading), and Resolve (mental grit) boosted
           [ Force, prim; Fortitude, prim
             Finesse, sec; Reflex, sec
-            Prowess, tert; Poise, tert
-            Intellect, min; Resolve, offOff
-            Acuity, min; Intuition, min
-            Acumen, offOff; Composure, offDef ]
-        | CharacterClass.Juggernaut ->
-          // Power / Discipline / Agility (1.0 : 0.75 : 0.50)
-          [ Force, prim; Fortitude, prim
             Prowess, sec; Poise, sec
-            Finesse, tert; Reflex, tert
-            Intellect, min; Resolve, offOff
+            Intellect, min; Resolve, offDef
             Acuity, min; Intuition, min
             Acumen, offOff; Composure, offDef ]
         | CharacterClass.Duelist ->
-          // Agility / Discipline / Power (1.0 : 0.75 : 0.50)
+          // Agility Primary (1.0 : 0.75 : 0.75): Agility 1.0, Discipline 0.75, Power 0.75
           // Agility Archetype: Intuition (defensive awareness), Acuity (offensive precision), and Resolve boosted
           [ Finesse, prim; Reflex, prim
             Prowess, sec; Poise, sec
-            Force, tert; Fortitude, tert
-            Intellect, min; Resolve, offOff
-            Acuity, offOff; Intuition, offDef
-            Acumen, min; Composure, min ]
-        | CharacterClass.Assassin ->
-          // Agility / Power / Discipline (1.0 : 0.75 : 0.50)
-          [ Finesse, prim; Reflex, prim
             Force, sec; Fortitude, sec
-            Prowess, tert; Poise, tert
-            Intellect, min; Resolve, offOff
+            Intellect, min; Resolve, offDef
             Acuity, offOff; Intuition, offDef
             Acumen, min; Composure, min ]
         | CharacterClass.Warden
         | CharacterClass.Justicar ->
-          // Discipline / Power / Agility (1.0 : 0.75 : 0.50)
+          // Discipline Primary (1.0 : 0.75 : 0.75): Discipline 1.0, Power 0.75, Agility 0.75
           // Discipline Archetype: Intuition (defensive awareness), Resolve (mental fortitude), and Composure boosted
           [ Prowess, prim; Poise, prim
             Force, sec; Fortitude, sec
-            Finesse, tert; Reflex, tert
-            Intellect, min; Resolve, offDef
-            Acuity, min; Intuition, offDef
-            Acumen, min; Composure, offOff ]
-        | CharacterClass.Ranger ->
-          // Discipline / Agility / Power (1.0 : 0.75 : 0.50)
-          [ Prowess, prim; Poise, prim
             Finesse, sec; Reflex, sec
-            Force, tert; Fortitude, tert
             Intellect, min; Resolve, offDef
             Acuity, min; Intuition, offDef
-            Acumen, min; Composure, offOff ]
+            Acumen, min; Composure, offDef ]
         | CharacterClass.Rogue ->
           // Generic Agility NPC
           [ Finesse, prim; Reflex, prim
             Prowess, sec; Poise, sec
-            Force, tert; Fortitude, tert
-            Intellect, min; Resolve, offOff
+            Force, sec; Fortitude, sec
+            Intellect, min; Resolve, offDef
             Acuity, offOff; Intuition, offDef
             Acumen, min; Composure, min ]
         | CharacterClass.Warrior ->
           // Generic Power NPC
           [ Force, prim; Fortitude, prim
             Prowess, sec; Poise, sec
-            Finesse, tert; Reflex, tert
-            Intellect, min; Resolve, offOff
+            Finesse, sec; Reflex, sec
+            Intellect, min; Resolve, offDef
             Acuity, min; Intuition, min
             Acumen, offOff; Composure, offDef ]
         | CharacterClass.Soldier ->
           // Generic Discipline NPC
           [ Prowess, prim; Poise, prim
             Force, sec; Fortitude, sec
-            Finesse, tert; Reflex, tert
+            Finesse, sec; Reflex, sec
             Intellect, min; Resolve, offDef
             Acuity, min; Intuition, offDef
-            Acumen, min; Composure, offOff ]
+            Acumen, min; Composure, offDef ]
         | _ ->
           [ Force, prim; Fortitude, prim
             Finesse, sec; Reflex, sec
-            Prowess, tert; Poise, tert
+            Prowess, sec; Poise, sec
             Intellect, min; Resolve, min
             Acuity, min; Intuition, min
             Acumen, min; Composure, min ]
@@ -212,15 +195,12 @@ module TierFactory =
     let stance =
       match cls with
       | CharacterClass.Berserker
-      | CharacterClass.Juggernaut
       | CharacterClass.Warrior
       | CharacterClass.Inquisitor
       | CharacterClass.Mage -> CombatStance.PowerStance
       | CharacterClass.Duelist
-      | CharacterClass.Assassin
       | CharacterClass.Rogue
-      | CharacterClass.Mesmer
-      | CharacterClass.Ranger -> CombatStance.AgilityStance
+      | CharacterClass.Mesmer -> CombatStance.AgilityStance
       | CharacterClass.Warden
       | CharacterClass.Justicar
       | CharacterClass.Soldier

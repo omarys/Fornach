@@ -6,156 +6,44 @@ open Fornach.Domain
 module Archetypes =
 
   // =========================================================================
-  // Veteran Tier (Level 40: Stats ~200, HP/Morale 2400–3600, Armor 55–85)
+  // Archetype Tier Factories
   // =========================================================================
 
-  let createVeteranJuggernaut () =
-    let id = CombatantId.New()
-    let stats =
-      StatBlock.Create [
-        Force, 201; Fortitude, 201
-        Prowess, 123; Poise, 123
-        Finesse, 74; Reflex, 74
-        Intellect, 74; Resolve, 74
-        Acuity, 74; Intuition, 74
-        Acumen, 74; Composure, 74
-      ]
-    { Combatant.create id "Veteran Juggernaut" 3575 2400 stats with
-        Class = CharacterClass.Juggernaut
-        Armor = ArmorIntegrity.Create 84
-        Stance = CombatStance.PowerStance }
+  let createClassTier (cls: CharacterClass) (tier: CombatTier) () =
+    TierFactory.createClassTier cls tier
 
-  let createVeteranDuelist () =
-    let id = CombatantId.New()
-    let stats =
-      StatBlock.Create [
-        Finesse, 201; Reflex, 201
-        Prowess, 123; Poise, 123
-        Force, 74; Fortitude, 74
-        Intellect, 74; Resolve, 74
-        Acuity, 74; Intuition, 74
-        Acumen, 74; Composure, 74
-      ]
-    { Combatant.create id "Veteran Duelist" 3575 2400 stats with
-        Class = CharacterClass.Duelist
-        Armor = ArmorIntegrity.Create 84
-        Stance = CombatStance.AgilityStance }
+  let createVeteranBerserker () = TierFactory.createClassTier CharacterClass.Berserker CombatTier.Veteran
+  let createVeteranDuelist () = TierFactory.createClassTier CharacterClass.Duelist CombatTier.Veteran
+  let createVeteranWarden () = TierFactory.createClassTier CharacterClass.Warden CombatTier.Veteran
+  let createVeteranInquisitor () = TierFactory.createClassTier CharacterClass.Inquisitor CombatTier.Veteran
+  let createVeteranMesmer () = TierFactory.createClassTier CharacterClass.Mesmer CombatTier.Veteran
+  let createVeteranAbjurer () = TierFactory.createClassTier CharacterClass.Abjurer CombatTier.Veteran
 
-  let createVeteranInquisitor () =
-    let id = CombatantId.New()
-    let stats =
-      StatBlock.Create [
-        Intellect, 201; Resolve, 201
-        Acuity, 123; Intuition, 123
-        Acumen, 74; Composure, 74
-        Force, 74; Fortitude, 74
-        Finesse, 74; Reflex, 74
-        Prowess, 74; Poise, 74
-      ]
-    { Combatant.create id "Veteran Inquisitor" 2400 3575 stats with
-        Class = CharacterClass.Inquisitor
-        Armor = ArmorIntegrity.Create 54
-        Stance = CombatStance.AgilityStance }
-
-  let createVeteranMesmer () =
-    let id = CombatantId.New()
-    let stats =
-      StatBlock.Create [
-        Acuity, 201; Intuition, 201
-        Intellect, 123; Resolve, 123
-        Force, 74; Fortitude, 74
-        Finesse, 74; Reflex, 74
-        Prowess, 74; Poise, 74
-        Acumen, 74; Composure, 74
-      ]
-    { Combatant.create id "Veteran Mesmer" 2400 3575 stats with
-        Class = CharacterClass.Mesmer
-        Armor = ArmorIntegrity.Create 54
-        Stance = CombatStance.AgilityStance }
-
-  let createVeteranAbjurer () =
-    let id = CombatantId.New()
-    let stats =
-      StatBlock.Create [
-        Acumen, 201; Composure, 201
-        Prowess, 123; Poise, 123
-        Force, 74; Fortitude, 74
-        Finesse, 74; Reflex, 74
-        Intellect, 74; Resolve, 74
-        Acuity, 74; Intuition, 74
-      ]
-    { Combatant.create id "Veteran Abjurer" 2400 3575 stats with
-        Class = CharacterClass.Abjurer
-        Armor = ArmorIntegrity.Create 54
-        Stance = CombatStance.DisciplineStance }
-
-  // =========================================================================
-  // Master Tier (Level 100: Stats ~440, HP/Morale 5400–8100, Armor 114–174)
-  // =========================================================================
-
-  let createMasterJuggernaut () =
-    let id = CombatantId.New()
-    let stats =
-      StatBlock.Create [
-        Force, 441; Fortitude, 441
-        Prowess, 273; Poise, 273
-        Finesse, 164; Reflex, 164
-        Intellect, 164; Resolve, 164
-        Acuity, 164; Intuition, 164
-        Acumen, 164; Composure, 164
-      ]
-    { Combatant.create id "Master Juggernaut" 8075 5400 stats with
-        Class = CharacterClass.Juggernaut
-        Armor = ArmorIntegrity.Create 174
-        Stance = CombatStance.PowerStance }
-
-  let createMasterInquisitor () =
-    let id = CombatantId.New()
-    let stats =
-      StatBlock.Create [
-        Intellect, 441; Resolve, 441
-        Acuity, 273; Intuition, 273
-        Acumen, 164; Composure, 164
-        Force, 164; Fortitude, 164
-        Finesse, 164; Reflex, 164
-        Prowess, 164; Poise, 164
-      ]
-    { Combatant.create id "Master Inquisitor" 5400 8075 stats with
-        Class = CharacterClass.Inquisitor
-        Armor = ArmorIntegrity.Create 114
-        Stance = CombatStance.PowerStance }
-
-  // =========================================================================
-  // GrandMaster Tier (Level 200, 6 Preparations, Max Stats 840+)
-  // =========================================================================
+  let createMasterBerserker () = TierFactory.createClassTier CharacterClass.Berserker CombatTier.Master
+  let createMasterDuelist () = TierFactory.createClassTier CharacterClass.Duelist CombatTier.Master
+  let createMasterWarden () = TierFactory.createClassTier CharacterClass.Warden CombatTier.Master
+  let createMasterInquisitor () = TierFactory.createClassTier CharacterClass.Inquisitor CombatTier.Master
+  let createMasterMesmer () = TierFactory.createClassTier CharacterClass.Mesmer CombatTier.Master
+  let createMasterAbjurer () = TierFactory.createClassTier CharacterClass.Abjurer CombatTier.Master
 
   let createGrandMasterBerserker () = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
-  let createGrandMasterJuggernaut () = TierFactory.createClassTier CharacterClass.Juggernaut CombatTier.GrandMaster
   let createGrandMasterInquisitor () = TierFactory.createClassTier CharacterClass.Inquisitor CombatTier.GrandMaster
   let createGrandMasterDuelist () = TierFactory.createClassTier CharacterClass.Duelist CombatTier.GrandMaster
-  let createGrandMasterAssassin () = TierFactory.createClassTier CharacterClass.Assassin CombatTier.GrandMaster
   let createGrandMasterMesmer () = TierFactory.createClassTier CharacterClass.Mesmer CombatTier.GrandMaster
   let createGrandMasterWarden () = TierFactory.createClassTier CharacterClass.Warden CombatTier.GrandMaster
   let createGrandMasterJusticar () = TierFactory.createClassTier CharacterClass.Justicar CombatTier.GrandMaster
-  let createGrandMasterRanger () = TierFactory.createClassTier CharacterClass.Ranger CombatTier.GrandMaster
   let createGrandMasterAbjurer () = TierFactory.createClassTier CharacterClass.Abjurer CombatTier.GrandMaster
   let createGrandMasterStrategist = createGrandMasterAbjurer
 
   let createGrandmasterBerserker = createGrandMasterBerserker
-  let createGrandmasterJuggernaut = createGrandMasterJuggernaut
   let createGrandmasterTitan = createGrandMasterBerserker
   let createGrandmasterInquisitor = createGrandMasterInquisitor
   let createGrandmasterDuelist = createGrandMasterDuelist
-  let createGrandmasterAssassin = createGrandMasterAssassin
   let createGrandmasterMesmer = createGrandMasterMesmer
   let createGrandmasterWarden = createGrandMasterWarden
   let createGrandmasterJusticar = createGrandMasterJusticar
-  let createGrandmasterRanger = createGrandMasterRanger
   let createGrandmasterAbjurer = createGrandMasterAbjurer
   let createGrandmasterStrategist = createGrandMasterAbjurer
-
-  let createClassTier (cls: CharacterClass) (tier: CombatTier) () =
-    TierFactory.createClassTier cls tier
 
   // =========================================================================
   // Generic NPC Archetypes (Novice Tier, Level 1, Zero Preparations)
@@ -182,77 +70,77 @@ module Archetypes =
   // =========================================================================
 
   let allArchetypes : ArchetypeInfo list = [
-    { Name = "Veteran Juggernaut"
+    { Name = "Veteran Berserker"
       Tier = Veteran
       Discipline = CombatMode.Physical
-      Description = "Seasoned martial warrior commanding heavy Force and stance pressure."
-      Factory = createVeteranJuggernaut }
+      Description = "Power Primary (1.0 : 0.75 : 0.75): seasoned kinetic slayer commanding heavy Force and cleaves."
+      Factory = createVeteranBerserker }
 
     { Name = "Veteran Duelist"
       Tier = Veteran
       Discipline = CombatMode.Physical
-      Description = "Agile fencer executing probing Finesse strikes, seeking critical vital openings."
+      Description = "Agility Primary (1.0 : 0.75 : 0.75): agile fencer executing probing cadences seeking vital openings."
       Factory = createVeteranDuelist }
+
+    { Name = "Veteran Warden"
+      Tier = Veteran
+      Discipline = CombatMode.Physical
+      Description = "Discipline Primary (1.0 : 0.75 : 0.75): bastion knight commanding zone control and unyielding defense."
+      Factory = createVeteranWarden }
 
     { Name = "Veteran Inquisitor"
       Tier = Veteran
       Discipline = CombatMode.Arcane
-      Description = "Psionic mystic shredding mental defenses via raw Intellect and Acuity."
+      Description = "Power Primary (1.0 : 0.75 : 0.75): psychic mystic shredding mental defenses via raw Intellect."
       Factory = createVeteranInquisitor }
 
     { Name = "Veteran Mesmer"
       Tier = Veteran
       Discipline = CombatMode.Arcane
-      Description = "Guile illusionist conjuring decoy mirror swarms and disorienting glamours."
+      Description = "Agility Primary (1.0 : 0.75 : 0.75): guile illusionist conjuring decoy mirror swarms and sensory static."
       Factory = createVeteranMesmer }
 
     { Name = "Veteran Abjurer"
       Tier = Veteran
       Discipline = CombatMode.Arcane
-      Description = "Discipline abjurer commanding defensive wards and posture-shattering shockwaves."
+      Description = "Discipline Primary (1.0 : 0.75 : 0.75): discipline abjurer commanding defensive wards and posture shockwaves."
       Factory = createVeteranAbjurer }
 
-    { Name = "Veteran Warden"
-      Tier = Veteran
-      Discipline = CombatMode.Physical
-      Description = "Discipline/Power/Agility bastion knight commanding Bastion Zone Control."
-      Factory = createClassTier CharacterClass.Warden CombatTier.Veteran }
-
-    { Name = "Veteran Ranger"
-      Tier = Veteran
-      Discipline = CombatMode.Physical
-      Description = "Discipline/Agility/Power wild sentinel weaving reactive intercepts and skirmishing."
-      Factory = createClassTier CharacterClass.Ranger CombatTier.Veteran }
-
-    { Name = "Master Juggernaut"
+    { Name = "Master Berserker"
       Tier = Master
       Discipline = CombatMode.Physical
-      Description = "Uncapped martial behemoth capable of crushing even expert shields in one blow."
-      Factory = createMasterJuggernaut }
+      Description = "Power Primary (1.0 : 0.75 : 0.75): unstoppable martial juggernaut wielding sweeping momentum."
+      Factory = createMasterBerserker }
 
-    { Name = "Master Inquisitor"
+    { Name = "Master Duelist"
       Tier = Master
-      Discipline = CombatMode.Arcane
-      Description = "Ascendant psion with staggering psychic projection and cataclysmic surges."
-      Factory = createMasterInquisitor }
+      Discipline = CombatMode.Physical
+      Description = "Agility Primary (1.0 : 0.75 : 0.75): fencing master with razor precision and lethal counter-openings."
+      Factory = createMasterDuelist }
 
     { Name = "Master Warden"
       Tier = Master
       Discipline = CombatMode.Physical
-      Description = "Discipline/Power/Agility bastion master with impenetrable zone control."
-      Factory = createClassTier CharacterClass.Warden CombatTier.Master }
+      Description = "Discipline Primary (1.0 : 0.75 : 0.75): bastion master commanding impenetrable zone control."
+      Factory = createMasterWarden }
 
-    { Name = "Master Ranger"
+    { Name = "Master Inquisitor"
       Tier = Master
-      Discipline = CombatMode.Physical
-      Description = "Discipline/Agility/Power master scout with fluid reactive defense."
-      Factory = createClassTier CharacterClass.Ranger CombatTier.Master }
+      Discipline = CombatMode.Arcane
+      Description = "Power Primary (1.0 : 0.75 : 0.75): ascendant psion with staggering psychic projection."
+      Factory = createMasterInquisitor }
+
+    { Name = "Master Mesmer"
+      Tier = Master
+      Discipline = CombatMode.Arcane
+      Description = "Agility Primary (1.0 : 0.75 : 0.75): master phantasmist weaving intricate mirror labyrinths."
+      Factory = createMasterMesmer }
 
     { Name = "Master Abjurer"
       Tier = Master
       Discipline = CombatMode.Arcane
-      Description = "Discipline/Mental grand abjurer placing destabilizing wards and composure barriers."
-      Factory = createClassTier CharacterClass.Abjurer CombatTier.Master }
+      Description = "Discipline Primary (1.0 : 0.75 : 0.75): grand abjurer placing destabilizing ground glyphs and barriers."
+      Factory = createMasterAbjurer }
 
     // =========================================================================
     // GrandMaster Tier (Level 200, 6 Preparations, Max Stats 840+)
@@ -261,67 +149,49 @@ module Archetypes =
     { Name = "Grandmaster Berserker"
       Tier = GrandMaster
       Discipline = CombatMode.Physical
-      Description = "Power/Agility/Discipline (1.0 : 0.75 : 0.50): kinetic slayer wielding wild momentum and cleaves."
+      Description = "Power Primary (1.0 : 0.75 : 0.75): kinetic slayer wielding wild momentum and cleaves."
       Factory = createGrandMasterBerserker }
-
-    { Name = "Grandmaster Juggernaut"
-      Tier = GrandMaster
-      Discipline = CombatMode.Physical
-      Description = "Power/Discipline/Agility (1.0 : 0.75 : 0.50): iron colossus with heavy armor and sundering impacts."
-      Factory = createGrandMasterJuggernaut }
 
     { Name = "Grandmaster Inquisitor"
       Tier = GrandMaster
       Discipline = CombatMode.Arcane
-      Description = "Power/Mental GrandMaster: psychic dread arcanist unleashing Dread Warhorn and Synaptic Brand."
+      Description = "Power Primary (1.0 : 0.75 : 0.75): psychic dread arcanist unleashing Dread Warhorn and Synaptic Brand."
       Factory = createGrandMasterInquisitor }
 
     { Name = "Grandmaster Duelist"
       Tier = GrandMaster
       Discipline = CombatMode.Physical
-      Description = "Agility/Discipline/Power (1.0 : 0.75 : 0.50): technical fencer deploying Caltrop Pouches (2 turns) and parries."
+      Description = "Agility Primary (1.0 : 0.75 : 0.75): master fencer deploying Caltrop Pouches, seeking vital openings."
       Factory = createGrandMasterDuelist }
-
-    { Name = "Grandmaster Assassin"
-      Tier = GrandMaster
-      Discipline = CombatMode.Physical
-      Description = "Agility/Power/Discipline (1.0 : 0.75 : 0.50): lethal shadow striker deploying Concealed Blades and burst."
-      Factory = createGrandMasterAssassin }
 
     { Name = "Grandmaster Mesmer"
       Tier = GrandMaster
       Discipline = CombatMode.Arcane
-      Description = "Agility/Mental GrandMaster: phantasmist weaving Mirror Mirages, decoy swaps, and Prismatic Flares."
+      Description = "Agility Primary (1.0 : 0.75 : 0.75): phantasmist weaving Mirror Mirages, decoy swaps, and Prismatic Flares."
       Factory = createGrandMasterMesmer }
 
     { Name = "Grandmaster Warden"
       Tier = GrandMaster
       Discipline = CombatMode.Physical
-      Description = "Discipline/Power/Agility (1.0 : 0.75 : 0.50): bastion knight planting Bastion Zone Control and polearms."
+      Description = "Discipline Primary (1.0 : 0.75 : 0.75): bastion knight planting Bastion Zone Control and polearms."
       Factory = createGrandMasterWarden }
 
     { Name = "Grandmaster Justicar"
       Tier = GrandMaster
       Discipline = CombatMode.Physical
-      Description = "Discipline/Physical GrandMaster (legacy alias for Warden): knight warder planting Bastion Zone Control."
+      Description = "Discipline Primary (legacy alias for Warden): knight warder planting Bastion Zone Control."
       Factory = createGrandMasterJusticar }
-
-    { Name = "Grandmaster Ranger"
-      Tier = GrandMaster
-      Discipline = CombatMode.Physical
-      Description = "Discipline/Agility/Power (1.0 : 0.75 : 0.50): wild sentinel weaving reactive intercepts and skirmishing."
-      Factory = createGrandMasterRanger }
 
     { Name = "Grandmaster Abjurer"
       Tier = GrandMaster
       Discipline = CombatMode.Arcane
-      Description = "Discipline/Mental GrandMaster: runic warder commanding Heraldic Treatises and destabilizing ground glyphs."
+      Description = "Discipline Primary (1.0 : 0.75 : 0.75): runic warder commanding Heraldic Treatises and ground glyphs."
       Factory = createGrandMasterAbjurer }
 
     { Name = "Grandmaster Strategist"
       Tier = GrandMaster
       Discipline = CombatMode.Arcane
-      Description = "Discipline/Mental GrandMaster (legacy alias for Abjurer): tactical mastermind."
+      Description = "Discipline Primary (legacy alias for Abjurer): tactical mastermind."
       Factory = createGrandMasterStrategist }
 
     // =========================================================================

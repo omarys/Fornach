@@ -202,6 +202,59 @@ module Simulation =
       TotalWhiffs = totalWhiffs
       TotalCrits = totalCrits }
 
+  /// Headless batch simulation of 1 vs 1 duel combat without console progress bars.
+  /// Alternates turn order across iterations to eliminate first-mover bias.
+  let runHeadlessBatch
+    (factoryA: unit -> Combatant)
+    (factoryB: unit -> Combatant)
+    (iterations: int)
+    (roller: DiceRoller)
+    : SimulationSummary =
+    let maxRoundsPerMatch = 60
+    let sampleA = factoryA()
+    let sampleB = factoryB()
+
+    let results =
+      List.init iterations (fun i ->
+        if i % 2 = 0 then
+          runSingleMatch roller factoryA factoryB maxRoundsPerMatch
+        else
+          let revRes = runSingleMatch roller factoryB factoryA maxRoundsPerMatch
+          { revRes with
+              WinnerName = revRes.WinnerName
+              WinnerIsA = revRes.WinnerIsA |> Option.map not })
+
+    let totalWinsA = results |> List.filter (fun r -> r.WinnerIsA = Some true) |> List.length
+    let totalWinsB = results |> List.filter (fun r -> r.WinnerIsA = Some false) |> List.length
+    let totalStalemates = results |> List.filter (fun r -> r.WinnerIsA.IsNone) |> List.length
+
+    let resolvedRounds = results |> List.filter (fun r -> r.Condition <> Stalemate) |> List.map (fun r -> r.Rounds)
+    let avgRounds = if resolvedRounds.IsEmpty then 0.0 else resolvedRounds |> List.averageBy float
+    let minRounds = if resolvedRounds.IsEmpty then 0 else List.min resolvedRounds
+    let maxRounds = if resolvedRounds.IsEmpty then 0 else List.max resolvedRounds
+
+    let healthKills = results |> List.filter (fun r -> r.Condition = HealthDepleted) |> List.length
+    let moraleKills = results |> List.filter (fun r -> r.Condition = MoraleDepleted) |> List.length
+    let executions = results |> List.filter (fun r -> match r.Condition with ExecutionFinisher _ -> true | _ -> false) |> List.length
+
+    let totalWhiffs = results |> List.sumBy (fun r -> r.TotalWhiffs)
+    let totalCrits = results |> List.sumBy (fun r -> r.TotalCrits)
+
+    { ArchetypeNameA = sampleA.Name
+      ArchetypeNameB = sampleB.Name
+      TotalIterations = iterations
+      WinsA = totalWinsA
+      WinsB = totalWinsB
+      Stalemates = totalStalemates
+      AvgRounds = avgRounds
+      MinRounds = minRounds
+      MaxRounds = maxRounds
+      HealthDepletions = healthKills
+      MoraleDepletions = moraleKills
+      Executions = executions
+      TotalWhiffs = totalWhiffs
+      TotalCrits = totalCrits }
+
   let renderDashboard (summary: SimulationSummary) (sampleA: Combatant) (sampleB: Combatant) =
     AnsiConsole.WriteLine()
     AnsiConsole.Write(
@@ -752,13 +805,11 @@ module Simulation =
 
     let championClasses = [
       CharacterClass.Berserker
-      CharacterClass.Juggernaut
       CharacterClass.Duelist
       CharacterClass.Warden
       CharacterClass.Inquisitor
       CharacterClass.Mesmer
       CharacterClass.Abjurer
-      CharacterClass.Ranger
     ]
 
     let tiers = [
@@ -777,7 +828,7 @@ module Simulation =
     matrixTable.AddColumn(TableColumn(sprintf "[bold %s]Champion Archetype[/]" Theme.Foreground)) |> ignore
     matrixTable.AddColumn(TableColumn(sprintf "[bold %s]Tier[/]" Theme.Cyan)) |> ignore
     matrixTable.AddColumn(TableColumn(sprintf "[bold %s]vs. Warrior (Power)[/]" Theme.Red)) |> ignore
-    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]vs. Assassin (Finesse)[/]" Theme.Green)) |> ignore
+    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]vs. Rogue (Finesse)[/]" Theme.Green)) |> ignore
     matrixTable.AddColumn(TableColumn(sprintf "[bold %s]vs. Soldier (Discipline)[/]" Theme.Yellow)) |> ignore
     matrixTable.AddColumn(TableColumn(sprintf "[bold %s]vs. Mage (Arcane)[/]" Theme.Pink)) |> ignore
     matrixTable.AddColumn(TableColumn(sprintf "[bold %s]Tactical Dynamics & Observations[/]" Theme.Comment)) |> ignore
@@ -791,13 +842,13 @@ module Simulation =
         RemainingTimeColumn() :> ProgressColumn
       |])
       .Start(fun ctx ->
-        let task = ctx.AddTask(sprintf "[bold %s]Sweeping 32 Archetype Tiers across 4 Base Classes (128 Matchups)...[/]" Theme.Cyan, maxValue = 32.0)
+        let task = ctx.AddTask(sprintf "[bold %s]Sweeping 24 Archetype Tiers across 4 Base Classes (96 Matchups)...[/]" Theme.Cyan, maxValue = 24.0)
 
         for cls in championClasses do
           for tier in tiers do
             let champFactory () = TierFactory.createClassTier cls tier
             let warriorTP = findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Warrior Novice) maxMobCount iterations roller
-            let assassinTP = findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Assassin Novice) maxMobCount iterations roller
+            let rogueTP = findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Rogue Novice) maxMobCount iterations roller
             let soldierTP = findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Soldier Novice) maxMobCount iterations roller
             let mageTP = findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Mage Novice) maxMobCount iterations roller
 
@@ -831,8 +882,6 @@ module Simulation =
               | CharacterClass.Justicar, _ -> "Discipline posture & bastion geometry resist early encirclement penalties."
               | CharacterClass.Berserker, GrandMaster -> "Berserk Tincture deadens 35% physical damage & unleashes Frenzy bonus swings; cleaves up to 5 adjacent foes."
               | CharacterClass.Berserker, _ -> "Brute kinetic Force & high HP pool; vulnerable to compounding flank penalties over prolonged duels."
-              | CharacterClass.Juggernaut, GrandMaster -> "Iron Colossus armor soak & Shockwave Slam shatter enemy formations; massive Force & Fortitude outlast physical swarms."
-              | CharacterClass.Juggernaut, _ -> "Power & Discipline juggernaut; high physical armor absorption with Shockwave Slam cleave reinforcement."
               | CharacterClass.Duelist, GrandMaster -> "Caltrop Pouch strips flank penalties for 2 turns; Agility disparity triggers lethal AoO counters."
               | CharacterClass.Duelist, _ -> "High Finesse & Reflex dodge initial attacks; overwhelmed once caltrops expire against large mobs."
               | CharacterClass.Inquisitor, GrandMaster -> "Dread Warhorn inflicts +25 Cognitive Fatigue on all attackers; devastates Mage morale & triggers mental routs."
@@ -843,23 +892,187 @@ module Simulation =
               | CharacterClass.Strategist, GrandMaster -> "Aegis of Retribution reduces damage by 35% and reflects 50% back; destabilizing ground wards trip flankers with heavy Frustration."
               | CharacterClass.Abjurer, _
               | CharacterClass.Strategist, _ -> "Runic composure wards & destabilizing ground glyphs disrupt oncoming attackers through calculated attrition."
-              | CharacterClass.Ranger, GrandMaster -> "Caltrop Pouch & fluid skirmishing punish advancing flankers; high Prowess & Finesse maintain reactive AoO zone."
-              | CharacterClass.Ranger, _ -> "Discipline & Agility skirmisher; relies on Caltrop Pouch and opportunist reactive counters against mobs."
               | _ -> "Standard archetype profile."
 
             matrixTable.AddRow(
               Markup(sprintf "[bold %s]%s[/]" Theme.Foreground displayName),
               Markup(sprintf "[bold %s]%A[/]" tierColor tier),
               Markup(formatTP warriorTP Theme.Red),
-              Markup(formatTP assassinTP Theme.Green),
+              Markup(formatTP rogueTP Theme.Green),
               Markup(formatTP soldierTP Theme.Yellow),
               Markup(formatTP mageTP Theme.Pink),
               Markup(sprintf "[%s]%s[/]" Theme.Comment notes)
             ) |> ignore
 
-            task.Increment 1.0
+            task.Increment(1.0)
       )
 
     AnsiConsole.WriteLine()
     AnsiConsole.Write(matrixTable)
+    AnsiConsole.WriteLine()
+
+  /// Renders a cross-tier 1v1 peer balance matrix for the 6 canonical character classes.
+  /// Runs 100 iterations per pairwise matchup with alternating opening strike (50 A-first, 50 B-first).
+  let renderPeerBalanceMatrix () =
+    AnsiConsole.WriteLine()
+    AnsiConsole.Write(
+      Rule(sprintf "[bold %s]FORNACH PEER CLASS 1v1 BALANCE MATRIX (100 RUNS, ALTERNATING INITIATIVE)[/]" Theme.Purple)
+        .Centered()
+        .RuleStyle(Theme.StyleCurrentLine)
+    )
+    AnsiConsole.WriteLine()
+
+    let classes = [
+      CharacterClass.Berserker
+      CharacterClass.Duelist
+      CharacterClass.Warden
+      CharacterClass.Inquisitor
+      CharacterClass.Mesmer
+      CharacterClass.Abjurer
+    ]
+
+    let tiers = [
+      CombatTier.Novice
+      CombatTier.Veteran
+      CombatTier.Master
+      CombatTier.GrandMaster
+    ]
+
+    let iterations = 100
+    let rng = Random(42)
+    let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
+
+    // Precalculate all 15 pairwise matchups for each of the 4 tiers (60 matchups total)
+    let matchupResults = System.Collections.Generic.Dictionary<(CombatTier * CharacterClass * CharacterClass), SimulationSummary>()
+
+    AnsiConsole.Progress()
+      .AutoClear(false)
+      .Columns([|
+        TaskDescriptionColumn() :> ProgressColumn
+        ProgressBarColumn() :> ProgressColumn
+        PercentageColumn() :> ProgressColumn
+        RemainingTimeColumn() :> ProgressColumn
+      |])
+      .Start(fun ctx ->
+        let task = ctx.AddTask(sprintf "[bold %s]Simulating 60 Peer Matchups (6,000 Duels across 4 Tiers)...[/]" Theme.Cyan, maxValue = 60.0)
+
+        for tier in tiers do
+          for i in 0 .. classes.Length - 2 do
+            for j in i + 1 .. classes.Length - 1 do
+              let clsA = classes.[i]
+              let clsB = classes.[j]
+              let factoryA () = TierFactory.createClassTier clsA tier
+              let factoryB () = TierFactory.createClassTier clsB tier
+              let summary = runHeadlessBatch factoryA factoryB iterations roller
+              matchupResults.[(tier, clsA, clsB)] <- summary
+              task.Increment(1.0)
+      )
+
+    let getPairResult (t: CombatTier) (a: CharacterClass) (b: CharacterClass) =
+      if matchupResults.ContainsKey((t, a, b)) then
+        let s = matchupResults.[(t, a, b)]
+        s.WinsA, s.AvgRounds
+      elif matchupResults.ContainsKey((t, b, a)) then
+        let s = matchupResults.[(t, b, a)]
+        s.WinsB, s.AvgRounds
+      else
+        0, 0.0
+
+    let matrixTable = Table().Border(TableBorder.Rounded).BorderColor(Theme.ColorCurrentLine)
+    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]Tier[/]" Theme.Cyan).NoWrap()) |> ignore
+    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]Character[/]" Theme.Foreground).NoWrap()) |> ignore
+    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]vs. Berserker[/]" Theme.Red).Centered().Padding(0, 0, 0, 0)) |> ignore
+    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]vs. Duelist[/]" Theme.Green).Centered().Padding(0, 0, 0, 0)) |> ignore
+    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]vs. Warden[/]" Theme.Yellow).Centered().Padding(0, 0, 0, 0)) |> ignore
+    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]vs. Inquisitor[/]" Theme.Pink).Centered().Padding(0, 0, 0, 0)) |> ignore
+    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]vs. Mesmer[/]" Theme.Cyan).Centered().Padding(0, 0, 0, 0)) |> ignore
+    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]vs. Abjurer[/]" Theme.Purple).Centered().Padding(0, 0, 0, 0)) |> ignore
+    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]Net Win%%[/]" Theme.Foreground).Centered().NoWrap().Padding(0, 0, 0, 0)) |> ignore
+    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]Avg TTK[/]" Theme.Comment).Centered().NoWrap().Padding(0, 0, 0, 0)) |> ignore
+
+    let formatWinRate (wins: int) (total: int) =
+      let pct = (float wins / float total) * 100.0
+      let color =
+        if pct >= 65.0 then Theme.Green
+        elif pct >= 55.0 then Theme.Cyan
+        elif pct >= 45.0 then Theme.Yellow
+        elif pct >= 35.0 then Theme.Orange
+        else Theme.Red
+      sprintf "[bold %s]%.0f%%[/]" color pct
+
+    for tierIdx in 0 .. tiers.Length - 1 do
+      let tier = tiers.[tierIdx]
+      let tierColor, tierName =
+        match tier with
+        | Novice -> Theme.Comment, "Novice"
+        | Veteran -> Theme.Cyan, "Veteran"
+        | Master -> Theme.Yellow, "Master"
+        | GrandMaster -> Theme.Purple, "GrMaster"
+
+      for clsA in classes do
+        let mutable totalWins = 0
+        let mutable totalMatches = 0
+        let mutable roundSums = 0.0
+        let mutable roundCount = 0
+
+        let matchCells =
+          classes
+          |> List.map (fun clsB ->
+            if clsA = clsB then
+              sprintf "[%s]──[/]" Theme.Comment
+            else
+              let winsA, rounds = getPairResult tier clsA clsB
+              totalWins <- totalWins + winsA
+              totalMatches <- totalMatches + iterations
+              roundSums <- roundSums + rounds
+              roundCount <- roundCount + 1
+              formatWinRate winsA iterations
+          )
+
+        let overallPct = if totalMatches > 0 then (float totalWins / float totalMatches) * 100.0 else 0.0
+        let overallColor =
+          if overallPct >= 65.0 then Theme.Green
+          elif overallPct >= 55.0 then Theme.Cyan
+          elif overallPct >= 45.0 then Theme.Yellow
+          elif overallPct >= 35.0 then Theme.Orange
+          else Theme.Red
+
+        let avgRounds = if roundCount > 0 then roundSums / float roundCount else 0.0
+
+        let rowStrings : string array =
+          [|
+            sprintf "[bold %s]%s[/]" tierColor tierName
+            sprintf "[bold %s]%s[/]" Theme.Foreground clsA.Name
+            yield! matchCells
+            sprintf "[bold %s]%.1f%%[/]" overallColor overallPct
+            sprintf "[%s]%.1fr[/]" Theme.Comment avgRounds
+          |]
+
+        matrixTable.AddRow(rowStrings) |> ignore
+
+      if tierIdx < tiers.Length - 1 then
+        matrixTable.AddEmptyRow() |> ignore
+
+    let legendGrid = Grid()
+    legendGrid.AddColumn(GridColumn()) |> ignore
+    legendGrid.AddColumn(GridColumn()) |> ignore
+    legendGrid.AddRow(
+      Markup(sprintf "[bold %s]Methodology:[/] 100 runs per pairwise duel (50 runs A-first, 50 runs B-first) to eliminate initiative bias." Theme.Cyan),
+      Markup(sprintf "[bold %s]Scale:[/] [bold %s]>=65%%[/] Dominant  [bold %s]55-64%%[/] Favorable  [bold %s]45-54%%[/] Parity  [bold %s]35-44%%[/] Disadvantage  [bold %s]<35%%[/] Vulnerable" Theme.Yellow Theme.Green Theme.Cyan Theme.Yellow Theme.Orange Theme.Red)
+    ) |> ignore
+    legendGrid.AddRow(
+      Markup(sprintf "[bold %s]Trauma Vectors:[/] Power ➔ Exhaustion (Fort/Res)  •  Agility ➔ Confusion (Ref/Int)  •  Discipline ➔ Frustration (Poise/Comp)" Theme.Comment),
+      Markup(sprintf "[bold %s]Stat Scaling:[/] Canonical 1.0 : 0.75 : 0.75 attribute ratio parity across all 6 classes." Theme.Comment)
+    ) |> ignore
+
+    let legendPanel =
+      Panel(legendGrid)
+        .Border(BoxBorder.Rounded)
+        .BorderStyle(Theme.StyleCurrentLine)
+        .Header(sprintf "[bold %s] 󰒋 PEER MATRIX BENCHMARK TELEMETRY & TRAUMA VECTOR KEY [/]" Theme.Yellow)
+
+    AnsiConsole.WriteLine()
+    AnsiConsole.Write(matrixTable)
+    AnsiConsole.WriteLine()
+    AnsiConsole.Write(legendPanel)
     AnsiConsole.WriteLine()

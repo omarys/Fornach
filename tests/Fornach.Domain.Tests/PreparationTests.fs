@@ -91,9 +91,9 @@ module PreparationTests =
   // =========================================================================
 
   [<Fact>]
-  let ``All 10 player character classes correctly map Vector, Plane, and 2 unique preparations (1 Crowd, 1 Duel)`` () =
+  let ``All 7 player character classes correctly map Vector, Plane, and 2 unique preparations (1 Crowd, 1 Duel)`` () =
     let playerClasses = CharacterClass.PlayerClasses
-    Assert.Equal(10, playerClasses.Length)
+    Assert.Equal(7, playerClasses.Length)
 
     for cls in playerClasses do
       Assert.False(cls.IsGeneric)
@@ -115,7 +115,7 @@ module PreparationTests =
   let ``All 4 generic NPC classes (Warrior, Rogue, Soldier, Mage) map correctly and possess zero preparations`` () =
     let genericClasses = CharacterClass.GenericClasses
     Assert.Equal(4, genericClasses.Length)
-    Assert.Equal(14, CharacterClass.All.Length)
+    Assert.Equal(11, CharacterClass.All.Length)
 
     for cls in genericClasses do
       Assert.True(cls.IsGeneric)
@@ -331,11 +331,11 @@ module PreparationTests =
 
 
   [<Fact>]
-  let ``TierFactory initializes all 56 archetypes across 14 classes and 4 tiers correctly`` () =
+  let ``TierFactory initializes all 44 archetypes across 11 classes and 4 tiers correctly`` () =
     let tiers = [ Novice; Veteran; Master; GrandMaster ]
     let classes = CharacterClass.All
 
-    Assert.Equal(14, classes.Length)
+    Assert.Equal(11, classes.Length)
 
     for cls in classes do
       for tier in tiers do
@@ -438,18 +438,21 @@ module PreparationTests =
     Assert.True(attackRes.Target.Morale.Current < warriorFlared.Morale.Current)
 
   [<Fact>]
-  let ``Duel: Master Justicar with Parrying Buckler seizes Vor in Indes against Master Assassin`` () =
+  let ``Duel: Master Justicar with Parrying Buckler seizes Vor in Indes against Master Duelist`` () =
     let justicar =
       TierFactory.createClassTier CharacterClass.Justicar Master
       |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ParryingBuckler None 3)
-    let assassin = TierFactory.createClassTier CharacterClass.Assassin Master
+    let duelist = TierFactory.createClassTier CharacterClass.Duelist Master
 
     // Parrying Buckler reduces Indes threshold from 3 to 2
     Assert.Equal(2, Indes.calculateThreshold justicar)
 
     // Roller where justicar's high defense hits generate margin of 2+ on whiff
-    let roller = fixedRoller 4
-    let res = ActionResolver.resolve roller (StandardAttack (ProwessStrike false)) assassin justicar
+    let mutable rollCount = 0
+    let roller _ _ =
+      rollCount <- rollCount + 1
+      if rollCount <= 10 then 3 else 5
+    let res = ActionResolver.resolve roller (StandardAttack (ProwessStrike false)) duelist justicar
 
     let seizedEvt =
       res.Events
@@ -574,15 +577,15 @@ module PreparationTests =
     Assert.True(res.Target.Health.Current < mage.Health.Current, "Mage should take physical damage from Warrior Force strike.")
 
   [<Fact>]
-  let ``Duel: Generic Master Soldier vs Master Assassin duels with high defense poise`` () =
+  let ``Duel: Generic Master Soldier vs Master Duelist duels with high defense poise`` () =
     let soldier = TierFactory.createClassTier CharacterClass.Soldier Master
-    let assassin = TierFactory.createClassTier CharacterClass.Assassin Master
+    let duelist = TierFactory.createClassTier CharacterClass.Duelist Master
     let roller = fixedRoller 4
 
-    // Assassin attacks Soldier with ProwessStrike (assassin secStat 273 vs soldier primStat 441) -> Whiffs
-    let res = ActionResolver.resolve roller (StandardAttack (ProwessStrike false)) assassin soldier
+    // Duelist attacks Soldier with ProwessStrike (duelist secStat vs soldier primStat) -> Whiffs
+    let res = ActionResolver.resolve roller (StandardAttack (ProwessStrike false)) duelist soldier
     Assert.NotNull(res.Contest)
-    Assert.True(res.Contest.Value.IsWhiff, "Assassin secondary Prowess strike whiffs against Soldier Master Poise.")
+    Assert.True(res.Contest.Value.IsWhiff, "Duelist secondary Prowess strike whiffs against Soldier Master Poise.")
 
   [<Fact>]
   let ``Duel: Generic GrandMaster Warrior vs GrandMaster Soldier duels in clash of brute force and guard`` () =
@@ -605,13 +608,13 @@ module PreparationTests =
   // =========================================================================
 
   [<Fact>]
-  let ``1vsN: GrandMaster Berserker with Shockwave Slam and Power Cleave decimates 5 Novice Assassins`` () =
+  let ``1vsN: GrandMaster Berserker with Shockwave Slam and Power Cleave decimates 5 Novice Rogues`` () =
     let berserker =
       TierFactory.createClassTier CharacterClass.Berserker GrandMaster
       |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ShockwaveSlam None 3)
 
-    let primaryNovice = TierFactory.createClassTier CharacterClass.Assassin Novice
-    let flankers = List.init 4 (fun _ -> TierFactory.createClassTier CharacterClass.Assassin Novice)
+    let primaryNovice = TierFactory.createClassTier CharacterClass.Rogue Novice
+    let flankers = List.init 4 (fun _ -> TierFactory.createClassTier CharacterClass.Rogue Novice)
 
     let roller = fixedRoller 6 // guarantees NetHits >= 3
     let groupRes =
@@ -763,9 +766,9 @@ module PreparationTests =
     Assert.True(groupRes.Actor.StudyStacks >= 10, sprintf "Strategist should gain massive Study Stacks across swarm (Actual: %d)" groupRes.Actor.StudyStacks)
 
   [<Fact>]
-  let ``1vsN Control: Novice Warrior without preparations suffers escalating encirclement against 4 Novice Assassins`` () =
+  let ``1vsN Control: Novice Warrior without preparations suffers escalating encirclement against 4 Novice Rogues`` () =
     let noviceDefender = TierFactory.createClassTier CharacterClass.Warrior Novice
-    let attacker = TierFactory.createClassTier CharacterClass.Assassin Novice
+    let attacker = TierFactory.createClassTier CharacterClass.Rogue Novice
     let roller = fixedRoller 4
 
     // Novice attacks against 1st defense (prior = 0) vs 4th defense (prior = 3)

@@ -70,7 +70,9 @@ type Combatant =
     Class: CharacterClass
     Progression: ProgressionProfile
     Preparations: PreparationSlot list
-    ActivePreparations: ActivePreparation list }
+    ActivePreparations: ActivePreparation list
+    MonsterFamily: MonsterFamily option
+    MonsterTraits: MonsterTrait list }
 
   /// Combatant level derived from progression profile
   member this.Level = this.Progression.Level
@@ -162,7 +164,9 @@ type Combatant =
       Class = CharacterClass.Warrior
       Progression = defaultProg
       Preparations = defaultProg.Preparations
-      ActivePreparations = [] }
+      ActivePreparations = []
+      MonsterFamily = None
+      MonsterTraits = [] }
 
   /// Factory for creating a combatant with explicit class archetype and progression level
   static member createWithClass id name maxHealth maxMorale (stats: StatBlock) (cls: CharacterClass) (level: int) =
@@ -201,7 +205,9 @@ type Combatant =
       Class = cls
       Progression = prog
       Preparations = prog.Preparations
-      ActivePreparations = [] }
+      ActivePreparations = []
+      MonsterFamily = None
+      MonsterTraits = [] }
 
   /// Pure helper to update status meters
   static member updateMeters (updater: StatusMeters -> StatusMeters) (c: Combatant) =
@@ -278,7 +284,12 @@ type Combatant =
 
       let reasonOpt =
         // Shared Entropy Break (evaluated first)
-        if m.Recklessness.Value >= 100 then
+        let recklessnessCap =
+          if c.Class = CharacterClass.Berserker || c.HasActivePreparation PreparationType.BerserkTincture then
+            120
+          else
+            100
+        if m.Recklessness.Value >= recklessnessCap then
           Some RecklessExposure
         // Physical Status Breaks
         elif m.Exhaustion.Value >= 100 then

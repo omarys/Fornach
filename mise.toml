@@ -21,7 +21,7 @@ run = "dotnet build Fornach.slnx -c Release --nologo"
 description = "Run the test suite"
 run = "dotnet test tests/Fornach.Domain.Tests/Fornach.Domain.Tests.fsproj --nologo -v q"
 
-[tasks.run]
+[tasks.game]
 description = "Launch the interactive Spectre.Console CLI arena"
 run = "dotnet run --project src/Fornach.Cli"
 

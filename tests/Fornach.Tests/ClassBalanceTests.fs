@@ -7,44 +7,26 @@ open Fornach.Engine
 open Fornach.Cli
 
 [<Fact>]
-let ``Physical sub-classes follow exact 1.0 to 0.75 to 0.50 stat ratios`` () =
+let ``Physical sub-classes follow exact 1.0 to 0.75 to 0.75 stat ratios`` () =
   let level = 200 // GrandMaster tier
 
-  // 1. Berserker: Power / Agility / Discipline
+  // 1. Berserker: Power Primary (Power 1.0, Agility 0.75, Discipline 0.75)
   let berserker = TierFactory.createClassLevel CharacterClass.Berserker level
   Assert.Equal(841, berserker.GetStat Force)
   Assert.Equal(631, berserker.GetStat Finesse)
-  Assert.Equal(420, berserker.GetStat Prowess)
+  Assert.Equal(631, berserker.GetStat Prowess)
 
-  // 2. Juggernaut: Power / Discipline / Agility
-  let juggernaut = TierFactory.createClassLevel CharacterClass.Juggernaut level
-  Assert.Equal(841, juggernaut.GetStat Force)
-  Assert.Equal(631, juggernaut.GetStat Prowess)
-  Assert.Equal(420, juggernaut.GetStat Finesse)
-
-  // 3. Duelist: Agility / Discipline / Power
+  // 2. Duelist: Agility Primary (Agility 1.0, Discipline 0.75, Power 0.75)
   let duelist = TierFactory.createClassLevel CharacterClass.Duelist level
   Assert.Equal(841, duelist.GetStat Finesse)
   Assert.Equal(631, duelist.GetStat Prowess)
-  Assert.Equal(420, duelist.GetStat Force)
+  Assert.Equal(631, duelist.GetStat Force)
 
-  // 4. Assassin: Agility / Power / Discipline
-  let assassin = TierFactory.createClassLevel CharacterClass.Assassin level
-  Assert.Equal(841, assassin.GetStat Finesse)
-  Assert.Equal(631, assassin.GetStat Force)
-  Assert.Equal(420, assassin.GetStat Prowess)
-
-  // 5. Warden: Discipline / Power / Agility
+  // 3. Warden: Discipline Primary (Discipline 1.0, Power 0.75, Agility 0.75)
   let warden = TierFactory.createClassLevel CharacterClass.Warden level
   Assert.Equal(841, warden.GetStat Prowess)
   Assert.Equal(631, warden.GetStat Force)
-  Assert.Equal(420, warden.GetStat Finesse)
-
-  // 6. Ranger: Discipline / Agility / Power
-  let ranger = TierFactory.createClassLevel CharacterClass.Ranger level
-  Assert.Equal(841, ranger.GetStat Prowess)
-  Assert.Equal(631, ranger.GetStat Finesse)
-  Assert.Equal(420, ranger.GetStat Force)
+  Assert.Equal(631, warden.GetStat Finesse)
 
 [<Fact>]
 let ``Magic classes follow 1.0 to 0.75 to 0.75 mental utility ratio`` () =
@@ -196,15 +178,15 @@ let ``Grandmaster Inquisitor fends off Novice Warrior with zero fatigue drain`` 
 [<Fact>]
 let ``Physical archetypes receive thematic mental boosts and mages receive poise`` () =
   let level = 200 // GrandMaster tier
-  let gmAssassin = TierFactory.createClassLevel CharacterClass.Assassin level
+  let gmDuelist = TierFactory.createClassLevel CharacterClass.Duelist level
   let gmBerserker = TierFactory.createClassLevel CharacterClass.Berserker level
   let gmWarden = TierFactory.createClassLevel CharacterClass.Warden level
   let gmMesmer = TierFactory.createClassLevel CharacterClass.Mesmer level
 
   // Agility archetype: boosted Intuition (offDef = 420) and Acuity (offOff = 317)
-  Assert.Equal(420, gmAssassin.GetStat Intuition)
-  Assert.Equal(317, gmAssassin.GetStat Acuity)
-  Assert.Equal(214, gmAssassin.GetStat Composure)
+  Assert.Equal(420, gmDuelist.GetStat Intuition)
+  Assert.Equal(317, gmDuelist.GetStat Acuity)
+  Assert.Equal(214, gmDuelist.GetStat Composure)
 
   // Power archetype: boosted Composure (offDef = 420) and Acumen (offOff = 317)
   Assert.Equal(420, gmBerserker.GetStat Composure)
@@ -224,11 +206,11 @@ let ``Physical archetypes receive thematic mental boosts and mages receive poise
 let ``Mesmer mirror decoy shatters upon being attacked, inflicting retaliatory Morale blast damage`` () =
   let roller : DiceRoller = fun _ _ -> 1
   let gmMesmer = TierFactory.createClassTier CharacterClass.Mesmer CombatTier.GrandMaster
-  let gmAssassin = TierFactory.createClassTier CharacterClass.Assassin CombatTier.GrandMaster
+  let gmDuelist = TierFactory.createClassTier CharacterClass.Duelist CombatTier.GrandMaster
 
   let attack = AttackClassification.FinesseCadence false
   let intent = ActionIntent.StandardAttack attack
-  let result = ActionResolver.resolve roller intent gmAssassin gmMesmer
+  let result = ActionResolver.resolve roller intent gmDuelist gmMesmer
 
   // Decoy intercepted and shattered
   let shatteredEvent =
@@ -238,7 +220,7 @@ let ``Mesmer mirror decoy shatters upon being attacked, inflicting retaliatory M
   Assert.True(shatteredEvent.Value > 0)
 
   // Attacker took retaliatory Morale damage from shatter
-  Assert.True(result.Actor.Morale.Current < gmAssassin.Morale.Current)
+  Assert.True(result.Actor.Morale.Current < gmDuelist.Morale.Current)
   // Attacker gained confusion and combo reset from shatter shockwave
   Assert.True(result.Actor.Meters.Confusion.Value > 0)
   Assert.Equal(0, result.Actor.ComboTracker.ConsecutiveHits)
@@ -283,11 +265,11 @@ let ``Magic character cannot execute physical martial attacks and action is bloc
 let ``Physical character successfully executes physical strike and produces contest`` () =
   let roller : DiceRoller = fun _ _ -> 4
   let berserker = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
-  let juggernaut = TierFactory.createClassTier CharacterClass.Juggernaut CombatTier.GrandMaster
+  let warden = TierFactory.createClassTier CharacterClass.Warden CombatTier.GrandMaster
 
   let attack = AttackClassification.ForceStrike false
   let intent = ActionIntent.StandardAttack attack
-  let result = ActionResolver.resolve roller intent berserker juggernaut
+  let result = ActionResolver.resolve roller intent berserker warden
 
   Assert.True(result.Contest.IsSome, "Valid physical attack must produce contest.")
 

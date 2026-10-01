@@ -48,14 +48,35 @@ module ActionResolver =
           let forceFactor = Math.Min(0.50, 0.35 + (float (targetWithWard.GetStat Force) / 1000.0))
           Math.Max(1, int (Math.Round(float remAmount * forceFactor)))
         else 0
-      let postEnrageAmount = remAmount - enrageShrugged
+
+      // Discipline Stance: Flat percentage defense increase (15%) applying across physical and mental planes
+      let disciplineShrugged =
+        if targetWithWard.Stance = CombatStance.DisciplineStance && remAmount > 0 then
+          Math.Max(1, int (Math.Round(float remAmount * 0.15)))
+        else 0
+
+      // Monster Trait: Ethereal Carapace (Physical damage soak)
+      let etherealSoak =
+        targetWithWard.MonsterTraits
+        |> List.tryPick (function EtherealCarapace soak -> Some soak | _ -> None)
+        |> Option.defaultValue 0.0
+      let etherealShrugged =
+        if etherealSoak > 0.0 && remAmount > 0 then
+          int (Math.Round(float remAmount * etherealSoak))
+        else 0
+
+      let postEnrageAmount = Math.Max(0, remAmount - enrageShrugged - disciplineShrugged - etherealShrugged)
       let absorbed = int (float postEnrageAmount * targetWithWard.Armor.AbsorptionRatio)
       let actualDmg = if postEnrageAmount <= 0 then 0 else Math.Max(1, postEnrageAmount - absorbed)
       let updatedPool = targetWithWard.Health.ApplyDelta -actualDmg
-      let enrageEvts =
+      let shrugEvts = [
         if enrageShrugged > 0 then
-          [ CombatEvent.EnrageDamageShrugged(target.Id, enrageShrugged) ]
-        else []
+          CombatEvent.EnrageDamageShrugged(target.Id, enrageShrugged)
+        if disciplineShrugged > 0 then
+          CombatEvent.ComposureDamageShrugged(target.Id, disciplineShrugged)
+        if etherealShrugged > 0 then
+          CombatEvent.MonsterTraitTriggered(target.Id, "Ethereal Carapace", sprintf "Ethereal carapace deflected %d physical damage!" etherealShrugged)
+      ]
 
       // Massive blows automatically shred armor durability: shred up to 25% of max armor per blow
       let updatedArmor =
@@ -78,12 +99,33 @@ module ActionResolver =
           IsCritical = isCrit
           IsArmorCompromised = updatedArmor.IsShredded || isCrit }
 
-      updatedTarget, evt, (wardEvts @ enrageEvts)
+      updatedTarget, evt, (wardEvts @ shrugEvts)
 
     | Mental ->
-      let actualDmg = if remAmount <= 0 then 0 else Math.Max(1, remAmount)
+      // Berserk Tincture Enrage: unyielding blood frenzy deadens psychological trauma, shrugging off mental shocks
+      let enrageShrugged =
+        if targetWithWard.HasActivePreparation PreparationType.BerserkTincture && remAmount > 0 then
+          let forceFactor = Math.Min(0.30, 0.15 + (float (targetWithWard.GetStat Force) / 2500.0))
+          Math.Max(1, int (Math.Round(float remAmount * forceFactor)))
+        else 0
+
+      // Discipline Stance: Flat percentage defense increase (15%) applying across physical and mental planes
+      let disciplineShrugged =
+        if targetWithWard.Stance = CombatStance.DisciplineStance && remAmount > 0 then
+          Math.Max(1, int (Math.Round(float remAmount * 0.15)))
+        else 0
+
+      let postMitigatedAmount = remAmount - enrageShrugged - disciplineShrugged
+      let actualDmg = if postMitigatedAmount <= 0 then 0 else Math.Max(1, postMitigatedAmount)
       let updatedPool = targetWithWard.Morale.ApplyDelta -actualDmg
       let updatedTarget = { targetWithWard with Morale = updatedPool }
+
+      let shrugEvts = [
+        if enrageShrugged > 0 then
+          CombatEvent.EnrageDamageShrugged(target.Id, enrageShrugged)
+        if disciplineShrugged > 0 then
+          CombatEvent.ComposureDamageShrugged(target.Id, disciplineShrugged)
+      ]
 
       let evt =
         { TargetId = target.Id
@@ -92,7 +134,7 @@ module ActionResolver =
           IsCritical = isCrit
           IsArmorCompromised = false }
 
-      updatedTarget, evt, wardEvts
+      updatedTarget, evt, (wardEvts @ shrugEvts)
 
   // =========================================================================
   // 2. Equipment Hook Execution
@@ -504,13 +546,13 @@ module ActionResolver =
         { Actor = updatedActor; Target = target; Events = evts; Contest = None }
 
       | PreparationType.BerserkTincture ->
-        let healthCost = Math.Min(25, Math.Max(5, actorSpent.Health.Current / 4))
+        let healthCost = Math.Min(15, Math.Max(5, actorSpent.Health.Current / 10))
         let updatedActor =
           { actorSpent with Health = actorSpent.Health.ApplyDelta -healthCost }
-          |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness + 35 })
+          |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness + 15 })
           |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.BerserkTincture None duration)
         let evts = [
-          CombatEvent.PreparationDeployed(actor.Id, prepType, None, sprintf "Consumed Berserk Tincture (lost %d HP): Recklessness spiked into Fever Pitch (+35) for %d turns!" healthCost duration)
+          CombatEvent.PreparationDeployed(actor.Id, prepType, None, sprintf "Consumed Berserk Tincture (lost %d HP): Recklessness spiked into Fever Pitch (+15) for %d turns!" healthCost duration)
           CombatEvent.DamageApplied { TargetId = actor.Id; Plane = Physical; Amount = healthCost; IsCritical = false; IsArmorCompromised = false }
         ]
         { Actor = updatedActor; Target = target; Events = evts; Contest = None }
@@ -562,8 +604,8 @@ module ActionResolver =
         { Actor = updatedActor; Target = target; Events = evts; Contest = None }
 
       | PreparationType.MirrorMirage ->
-        let maxClones = Math.Clamp(actor.Progression.Level / 40 + 1, 1, 5)
-        let clonesToAdd = Math.Max(0, Math.Min(3, maxClones - actorSpent.MirrorClones))
+        let maxClones = if actor.Progression.Level >= 100 then 2 else 1
+        let clonesToAdd = Math.Max(0, Math.Min(1, maxClones - actorSpent.MirrorClones))
         let updatedActor =
           actorSpent
           |> (if clonesToAdd > 0 then Combatant.addClones clonesToAdd else id)
@@ -658,7 +700,7 @@ module ActionResolver =
   let applyTurnUpkeep (c: Combatant) : Combatant * CombatEvent list =
     let baseUpdated, baseEvents =
       if c.BleedStacks > 0 then
-        let bleedDmg = c.BleedStacks * 12
+        let bleedDmg = c.BleedStacks * Math.Max(12, int (Math.Round(float c.Health.Maximum * 0.012)))
         let newHealth = c.Health.ApplyDelta -bleedDmg
         let remStacks = Math.Max(0, c.BleedStacks - 1)
         let updated = { c with Health = newHealth; BleedStacks = remStacks }
@@ -756,7 +798,7 @@ module ActionResolver =
         false, "", 0 // Consumes Study Stacks with 0 Recklessness self-spike!
       | MasterfulDisarm stacks ->
         let off = currentActor.GetStat Prowess
-        let def = currentTarget.GetStat Poise
+        let def = (currentTarget.GetStat Poise + currentTarget.GetStat Composure) / 2
         let isPossible = off >= int (Math.Round(float def * 0.75))
         let required = Math.Max(3, int (Math.Ceiling((float def / Math.Max(1.0, float off)) * 3.5)))
         let actualSpend = Math.Min(currentActor.StudyStacks, required)
@@ -831,8 +873,8 @@ module ActionResolver =
     match atk with
     | MirrorIllusion isDecoySwarm ->
       let actorAcuity = currentActor.GetStat Acuity
-      let maxClones = Math.Clamp(1 + (actorAcuity / 140), 2, 6)
-      let baseClones = if isDecoySwarm then 3.0 else 2.0
+      let maxClones = if currentActor.Progression.Level >= 100 then 2 else 1
+      let baseClones = if isDecoySwarm then 2.0 else 1.0
       let clonesConjured = Math.Max(1, int (Math.Round(baseClones * profRatio)))
       let room = Math.Max(0, maxClones - currentActor.MirrorClones)
       let actualConjured = Math.Min(clonesConjured, room)
@@ -857,51 +899,51 @@ module ActionResolver =
       // 1. Physical Attacks
       | ForceStrike isWild ->
         let off = currentActor.GetStat Force
-        let def = currentTarget.GetStat Fortitude
-        let stanceMult = if currentActor.Stance = CombatStance.PowerStance then 1.15 else 1.0
-        let wildMult = (if isWild then 1.3 else 1.0) * stanceMult
+        let def = (currentTarget.GetStat Fortitude + currentTarget.GetStat Resolve) / 2
+        let stanceMult = if currentActor.Stance = CombatStance.PowerStance then 1.25 else 1.0
+        let wildMult = (if isWild then 1.35 else 1.0) * stanceMult
         let ratio = float off / Math.Max(1.0, float def)
         let baseExhaust =
           if off >= def then
-            10 + ((off - def) / 4)
+            12 + ((off - def) / 4)
           else
-            int (Math.Round(10.0 * Math.Pow(ratio, 2.0)))
+            int (Math.Round(12.0 * Math.Pow(ratio, 2.0)))
         let exhaust = fun isCrit -> baseExhaust + (if isCrit then 25 else 0)
         let disp = fun isCrit -> if isCrit then Some(CrushingBlow(exhaust true)) else None
 
         let upd isCrit (m: StatusMeters) =
           { m with
               Exhaustion = m.Exhaustion + (exhaust isCrit)
-              Recklessness = m.Recklessness + 10 }
+              Recklessness = m.Recklessness + (if isWild then 8 else 4) }
 
         off, def, wildMult, disp, upd
 
       | FinesseCadence isRelentless ->
         let off = currentActor.GetStat Finesse
-        let def = currentTarget.GetStat Reflex
+        let def = (currentTarget.GetStat Reflex + currentTarget.GetStat Intuition) / 2
         let hits = if isRelentless then 3 else 1
         let reckMult = 1.0 + (float currentTarget.Meters.Recklessness.Value / 100.0)
-        // Probing cadence deals lower base damage (0.55x) while seeking openings
-        let baseProbingMult = 0.55 * float hits * reckMult
+        // Probing cadence deals reduced base damage (0.95x) while seeking openings; Relentless Cadence gambit unleashes a 1.35x flurry
+        let baseProbingMult = (if isRelentless then 1.35 else 0.95) * reckMult
         let ratio = float off / Math.Max(1.0, float def)
-        let baseOverwhelm =
+        let baseConfusion =
           if off >= def then
-            8 + ((off - def) / 5)
+            12 + ((off - def) / 4)
           else
-            int (Math.Round(8.0 * Math.Pow(ratio, 2.0)))
-        let overwhelm = fun isCrit -> (baseOverwhelm * hits) + (if isCrit then 20 else 0)
-        let disp = fun isCrit -> if isCrit then Some(ArterialRupture(overwhelm true)) else None
+            int (Math.Round(12.0 * Math.Pow(ratio, 2.0)))
+        let confusion = fun isCrit -> baseConfusion + (if isCrit then 20 else 0)
+        let disp = fun isCrit -> if isCrit then Some(ArterialRupture(confusion true)) else None
 
         let upd isCrit (m: StatusMeters) =
           { m with
-              Overwhelm = m.Overwhelm + (overwhelm isCrit)
+              Confusion = m.Confusion + (confusion isCrit)
               Recklessness = m.Recklessness + (5 * hits) }
 
         off, def, baseProbingMult, disp, upd
 
       | ProwessStrike isInvitational ->
         let off = currentActor.GetStat Prowess
-        let def = currentTarget.GetStat Poise
+        let def = (currentTarget.GetStat Poise + currentTarget.GetStat Composure) / 2
         let studyMult = 1.0 + (float currentActor.StudyStacks * 0.15)
         let baitMult = if isInvitational then 1.25 else 1.0
         let stanceMult = if currentActor.Stance = CombatStance.DisciplineStance then 1.10 else 1.0
@@ -924,7 +966,7 @@ module ActionResolver =
 
       | CalculatedFlawStrike stacks ->
         let off = currentActor.GetStat Prowess
-        let def = currentTarget.GetStat Poise
+        let def = (currentTarget.GetStat Poise + currentTarget.GetStat Composure) / 2
         let disparity = Math.Max(0, off - def)
         let spend = Math.Min(currentActor.StudyStacks, Math.Max(2, stacks))
         let mult = 1.2 + (0.35 * float spend)
@@ -939,7 +981,7 @@ module ActionResolver =
 
       | MasterfulDisarm _ ->
         let off = currentActor.GetStat Prowess
-        let def = currentTarget.GetStat Poise
+        let def = (currentTarget.GetStat Poise + currentTarget.GetStat Composure) / 2
         let disp = fun _ -> Some DisarmOrLimbDisable
 
         let upd _ (m: StatusMeters) =
@@ -952,23 +994,25 @@ module ActionResolver =
       // 2. Social Attacks
       | AuthorityDecree isImperious ->
         let off = currentActor.GetStat Intellect
-        let def = currentTarget.GetStat Resolve
+        let def = (currentTarget.GetStat Fortitude + currentTarget.GetStat Resolve) / 2
         let disparity = Math.Max(0, off - def)
         let disparityReck = int (Math.Round(float disparity / 15.0))
         let imperiousMult = if isImperious then 1.3 else 1.0
-        let fatigue = fun isCrit -> (if isCrit then 40 else 20) + (disparity / 25)
-        let disp = fun isCrit -> if isCrit then Some(CognitiveRupture(fatigue true)) else None
+        let exhaust = fun isCrit -> (if isCrit then 40 else 20) + (disparity / 25)
+        let disp = fun isCrit -> if isCrit then Some(CognitiveRupture(exhaust true)) else None
 
         let upd isCrit (m: StatusMeters) =
+          let e = exhaust isCrit
           { m with
-              CognitiveFatigue = m.CognitiveFatigue + (fatigue isCrit)
+              Exhaustion = m.Exhaustion + e
+              CognitiveFatigue = m.CognitiveFatigue + e
               Recklessness = m.Recklessness + 15 + disparityReck }
 
         off, def, imperiousMult, disp, upd
 
       | GuileDeception isConfidenceTrap ->
         let off = currentActor.GetStat Acuity
-        let def = currentTarget.GetStat Intuition
+        let def = (currentTarget.GetStat Reflex + currentTarget.GetStat Intuition) / 2
         let disparity = Math.Max(0, off - def)
         let disparityReck = int (Math.Round(float disparity / 10.0))
         let args = if isConfidenceTrap then 3 else 1
@@ -985,17 +1029,19 @@ module ActionResolver =
 
       | AcumenInterrogation isCheckmate ->
         let off = currentActor.GetStat Acumen
-        let def = currentTarget.GetStat Composure
+        let def = (currentTarget.GetStat Poise + currentTarget.GetStat Composure) / 2
         let disparity = Math.Max(0, off - def)
         let disparityReck = int (Math.Round(float disparity / 10.0))
         let studyMult = 1.0 + (float currentActor.StudyStacks * 0.25)
         let checkmateMult = if isCheckmate then 1.35 else 1.0
-        let provoke = fun isCrit -> (if isCrit then 50 else 25) + (disparity / 20)
-        let disp = fun isCrit -> if isCrit then Some(StrippedCredibility(provoke true)) else None
+        let frustrate = fun isCrit -> (if isCrit then 50 else 25) + (disparity / 20)
+        let disp = fun isCrit -> if isCrit then Some(StrippedCredibility(frustrate true)) else None
 
         let upd isCrit (m: StatusMeters) =
+          let f = frustrate isCrit
           { m with
-              Provoke = m.Provoke + (provoke isCrit)
+              Frustration = m.Frustration + f
+              Provoke = m.Provoke + f
               Recklessness = m.Recklessness + 30 + disparityReck }
 
         off, def, (studyMult * checkmateMult), disp, upd
@@ -1003,7 +1049,8 @@ module ActionResolver =
       // 3. Arcane Attacks
       | ArcaneCataclysm isOverchannel ->
         let off = currentActor.GetStat Intellect
-        let def = currentTarget.GetStat Resolve
+        let rawDef = (currentTarget.GetStat Fortitude + currentTarget.GetStat Resolve) / 2
+        let def = if currentTarget.Class = CharacterClass.Warden || currentTarget.Class = CharacterClass.Justicar then int (float rawDef * 1.25) else rawDef
         let disparity = Math.Max(0, off - def)
         let disparityReck = int (Math.Round(float disparity / 15.0))
 
@@ -1014,22 +1061,23 @@ module ActionResolver =
             0.0
 
         let cataclysmMult = (1.1 + (surge / Math.Max(10.0, float off))) * profMult
-        let fatigue = fun isCrit -> int (float (if isCrit then 45 else 22) * profMult) + (disparity / 25)
-        let disp = fun isCrit -> if isCrit then Some(CognitiveRupture(fatigue true)) else None
+        let exhaust = fun isCrit -> int (float (if isCrit then 45 else 22) * profMult) + (disparity / 25)
+        let disp = fun isCrit -> if isCrit then Some(CognitiveRupture(exhaust true)) else None
 
         let upd isCrit (m: StatusMeters) =
-          let f = fatigue isCrit
+          let e = exhaust isCrit
 
           { m with
-              CognitiveFatigue = m.CognitiveFatigue + f
-              Exhaustion = m.Exhaustion + (f / 2)
+              Exhaustion = m.Exhaustion + e
+              CognitiveFatigue = m.CognitiveFatigue + e
               Recklessness = m.Recklessness + 15 + disparityReck }
 
         off, def, cataclysmMult, disp, upd
 
       | SynapticGlamour isMindFracture ->
         let off = currentActor.GetStat Acuity
-        let def = currentTarget.GetStat Intuition
+        let rawDef = (currentTarget.GetStat Reflex + currentTarget.GetStat Intuition) / 2
+        let def = if currentTarget.Class = CharacterClass.Warden || currentTarget.Class = CharacterClass.Justicar then int (float rawDef * 1.25) else rawDef
         let disparity = Math.Max(0, off - def)
         let disparityReck = int (Math.Round(float disparity / 10.0))
         let pulses = if isMindFracture then 3 else 1
@@ -1045,7 +1093,8 @@ module ActionResolver =
 
       | MirrorIllusion isDecoySwarm ->
         let off = currentActor.GetStat Acuity
-        let def = currentTarget.GetStat Intuition
+        let rawDef = (currentTarget.GetStat Reflex + currentTarget.GetStat Intuition) / 2
+        let def = if currentTarget.Class = CharacterClass.Warden || currentTarget.Class = CharacterClass.Justicar then int (float rawDef * 1.25) else rawDef
         let disparity = Math.Max(0, off - def)
         let disparityReck = int (Math.Round(float disparity / 12.0))
         let swarms = if isDecoySwarm then 2 else 1
@@ -1061,34 +1110,40 @@ module ActionResolver =
 
       | RunicWardTrap isAnomalousGlyph ->
         let off = currentActor.GetStat Acumen
-        let def = currentTarget.GetStat Composure
+        let rawDef = (currentTarget.GetStat Poise + currentTarget.GetStat Composure) / 2
+        let def = if currentTarget.Class = CharacterClass.Warden || currentTarget.Class = CharacterClass.Justicar then int (float rawDef * 1.25) else rawDef
         let disparity = Math.Max(0, off - def)
         let disparityReck = int (Math.Round(float disparity / 12.0))
         let studyMult = 1.0 + (float currentActor.StudyStacks * 0.25)
         let glyphMult = if isAnomalousGlyph then 1.25 else 1.0
-        let provoke = fun isCrit -> int (float (if isCrit then 45 else 20) * profMult) + (disparity / 25)
-        let disp = fun isCrit -> if isCrit then Some(StrippedCredibility(provoke true)) else None
+        let frustrate = fun isCrit -> int (float (if isCrit then 45 else 20) * profMult) + (disparity / 25)
+        let disp = fun isCrit -> if isCrit then Some(StrippedCredibility(frustrate true)) else None
 
         let upd isCrit (m: StatusMeters) =
+          let f = frustrate isCrit
           { m with
-              Provoke = m.Provoke + (provoke isCrit)
+              Frustration = m.Frustration + f
+              Provoke = m.Provoke + f
               Recklessness = m.Recklessness + 25 + disparityReck }
 
         off, def, (studyMult * glyphMult * profMult), disp, upd
 
       | DisorientingShockwave isStaggeringPulse ->
         let off = currentActor.GetStat Acumen
-        let def = currentTarget.GetStat Composure
+        let rawDef = (currentTarget.GetStat Poise + currentTarget.GetStat Composure) / 2
+        let def = if currentTarget.Class = CharacterClass.Warden || currentTarget.Class = CharacterClass.Justicar then int (float rawDef * 1.25) else rawDef
         let disparity = Math.Max(0, off - def)
         let disparityReck = int (Math.Round(float disparity / 12.0))
         let studyMult = 1.0 + (float currentActor.StudyStacks * 0.15)
         let pulseMult = if isStaggeringPulse then 1.35 else 1.0
-        let provoke = fun isCrit -> int (float (if isCrit then 35 else 18) * profMult) + (disparity / 25)
-        let disp = fun isCrit -> if isCrit then Some(StrippedCredibility(provoke true)) else None
+        let frustrate = fun isCrit -> int (float (if isCrit then 35 else 18) * profMult) + (disparity / 25)
+        let disp = fun isCrit -> if isCrit then Some(StrippedCredibility(frustrate true)) else None
 
         let upd isCrit (m: StatusMeters) =
+          let f = frustrate isCrit
           { m with
-              Provoke = m.Provoke + (provoke isCrit)
+              Frustration = m.Frustration + f
+              Provoke = m.Provoke + f
               Confusion = m.Confusion + int (float (if isCrit then 25 else 12) * profMult)
               Recklessness = m.Recklessness + 20 + disparityReck }
 
@@ -1096,7 +1151,7 @@ module ActionResolver =
 
       | TraumaAttack DenialPhaseShift ->
         let off = currentActor.GetStat Finesse
-        let def = currentTarget.GetStat Intuition
+        let def = (currentTarget.GetStat Reflex + currentTarget.GetStat Intuition) / 2
         let disparity = Math.Max(0, off - def)
         let disp = fun isCrit -> if isCrit then Some DialecticalParalysis else None
         let upd isCrit (m: StatusMeters) =
@@ -1107,7 +1162,7 @@ module ActionResolver =
 
       | TraumaAttack BasaltEruption ->
         let off = currentActor.GetStat Force
-        let def = currentTarget.GetStat Fortitude
+        let def = (currentTarget.GetStat Fortitude + currentTarget.GetStat Resolve) / 2
         let disparity = Math.Max(0, off - def)
         let disp = fun isCrit -> if isCrit then Some(CrushingBlow(35 + (disparity / 10))) else None
         let upd isCrit (m: StatusMeters) =
@@ -1120,7 +1175,7 @@ module ActionResolver =
 
       | TraumaAttack CoerciveBargain ->
         let off = currentActor.GetStat Acumen
-        let def = currentTarget.GetStat Resolve
+        let def = (currentTarget.GetStat Poise + currentTarget.GetStat Composure) / 2
         let disparity = Math.Max(0, off - def)
         let disp = fun isCrit -> if isCrit then Some DialecticalParalysis else None
         let upd isCrit (m: StatusMeters) =
@@ -1133,7 +1188,7 @@ module ActionResolver =
 
       | TraumaAttack ApathyDoldrums ->
         let off = currentActor.GetStat Fortitude
-        let def = currentTarget.GetStat Composure
+        let def = (currentTarget.GetStat Poise + currentTarget.GetStat Composure) / 2
         let disparity = Math.Max(0, off - def)
         let disp = fun isCrit -> if isCrit then Some(CognitiveRupture(40)) else None
         let upd isCrit (m: StatusMeters) =
@@ -1144,7 +1199,7 @@ module ActionResolver =
 
       | TraumaAttack SereneResolution ->
         let off = currentActor.GetStat Composure
-        let def = currentTarget.GetStat Resolve
+        let def = (currentTarget.GetStat Fortitude + currentTarget.GetStat Resolve) / 2
         let disp = fun _ -> None
         let upd _ (m: StatusMeters) =
           { m with
@@ -1160,7 +1215,7 @@ module ActionResolver =
       match atk with
       | MasterfulDisarm _ ->
         let off = currentActor.GetStat Prowess
-        let def = currentTarget.GetStat Poise
+        let def = (currentTarget.GetStat Poise + currentTarget.GetStat Composure) / 2
         let isPossible = off >= int (Math.Round(float def * 0.75))
         let required = Math.Max(3, int (Math.Ceiling((float def / Math.Max(1.0, float off)) * 3.5)))
         if not isPossible || currentActor.StudyStacks < required then
@@ -1387,7 +1442,7 @@ module ActionResolver =
       let currentExhaustion = currentTarget.Meters.Exhaustion.Value
       let currentFatigue = currentTarget.Meters.CognitiveFatigue.Value
       let fatigueTolerance = Math.Min(85, 45 + (defIntuition / 12))
-      let maxClones = Math.Clamp(currentTarget.Progression.Level / 40 + 1, 1, 5)
+      let maxClones = if currentTarget.Progression.Level >= 100 then 2 else 1
 
       if currentTarget.Class = CharacterClass.Mesmer && currentTarget.MirrorClones < maxClones && currentFatigue < fatigueTolerance && currentExhaustion < 75 then
         let statDelta = defIntuition - atkAcuity
@@ -1461,17 +1516,19 @@ module ActionResolver =
     let hasDiffusion = currentTarget.ComplexForm = Some ComplexForm.PhantasmalDiffusion
     if not decoyIntercepted && (currentTarget.MirrorClones > 0 || hasDiffusion) then
       let defAcuity = currentTarget.GetStat Acuity
-      let atkIntuition = currentActor.GetStat Intuition
-      let delta = defAcuity - atkIntuition
+      // Perception against sensory deceptions: physical reflex reactions & mental instincts
+      let atkPerception = (currentActor.GetStat Reflex + currentActor.GetStat Intuition) / 2
+      let delta = defAcuity - atkPerception
       let disparity = delta
       let isOverwhelming = (currentTarget.Progression.Level - currentActor.Progression.Level >= 60) || disparity >= 550
       let fatigueCap = if isOverwhelming then 90 else 75
       if currentTarget.Meters.CognitiveFatigue.Value < fatigueCap then
         let rollMargin = (roller 1 6 - roller 1 6) * 3
         let fatiguePenalty = (currentTarget.Meters.Exhaustion.Value / 4) + (currentTarget.Meters.Recklessness.Value / 4)
-        let slope = if delta >= 0 then 0.8 else 1.4
-        let baseChance = if hasDiffusion then 95.0 else 55.0
-        let swapChance = Math.Clamp(int (baseChance + float delta * slope) + rollMargin - fatiguePenalty, 5, 95)
+        let slope = if delta >= 0 then 0.20 else 0.40
+        let baseChance = if hasDiffusion then 50.0 else 25.0
+        let forceDispersion = if currentActor.Class = CharacterClass.Berserker then 15 else 0
+        let swapChance = Math.Clamp(int (baseChance + float delta * slope) + rollMargin - fatiguePenalty - forceDispersion, 10, 48)
         if priorDefenses < 5 && roller 1 100 <= swapChance then
           let fatigueCost, exhaustionCost =
             if isOverwhelming then 0, 0
@@ -1486,7 +1543,7 @@ module ActionResolver =
           let costMsg = if fatigueCost > 0 || exhaustionCost > 0 then sprintf " (+%d Fatigue, +%d Exhaustion)" fatigueCost exhaustionCost else " (Effortless)"
 
           // The clone SHATTERS as soon as it is attacked!
-          let blastDamage = Math.Max(30, int (float defAcuity * 0.18))
+          let blastDamage = Math.Max(15, int (float defAcuity * 0.10))
           let actorAfterBlast, _, wardEvts = applyDamage Mental blastDamage false currentActor
           events <- wardEvts @ events
           events <- CombatEvent.MirrorCloneShattered(currentTarget.Id, currentActor.Id, blastDamage, currentTarget.MirrorClones) :: events
@@ -1500,7 +1557,7 @@ module ActionResolver =
           currentActor <-
             actorAfterBlast
             |> fun a -> { a with ComboTracker = a.ComboTracker.ResetCombo() }
-            |> Combatant.updateMeters (fun m -> { m with Confusion = m.Confusion + 25; Recklessness = m.Recklessness + 15 })
+            |> Combatant.updateMeters (fun m -> { m with Confusion = m.Confusion + 15; Recklessness = m.Recklessness + 5 })
           events <- CombatEvent.ComboReset(currentActor.Id, "Attacker blasted off-balance by shattered mirror clone.") :: events
           decoyIntercepted <- true
         elif priorDefenses < 5 then
@@ -1516,7 +1573,7 @@ module ActionResolver =
       let fatigueCap = if isOverwhelming then 90 else 75
       if currentTarget.Meters.CognitiveFatigue.Value < fatigueCap then
         let fatiguePenalty = (currentTarget.Meters.Exhaustion.Value / 4) + (currentTarget.Meters.Recklessness.Value / 4)
-        let acumenMargin = (defAcumen / 20) - (atkPoise / 15) - fatiguePenalty + (roller 1 6 - roller 1 6)
+        let acumenMargin = (defAcumen / 20) - (atkPoise / 20) - fatiguePenalty + (roller 1 6 - roller 1 6)
         if acumenMargin >= 3 && priorDefenses < 5 then
           let fatigueCost, exhaustionCost =
             if isOverwhelming then 0, 0
@@ -1714,20 +1771,31 @@ module ActionResolver =
         if flankOverwhelm > 0 then
           currentTarget <- Combatant.updateMeters (fun m -> { m with Overwhelm = m.Overwhelm + flankOverwhelm }) currentTarget
 
-      // Agility crit bonus: combo tracker + opponent overwhelm increases crit chance
+      // Agility crit bonus: combo tracker + opponent confusion/overwhelm increases crit chance
       let isAgilityAtk = match atk with FinesseCadence _ -> true | _ -> false
+      let isForceAtk = match atk with ForceStrike _ -> true | _ -> false
       let agilityCritRolled =
         if isAgilityAtk then
           let comboBonus = currentActor.ComboTracker.VitalOpeningBonus
-          let overwhelmBonus = currentTarget.Meters.Overwhelm.Value / 2
+          let confusionBonus = (Math.Max(currentTarget.Meters.Confusion.Value, currentTarget.Meters.Overwhelm.Value)) / 2
           let stanceBonus = if currentActor.Stance = CombatStance.AgilityStance then 15 else 0
-          let critChance = Math.Min(90, 10 + comboBonus + overwhelmBonus + stanceBonus)
+          // Discipline Stance: disciplined guard closes vital openings, reducing attacker crit chance scaling with Prowess
+          let defProwess = currentTarget.GetStat Prowess
+          let disciplineCritPenalty =
+            if currentTarget.Stance = CombatStance.DisciplineStance then
+              Math.Min(45, 10 + (defProwess / 25))
+            else 0
+          let critChance = Math.Max(5, Math.Min(90, 10 + comboBonus + confusionBonus + stanceBonus - disciplineCritPenalty))
           roller 1 100 <= critChance
         else
           false
 
       let isCrit = contest.IsCritical || agilityCritRolled
-      let critDmgMult = if isCrit && isAgilityAtk then 1.85 elif isCrit then 1.5 else 1.0
+      let critDmgMult =
+        if isCrit && isAgilityAtk then 2.50
+        elif isCrit && isForceAtk then 2.00
+        elif isCrit then 1.50
+        else 1.0
 
       let formDmgMult =
         if plane = Mental then
@@ -1737,9 +1805,25 @@ module ActionResolver =
           | _ -> 1.0
         else 1.0
 
+      let ferocityMult =
+        currentActor.MonsterTraits
+        |> List.tryPick (function
+          | RelentlessFerocity pct when currentActor.Health.Current < (currentActor.Health.Maximum / 2) ->
+            Some (1.0 + (float pct / 100.0))
+          | _ -> None)
+        |> Option.defaultValue 1.0
+
+      let packMult =
+        currentActor.MonsterTraits
+        |> List.tryPick (function
+          | PackTactics bonus when effectivePriorDefenses > 0 ->
+            Some (1.0 + (float (bonus * effectivePriorDefenses) * 0.05))
+          | _ -> None)
+        |> Option.defaultValue 1.0
+
       let baseRawDmg =
         if classMult <= 0.0 then 0
-        else Math.Max(1, int (float baseDamage * tierMult * gambitMult * classMult * weaponEff * critDmgMult * berserkMult * formDmgMult * attackDamageMitigation))
+        else Math.Max(1, int (float baseDamage * tierMult * gambitMult * classMult * weaponEff * critDmgMult * berserkMult * formDmgMult * attackDamageMitigation * ferocityMult * packMult))
 
       // Aegis of Retribution: 35% damage reduction applied to recipient
       let rawDmg =
@@ -1785,6 +1869,48 @@ module ActionResolver =
       currentTarget <- updatedTarget
       events <- wardEvts @ (CombatEvent.DamageApplied dmgEvt :: events)
 
+      // Defender Reactive Monster Traits: Acidic Blood & Molten Aura
+      if plane = Physical && dmgEvt.Amount > 0 then
+        for trait' in currentTarget.MonsterTraits do
+          match trait' with
+          | AcidicBlood corrosion ->
+            let shreddedArmor = currentActor.Armor.Shred corrosion
+            currentActor <- { currentActor with Armor = shreddedArmor }
+            events <- CombatEvent.AcidicArmorCorroded(currentActor.Id, corrosion)
+                      :: CombatEvent.MonsterTraitTriggered(currentTarget.Id, "Acidic Blood", sprintf "Acidic spray dissolved %d Armor durability!" corrosion)
+                      :: events
+          | MoltenAura burn ->
+            let burnedActor, burnDmgEvt, burnWardEvts = applyDamage Physical burn false currentActor
+            currentActor <- burnedActor |> Combatant.evaluateCollapse
+            events <- burnWardEvts @ (CombatEvent.DamageApplied burnDmgEvt
+                      :: CombatEvent.MoltenBurnInflicted(currentActor.Id, burn)
+                      :: CombatEvent.MonsterTraitTriggered(currentTarget.Id, "Molten Aura", sprintf "Searing magma scorched attacker for %d physical burn damage!" burn)
+                      :: events)
+          | _ -> ()
+
+      // Attacker Offensive Monster Traits: Venomous Sting, Psychic Doldrums, Petrifying Gaze, Chilling Presence
+      if dmgEvt.Amount > 0 then
+        for trait' in currentActor.MonsterTraits do
+          match trait' with
+          | VenomousSting stacks ->
+            currentTarget <- currentTarget |> Combatant.addBleed stacks
+            events <- CombatEvent.BleedApplied(currentTarget.Id, stacks, currentTarget.BleedStacks)
+                      :: CombatEvent.MonsterTraitTriggered(currentActor.Id, "Venomous Sting", sprintf "Injected venom, inflicting +%d Bleed stacks!" stacks)
+                      :: events
+          | PsychicDoldrums fatigue ->
+            currentTarget <- currentTarget |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue + fatigue })
+            events <- CombatEvent.MonsterTraitTriggered(currentActor.Id, "Psychic Doldrums", sprintf "Aura of psychic doldrums drained focus (+%d Cognitive Fatigue)!" fatigue)
+                      :: events
+          | PetrifyingGaze debuff ->
+            currentTarget <- currentTarget |> Combatant.updateMeters (fun m -> { m with Overwhelm = m.Overwhelm + debuff; Confusion = m.Confusion + (debuff / 2) })
+            events <- CombatEvent.MonsterTraitTriggered(currentActor.Id, "Petrifying Gaze", sprintf "Petrifying gaze slowed reactions (+%d Overwhelm)!" debuff)
+                      :: events
+          | ChillingPresence drain ->
+            currentTarget <- currentTarget |> Combatant.updateMeters (fun m -> { m with Exhaustion = m.Exhaustion + drain })
+            events <- CombatEvent.MonsterTraitTriggered(currentActor.Id, "Chilling Presence", sprintf "Chilling presence drained stamina (+%d Exhaustion)!" drain)
+                      :: events
+          | _ -> ()
+
       // Aegis of Retribution / Retribution Ward / Aegis Lattice: reflects incoming damage back to attacker as radiant retribution + Frustration
       let hasRetributionAegis = currentTarget.HasActivePreparation PreparationType.AegisOfRetribution
       let hasAegisLattice = currentTarget.ComplexForm = Some ComplexForm.AegisLattice && (wardEvts |> List.exists (function CombatEvent.ArcaneWardAbsorbed _ -> true | _ -> false))
@@ -1803,11 +1929,15 @@ module ActionResolver =
       // Severe Mental Stat Disparity: Cranial Hemorrhage (Psychic Bleeding)
       if plane = Mental && rawDmg > 0 then
         let mentalDisparity = offStat - defStat
-        if mentalDisparity >= 30 || contest.NetHits >= 4 then
-          let bleedStacks =
+        let dispThreshold = if currentTarget.Stance = CombatStance.DisciplineStance then 60 else 30
+        if mentalDisparity >= dispThreshold || contest.NetHits >= 4 then
+          let baseBleed =
             if mentalDisparity >= 100 || contest.NetHits >= 6 then 3
             elif mentalDisparity >= 50 || contest.NetHits >= 4 then 2
             else 1
+          let bleedStacks =
+            if currentTarget.Stance = CombatStance.DisciplineStance then Math.Max(1, baseBleed - 1)
+            else baseBleed
           currentTarget <- currentTarget |> Combatant.addBleed bleedStacks
           events <-
             CombatEvent.BleedApplied(currentTarget.Id, bleedStacks, currentTarget.BleedStacks)
@@ -1825,6 +1955,9 @@ module ActionResolver =
 
       // Disparity trigger if critical
       match disparityFactory isCrit with
+      | Some (ArterialRupture bonus) ->
+        currentTarget <- currentTarget |> Combatant.addBleed 1
+        events <- CombatEvent.BleedApplied(currentTarget.Id, 1, currentTarget.BleedStacks) :: CombatEvent.DisparityTriggered(currentActor.Id, currentTarget.Id, ArterialRupture bonus) :: events
       | Some disp -> events <- CombatEvent.DisparityTriggered(currentActor.Id, currentTarget.Id, disp) :: events
       | None -> ()
 

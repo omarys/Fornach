@@ -14,7 +14,7 @@ module OverallBalanceTests =
     Class: CharacterClass
     Tier: CombatTier
     WarriorTippingPoint: Simulation.TippingPointResult
-    AssassinTippingPoint: Simulation.TippingPointResult
+    RogueTippingPoint: Simulation.TippingPointResult
     SoldierTippingPoint: Simulation.TippingPointResult
     MageTippingPoint: Simulation.TippingPointResult
     TacticalNote: string
@@ -53,14 +53,6 @@ module OverallBalanceTests =
     | CharacterClass.Abjurer, _
     | CharacterClass.Strategist, _ ->
       "Runic composure wards & destabilizing ground glyphs disrupt oncoming attackers through calculated attrition."
-    | CharacterClass.Juggernaut, GrandMaster ->
-      "Iron Colossus armor soak & Shockwave Slam shatter enemy formations; massive Force & Fortitude outlast physical swarms."
-    | CharacterClass.Juggernaut, _ ->
-      "Power & Discipline juggernaut; high physical armor absorption with Shockwave Slam cleave reinforcement."
-    | CharacterClass.Ranger, GrandMaster ->
-      "Caltrop Pouch & fluid skirmishing punish advancing flankers; high Prowess & Finesse maintain reactive AoO zone."
-    | CharacterClass.Ranger, _ ->
-      "Discipline & Agility skirmisher; relies on Caltrop Pouch and opportunist reactive counters against mobs."
     | _ -> "Standard archetype profile."
 
   let private getDisplayClassName (cls: CharacterClass) : string =
@@ -76,7 +68,7 @@ module OverallBalanceTests =
   type OverallBalanceFixture(output: ITestOutputHelper) =
 
     [<Fact>]
-    let ``Overall Balance Matrix: Determine average base class swarm required to defeat each tier of all 8 archetypes`` () =
+    let ``Overall Balance Matrix: Determine average base class swarm required to defeat each tier of all 6 archetypes`` () =
       let rng = Random(42)
       let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
       let iterationsPerProbe = 10
@@ -84,13 +76,11 @@ module OverallBalanceTests =
 
       let championClasses = [
         CharacterClass.Berserker
-        CharacterClass.Juggernaut
         CharacterClass.Duelist
         CharacterClass.Warden
         CharacterClass.Inquisitor
         CharacterClass.Mesmer
         CharacterClass.Abjurer
-        CharacterClass.Ranger
       ]
 
       let tiers = [
@@ -109,8 +99,8 @@ module OverallBalanceTests =
           let warriorTP =
             Simulation.findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Warrior Novice) maxMobCount iterationsPerProbe roller
 
-          let assassinTP =
-            Simulation.findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Assassin Novice) maxMobCount iterationsPerProbe roller
+          let rogueTP =
+            Simulation.findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Rogue Novice) maxMobCount iterationsPerProbe roller
 
           let soldierTP =
             Simulation.findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Soldier Novice) maxMobCount iterationsPerProbe roller
@@ -123,7 +113,7 @@ module OverallBalanceTests =
             Class = cls
             Tier = tier
             WarriorTippingPoint = warriorTP
-            AssassinTippingPoint = assassinTP
+            RogueTippingPoint = rogueTP
             SoldierTippingPoint = soldierTP
             MageTippingPoint = mageTP
             TacticalNote = getTacticalObservations cls tier
@@ -134,16 +124,16 @@ module OverallBalanceTests =
       output.WriteLine("\n# FORNACH COMBAT ENGINE: COMPREHENSIVE ARCHETYPE BALANCE MATRIX")
       output.WriteLine("### Swarm Tipping Point N* (Average base class mob count required to achieve >= 50% win rate against Champion)\n")
 
-      output.WriteLine("| Champion Archetype | Tier | vs. Warrior (Power) | vs. Assassin (Finesse) | vs. Soldier (Discipline) | vs. Mage (Arcane) | Tactical Observations |")
-      output.WriteLine("|:-------------------|:-----|:-------------------:|:----------------------:|:------------------------:|:-----------------:|:----------------------|")
+      output.WriteLine("| Champion Archetype | Tier | vs. Warrior (Power) | vs. Rogue (Finesse) | vs. Soldier (Discipline) | vs. Mage (Arcane) | Tactical Observations |")
+      output.WriteLine("|:-------------------|:-----|:-------------------:|:-------------------:|:------------------------:|:-----------------:|:----------------------|")
 
       for r in rows do
         output.WriteLine(
-          sprintf "| %-18s | %-12s | %-19s | %-22s | %-24s | %-17s | %s |"
+          sprintf "| %-18s | %-12s | %-19s | %-19s | %-24s | %-17s | %s |"
             (getDisplayClassName r.Class)
             (r.Tier.ToString())
             (r.WarriorTippingPoint.ToString())
-            (r.AssassinTippingPoint.ToString())
+            (r.RogueTippingPoint.ToString())
             (r.SoldierTippingPoint.ToString())
             (r.MageTippingPoint.ToString())
             r.TacticalNote
@@ -155,7 +145,7 @@ module OverallBalanceTests =
       // 1. Sanity: All tipping points must be >= 1
       for r in rows do
         Assert.True(r.WarriorTippingPoint.Value >= 1, sprintf "%s vs Warrior tipping point must be >= 1" r.ArchetypeName)
-        Assert.True(r.AssassinTippingPoint.Value >= 1, sprintf "%s vs Assassin tipping point must be >= 1" r.ArchetypeName)
+        Assert.True(r.RogueTippingPoint.Value >= 1, sprintf "%s vs Rogue tipping point must be >= 1" r.ArchetypeName)
         Assert.True(r.SoldierTippingPoint.Value >= 1, sprintf "%s vs Soldier tipping point must be >= 1" r.ArchetypeName)
         Assert.True(r.MageTippingPoint.Value >= 1, sprintf "%s vs Mage tipping point must be >= 1" r.ArchetypeName)
 
@@ -166,8 +156,8 @@ module OverallBalanceTests =
 
         Assert.True(gmRow.WarriorTippingPoint.Value >= noviceRow.WarriorTippingPoint.Value,
           sprintf "%s GrandMaster Warrior tipping point (%d) must be >= Novice (%d)" cls.Name gmRow.WarriorTippingPoint.Value noviceRow.WarriorTippingPoint.Value)
-        Assert.True(gmRow.AssassinTippingPoint.Value >= noviceRow.AssassinTippingPoint.Value,
-          sprintf "%s GrandMaster Assassin tipping point (%d) must be >= Novice (%d)" cls.Name gmRow.AssassinTippingPoint.Value noviceRow.AssassinTippingPoint.Value)
+        Assert.True(gmRow.RogueTippingPoint.Value >= noviceRow.RogueTippingPoint.Value,
+          sprintf "%s GrandMaster Rogue tipping point (%d) must be >= Novice (%d)" cls.Name gmRow.RogueTippingPoint.Value noviceRow.RogueTippingPoint.Value)
         Assert.True(gmRow.SoldierTippingPoint.Value >= noviceRow.SoldierTippingPoint.Value,
           sprintf "%s GrandMaster Soldier tipping point (%d) must be >= Novice (%d)" cls.Name gmRow.SoldierTippingPoint.Value noviceRow.SoldierTippingPoint.Value)
         Assert.True(gmRow.MageTippingPoint.Value >= noviceRow.MageTippingPoint.Value,
@@ -206,14 +196,14 @@ module OverallBalanceTests =
       Assert.True(mobWinRate <= 0.10, sprintf "Swarm win rate should be <= 10%% against GrandMaster Warden (Actual: %.1f%%)" (mobWinRate * 100.0))
 
     [<Fact>]
-    let ``Duelist: Superior Agility disparity and Caltrops punish agile Assassin mobs`` () =
+    let ``Duelist: Superior Agility disparity and Caltrops punish agile Rogue mobs`` () =
       let rng = Random(789)
       let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
       let gmDuelist = fun () -> TierFactory.createClassTier CharacterClass.Duelist CombatTier.GrandMaster
-      let assassinMob = fun () -> TierFactory.createClassTier CharacterClass.Assassin CombatTier.Novice
+      let rogueMob = fun () -> TierFactory.createClassTier CharacterClass.Rogue CombatTier.Novice
 
-      let tpGMAssassin = Simulation.findSwarmTippingPoint gmDuelist assassinMob 50 10 roller
-      Assert.True(tpGMAssassin.Value >= 25, sprintf "GrandMaster Duelist should withstand at least 25 Assassins (Actual: %d)" tpGMAssassin.Value)
+      let tpGMRogue = Simulation.findSwarmTippingPoint gmDuelist rogueMob 50 10 roller
+      Assert.True(tpGMRogue.Value >= 25, sprintf "GrandMaster Duelist should withstand at least 25 Rogues (Actual: %d)" tpGMRogue.Value)
 
     [<Fact>]
     let ``Inquisitor: Mental plane dominance with Dread Warhorn heavily counters Mage mobs`` () =
@@ -228,33 +218,3 @@ module OverallBalanceTests =
 
       Assert.True(tpGMMage.Value >= 20, sprintf "GrandMaster Inquisitor should withstand 20+ Mages (Actual: %d)" tpGMMage.Value)
       Assert.True(tpGMMage.Value >= tpGMWarrior.Value, "Inquisitor should endure more Mages on the Mental plane than physical Warriors bypassing armor.")
-
-    [<Fact>]
-    let ``Juggernaut: Iron Colossus endurance holds against physical hordes while vulnerable to Arcane Mages`` () =
-      let rng = Random(202)
-      let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
-      let gmJuggernaut = fun () -> TierFactory.createClassTier CharacterClass.Juggernaut CombatTier.GrandMaster
-      let warriorMob = fun () -> TierFactory.createClassTier CharacterClass.Warrior CombatTier.Novice
-      let mageMob = fun () -> TierFactory.createClassTier CharacterClass.Mage CombatTier.Novice
-
-      let tpGMWarrior = Simulation.findSwarmTippingPoint gmJuggernaut warriorMob 50 10 roller
-      let tpGMMage = Simulation.findSwarmTippingPoint gmJuggernaut mageMob 50 10 roller
-
-      Assert.True(tpGMWarrior.Value >= 40, sprintf "GrandMaster Juggernaut should withstand 40+ Warriors (Actual: %d)" tpGMWarrior.Value)
-      Assert.True(tpGMWarrior.Value > tpGMMage.Value, "Juggernaut physical armor soak should endure significantly more Warriors than Arcane Mages.")
-
-    [<Fact>]
-    let ``Ranger: Caltrop Pouch and opportunist agility dismantle advancing physical flankers`` () =
-      let rng = Random(303)
-      let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
-      let gmRanger = fun () -> TierFactory.createClassTier CharacterClass.Ranger CombatTier.GrandMaster
-      let masterRanger = fun () -> TierFactory.createClassTier CharacterClass.Ranger CombatTier.Master
-      let soldierMob = fun () -> TierFactory.createClassTier CharacterClass.Soldier CombatTier.Novice
-      let mageMob = fun () -> TierFactory.createClassTier CharacterClass.Mage CombatTier.Novice
-
-      let tpGMSoldier = Simulation.findSwarmTippingPoint gmRanger soldierMob 50 10 roller
-      let tpMasterSoldier = Simulation.findSwarmTippingPoint masterRanger soldierMob 50 10 roller
-      let tpMasterMage = Simulation.findSwarmTippingPoint masterRanger mageMob 50 10 roller
-
-      Assert.True(tpGMSoldier.Value >= 40, sprintf "GrandMaster Ranger should withstand 40+ Soldiers (Actual: %d)" tpGMSoldier.Value)
-      Assert.True(tpMasterSoldier.Value > tpMasterMage.Value, "At Master tier, Ranger physical mobility and Caltrops should endure more Soldiers than Arcane Mages.")

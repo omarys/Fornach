@@ -149,18 +149,15 @@ type PreparationType =
         Math.Max(this.BaseDuration, this.BaseDuration + bonus)
 
   /// Retrieves the pair of preparations (1 CrowdControl, 1 SingleTargetDuel) belonging to a class.
-  /// Generic NPC classes (Warrior, Assassin, Soldier, Mage) do not possess specialized preparation abilities.
+  /// Generic NPC classes (Warrior, Rogue, Soldier, Mage) do not possess specialized preparation abilities.
   static member ForClass (cls: CharacterClass) : PreparationType list =
     match cls with
     | CharacterClass.Berserker -> [ ShockwaveSlam; BerserkTincture ]
-    | CharacterClass.Juggernaut -> [ ShockwaveSlam; ParryingBuckler ]
     | CharacterClass.Inquisitor -> [ DreadWarhorn; SynapticBrand ]
     | CharacterClass.Duelist -> [ CaltropPouch; ConcealedBlade ]
-    | CharacterClass.Assassin -> [ CaltropPouch; ConcealedBlade ]
     | CharacterClass.Mesmer -> [ MirrorMirage; PrismaticFlare ]
     | CharacterClass.Warden
     | CharacterClass.Justicar -> [ BastionZoneControl; ParryingBuckler ]
-    | CharacterClass.Ranger -> [ CaltropPouch; ParryingBuckler ]
     | CharacterClass.Abjurer -> [ AegisOfRetribution; SocraticDossier ]
     | CharacterClass.Strategist -> [ HeraldicTreatise; SocraticDossier ]
     | CharacterClass.Warrior

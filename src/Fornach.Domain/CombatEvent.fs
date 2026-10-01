@@ -182,5 +182,20 @@ type CombatEvent =
   /// Enraged Berserker deadened pain receptors, shrugging off incoming physical damage
   | EnrageDamageShrugged of defenderId: CombatantId * damageIgnored: int
 
+  /// Disciplined warrior steeled their mind against psychic shock, shrugging off incoming mental damage
+  | ComposureDamageShrugged of defenderId: CombatantId * damageIgnored: int
+
   /// Enraged Berserker executed an adrenaline-fueled Frenzy bonus attack against the swarm
   | FrenzyStrikeExecuted of actorId: CombatantId * targetId: CombatantId
+
+  /// Monster passive trait triggered in combat
+  | MonsterTraitTriggered of monsterId: CombatantId * traitName: string * effectDescription: string
+
+  /// Acidic blood corroded opponent's armor durability
+  | AcidicArmorCorroded of targetId: CombatantId * armorShredded: int
+
+  /// Molten aura burned physical attacker
+  | MoltenBurnInflicted of targetId: CombatantId * burnDamage: int
+
+  /// Alchemical material or trophy harvested upon monster defeat
+  | AlchemicalTrophyHarvested of harvesterId: CombatantId * trophyName: string * essenceValue: int

@@ -254,26 +254,34 @@ module TowerGenerator =
     let guardianPos = guardianPlaza.Center
     tiles <- Map.add guardianPos (Floor surface) tiles
 
-    let guardianStats =
-      StatBlock.Create
-        [ StatId.Force, 70 + floorNumber * 5
-          StatId.Fortitude, 60 + floorNumber * 4
-          StatId.Finesse, 65 + floorNumber * 3
-          StatId.Reflex, 60 + floorNumber * 3
-          StatId.Poise, 65 + floorNumber * 3
-          StatId.Prowess, 65 + floorNumber * 3 ]
+    // 6. Spawn Biome-Themed Bestiary Monster Guardian
+    let biomeMonsters = Bestiary.byBiome theme
+    let monsterTemplate =
+      match biomeMonsters with
+      | [] -> Bestiary.slagHound
+      | list ->
+        let idx = Math.Min(list.Length - 1, (floorNumber - 1) % list.Length)
+        list.[idx]
 
-    let guardianCombatant =
-      Combatant.create (CombatantId.New()) (sprintf "Floor %d Sentinel" floorNumber) (200 + floorNumber * 30) (180 + floorNumber * 20) guardianStats
+    let guardianCombatant = Bestiary.createMonster monsterTemplate
 
     let guardianEnemy =
       { Id = sprintf "enemy_guardian_%d" floorNumber
-        Name = sprintf "Sentinel of %s" theme.Name
+        Name = monsterTemplate.Name
         Combatant = guardianCombatant
         DropsKeyId = requiredKey
         IsDefeated = false }
 
     entities <- Map.add guardianPos (EntityEnemy guardianEnemy) entities
+
+    // E. Dynamic World & Tower Floor Encounters (ADR 0004 Phase 3)
+    let plazaCenters = plazas |> List.map (fun p -> p.Center)
+    let floorEncounters = WorldEvents.generateFloorEncounters theme floorNumber plazaCenters
+
+    for (encPos, enc) in floorEncounters do
+      tiles <- Map.add encPos (Floor surface) tiles
+      if encPos <> spawn && encPos <> stairway && not (Map.containsKey encPos entities) then
+        entities <- Map.add encPos (EntityEncounter enc) entities
 
     // 7. Verify Path Connectivity using A* Pathfinding
     let isPassable (p: Point) =

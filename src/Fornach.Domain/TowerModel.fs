@@ -3,95 +3,6 @@ namespace Fornach.Domain
 open System
 open Fornach.Spatial
 
-/// Floor biomes recycling and expanding upon the 5 Grief environments and beyond
-type FloorTheme =
-  | QuarryPlazas
-  | PineCloisters
-  | BasaltCalderas
-  | TempestTerraces
-  | SunkenBoulevards
-  | ElysianSanctuaries
-  | CelestialSpires
-
-  member this.Name : string =
-    match this with
-    | QuarryPlazas -> "The Obsidian Quarry Plazas"
-    | PineCloisters -> "The Shrouded Pine Cloisters"
-    | BasaltCalderas -> "The Basalt Caldera Causeways"
-    | TempestTerraces -> "The Tempest Promontory Terraces"
-    | SunkenBoulevards -> "The Sunken Metropolis Boulevards"
-    | ElysianSanctuaries -> "The Elysian Meadow Sanctuaries"
-    | CelestialSpires -> "The Celestial Spire Bridges"
-
-  member this.Description : string =
-    match this with
-    | QuarryPlazas -> "Wide stone pavilions, steam-vent walkways, and iron gantry plazas in the dark rain."
-    | PineCloisters -> "Expansive moonlit glades flanked by colossal ancient pines, mossy arches, and shifting mist."
-    | BasaltCalderas -> "Broad obsidian causeways suspended over rivers of magma, glowing with crackling heat."
-    | TempestTerraces -> "Sweeping stone terraces buffeted by gale-force spray above a roaring, boundless ocean."
-    | SunkenBoulevards -> "Grand flooded marble avenues and drowned colonnades reflecting silent, calm floodwaters."
-    | ElysianSanctuaries -> "Endless white lily sanctuaries bathed in gentle golden sunlight and fragrant breezes."
-    | CelestialSpires -> "Starlit glass causeways piercing through the void, suspended beneath cosmic constellations."
-
-  member this.ColorHex : string =
-    match this with
-    | QuarryPlazas -> "#6272a4" // Slate / Comment
-    | PineCloisters -> "#50fa7b" // Green
-    | BasaltCalderas -> "#ff5555" // Red
-    | TempestTerraces -> "#8be9fd" // Cyan
-    | SunkenBoulevards -> "#bd93f9" // Purple
-    | ElysianSanctuaries -> "#f1fa8c" // Yellow / Gold
-    | CelestialSpires -> "#ff79c6" // Pink / Cosmic
-
-  member this.FloorGlyph : char =
-    match this with
-    | QuarryPlazas -> '.'
-    | PineCloisters -> '"'
-    | BasaltCalderas -> ','
-    | TempestTerraces -> '~'
-    | SunkenBoulevards -> '·'
-    | ElysianSanctuaries -> '❀'
-    | CelestialSpires -> '✧'
-
-  member this.PillarGlyph : char =
-    match this with
-    | QuarryPlazas -> '∏'
-    | PineCloisters -> '♠'
-    | BasaltCalderas -> '▲'
-    | TempestTerraces -> '☗'
-    | SunkenBoulevards -> '∩'
-    | ElysianSanctuaries -> '⛩'
-    | CelestialSpires -> '✦'
-
-  member this.ChasmGlyph : char =
-    match this with
-    | BasaltCalderas -> '≈' // Magma lake
-    | TempestTerraces -> '≋' // Sea abyss
-    | SunkenBoulevards -> '░' // Deep murky flood
-    | _ -> ' ' // Open void
-
-/// Surface terrain texture for floor tiles
-type SurfaceType =
-  | PavedStone
-  | ForestMoss
-  | BasaltRock
-  | ShallowWater
-  | LilyPetals
-  | StarlitGlass
-
-/// Environmental hazard types
-type HazardType =
-  | LavaRift
-  | AcidSlag
-  | DeepCurrent
-  | CalmingSpores
-
-/// The state of the Ascension Door leading to the next floor
-type DoorState =
-  | Open
-  | LockedByKey of keyId: string * keyName: string * hint: string
-  | LockedByQuest of questId: string * questTitle: string * requirement: string
-
 /// Distinct architectural tile types (avoids blocky cave walls and hidden doors)
 type TowerTile =
   /// Walkable open plaza or colonnade floor
@@ -166,12 +77,128 @@ type TowerShrine =
     BlessingDescription: string
     IsUsed: bool }
 
+/// Cost required to receive an altar's blessing
+type AltarCost =
+  | SacrificeHealth of amount: int
+  | SacrificeMorale of amount: int
+  | ShredArmor of amount: int
+
+  member this.Description : string =
+    match this with
+    | SacrificeHealth amt -> sprintf "Sacrifice %d Health" amt
+    | SacrificeMorale amt -> sprintf "Sacrifice %d Morale" amt
+    | ShredArmor amt -> sprintf "Shred %d Armor durability" amt
+
+/// Reward granted upon fulfilling an altar's sacrifice
+type AltarReward =
+  | StatBuff of stat: StatId * bonus: int
+  | VitalitySurge of health: int * morale: int
+  | KeyReward of keyId: string * keyName: string
+  | RelicReward of EquipmentItem
+
+  member this.Description : string =
+    match this with
+    | StatBuff (stat, bonus) -> sprintf "+%d %A" bonus stat
+    | VitalitySurge (hp, mor) -> sprintf "+%d HP and +%d Morale" hp mor
+    | KeyReward (_, keyName) -> sprintf "Keystone: %s" keyName
+    | RelicReward item -> sprintf "Relic: %s" item.Name
+
+/// Ancient sacrificial altar offering dangerous risk/reward dilemmas
+type AltarChoice =
+  { Id: string
+    Name: string
+    Description: string
+    Cost: AltarCost
+    Reward: AltarReward
+    IsUsed: bool }
+
+/// Monster pack configuration lurking in an ambush lair
+type AmbushPack =
+  { Leader: MonsterTemplate
+    Minions: MonsterTemplate list }
+
+/// Monster pack ambush lair guarding bottleneck archways and causeways
+type AmbushData =
+  { Id: string
+    Name: string
+    Pack: AmbushPack
+    TriggerDescription: string
+    IsTriggered: bool }
+
+/// Rare item ware offered by spectral merchants
+type MerchantItem =
+  { Item: EquipmentItem
+    CostSouls: int
+    RequiredTrophy: (AlchemicalTrophy * int) option
+    IsPurchased: bool }
+
+/// Wandering spectral trader exchanging souls and trophies for relics
+type SpectralMerchant =
+  { Id: string
+    Name: string
+    Title: string
+    Dialogue: string list
+    Wares: MerchantItem list
+    HasTraded: bool }
+
+/// Locking mechanism or puzzle barring a treasure vault
+type VaultPuzzle =
+  | KeyholeLock of keyId: string * keyName: string * hint: string
+  | StatCheck of stat: StatId * requiredValue: int * testDescription: string
+  | MemoryCipher of riddle: string * answer: string
+
+/// Sealed treasure vault guarding ancient relics behind puzzles or stat checks
+type VaultData =
+  { Id: string
+    Name: string
+    Description: string
+    Puzzle: VaultPuzzle
+    Relics: EquipmentItem list
+    BonusSouls: int
+    IsOpen: bool }
+
+/// Hazardous mechanical trap types
+type TrapType =
+  | FloorSpikes of damage: int
+  | DartVolley of armorShred: int * damage: int
+  | HallucinogenicGas of moraleDrain: int * exhaustion: int
+  | ArcaneDischarge of directDamage: int
+
+/// Mechanical trap corridor or gauntlet testing player reflexes or perception
+type TrapGauntletData =
+  { Id: string
+    Name: string
+    TrapType: TrapType
+    DisarmStat: StatId
+    DisarmThreshold: int
+    IsDisarmed: bool
+    IsTriggered: bool }
+
+/// Narrative memory fragment illuminating repressed trauma and the lost twin
+type MemoryEchoData =
+  { Id: string
+    Title: string
+    SensoryDetail: string
+    MemoryTranscript: string list
+    MoraleRecovery: int
+    IsCommuned: bool }
+
+/// Dynamic world and Tower floor encounter types (ADR 0004 Phase 3)
+type FloorEncounter =
+  | AmbushLair of AmbushData
+  | SacrificialAltar of AltarChoice
+  | WanderingTrader of SpectralMerchant
+  | TreasureVault of VaultData
+  | MechanicalTrapGauntlet of TrapGauntletData
+  | MemoryEchoFragment of MemoryEchoData
+
 /// Discrete interactive entities occupying points on the floor grid
 type TowerEntity =
   | EntityNpc of TowerNpc
   | EntityEnemy of TowerEnemy
   | EntityChest of TowerChest
   | EntityShrine of TowerShrine
+  | EntityEncounter of FloorEncounter
 
   member this.BlocksMovement : bool =
     match this with
@@ -179,6 +206,14 @@ type TowerEntity =
     | EntityNpc _ -> true
     | EntityChest _ -> true
     | EntityShrine _ -> true
+    | EntityEncounter enc ->
+      match enc with
+      | AmbushLair _ -> false
+      | SacrificialAltar a -> not a.IsUsed
+      | WanderingTrader _ -> true
+      | TreasureVault v -> not v.IsOpen
+      | MechanicalTrapGauntlet _ -> false
+      | MemoryEchoFragment _ -> false
 
 /// Aggregate domain model representing a complete Tower floor
 type TowerFloor =

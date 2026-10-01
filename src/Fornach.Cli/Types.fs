@@ -87,4 +87,5 @@ type CliOptions =
   | InteractiveMenu
   | RunSimulation of archetypeA: string * archetypeB: string * iterations: int
   | RunGroupSimulation of soloName: string * mobName: string * mobCount: int * iterations: int
+  | RunPeerBalanceMatrix
   | RunBalanceMatrix

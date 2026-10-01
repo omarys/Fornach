@@ -239,12 +239,11 @@ module Program =
       // 1. Choose Player Action
       let choices = buildActionChoices player enemy
       let choice =
-        Display.promptWithVim(
-          SelectionPrompt<string>()
-            .Title(sprintf "[bold %s]Round %d - Select Tactical Action for %s:[/]" Theme.Yellow round player.Name)
-            .PageSize(10)
-            .AddChoices(choices)
-        )
+        Display.promptSelectionWithHelp
+          (sprintf "[bold %s]Round %d - Select Tactical Action for %s (Press '?' or F1 for Symbol Legend):[/]" Theme.Yellow round player.Name)
+          choices
+          (Some 11)
+          (fun () -> Display.renderHUD player enemy round)
 
       let playerIntent = parseActionChoice choice
 
@@ -452,15 +451,18 @@ module Program =
       |> Option.map (fun i -> i + 1 >= args.Length || args.[i + 1].StartsWith("-"))
       |> Option.defaultValue false
 
+    let isPeerMatrix = hasFlag "--peer-matrix" || hasFlag "--peer-balance" || hasFlag "-pbm"
     let isMatrix = hasFlag "--balance-matrix" || hasFlag "--matrix" || hasFlag "-b"
     let isSim = hasFlag "--sim" || hasGroupFlag || isStandaloneSimFlag || hasFlag "-a1" || hasFlag "--solo"
 
-    if isMatrix then
+    if isPeerMatrix then
+      RunPeerBalanceMatrix
+    elif isMatrix then
       RunBalanceMatrix
     elif not isSim then
       InteractiveMenu
     else
-      let arch1 = findArg ["--solo"; "-s"; "-a1"; "--archetype1"] "Veteran Juggernaut"
+      let arch1 = findArg ["--solo"; "-s"; "-a1"; "--archetype1"] "Veteran Berserker"
       let arch2 = findArg ["--mob"; "--enemy"; "-e"; "-a2"; "--archetype2"] "Veteran Inquisitor"
       let itersStr = findArg ["-n"; "--iterations"] "100"
       let iters = match Int32.TryParse itersStr with true, v -> Math.Max(1, v) | _ -> 100
@@ -491,12 +493,11 @@ module Program =
       // 1. Choose Player Action
       let choices = buildActionChoices currentCombatant currentBoss
       let choice =
-        Display.promptWithVim(
-          SelectionPrompt<string>()
-            .Title(sprintf "[bold %s]Round %d - Tactical Action against %s:[/]" Theme.Yellow round currentBoss.Name)
-            .PageSize(10)
-            .AddChoices(choices)
-        )
+        Display.promptSelectionWithHelp
+          (sprintf "[bold %s]Round %d - Tactical Action against %s (Press '?' or F1 for Symbol Legend):[/]" Theme.Yellow round currentBoss.Name)
+          choices
+          (Some 11)
+          (fun () -> Display.renderHUD currentCombatant currentBoss round)
 
       let playerIntent = parseActionChoice choice
 
@@ -636,15 +637,22 @@ module Program =
           AnsiConsole.Write(EnvironmentScenes.renderBossEncounterCard boss scene)
           AnsiConsole.WriteLine()
 
+          let renderCombatHeader () =
+            AnsiConsole.Clear()
+            AnsiConsole.Write(EnvironmentScenes.renderSceneHeader scene)
+            AnsiConsole.WriteLine()
+            AnsiConsole.Write(EnvironmentScenes.renderBossEncounterCard boss scene)
+            AnsiConsole.WriteLine()
+
           let combatChoice =
-            Display.promptWithVim(
-              SelectionPrompt<string>()
-                .Title("[bold red]Face the Manifestation:[/]")
-                .AddChoices([
-                  "⚔️ Enter Tactical Combat Duel"
-                  "⚡ Quick Resolve Encounter"
-                ])
-            )
+            Display.promptSelectionWithHelp
+              "[bold red]Face the Manifestation (Press '?' or F1 for Symbol Legend):[/]"
+              [
+                "⚔️ Enter Tactical Combat Duel"
+                "⚡ Quick Resolve Encounter"
+              ]
+              None
+              renderCombatHeader
 
           let outcome, updatedPlayer =
             if combatChoice.Contains("Quick Resolve") then
@@ -676,11 +684,11 @@ module Program =
       if runner.CurrentChoices.Length > 0 then
         let choiceTexts = runner.CurrentChoices |> List.map snd
         let selectedText =
-          Display.promptWithVim(
-            SelectionPrompt<string>()
-              .Title(sprintf "[bold %s]Choose your response:[/]" Theme.Yellow)
-              .AddChoices(choiceTexts)
-          )
+          Display.promptSelectionWithHelp
+            (sprintf "[bold %s]Choose your response (Press '?' or F1 for Symbol Legend):[/]" Theme.Yellow)
+            choiceTexts
+            None
+            (fun () -> ())
         let selectedIdx = runner.CurrentChoices |> List.findIndex (fun (_, t) -> t = selectedText)
         runner.ChooseChoice selectedIdx
       elif not runner.CanContinue then
@@ -699,6 +707,11 @@ module Program =
   [<EntryPoint>]
   let main (args: string array) =
     match parseCliArgs args with
+    | RunPeerBalanceMatrix ->
+      printBanner()
+      Simulation.renderPeerBalanceMatrix()
+      0
+
     | RunBalanceMatrix ->
       printBanner()
       Simulation.renderBalanceMatrix()
@@ -769,7 +782,7 @@ module Program =
           Display.promptWithVim(
             SelectionPrompt<string>()
               .Title(promptTitle)
-              .PageSize(9)
+              .PageSize(11)
               .AddChoices([
                 formatMenuItem "󰈙 " "Interactive Story Mode" "Narrative prologue & aspect battles" Theme.Cyan
                 formatMenuItem "󰒋 " "Ascend The Infinite Tower" "Roguelike procedural dungeon crawl" Theme.Yellow
@@ -778,7 +791,9 @@ module Program =
                 formatMenuItem " " "1 vs N Encirclement Swarm Simulator" "Swarm overwhelm stress test" Theme.Pink
                 formatMenuItem " " "Custom Combatant Builder" "Interactive stat & stance forge" Theme.Orange
                 formatMenuItem "󰂺 " "View Archetype Roster" (sprintf "Inspect %d mastery archetypes" Archetypes.allArchetypes.Length) Theme.Purple
+                formatMenuItem "󰓥 " "Peer Class 1v1 Balance Matrix" "Cross-tier 100-run pairwise duel benchmark" Theme.Green
                 formatMenuItem "󰈷 " "Swarm Tipping Point Balance Matrix" "128-matchup macro balance benchmark" Theme.Yellow
+                formatMenuItem "󰒋 " "Symbol & Glyph Reference Manual" "Exhaustive guide to icons, meters & hazards" Theme.Yellow
                 formatMenuItem "󰗼 " "Exit" "Close the Fornach Arena" Theme.Red
               ])
           )
@@ -812,10 +827,18 @@ module Program =
         elif choice.Contains("View Archetype Roster") then
           showRoster ()
 
+        elif choice.Contains("Peer Class 1v1 Balance Matrix") then
+          Simulation.renderPeerBalanceMatrix ()
+          AnsiConsole.MarkupLine(sprintf "[%s]Press any key to return to menu...[/]" Theme.Comment)
+          Console.ReadKey(true) |> ignore
+
         elif choice.Contains("Swarm Tipping Point Balance Matrix") then
           Simulation.renderBalanceMatrix ()
           AnsiConsole.MarkupLine(sprintf "[%s]Press any key to return to menu...[/]" Theme.Comment)
           Console.ReadKey(true) |> ignore
+
+        elif choice.Contains("Symbol & Glyph Reference Manual") then
+          Display.showSymbolAndGlyphLegend ()
 
         elif choice.Contains("Exit") then
           running <- false

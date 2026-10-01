@@ -58,6 +58,35 @@ module AI =
         StandardAttack (ProwessStrike false)
     elif self.Name.Contains("Acceptance") then
       StandardAttack (TraumaAttack SereneResolution)
+    // -------------------------------------------------------------------------
+    // Monster Species Instinct Profiles (ADR 0004)
+    // -------------------------------------------------------------------------
+    elif self.MonsterFamily = Some MonsterFamily.Beast then
+      // Beasts strike ferally, exploiting bleeding prey or lunging with agile cadences
+      if opponent.BleedStacks > 0 || finesse >= force then
+        StandardAttack (FinesseCadence isGambit)
+      else
+        StandardAttack (ForceStrike isGambit)
+    elif self.MonsterFamily = Some MonsterFamily.Construct then
+      // Constructs hold immovable bastion discipline, smashing with calculated stone blows
+      if self.Stance <> CombatStance.DisciplineStance && self.Meters.Recklessness.Value < 35 then
+        ShiftStance CombatStance.DisciplineStance
+      elif prowess >= force then
+        StandardAttack (ProwessStrike isGambit)
+      else
+        StandardAttack (ForceStrike isGambit)
+    elif self.MonsterFamily = Some MonsterFamily.UndeadWraith then
+      // Wraiths bypass physical armor entirely, singing sorrowful glamours that erode Morale
+      StandardAttack (SynapticGlamour isGambit)
+    elif self.MonsterFamily = Some MonsterFamily.Aberration then
+      // Aberrations warp focus with psychic cataclysms or erratic pulses
+      if intellect >= acuity then
+        StandardAttack (ArcaneCataclysm isGambit)
+      else
+        StandardAttack (SynapticGlamour isGambit)
+    elif self.MonsterFamily = Some MonsterFamily.GriefManifestation then
+      // Grief manifestations strike with dialectical acumen interrogations
+      StandardAttack (AcumenInterrogation isGambit)
     elif self.Class = CharacterClass.Berserker then
       // Berserkers embody kinetic juggernaut momentum: stay in Power Stance, unleash Force strikes, and always cleave
       if self.Stance <> CombatStance.PowerStance && self.Meters.Recklessness.Value < 50 then
@@ -209,16 +238,18 @@ module AI =
               | PreparationType.BerserkTincture when self.Health.Current < (self.Health.Maximum / 3) || self.Meters.Recklessness.Value >= 70 -> None
               | prepType -> Some (DeployPreparation (prepType, None)))
       else
-        // 1-on-1 Duel: deploy available Single-Target preparation
+        // 1-on-1 Duel: deploy available Single-Target preparation or signature defensive barrier
         self.Preparations
         |> List.tryFind (fun slot ->
-          slot.Category = SingleTargetDuel
+          (slot.Category = SingleTargetDuel || slot.Type = PreparationType.AegisOfRetribution)
           && slot.RemainingUses > 0
           && not (self.HasActivePreparation slot.Type))
         |> Option.bind (fun slot ->
           match slot.Type with
           | PreparationType.SocraticDossier when opponent.Meters.Recklessness.Value < 25 -> None
-          | PreparationType.BerserkTincture when self.Health.Current < (self.Health.Maximum / 2) || self.Meters.Recklessness.Value >= 40 -> None
+          | PreparationType.BerserkTincture when self.Health.Current < (self.Health.Maximum / 3) || self.Meters.Recklessness.Value >= 60 -> None
+          | PreparationType.BerserkTincture -> Some (DeployPreparation (slot.Type, None))
+          | PreparationType.AegisOfRetribution -> Some (DeployPreparation (PreparationType.AegisOfRetribution, None))
           | prepType -> Some (DeployPreparation (prepType, Some opponent.Id)))
 
     match prepIntentOpt with
@@ -229,7 +260,7 @@ module AI =
         ExecuteStrike (chooseExecutePlane self)
 
       // 2. If self is reaching dangerous entropy or status debuff levels, bleed Recklessness
-      elif (if self.Name.Contains("Anger") then self.Meters.Recklessness.Value >= 85 else self.Meters.Recklessness.Value >= 40)
+      elif (if self.Name.Contains("Anger") || self.Class = CharacterClass.Berserker then self.Meters.Recklessness.Value >= 95 else self.Meters.Recklessness.Value >= 40)
            || self.Meters.Exhaustion.Value >= 65
            || self.Meters.Overwhelm.Value >= 65
            || self.Meters.CognitiveFatigue.Value >= 65
@@ -254,19 +285,42 @@ module AI =
     | [] -> failwith "Cannot choose target from empty opponents list"
     | [ single ] -> single
     | list ->
+      // 1. Any combatant seizes execution on collapsed targets
       match list |> List.tryFind (fun m -> m.IsExecuteEligible) with
       | Some target -> target
       | None ->
-        let nearCollapse =
-          list
-          |> List.filter (fun m ->
-            m.Meters.Exhaustion.Value >= 75
-            || m.Meters.Overwhelm.Value >= 75
-            || m.Meters.Frustration.Value >= 75
-            || m.Meters.CognitiveFatigue.Value >= 75
-            || m.Meters.Confusion.Value >= 75
-            || m.Meters.Provoke.Value >= 75)
-        match nearCollapse with
-        | target :: _ -> target
-        | [] ->
-          list |> List.minBy (fun m -> m.Health.Current + m.Morale.Current)
+        // 2. Species Instinct Target Profiles
+        match self.MonsterFamily with
+        | Some MonsterFamily.Beast ->
+          // Beasts hunt bleeding prey first; otherwise focus down lowest HP target
+          let bleeding = list |> List.tryFind (fun m -> m.BleedStacks > 0)
+          match bleeding with
+          | Some target -> target
+          | None -> list |> List.minBy (fun m -> m.Health.Current)
+        | Some MonsterFamily.UndeadWraith ->
+          // Wraiths and Specters prioritize targets with lowest current Morale
+          list |> List.minBy (fun m -> m.Morale.Current)
+        | Some MonsterFamily.Construct ->
+          // Constructs hold choke points and crush heavily armored frontline combatants
+          list |> List.maxBy (fun m -> m.Armor.Current)
+        | Some MonsterFamily.Aberration ->
+          // Aberrations target chaotic entropy: combatants with highest Recklessness or Confusion
+          list |> List.maxBy (fun m -> m.Meters.Recklessness.Value + m.Meters.Confusion.Value)
+        | Some MonsterFamily.GriefManifestation ->
+          // Grief manifestations target the combatant with highest Frustration
+          list |> List.maxBy (fun m -> m.Meters.Frustration.Value)
+        | None ->
+          // Standard humanoid targeting: near-collapse -> lowest combined vitality
+          let nearCollapse =
+            list
+            |> List.filter (fun m ->
+              m.Meters.Exhaustion.Value >= 75
+              || m.Meters.Overwhelm.Value >= 75
+              || m.Meters.Frustration.Value >= 75
+              || m.Meters.CognitiveFatigue.Value >= 75
+              || m.Meters.Confusion.Value >= 75
+              || m.Meters.Provoke.Value >= 75)
+          match nearCollapse with
+          | target :: _ -> target
+          | [] ->
+            list |> List.minBy (fun m -> m.Health.Current + m.Morale.Current)

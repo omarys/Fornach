@@ -40,7 +40,13 @@
     <!-- 9. Dynamic Vision and Locomotion Domain Resolver -->
     <Compile Include="Vision.fs" />
 
-    <!-- 10. The Infinite Roguelike Tower Domain Model -->
+    <!-- 10. Floor Theme and Architectural Terrain Enums -->
+    <Compile Include="TowerTheme.fs" />
+
+    <!-- 11. Monster Bestiary Subsystem (ADR 0004) -->
+    <Compile Include="Bestiary.fs" />
+
+    <!-- 12. The Infinite Roguelike Tower Domain Model -->
     <Compile Include="TowerModel.fs" />
   </ItemGroup>
 

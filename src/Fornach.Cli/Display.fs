@@ -8,47 +8,66 @@ open Spectre.Console.Rendering
 open Fornach.Domain
 open Fornach.Engine
 
-type VimInput(inner: IAnsiConsoleInput) =
+type VimInput(inner: IAnsiConsoleInput, enableHelpHotkey: bool) =
+  let keyQueue = System.Collections.Generic.Queue<ConsoleKeyInfo>()
+
+  new(inner: IAnsiConsoleInput) = VimInput(inner, false)
+
   interface IAnsiConsoleInput with
-    member this.IsKeyAvailable() = inner.IsKeyAvailable()
+    member this.IsKeyAvailable() = keyQueue.Count > 0 || inner.IsKeyAvailable()
     member this.ReadKey(intercept: bool) =
-      let n = inner.ReadKey(intercept)
-      if n.HasValue then
-        let k = n.Value
-        let translated =
-          match k.Key with
-          | ConsoleKey.J -> ConsoleKeyInfo(char 0, ConsoleKey.DownArrow, false, false, false)
-          | ConsoleKey.K -> ConsoleKeyInfo(char 0, ConsoleKey.UpArrow, false, false, false)
-          | _ ->
-            match k.KeyChar with
-            | 'j' | 'J' -> ConsoleKeyInfo(char 0, ConsoleKey.DownArrow, false, false, false)
-            | 'k' | 'K' -> ConsoleKeyInfo(char 0, ConsoleKey.UpArrow, false, false, false)
-            | _ -> k
-        Nullable translated
+      if keyQueue.Count > 0 then
+        Nullable (keyQueue.Dequeue())
       else
-        Nullable()
+        let n = inner.ReadKey(intercept)
+        if n.HasValue then
+          let k = n.Value
+          if enableHelpHotkey && (k.Key = ConsoleKey.F1 || k.KeyChar = '?') then
+            keyQueue.Enqueue(ConsoleKeyInfo(char 13, ConsoleKey.Enter, false, false, false))
+            Nullable (ConsoleKeyInfo(char 0, ConsoleKey.End, false, false, false))
+          else
+            let translated =
+              match k.Key with
+              | ConsoleKey.J -> ConsoleKeyInfo(char 0, ConsoleKey.DownArrow, false, false, false)
+              | ConsoleKey.K -> ConsoleKeyInfo(char 0, ConsoleKey.UpArrow, false, false, false)
+              | _ ->
+                match k.KeyChar with
+                | 'j' | 'J' -> ConsoleKeyInfo(char 0, ConsoleKey.DownArrow, false, false, false)
+                | 'k' | 'K' -> ConsoleKeyInfo(char 0, ConsoleKey.UpArrow, false, false, false)
+                | _ -> k
+            Nullable translated
+        else
+          Nullable()
 
     member this.ReadKeyAsync(intercept: bool, ct: CancellationToken) =
       task {
-        let! n = inner.ReadKeyAsync(intercept, ct)
-        if n.HasValue then
-          let k = n.Value
-          let translated =
-            match k.Key with
-            | ConsoleKey.J -> ConsoleKeyInfo(char 0, ConsoleKey.DownArrow, false, false, false)
-            | ConsoleKey.K -> ConsoleKeyInfo(char 0, ConsoleKey.UpArrow, false, false, false)
-            | _ ->
-              match k.KeyChar with
-              | 'j' | 'J' -> ConsoleKeyInfo(char 0, ConsoleKey.DownArrow, false, false, false)
-              | 'k' | 'K' -> ConsoleKeyInfo(char 0, ConsoleKey.UpArrow, false, false, false)
-              | _ -> k
-          return Nullable translated
+        if keyQueue.Count > 0 then
+          return Nullable (keyQueue.Dequeue())
         else
-          return Nullable()
+          let! n = inner.ReadKeyAsync(intercept, ct)
+          if n.HasValue then
+            let k = n.Value
+            if enableHelpHotkey && (k.Key = ConsoleKey.F1 || k.KeyChar = '?') then
+              keyQueue.Enqueue(ConsoleKeyInfo(char 13, ConsoleKey.Enter, false, false, false))
+              return Nullable (ConsoleKeyInfo(char 0, ConsoleKey.End, false, false, false))
+            else
+              let translated =
+                match k.Key with
+                | ConsoleKey.J -> ConsoleKeyInfo(char 0, ConsoleKey.DownArrow, false, false, false)
+                | ConsoleKey.K -> ConsoleKeyInfo(char 0, ConsoleKey.UpArrow, false, false, false)
+                | _ ->
+                  match k.KeyChar with
+                  | 'j' | 'J' -> ConsoleKeyInfo(char 0, ConsoleKey.DownArrow, false, false, false)
+                  | 'k' | 'K' -> ConsoleKeyInfo(char 0, ConsoleKey.UpArrow, false, false, false)
+                  | _ -> k
+              return Nullable translated
+          else
+            return Nullable()
       }
 
-type VimConsole(inner: IAnsiConsole) =
-  let vimInput = VimInput(inner.Input)
+type VimConsole(inner: IAnsiConsole, enableHelpHotkey: bool) =
+  let vimInput = VimInput(inner.Input, enableHelpHotkey)
+  new(inner: IAnsiConsole) = VimConsole(inner, false)
   interface IAnsiConsole with
     member this.Profile = inner.Profile
     member this.Cursor = inner.Cursor
@@ -65,7 +84,16 @@ module Display =
   let promptWithVim (prompt: IPrompt<'T>) : 'T =
     let prev = AnsiConsole.Console
     try
-      AnsiConsole.Console <- VimConsole(prev)
+      AnsiConsole.Console <- VimConsole(prev, false)
+      AnsiConsole.Prompt(prompt)
+    finally
+      AnsiConsole.Console <- prev
+
+  /// Executes a prompt with Vim-style navigation and '?' / F1 help hotkey enabled
+  let promptWithVimAndHelp (prompt: IPrompt<'T>) : 'T =
+    let prev = AnsiConsole.Console
+    try
+      AnsiConsole.Console <- VimConsole(prev, true)
       AnsiConsole.Prompt(prompt)
     finally
       AnsiConsole.Console <- prev
@@ -442,6 +470,9 @@ module Display =
     | CombatEvent.EnrageDamageShrugged (_, ignored) ->
       AnsiConsole.MarkupLine(sprintf "  [bold %s]🩸 ENRAGE SHRUG:[/] Pain deadened by stimulant! Shrugged off [bold %s]%d physical damage[/]!" Theme.Red Theme.Yellow ignored)
 
+    | CombatEvent.ComposureDamageShrugged (_, ignored) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🛡️ DISCIPLINE DEFENSE:[/] Guard steeled by martial discipline! Deflected [bold %s]%d incoming damage[/]!" Theme.Yellow Theme.Cyan ignored)
+
     | CombatEvent.FrenzyStrikeExecuted (_, _) ->
       AnsiConsole.MarkupLine(sprintf "  [bold %s]⚡ FRENZY ATTACK:[/] Enraged bloodlust triggered an immediate savage follow-up swing!" Theme.Orange)
 
@@ -451,3 +482,154 @@ module Display =
 
     | CombatEvent.FadingDrainSuffered (_, formName, fatigueDrain, reckSpike) ->
       AnsiConsole.MarkupLine(sprintf "  [bold %s]⚡ FADING DRAIN:[/] Channeling [bold %s]%s[/] burned through mental reserves (+%d Cognitive Fatigue, +%d Recklessness)!" Theme.Purple Theme.Cyan formName fatigueDrain reckSpike)
+
+    | CombatEvent.MonsterTraitTriggered (_, traitName, effectDesc) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🐾 TRAIT ([%s]%s[/]):[/] %s" Theme.Purple Theme.Yellow traitName effectDesc)
+
+    | CombatEvent.AcidicArmorCorroded (_, corrosion) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🧪 ACIDIC CORROSION:[/] Searing acidic blood corroded [bold %s]-%d Armor durability[/]!" Theme.Green Theme.Red corrosion)
+
+    | CombatEvent.MoltenBurnInflicted (_, burn) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🔥 MOLTEN AURA:[/] Searing volcanic heat scorched attacker for [bold %s]%d burn damage[/]!" Theme.Orange Theme.Red burn)
+
+    | CombatEvent.AlchemicalTrophyHarvested (_, trophyName, value) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]💎 TROPHY HARVESTED:[/] Obtained [bold %s]%s[/] (Essence Value: [bold %s]%d[/])!" Theme.Cyan Theme.Yellow trophyName Theme.Cyan value)
+
+  /// Displays a comprehensive interactive modal with the full symbol and glyph legend across Tower and Story modes
+  let showSymbolAndGlyphLegend () =
+    let grid = Grid()
+    grid.AddColumn(GridColumn()) |> ignore
+
+    grid.AddRow(Markup(sprintf "[bold %s]󰒋 FORNACH: COMPREHENSIVE SYMBOL & GLYPH REFERENCE MANUAL[/]" Theme.Yellow)) |> ignore
+    grid.AddRow(Rule().RuleStyle(Theme.StylePurple)) |> ignore
+
+    // Section 1: Navigation & Hotkeys
+    grid.AddRow(Markup(sprintf "[bold %s]󰌌 Navigation & Hotkeys (Tower & Story Modes):[/]" Theme.Pink)) |> ignore
+
+    let controlsTable = Table().Border(TableBorder.Rounded).BorderColor(Theme.ColorComment)
+    controlsTable.AddColumn(TableColumn("[bold white]Hotkey / Input[/]").Centered()) |> ignore
+    controlsTable.AddColumn(TableColumn("[bold white]Mode / Context[/]")) |> ignore
+    controlsTable.AddColumn(TableColumn("[bold white]Functionality & Action[/]")) |> ignore
+
+    controlsTable.AddRow(Markup("[bold #f1fa8c] ? [/] or [bold #f1fa8c] F1 [/]"), Markup("Global (Tower & Story)"), Markup("Open this comprehensive Symbol & Glyph Reference Guide at any time.")) |> ignore
+    controlsTable.AddRow(Markup("[bold white]Arrows / Vim (H J K L)[/]"), Markup("Tower Mode (Locomotion)"), Markup("Move player North (K/Up), South (J/Down), West (H/Left), East (L/Right).")) |> ignore
+    controlsTable.AddRow(Markup("[bold white]Y / U / B / N (Keypad)[/]"), Markup("Tower Mode (Locomotion)"), Markup("Diagonal movement: NW (Y/7), NE (U/9), SW (B/1), SE (N/3).")) |> ignore
+    controlsTable.AddRow(Markup("[bold white]X [/] or [bold white]Semicolon (;)[/]"), Markup("Tower Mode"), Markup("Toggle Tile & Hazard Reticle Inspection Mode to examine distant cells.")) |> ignore
+    controlsTable.AddRow(Markup("[bold white]Spacebar [/] or [bold white]Period (.)[/]"), Markup("Tower Mode"), Markup("Stand ground / Wait a turn to observe ambient flow and effects.")) |> ignore
+    controlsTable.AddRow(Markup("[bold white]J / K [/] or [bold white]Arrows[/]"), Markup("Story & Duel Prompts"), Markup("Vim navigation up/down through tactical menus and story choices.")) |> ignore
+    controlsTable.AddRow(Markup("[bold white]Q [/] or [bold white]Escape[/]"), Markup("Tower Mode / Inspect"), Markup("Exit reticle inspection mode or retreat from tower expedition to menu.")) |> ignore
+
+    grid.AddRow(controlsTable) |> ignore
+
+    // Section 2: Map Entities & World Encounters
+    grid.AddRow(Markup(sprintf "\n[bold %s]󰞁 Dungeon Map Entities & World Encounters (Tower Mode):[/]" Theme.Cyan)) |> ignore
+
+    let entityTable = Table().Border(TableBorder.Rounded).BorderColor(Theme.ColorComment)
+    entityTable.AddColumn(TableColumn("[bold white]Glyph[/]").Centered()) |> ignore
+    entityTable.AddColumn(TableColumn("[bold white]Name / Feature[/]")) |> ignore
+    entityTable.AddColumn(TableColumn("[bold white]Interaction & Effect[/]")) |> ignore
+
+    entityTable.AddRow(Markup("[bold #f1fa8c on #ff5555] @ [/]"), Markup("[bold #f1fa8c]Player Character[/]"), Markup("Your current location on the floor grid.")) |> ignore
+    entityTable.AddRow(Markup("[bold #ff5555] ! [/]"), Markup("[bold #ff5555]Hostile Guardian / Ambush[/]"), Markup("Formidable biome adversaries or lurking pack ambushes. Walk into tile to engage.")) |> ignore
+    entityTable.AddRow(Markup("[#6272a4] % [/]"), Markup("[#6272a4]Neutralized Adversary[/]"), Markup("Defeated guardian or dispersed ambush site. Safely walkable.")) |> ignore
+    entityTable.AddRow(Markup("[bold #8be9fd] ? [/]"), Markup("[bold #8be9fd]Inhabitant / Scholar[/]"), Markup("Friendly NPC offering dialogue, world lore, and optional ascension trials.")) |> ignore
+    entityTable.AddRow(Markup("[bold #f1fa8c] ⌹ [/]"), Markup("[bold #f1fa8c]Vault Chest / Sealed Vault[/]"), Markup("Loot caches and puzzle-locked chambers. Recover keystones, Souls, and relics.")) |> ignore
+    entityTable.AddRow(Markup("[bold #50fa7b] † [/]"), Markup("[bold #50fa7b]Runic Shrine[/]"), Markup("Ancient monolith; communing restores +40 Morale and resets Recklessness to 0.")) |> ignore
+    entityTable.AddRow(Markup("[bold #bd93f9] ♨ [/]"), Markup("[bold #bd93f9]Sacrificial Altar[/]"), Markup("Dark stone offering permanent combat buffs in exchange for Health, Morale, or Armor.")) |> ignore
+    entityTable.AddRow(Markup("[bold #8be9fd] $ [/]"), Markup("[bold #8be9fd]Spectral Merchant[/]"), Markup("Wandering trader exchanging rare equipment for Souls and alchemical trophies.")) |> ignore
+    entityTable.AddRow(Markup("[bold #50fa7b] ✦ [/]"), Markup("[bold #50fa7b]Dormant Memory Echo[/]"), Markup("Sensory fragment of repressed trauma from the real world. Restores Morale.")) |> ignore
+    entityTable.AddRow(Markup("[#6272a4] ✧ [/]"), Markup("[#6272a4]Communed Memory Echo[/]"), Markup("Previously awakened narrative echo. Safely walkable.")) |> ignore
+    entityTable.AddRow(Markup("[bold #ff5555] ✕ [/]"), Markup("[bold #ff5555]Mechanical Trap[/]"), Markup("Concealed spikes, gas, or discharge. Disarms with Reflex/Perception; triggers on fail.")) |> ignore
+    entityTable.AddRow(Markup("[bold #50fa7b] ▲ [/]"), Markup("[bold #50fa7b]Ascension Stairway[/]"), Markup("Open stairway portal leading up to the next tier of the Infinite Tower.")) |> ignore
+    entityTable.AddRow(Markup("[bold #ffb86c] ⮝ [/]"), Markup("[bold #ffb86c]Sealed Ascension Door[/]"), Markup("Barred portal requiring a guardian keystone or completed trial to unlock.")) |> ignore
+    entityTable.AddRow(Markup("[bold #f8f8f2] ∩ [/]"), Markup("[bold #f8f8f2]Colonnade Archway[/]"), Markup("Open architectural causeway transition connecting plazas.")) |> ignore
+
+    grid.AddRow(entityTable) |> ignore
+
+    // Section 3: Environmental Hazards & Terrain
+    grid.AddRow(Markup(sprintf "\n[bold %s]⚠ Environmental Hazards & Architecture:[/]" Theme.Red)) |> ignore
+
+    let hazardTable = Table().Border(TableBorder.Rounded).BorderColor(Theme.ColorComment)
+    hazardTable.AddColumn(TableColumn("[bold white]Glyph[/]").Centered()) |> ignore
+    hazardTable.AddColumn(TableColumn("[bold white]Terrain / Hazard[/]")) |> ignore
+    hazardTable.AddColumn(TableColumn("[bold white]Tactical Effect[/]")) |> ignore
+
+    hazardTable.AddRow(Markup("[bold #50fa7b] ≈ [/]"), Markup("[bold #50fa7b]Corrosive Acid Slag[/]"), Markup("[bold red]-15 Armor durability[/] dissolved immediately upon stepping into tile.")) |> ignore
+    hazardTable.AddRow(Markup("[bold #ff5555] ≈ [/]"), Markup("[bold #ff5555]Molten Lava Rift[/]"), Markup("[bold red]-15 Direct Health[/] burned immediately upon stepping into tile.")) |> ignore
+    hazardTable.AddRow(Markup("[bold #8be9fd] ≋ [/]"), Markup("[bold #8be9fd]Deep Current[/]"), Markup("[bold purple]+15 Exhaustion[/] inflicted from wading through heavy water currents.")) |> ignore
+    hazardTable.AddRow(Markup("[bold #ff79c6] ❀ [/]"), Markup("[bold #ff79c6]Calming Spores[/]"), Markup("[bold green]Resets Recklessness to 0[/] via fragrant psychotropic blossom spores.")) |> ignore
+    hazardTable.AddRow(Markup("[bold white] ∏ ♠ ▲ ☗ ⛩ ✦ [/]"), Markup("Colonnade Pillar"), Markup("Massive stone monoliths. Impassable; blocks movement and line-of-sight.")) |> ignore
+    hazardTable.AddRow(Markup("[grey] [Space] [/]"), Markup("Abyssal Chasm / Void"), Markup("Endless drop. Impassable; blocks movement, but allows vision & ranged line-of-sight.")) |> ignore
+
+    grid.AddRow(hazardTable) |> ignore
+
+    // Section 4: Tactical Vitals, Meters & Economy
+    grid.AddRow(Markup(sprintf "\n[bold %s]󰓥 Tactical Vitals, Meters & Story Icons:[/]" Theme.Yellow)) |> ignore
+
+    let vitalsTable = Table().Border(TableBorder.Rounded).BorderColor(Theme.ColorComment)
+    vitalsTable.AddColumn(TableColumn("[bold white]Glyph[/]").Centered()) |> ignore
+    vitalsTable.AddColumn(TableColumn("[bold white]Resource / Concept[/]")) |> ignore
+    vitalsTable.AddColumn(TableColumn("[bold white]Function & Significance[/]")) |> ignore
+
+    vitalsTable.AddRow(Markup("[bold #ff5555]󰋑[/]"), Markup("Health (HP)"), Markup("Physical vitality. Reaching 0 causes defeat and trauma loop rewind.")) |> ignore
+    vitalsTable.AddRow(Markup("[bold #8be9fd]󰧑[/]"), Markup("Morale"), Markup("Psychological resolve. Reaching 0 triggers mental collapse.")) |> ignore
+    vitalsTable.AddRow(Markup("[bold #f1fa8c][/]"), Markup("Armor Integrity"), Markup("Absorbs incoming attack damage based on durability absorption ratio.")) |> ignore
+    vitalsTable.AddRow(Markup("[bold #ff5555]󰈸[/]"), Markup("Recklessness (0-100)"), Markup("Offensive momentum; amplifies damage, but increases vulnerability if unchecked.")) |> ignore
+    vitalsTable.AddRow(Markup("[bold #f1fa8c]󰓎[/]"), Markup("Overwhelm (0-100)"), Markup("Mental clutter and pressure from rapid tactical exchanges.")) |> ignore
+    vitalsTable.AddRow(Markup("[bold #bd93f9]󰒓[/]"), Markup("Exhaustion (0-100)"), Markup("Physical stamina depletion. Increases dice difficulty for physical strikes.")) |> ignore
+    vitalsTable.AddRow(Markup("[bold #50fa7b]󰓥[/]"), Markup("Martial Stance"), Markup("Physical combat stance (Power, Agility, Discipline).")) |> ignore
+    vitalsTable.AddRow(Markup("[bold #ff79c6]🧵[/]"), Markup("Complex Form"), Markup("Arcane mental stance (Resonance Spike, Phantasmal Diffusion, Aegis Lattice).")) |> ignore
+    vitalsTable.AddRow(Markup("[bold gold1]󰮯[/]"), Markup("Souls"), Markup("Primary currency harvested from fallen adversaries for spectral merchant wares.")) |> ignore
+    vitalsTable.AddRow(Markup("[bold cyan]💎[/]"), Markup("Alchemical Trophies"), Markup("Rare monster remnants (Cores, Silk, Dust) required for legendary wares.")) |> ignore
+    vitalsTable.AddRow(Markup("[bold yellow]󰌆[/]"), Markup("Vault Keys"), Markup("Collected keys used to unlock sealed ascension doors and vaults.")) |> ignore
+    vitalsTable.AddRow(Markup("[bold pink]󰆧[/]"), Markup("Equipment Relics"), Markup("Ancient artifacts offering permanent stat boosts and reactive combat triggers.")) |> ignore
+    vitalsTable.AddRow(Markup("[bold gold1]★[/]"), Markup("Story Memory"), Markup("Unlocked narrative milestone illuminating amnesia and the lost twin (Lyra).")) |> ignore
+    vitalsTable.AddRow(Markup("[bold red]⚔️[/]"), Markup("Tactical Duel"), Markup("Turn-based contested roll battle against manifestations or guardians.")) |> ignore
+    vitalsTable.AddRow(Markup("[bold yellow]󰍹[/]"), Markup("Inspection Reticle"), Markup("Reticle mode (press 'x' or ';') for inspecting distant cells and hazards.")) |> ignore
+
+    grid.AddRow(vitalsTable) |> ignore
+
+    grid.AddRow(Markup(sprintf "\n[%s]Press any key to resume...[/]" Theme.Comment)) |> ignore
+
+    let panel =
+      Panel(grid)
+        .Border(BoxBorder.Double)
+        .BorderStyle(Theme.StylePurple)
+        .Expand()
+
+    AnsiConsole.Clear()
+    AnsiConsole.Write(panel)
+    Console.ReadKey(true) |> ignore
+
+  [<Literal>]
+  let HelpChoiceLabel = "󰋜  [Help & Legend] View Symbol & Glyph Guide (? / F1)"
+
+  /// Prompts for a selection with Vim navigation and '?' / F1 help hotkey support.
+  /// If the user presses '?' or F1, or selects the Help option, the symbol/glyph legend
+  /// is shown, and the prompt (and optional renderContext) is re-rendered without losing state.
+  let promptSelectionWithHelp
+    (title: string)
+    (choices: string list)
+    (pageSize: int option)
+    (renderContext: unit -> unit) : string =
+
+    let fullChoices = choices @ [ HelpChoiceLabel ]
+    let mutable result = None
+
+    while result.IsNone do
+      renderContext ()
+      let p =
+        SelectionPrompt<string>()
+          .Title(title)
+          .AddChoices(fullChoices)
+      match pageSize with
+      | Some sz -> p.PageSize(sz) |> ignore
+      | None -> ()
+
+      let selected = promptWithVimAndHelp p
+      if selected = HelpChoiceLabel || selected.Contains("[Help & Legend]") then
+        showSymbolAndGlyphLegend ()
+      else
+        result <- Some selected
+
+    result.Value

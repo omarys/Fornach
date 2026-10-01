@@ -83,39 +83,39 @@ module MonteCarloSwarmTests =
     Assert.True(summary.SoloWinRate >= 70.0, sprintf "Strategist win rate should be >= 70%% against 8 soldiers (Actual: %.1f%%)" summary.SoloWinRate)
 
   [<Fact>]
-  let ``Monte-Carlo: Grandmaster Juggernaut withstands 15 Novice Warriors via Shockwave Slam and heavy armor soak`` () =
-    let soloArch = Archetypes.findByName "Grandmaster Juggernaut" |> Option.get
+  let ``Monte-Carlo: Grandmaster Berserker withstands 15 Novice Warriors via Shockwave Slam and kinetic momentum`` () =
+    let soloArch = Archetypes.findByName "Grandmaster Berserker" |> Option.get
     let mobArch = Archetypes.findByName "Warrior" |> Option.get
     let mobCount = 15
     let iterations = 10
 
     let summary = Simulation.runGroupBatch soloArch mobArch mobCount iterations
 
-    Assert.True(summary.SoloWinRate >= 80.0, sprintf "Juggernaut win rate should be >= 80%% against 15 warriors (Actual: %.1f%%)" summary.SoloWinRate)
-    Assert.True(summary.AvgEliminations >= 12.0, sprintf "Juggernaut should eliminate majority of warriors (Actual: %.1f)" summary.AvgEliminations)
+    Assert.True(summary.SoloWinRate >= 80.0, sprintf "Berserker win rate should be >= 80%% against 15 warriors (Actual: %.1f%%)" summary.SoloWinRate)
+    Assert.True(summary.AvgEliminations >= 12.0, sprintf "Berserker should eliminate majority of warriors (Actual: %.1f)" summary.AvgEliminations)
 
   [<Fact>]
-  let ``Monte-Carlo: Grandmaster Ranger repels 12 Novice Soldiers via Caltrop Pouch and reactive counters`` () =
-    let soloArch = Archetypes.findByName "Grandmaster Ranger" |> Option.get
+  let ``Monte-Carlo: Grandmaster Warden repels 12 Novice Soldiers via Bastion Zone Control and reactive counters`` () =
+    let soloArch = Archetypes.findByName "Grandmaster Warden" |> Option.get
     let mobArch = Archetypes.findByName "Soldier" |> Option.get
     let mobCount = 12
     let iterations = 10
 
     let summary = Simulation.runGroupBatch soloArch mobArch mobCount iterations
 
-    Assert.True(summary.SoloWinRate >= 80.0, sprintf "Ranger win rate should be >= 80%% against 12 soldiers (Actual: %.1f%%)" summary.SoloWinRate)
-    Assert.True(summary.AvgAoOsTriggered >= 5.0, sprintf "Ranger should trigger opportunity attacks (Actual: %.1f)" summary.AvgAoOsTriggered)
+    Assert.True(summary.SoloWinRate >= 80.0, sprintf "Warden win rate should be >= 80%% against 12 soldiers (Actual: %.1f%%)" summary.SoloWinRate)
+    Assert.True(summary.AvgAoOsTriggered >= 5.0, sprintf "Warden should trigger opportunity attacks (Actual: %.1f)" summary.AvgAoOsTriggered)
 
   [<Fact>]
-  let ``Monte-Carlo: Grandmaster Justicar defeats squad of 3 Veteran Juggernauts via Bastion and Cadence Chains`` () =
+  let ``Monte-Carlo: Grandmaster Justicar defeats squad of 3 Veteran Berserkers via Bastion and Cadence Chains`` () =
     let soloArch = Archetypes.findByName "Grandmaster Justicar" |> Option.get
-    let mobArch = Archetypes.findByName "Veteran Juggernaut" |> Option.get
+    let mobArch = Archetypes.findByName "Veteran Berserker" |> Option.get
     let mobCount = 3
     let iterations = 10
 
     let summary = Simulation.runGroupBatch soloArch mobArch mobCount iterations
 
-    Assert.True(summary.SoloWinRate >= 80.0, sprintf "Justicar win rate should be >= 80%% against 3 Veteran Juggernauts (Actual: %.1f%%)" summary.SoloWinRate)
+    Assert.True(summary.SoloWinRate >= 80.0, sprintf "Justicar win rate should be >= 80%% against 3 Veteran Berserkers (Actual: %.1f%%)" summary.SoloWinRate)
     Assert.True(summary.AvgEliminations >= 2.5, sprintf "Justicar should eliminate most veterans (Actual: %.1f)" summary.AvgEliminations)
     Assert.True(summary.AvgRounds >= 2.0, sprintf "Combat should last multiple rounds (Actual: %.1f)" summary.AvgRounds)
 
@@ -132,15 +132,15 @@ module MonteCarloSwarmTests =
     Assert.True(summary.AvgEliminations >= 2.5, sprintf "Berserker should eliminate veterans (Actual: %.1f)" summary.AvgEliminations)
 
   [<Fact>]
-  let ``Monte-Carlo: Grandmaster Berserker holds ground against pair of Master Juggernauts`` () =
+  let ``Monte-Carlo: Grandmaster Berserker holds ground against pair of Master Wardens`` () =
     let soloArch = Archetypes.findByName "Grandmaster Berserker" |> Option.get
-    let mobArch = Archetypes.findByName "Master Juggernaut" |> Option.get
+    let mobArch = Archetypes.findByName "Master Warden" |> Option.get
     let mobCount = 2
     let iterations = 10
 
     let summary = Simulation.runGroupBatch soloArch mobArch mobCount iterations
 
-    Assert.True(summary.SoloWinRate >= 80.0, sprintf "Berserker win rate should be >= 80%% against 2 Master Juggernauts (Actual: %.1f%%)" summary.SoloWinRate)
+    Assert.True(summary.SoloWinRate >= 80.0, sprintf "Berserker win rate should be >= 80%% against 2 Master Wardens (Actual: %.1f%%)" summary.SoloWinRate)
     Assert.True(summary.AvgEliminations >= 1.6, sprintf "Berserker should eliminate Master foes (Actual: %.1f)" summary.AvgEliminations)
 
   [<Fact>]

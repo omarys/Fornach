@@ -81,3 +81,71 @@ module WeaponCondition =
     | WeaponCondition.Notched -> "Notched"
     | WeaponCondition.Damaged -> "Damaged"
     | WeaponCondition.Broken -> "Broken"
+
+/// High-level ecological classification of non-humanoid adversaries
+[<RequireQualifiedAccess>]
+type MonsterFamily =
+  | Beast
+  | Construct
+  | UndeadWraith
+  | Aberration
+  | GriefManifestation
+
+  member this.Name : string =
+    match this with
+    | Beast -> "Beast"
+    | Construct -> "Construct"
+    | UndeadWraith -> "Undead Wraith"
+    | Aberration -> "Aberration"
+    | GriefManifestation -> "Grief Manifestation"
+
+  member this.Description : string =
+    match this with
+    | Beast -> "Predatory fauna shaped by harsh ecological biomes; relies on packs, venom, and feral speed."
+    | Construct -> "Ancient animated stone and clockwork sentinels; possesses heavy armor and unyielding stability."
+    | UndeadWraith -> "Ethereal phantoms born of grief and trauma; bypasses physical plate to erode Morale."
+    | Aberration -> "Anomalous horrors from the void beneath the Tower; disrupts spacetime and sanity."
+    | GriefManifestation -> "Psychological embodiments of repressed trauma, amnesia, and unresolved loss."
+
+/// Tactical combat role defining stat distributions and AI behavior
+[<RequireQualifiedAccess>]
+type MonsterRole =
+  | Swarmer
+  | Brute
+  | Skirmisher
+  | Stalker
+  | Caster
+  | Colossus
+
+  member this.Name : string =
+    match this with
+    | Swarmer -> "Swarmer"
+    | Brute -> "Brute"
+    | Skirmisher -> "Skirmisher"
+    | Stalker -> "Stalker"
+    | Caster -> "Caster"
+    | Colossus -> "Colossus"
+
+/// Passive traits and biological/mechanical properties for monsters
+type MonsterTrait =
+  | PackTactics of hitBonusPerAlly: int
+  | VenomousSting of bleedPerHit: int
+  | AcidicBlood of armorCorrosion: int
+  | EtherealCarapace of physicalSoakBonus: float
+  | RelentlessFerocity of lowHealthDamageBonusPct: int
+  | PetrifyingGaze of reflexDebuff: int
+  | PsychicDoldrums of passiveCognitiveFatigue: int
+  | MoltenAura of physicalBurn: int
+  | ChillingPresence of exhaustionDrain: int
+
+  member this.Name : string =
+    match this with
+    | PackTactics _ -> "Pack Tactics"
+    | VenomousSting _ -> "Venomous Sting"
+    | AcidicBlood _ -> "Acidic Blood"
+    | EtherealCarapace _ -> "Ethereal Carapace"
+    | RelentlessFerocity _ -> "Relentless Ferocity"
+    | PetrifyingGaze _ -> "Petrifying Gaze"
+    | PsychicDoldrums _ -> "Psychic Doldrums"
+    | MoltenAura _ -> "Molten Aura"
+    | ChillingPresence _ -> "Chilling Presence"

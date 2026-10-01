@@ -17,9 +17,9 @@ module ProlongedBattleTests =
         Force, force; Fortitude, fort
         Finesse, finesse; Reflex, reflex
         Prowess, prowess; Poise, poise
-        Intellect, 10; Resolve, 10
-        Acuity, 10; Intuition, 10
-        Acumen, 10; Composure, 10
+        Intellect, force; Resolve, fort
+        Acuity, finesse; Intuition, reflex
+        Acumen, prowess; Composure, poise
       ]
     Combatant.create id "TestFighter" 2000 2000 stats
 
@@ -64,7 +64,7 @@ module ProlongedBattleTests =
       sprintf "Broken weapon damage (%d) should be less than pristine (%d)" dmgBroken dmgPristine)
 
   [<Fact>]
-  let ``Finesse strikes with high disparity inflict faster Overwhelm`` () =
+  let ``Finesse strikes with high disparity inflict faster Confusion`` () =
     let roller = fixedRoller 5
     let swiftAtk = createFighter 50 50 130 50 50 50
     let slowAtk = createFighter 50 50 50 50 50 50
@@ -73,9 +73,9 @@ module ProlongedBattleTests =
     let resSwift = ActionResolver.resolve roller (StandardAttack (FinesseCadence false)) swiftAtk defender
     let resSlow = ActionResolver.resolve roller (StandardAttack (FinesseCadence false)) slowAtk defender
 
-    Assert.True(resSwift.Target.Meters.Overwhelm.Value > resSlow.Target.Meters.Overwhelm.Value,
-      sprintf "Swift overwhelm (%d) should exceed slow overwhelm (%d)"
-        resSwift.Target.Meters.Overwhelm.Value resSlow.Target.Meters.Overwhelm.Value)
+    Assert.True(resSwift.Target.Meters.Confusion.Value > resSlow.Target.Meters.Confusion.Value,
+      sprintf "Swift confusion (%d) should exceed slow confusion (%d)"
+        resSwift.Target.Meters.Confusion.Value resSlow.Target.Meters.Confusion.Value)
 
   [<Fact>]
   let ``Agility critical strikes apply stacking bleed and upkeep deals damage`` () =

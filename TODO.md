@@ -40,9 +40,9 @@
 
 Reference: [`docs/adr/0004-monster-bestiary-and-world-encounters.md`](file:///home/omary/Dev/fornach/docs/adr/0004-monster-bestiary-and-world-encounters.md)
 
-- [ ] **4. Monster Bestiary Subsystem (ADR 0004 Phases 1 & 2)**:
-  - [ ] **Taxonomy & Primitives**: Define `MonsterFamily` (Beast, Construct, UndeadWraith, Aberration, GriefManifestation), `MonsterRole`, `MonsterTrait`, and `MonsterTemplate` in `src/Fornach.Domain/Bestiary.fs`.
-  - [ ] **Biome Catalog**: Author specialized non-humanoid species across all 7 Tower biomes:
+- [x] **4. Monster Bestiary Subsystem (ADR 0004 Phases 1 & 2)**:
+  - [x] **Taxonomy & Primitives**: Define `MonsterFamily` (Beast, Construct, UndeadWraith, Aberration, GriefManifestation), `MonsterRole`, `MonsterTrait`, and `MonsterTemplate` in `src/Fornach.Domain/Bestiary.fs`.
+  - [x] **Biome Catalog**: Author specialized non-humanoid species across all 7 Tower biomes:
     - *Quarry Plazas*: Slag Hounds, Stone Gargoyles, Quarry Overseers (Force / Armor crush).
     - *Pine Cloisters*: Thorn Weavers, Mist Stalkers, Blight Sprites (Finesse / Venom / Phantoms).
     - *Basalt Calderas*: Magma Crawlers, Basalt Golems, Obsidian Fiends (Recklessness / Lava Rifts).
@@ -50,13 +50,14 @@ Reference: [`docs/adr/0004-monster-bestiary-and-world-encounters.md`](file:///ho
     - *Sunken Boulevards*: Drowned Husks, Mire Crawlers, Siren Specters (Cognitive Doldrums / Morale drain).
     - *Elysian Sanctuaries*: Seraphic Wardens, Solar Sphinxes, Dawn Heralds (Reflect / Calming aura).
     - *Celestial Spires*: Starlit Eidolons, Void Reavers, Chrono-Anomalies (Teleport / Turn distortion).
-  - [ ] **Tactical Action Intents**: Hook specialized monster attack patterns (Pounce, Acidic Spit, Seismic Quake, Soul Wail, Engulf) into [`ActionResolver.fs`](file:///home/omary/Dev/fornach/src/Fornach.Engine/ActionResolver.fs).
-  - [ ] **Verification**: Add unit tests in `tests/Fornach.Domain.Tests/BestiaryTests.fs` and verify balance matrix compatibility.
+  - [x] **Tactical Action Intents**: Hook specialized monster attack patterns and reactive/offensive traits (Venomous Sting, Acidic Blood, Molten Aura, Ethereal Carapace, Psychic Doldrums, Relentless Ferocity) into [`ActionResolver.fs`](file:///home/omary/Dev/fornach/src/Fornach.Engine/ActionResolver.fs) and species-instinct profiles into [`AI.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/AI.fs).
+  - [x] **Verification**: Add unit tests in `tests/Fornach.Domain.Tests/BestiaryTests.fs` (212 tests passing, 0 warnings across solution).
 
-- [ ] **5. Dynamic World & Tower Encounters Engine (ADR 0004 Phase 3)**:
-  - [ ] **Encounter Domain Models**: Define `FloorEncounter` (AmbushLair, SacrificialAltar, WanderingTrader, TreasureVault, MechanicalTrapGauntlet, MemoryEchoFragment) in `src/Fornach.Domain/TowerModel.fs`.
-  - [ ] **Procedural Placement**: Update [`TowerGenerator.fs`](file:///home/omary/Dev/fornach/src/Fornach.Engine/TowerGenerator.fs) to distribute 2–4 diverse encounters per floor (guarding bottleneck archways, secret vault chambers, central plaza shrines).
-  - [ ] **Interactive TUI Modals**: Build interactive encounter dialogs and decision prompts in [`TowerDisplay.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/TowerDisplay.fs) with full Nerd Font integration and full-width layout expansion.
+- [x] **5. Dynamic World & Tower Encounters Engine (ADR 0004 Phase 3)**:
+  - [x] **Encounter Domain Models**: Defined `FloorEncounter` (`AmbushLair`, `SacrificialAltar`, `WanderingTrader`, `TreasureVault`, `MechanicalTrapGauntlet`, `MemoryEchoFragment`) in [`TowerModel.fs`](file:///home/omary/Dev/fornach/src/Fornach.Domain/TowerModel.fs).
+  - [x] **Procedural Placement**: Updated [`TowerGenerator.fs`](file:///home/omary/Dev/fornach/src/Fornach.Engine/TowerGenerator.fs) to distribute 2–4 diverse encounters per floor via [`WorldEvents.fs`](file:///home/omary/Dev/fornach/src/Fornach.Engine/WorldEvents.fs) (ambushes along colonnades, secret vaults in alcoves, sacrificial altars in courtyards).
+  - [x] **Interactive TUI Modals**: Built interactive Spectre.Console encounter modals and decision prompts in [`TowerDisplay.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/TowerDisplay.fs) with full Nerd Font glyphs, trading economy (Souls & alchemical trophies), sacrifice pacts, puzzle vaults, disarm mechanics, and roadside memory echo fragments.
+  - [x] **Verification**: Added 8 comprehensive unit tests in [`EncounterTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Tests/EncounterTests.fs) (all 221 tests passing cleanly with 0 warnings).
 
 - [ ] **6. Main Story World Encounters & Roadside Memories (ADR 0004 Phase 4)**:
   - [ ] **Sensory Flashbacks**: Scatter interactive roadside memory fragments across story chapters in [`StoryRunner.fs`](file:///home/omary/Dev/fornach/src/Fornach.Story/StoryRunner.fs), unlocking narrative clues about the protagonist's lost twin (Lyra).

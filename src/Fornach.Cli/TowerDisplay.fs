@@ -150,6 +150,25 @@ module TowerDisplay =
               Some (sprintf "[%s]† Depleted Shrine: %s[/] [grey](Power exhausted — remembered location)[/]" Theme.Comment s.Name)
             else
               Some (sprintf "[bold %s]† RUNIC SHRINE: %s[/] [grey](%s — remembered location)[/]" Theme.Green s.Name s.BlessingDescription)
+          | Some (EntityEncounter enc) ->
+            match enc with
+            | SacrificialAltar a ->
+              if a.IsUsed then Some (sprintf "[%s]♨ Depleted Altar: %s[/] [grey](Remembered location)[/]" Theme.Comment a.Name)
+              else Some (sprintf "[bold %s]♨ SACRIFICIAL ALTAR: %s[/] [grey](Remembered location)[/]" Theme.Purple a.Name)
+            | WanderingTrader m ->
+              Some (sprintf "[bold %s]󱁠 SPECTRAL MERCHANT: %s[/] [grey](Remembered location)[/]" Theme.Cyan m.Name)
+            | TreasureVault v ->
+              if v.IsOpen then Some (sprintf "[%s]⌹ Plundered Vault: %s[/] [grey](Remembered location)[/]" Theme.Comment v.Name)
+              else Some (sprintf "[bold %s]⌹ SEALED VAULT: %s[/] [grey](Remembered location)[/]" Theme.Yellow v.Name)
+            | MechanicalTrapGauntlet t ->
+              if t.IsDisarmed || t.IsTriggered then Some (sprintf "[%s]✕ Neutralized Trap: %s[/] [grey](Remembered location)[/]" Theme.Comment t.Name)
+              else Some (sprintf "[bold %s]✕ MECHANICAL TRAP: %s[/] [grey](Remembered location)[/]" Theme.Red t.Name)
+            | MemoryEchoFragment e ->
+              if e.IsCommuned then Some (sprintf "[%s]✧ Communed Memory: %s[/] [grey](Remembered location)[/]" Theme.Comment e.Title)
+              else Some (sprintf "[bold %s]✧ DORMANT MEMORY ECHO: %s[/] [grey](Remembered location)[/]" Theme.Green e.Title)
+            | AmbushLair a ->
+              if a.IsTriggered then Some (sprintf "[%s]! Cleared Ambush Site[/] [grey](Remembered location)[/]" Theme.Comment)
+              else Some (sprintf "[bold %s]! SUSPICIOUS COLONNADE[/] [grey](Remembered location)[/]" Theme.Red)
           | _ -> None
         else None
       elif pt = state.PlayerPosition then
@@ -170,8 +189,17 @@ module TowerDisplay =
                 | None -> "Unthreaded"
               else
                 sprintf "%A" c.Stance
-            Some (sprintf "[bold %s]! HOSTILE GUARDIAN: %s[/] [grey]| Lv.%d %s | HP: %d/%d | Morale: %d/%d | %s: %s[/]"
-              Theme.Red e.Name c.Level c.Class.Name c.Health.Current c.Health.Maximum c.Morale.Current c.Morale.Maximum (if c.Plane = Mental then "Form" else "Stance") stanceOrForm)
+            let familyPrefix =
+              match c.MonsterFamily with
+              | Some f -> sprintf "[bold %s][%s][/] " Theme.Purple f.Name
+              | None -> ""
+            let traitsSuffix =
+              if c.MonsterTraits.IsEmpty then ""
+              else
+                let traitNames = c.MonsterTraits |> List.map (fun t -> t.Name) |> String.concat ", "
+                sprintf " | Traits: [%s]%s[/]" Theme.Yellow traitNames
+            Some (sprintf "[bold %s]! HOSTILE GUARDIAN: %s%s[/] [grey]| Lv.%d %s | HP: %d/%d | Morale: %d/%d | %s: %s%s[/]"
+              Theme.Red familyPrefix e.Name c.Level c.Class.Name c.Health.Current c.Health.Maximum c.Morale.Current c.Morale.Maximum (if c.Plane = Mental then "Form" else "Stance") stanceOrForm traitsSuffix)
         | Some (EntityNpc n) ->
           let trialText = match n.Quest with Some q -> sprintf " [bold %s](Trial Offered: %s)[/]" Theme.Yellow q.Title | None -> ""
           Some (sprintf "[bold %s]? INHABITANT: %s[/] [italic %s](%s)[/]%s" Theme.Cyan n.Name Theme.Comment n.Role trialText)
@@ -185,6 +213,48 @@ module TowerDisplay =
             Some (sprintf "[%s]† Depleted Shrine: %s[/] [grey](Power exhausted)[/]" Theme.Comment s.Name)
           else
             Some (sprintf "[bold %s]† RUNIC SHRINE: %s[/] [grey](%s — walk into tile to commune)[/]" Theme.Green s.Name s.BlessingDescription)
+        | Some (EntityEncounter enc) ->
+          match enc with
+          | SacrificialAltar a ->
+            if a.IsUsed then
+              Some (sprintf "[%s]♨ Spent Sacrificial Altar: %s[/] [grey](Pact sealed — power exhausted)[/]" Theme.Comment a.Name)
+            else
+              Some (sprintf "[bold %s]♨ SACRIFICIAL ALTAR: %s[/] [grey]| Cost: [bold %s]%s[/] -> Reward: [bold %s]%s[/] (Walk into tile to commune)[/]"
+                Theme.Purple a.Name Theme.Red a.Cost.Description Theme.Green a.Reward.Description)
+          | WanderingTrader m ->
+            Some (sprintf "[bold %s]󱁠 SPECTRAL MERCHANT: %s (%s)[/] [grey]| %d wares available (Walk into tile to trade)[/]"
+              Theme.Cyan m.Name m.Title m.Wares.Length)
+          | TreasureVault v ->
+            if v.IsOpen then
+              Some (sprintf "[%s]⌹ Plundered Vault: %s[/] [grey](Emptied)[/]" Theme.Comment v.Name)
+            else
+              let puzzleText =
+                match v.Puzzle with
+                | KeyholeLock (_, name, _) -> sprintf "Key Required: %s" name
+                | StatCheck (stat, req, _) -> sprintf "Test: %d %A" req stat
+                | MemoryCipher (riddle, _) -> sprintf "Cipher: %s" riddle
+              Some (sprintf "[bold %s]⌹ SEALED TREASURE VAULT: %s[/] [grey]| %s | %d Souls + %d Relic(s)[/]"
+                Theme.Yellow v.Name puzzleText v.BonusSouls v.Relics.Length)
+          | MechanicalTrapGauntlet t ->
+            if t.IsDisarmed then
+              Some (sprintf "[%s]✕ Disarmed Trap: %s[/] [grey](Mechanism neutralized)[/]" Theme.Comment t.Name)
+            elif t.IsTriggered then
+              Some (sprintf "[%s]✕ Sprung Trap: %s[/] [grey](Mechanism discharged)[/]" Theme.Comment t.Name)
+            else
+              Some (sprintf "[bold %s]✕ CONCEALED MECHANICAL TRAP: %s[/] [grey]| Disarm Check: %d %A | Step cautiously![/]"
+                Theme.Red t.Name t.DisarmThreshold t.DisarmStat)
+          | MemoryEchoFragment e ->
+            if e.IsCommuned then
+              Some (sprintf "[%s]✧ Awakened Memory: %s[/] [grey](Communed)[/]" Theme.Comment e.Title)
+            else
+              Some (sprintf "[bold %s]✧ DORMANT MEMORY ECHO: %s[/] [grey]| \"%s\" (+%d Morale upon contact)[/]"
+                Theme.Green e.Title e.SensoryDetail e.MoraleRecovery)
+          | AmbushLair a ->
+            if a.IsTriggered then
+              Some (sprintf "[%s]! Cleared Ambush Site[/] [grey](All foes vanquished or dispersed)[/]" Theme.Comment)
+            else
+              Some (sprintf "[bold %s]󰈸 LURKING AMBUSH LAIR: %s[/] [grey]| Threat: Lv.%d %s | Status: Ready to spring![/]"
+                Theme.Red a.Name a.Pack.Leader.Level a.Pack.Leader.Name)
         | None -> None
 
     { Coordinate = pt
@@ -225,7 +295,7 @@ module TowerDisplay =
     | None -> ()
 
     // Row 5: Hint bar
-    grid.AddRow(Markup(sprintf "[italic %s]󰌌 Pan Reticle: Arrows / Vim (h/j/k/l/y/u/b/n)  •  Exit Inspect: Esc / x / Enter / Space[/]" Theme.Comment)) |> ignore
+    grid.AddRow(Markup(sprintf "[italic %s]󰌌 Pan Reticle: Arrows / Vim (h/j/k/l/y/u/b/n)  •  Exit Inspect: Esc / x / Enter  •  ? / F1: Legend & Manual[/]" Theme.Comment)) |> ignore
 
     Panel(grid)
       .Header(sprintf "[bold %s]󰍹 TILE & HAZARD INSPECTOR[/]" Theme.Yellow)
@@ -263,6 +333,14 @@ module TowerDisplay =
               | Some (EntityNpc _) -> "?"
               | Some (EntityChest _) -> "⌹"
               | Some (EntityShrine _) -> "†"
+              | Some (EntityEncounter enc) ->
+                match enc with
+                | SacrificialAltar _ -> "♨"
+                | WanderingTrader _ -> "$"
+                | TreasureVault _ -> "⌹"
+                | MechanicalTrapGauntlet _ -> "✕"
+                | MemoryEchoFragment _ -> "✦"
+                | AmbushLair _ -> "!"
               | None ->
                 match Map.tryFind pt state.CurrentFloor.Tiles with
                 | Some (Hazard AcidSlag) -> "≈"
@@ -279,6 +357,13 @@ module TowerDisplay =
               match Map.tryFind pt state.CurrentFloor.Entities with
               | Some (EntityChest c) when not c.IsOpen -> "⌹"
               | Some (EntityShrine s) when not s.IsUsed -> "†"
+              | Some (EntityEncounter enc) ->
+                match enc with
+                | SacrificialAltar a when not a.IsUsed -> "♨"
+                | WanderingTrader _ -> "$"
+                | TreasureVault v when not v.IsOpen -> "⌹"
+                | MemoryEchoFragment e when not e.IsCommuned -> "✦"
+                | _ -> " "
               | _ ->
                 match Map.tryFind pt state.CurrentFloor.Tiles with
                 | Some (Floor _) -> string theme.FloorGlyph
@@ -311,6 +396,25 @@ module TowerDisplay =
               sb.Append(sprintf "[%s]†[/]" Theme.Comment) |> ignore
             else
               sb.Append(sprintf "[bold %s]†[/]" Theme.Green) |> ignore
+          | Some (EntityEncounter enc) ->
+            match enc with
+            | SacrificialAltar a ->
+              if a.IsUsed then sb.Append(sprintf "[%s]♨[/]" Theme.Comment) |> ignore
+              else sb.Append(sprintf "[bold %s]♨[/]" Theme.Purple) |> ignore
+            | WanderingTrader _ ->
+              sb.Append(sprintf "[bold %s]$[/]" Theme.Cyan) |> ignore
+            | TreasureVault v ->
+              if v.IsOpen then sb.Append(sprintf "[%s]⌹[/]" Theme.Comment) |> ignore
+              else sb.Append(sprintf "[bold %s]⌹[/]" Theme.Yellow) |> ignore
+            | MechanicalTrapGauntlet t ->
+              if t.IsDisarmed || t.IsTriggered then sb.Append(sprintf "[%s]✕[/]" Theme.Comment) |> ignore
+              else sb.Append(sprintf "[bold %s]✕[/]" Theme.Red) |> ignore
+            | MemoryEchoFragment e ->
+              if e.IsCommuned then sb.Append(sprintf "[%s]✧[/]" Theme.Comment) |> ignore
+              else sb.Append(sprintf "[bold %s]✦[/]" Theme.Green) |> ignore
+            | AmbushLair a ->
+              if a.IsTriggered then sb.Append(sprintf "[%s]%%[/]" Theme.Comment) |> ignore
+              else sb.Append(sprintf "[bold %s]![/]" Theme.Red) |> ignore
           | None ->
             match Map.tryFind pt state.CurrentFloor.Tiles with
             | Some tile -> sb.Append(formatTileVisible tile theme) |> ignore
@@ -322,6 +426,16 @@ module TowerDisplay =
             sb.Append(sprintf "[%s]⌹[/]" Theme.Comment) |> ignore
           | Some (EntityShrine s) when not s.IsUsed ->
             sb.Append(sprintf "[%s]†[/]" Theme.Comment) |> ignore
+          | Some (EntityEncounter enc) ->
+            match enc with
+            | SacrificialAltar a when not a.IsUsed -> sb.Append(sprintf "[%s]♨[/]" Theme.Comment) |> ignore
+            | WanderingTrader _ -> sb.Append(sprintf "[%s]$[/]" Theme.Comment) |> ignore
+            | TreasureVault v when not v.IsOpen -> sb.Append(sprintf "[%s]⌹[/]" Theme.Comment) |> ignore
+            | MemoryEchoFragment e when not e.IsCommuned -> sb.Append(sprintf "[%s]✦[/]" Theme.Comment) |> ignore
+            | _ ->
+              match Map.tryFind pt state.CurrentFloor.Tiles with
+              | Some tile -> sb.Append(formatTileExplored tile theme) |> ignore
+              | None -> sb.Append(' ') |> ignore
           | _ ->
             match Map.tryFind pt state.CurrentFloor.Tiles with
             | Some tile -> sb.Append(formatTileExplored tile theme) |> ignore
@@ -425,6 +539,16 @@ module TowerDisplay =
         |> String.concat ", "
     grid.AddRow(Markup(sprintf "Relics: %s" relicsDisplay)) |> ignore
 
+    // Souls & Alchemical Trophies
+    let trophiesDisplay =
+      if state.Trophies.IsEmpty then
+        sprintf "[%s]None[/]" Theme.Comment
+      else
+        state.Trophies
+        |> List.map (fun (t, cnt) -> sprintf "[bold %s]%s (x%d)[/]" Theme.Cyan t.Name cnt)
+        |> String.concat ", "
+    grid.AddRow(Markup(sprintf "󰮯 Souls: [bold gold1]%d[/]  |  💎 Trophies: %s" state.Souls trophiesDisplay)) |> ignore
+
     // Active Quests
     if not state.CurrentFloor.ActiveQuests.IsEmpty then
       grid.AddRow(Markup(sprintf "[bold %s]─── 󱁕 ACTIVE TRIALS ───[/]" Theme.Purple)) |> ignore
@@ -436,9 +560,9 @@ module TowerDisplay =
 
     // Legend
     grid.AddRow(Markup(sprintf "[bold %s]─── 󰋜 ARCHITECTURAL LEGEND ───[/]" Theme.Comment)) |> ignore
-    grid.AddRow(Markup(sprintf "[bold %s]@[/] You  [bold %s]![/] Enemy  [bold %s]?[/] NPC  [bold %s]⌹[/] Chest  [bold %s]†[/] Shrine  [bold %s]▲[/] Stairs  [bold #50fa7b]≈[/] Hazard"
-      Theme.Yellow Theme.Red Theme.Cyan Theme.Yellow Theme.Green Theme.Green)) |> ignore
-    grid.AddRow(Markup(sprintf "[%s]󰌌 Keys: Arrows/Vim: Move | x/; : Inspect Tiles | Space: Wait | ?: Help | Q: Quit[/]" Theme.Comment)) |> ignore
+    grid.AddRow(Markup(sprintf "[bold %s]@[/] You  [bold %s]![/] Enemy  [bold %s]?[/] NPC  [bold %s]⌹[/] Chest/Vault  [bold %s]†[/] Shrine  [bold #bd93f9]♨[/] Altar  [bold #8be9fd]$[/] Trader  [bold #50fa7b]✦[/] Echo  [bold #ff5555]✕[/] Trap"
+      Theme.Yellow Theme.Red Theme.Cyan Theme.Yellow Theme.Green)) |> ignore
+    grid.AddRow(Markup(sprintf "[%s]󰌌 Keys: Arrows/Vim: Move | x/; : Inspect | Space: Wait | ? / F1: Symbol & Glyph Legend | Q: Quit[/]" Theme.Comment)) |> ignore
 
     Panel(grid)
       .Header(sprintf "[bold %s]󰍹 CHAMBER OBSERVATIONS[/]" Theme.Yellow)
@@ -495,47 +619,35 @@ module TowerDisplay =
     AnsiConsole.Write(panel)
     Console.ReadKey(true) |> ignore
 
-  /// Shows the keyboard control manual
-  let showHelpManual () =
+  /// Displays an evocative narrative modal when discovering a roadside memory fragment
+  let showMemoryEchoDialog (echo: MemoryEchoData) =
     let grid = Grid()
     grid.AddColumn(GridColumn()) |> ignore
 
-    grid.AddRow(Markup(sprintf "[bold %s]󰒋 THE INFINITE ROGUELIKE TOWER: EXPEDITION MANUAL[/]" Theme.Yellow)) |> ignore
+    grid.AddRow(Markup(sprintf "[bold %s]✧ AWAKENED REPRESSED MEMORY: %s[/]" Theme.Pink echo.Title)) |> ignore
     grid.AddRow(Rule().RuleStyle(Theme.StylePurple)) |> ignore
-    grid.AddRow(Markup(sprintf "[bold %s]󰌌 Movement & Exploration:[/]" Theme.Cyan)) |> ignore
-    grid.AddRow(Markup("  [bold white]K / W / UpArrow / Keypad 8[/]    : Move North")) |> ignore
-    grid.AddRow(Markup("  [bold white]J / S / DownArrow / Keypad 2[/]  : Move South")) |> ignore
-    grid.AddRow(Markup("  [bold white]H / A / LeftArrow / Keypad 4[/]  : Move West")) |> ignore
-    grid.AddRow(Markup("  [bold white]L / D / RightArrow / Keypad 6[/] : Move East")) |> ignore
-    grid.AddRow(Markup("  [bold white]Y / U / B / N (Keypad 7/9/1/3)[/] : Diagonal Movement (NW, NE, SW, SE)")) |> ignore
-    grid.AddRow(Markup("  [bold white]X / Semicolon (;)[/]            : Inspect / Look mode (examine tiles & hazards in vision)")) |> ignore
-    grid.AddRow(Markup("  [bold white]Spacebar / Period (.)[/]         : Stand ground / Wait a turn")) |> ignore
-    grid.AddRow(Markup("  [bold white]? / F1[/]                        : Open this manual")) |> ignore
-    grid.AddRow(Markup("  [bold white]Q / Escape[/]                     : Retreat to Main Menu")) |> ignore
-    grid.AddRow(Markup(sprintf "\n[bold %s]󰞁 Architecture & Encounters:[/]" Theme.Green)) |> ignore
-    grid.AddRow(Markup("  • [bold red]![/] Guardians   : Step into their space to initiate tactical combat.")) |> ignore
-    grid.AddRow(Markup("  • [bold cyan]?[/] Inhabitants : Walk into them to commune, learn lore, or receive trials.")) |> ignore
-    grid.AddRow(Markup("  • [bold gold1]⌹[/] Vault Chest : Walk into chests to recover keys and powerful relics.")) |> ignore
-    grid.AddRow(Markup("  • [bold green]†[/] Shrines     : Walk into ancient monoliths to recover Morale and poise.")) |> ignore
-    grid.AddRow(Markup("  • [bold green]▲[/] Ascension   : Leads upward to the next floor of the Infinite Tower.")) |> ignore
-    grid.AddRow(Markup("  • [bold white]∩[/] Archways    : Monumental transitions between expansive plazas.")) |> ignore
-    grid.AddRow(Markup("  • [bold grey]Chasms[/]         : Endless voids; vision pierces them, but movement is blocked.")) |> ignore
-    grid.AddRow(Markup(sprintf "\n[bold %s]⚠ Environmental Hazards:[/]" Theme.Red)) |> ignore
-    grid.AddRow(Markup("  • [bold #50fa7b]≈[/] Acid Slag   : Corrosive runoff; dissolves -15 Armor durability upon entry!")) |> ignore
-    grid.AddRow(Markup("  • [bold red]≈[/] Lava Rift   : Molten fissures; burns player for -15 direct Health!")) |> ignore
-    grid.AddRow(Markup("  • [bold cyan]≋[/] Deep Water  : Murky currents; exhausts player with +15 Exhaustion!")) |> ignore
-    grid.AddRow(Markup("  • [bold pink]❀[/] Spores     : Serene blossoms; resets accumulated Recklessness to 0!")) |> ignore
-    grid.AddRow(Markup(sprintf "\n[%s]Press any key to resume expedition...[/]" Theme.Comment)) |> ignore
+
+    grid.AddRow(Markup(sprintf "[italic %s]\"%s\"[/]\n" Theme.Cyan echo.SensoryDetail)) |> ignore
+
+    for line in echo.MemoryTranscript do
+      grid.AddRow(Markup(sprintf "[%s]%s[/]" Theme.Foreground line)) |> ignore
+
+    grid.AddRow(Rule().RuleStyle(Theme.StyleComment)) |> ignore
+    grid.AddRow(Markup(sprintf "[bold %s]󰄬 Cognitive clarity restored: +%d Morale[/]" Theme.Green echo.MoraleRecovery)) |> ignore
+    grid.AddRow(Markup(sprintf "\n[%s]Press any key to awaken and continue...[/]" Theme.Comment)) |> ignore
 
     let panel =
       Panel(grid)
-        .Border(BoxBorder.Double)
-        .BorderStyle(Theme.StylePurple)
-        .Expand()
+        .Border(BoxBorder.Heavy)
+        .BorderStyle(Style(foreground = Nullable Theme.ColorPurple))
 
     AnsiConsole.Clear()
     AnsiConsole.Write(panel)
     Console.ReadKey(true) |> ignore
+
+  /// Shows the comprehensive symbol, glyph, and control manual
+  let showHelpManual () =
+    Display.showSymbolAndGlyphLegend ()
 
   /// Main interactive turn loop for Tower dungeon crawling
   let runTowerCrawl
@@ -670,15 +782,15 @@ module TowerDisplay =
             | TowerEvent.CombatTriggered enemy ->
               AnsiConsole.WriteLine()
               let choice =
-                Display.promptWithVim(
-                  SelectionPrompt<string>()
-                    .Title(sprintf "[bold red]󰈸 A formidable foe blocks your path: %s![/]" enemy.Name)
-                    .AddChoices([
-                      "󰓥  Engage in Tactical Dueling Combat"
-                      "⚡  Quick Resolve (Overcome with Standard Prowess)"
-                      "🏃  Step Back / Disengage"
-                    ])
-                )
+                Display.promptSelectionWithHelp
+                  (sprintf "[bold red]󰈸 A formidable foe blocks your path: %s![/]" enemy.Name)
+                  [
+                    "󰓥  Engage in Tactical Dueling Combat"
+                    "⚡  Quick Resolve (Overcome with Standard Prowess)"
+                    "🏃  Step Back / Disengage"
+                  ]
+                  None
+                  (fun () -> ())
 
               if choice.Contains("Engage in Tactical") then
                 let outcome, updatedPlayer = onCombatDuel state.Player enemy.Combatant
@@ -717,6 +829,112 @@ module TowerDisplay =
 
             | TowerEvent.NpcInteracted(npc, _) ->
               showNpcDialog npc
+
+            | TowerEvent.AltarEncountered(altar, pt) ->
+              AnsiConsole.WriteLine()
+              let choice =
+                Display.promptSelectionWithHelp
+                  (sprintf "[bold %s]♨ %s[/]\n[italic %s]%s[/]\n[bold %s]Cost: %s[/]  ──>  [bold %s]Reward: %s[/]"
+                    Theme.Purple altar.Name Theme.Comment altar.Description Theme.Red altar.Cost.Description Theme.Green altar.Reward.Description)
+                  [
+                    "󰄬  Accept Sacrifice and Receive Boon"
+                    "🏃  Step Back / Refuse Pact"
+                  ]
+                  None
+                  (fun () -> ())
+              if choice.Contains("Accept") then
+                match TowerSession.applyAltarSacrifice pt state with
+                | Ok updatedState ->
+                  state <- updatedState
+                  AnsiConsole.MarkupLine(sprintf "\n[bold %s]The altar drinks your sacrifice. The blessing takes hold![/]" Theme.Green)
+                  Thread.Sleep(900)
+                | Error msg ->
+                  AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s[/]" Theme.Red msg)
+                  Thread.Sleep(700)
+
+            | TowerEvent.TraderEncountered(merchant, pt) ->
+              AnsiConsole.WriteLine()
+              let choices =
+                merchant.Wares
+                |> List.mapi (fun i w ->
+                  let trophyPart =
+                    match w.RequiredTrophy with
+                    | Some (t, cnt) -> sprintf " + %d %s" cnt t.Name
+                    | None -> ""
+                  if w.IsPurchased then
+                    sprintf "[grey]%d. [STRIKETHROUGH]%s[/] (Purchased)[/]" (i + 1) w.Item.Name
+                  else
+                    sprintf "󰆧  Buy %s ([bold gold1]%d Souls[/]%s)" w.Item.Name w.CostSouls trophyPart)
+                |> fun list -> list @ [ "🏃  Leave Shop" ]
+
+              let choice =
+                Display.promptSelectionWithHelp
+                  (sprintf "[bold %s]󱁠 %s, %s[/]\n[italic %s]\"%s\"[/]\n[bold gold1]Your Souls: %d[/]"
+                    Theme.Cyan merchant.Name merchant.Title Theme.Comment (List.head merchant.Dialogue) state.Souls)
+                  choices
+                  None
+                  (fun () -> ())
+              if not (choice.Contains("Leave")) then
+                let selectedIdx =
+                  merchant.Wares
+                  |> List.tryFindIndex (fun w -> choice.Contains(w.Item.Name))
+                match selectedIdx with
+                | Some idx ->
+                  match TowerSession.buyFromTrader pt idx state with
+                  | Ok updatedState ->
+                    state <- updatedState
+                    AnsiConsole.MarkupLine(sprintf "\n[bold %s]Transaction complete! Item placed in inventory.[/]" Theme.Green)
+                    Thread.Sleep(900)
+                  | Error err ->
+                    AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s[/]" Theme.Red err)
+                    Thread.Sleep(900)
+                | None -> ()
+
+            | TowerEvent.VaultEncountered(vault, pt) ->
+              AnsiConsole.WriteLine()
+              let puzzleInfo =
+                match vault.Puzzle with
+                | KeyholeLock (_, name, hint) -> sprintf "Locked by key: [%s] (%s)" name hint
+                | StatCheck (stat, req, desc) -> sprintf "Stat Requirement: %d %A (%s)" req stat desc
+                | MemoryCipher (riddle, _) -> sprintf "Cipher: \"%s\"" riddle
+
+              let choice =
+                Display.promptSelectionWithHelp
+                  (sprintf "[bold %s]⌹ %s[/]\n[italic %s]%s[/]\n[bold %s]%s[/]\nGuaranteed: [bold gold1]+%d Souls[/] + %d Relic(s)"
+                    Theme.Yellow vault.Name Theme.Comment vault.Description Theme.Orange puzzleInfo vault.BonusSouls vault.Relics.Length)
+                  [
+                    "󰌆  Attempt to Unlock and Loot Vault"
+                    "🏃  Step Back"
+                  ]
+                  None
+                  (fun () -> ())
+              if choice.Contains("Attempt") then
+                match TowerSession.attemptOpenVault pt state with
+                | Ok updatedState ->
+                  state <- updatedState
+                  AnsiConsole.MarkupLine(sprintf "\n[bold %s]The vault's ancient mechanisms yield! Spoils claimed![/]" Theme.Green)
+                  Thread.Sleep(900)
+                | Error err ->
+                  AnsiConsole.MarkupLine(sprintf "\n[bold %s]Failed to open vault: %s[/]" Theme.Red err)
+                  Thread.Sleep(1000)
+
+            | TowerEvent.EchoDiscovered echo ->
+              showMemoryEchoDialog echo
+
+            | TowerEvent.AmbushTriggered(ambush, spawned) ->
+              AnsiConsole.WriteLine()
+              AnsiConsole.MarkupLine(sprintf "\n[bold red]⚠ AMBUSH SPRUNG: %s![/]" ambush.Name)
+              AnsiConsole.MarkupLine(sprintf "[italic %s]%s[/]" Theme.Foreground ambush.TriggerDescription)
+              AnsiConsole.MarkupLine(sprintf "[bold %s]%d monsters emerge from the surrounding colonnades![/]" Theme.Yellow spawned.Length)
+              Thread.Sleep(1000)
+
+            | TowerEvent.TrapTriggered(_, msg) ->
+              AnsiConsole.MarkupLine(sprintf "\n[bold red]⚠ %s[/]" msg)
+              Thread.Sleep(800)
+
+            | TowerEvent.TrapDisarmed(_, msg) ->
+              AnsiConsole.MarkupLine(sprintf "\n[bold green]󰄬 %s[/]" msg)
+              Thread.Sleep(700)
 
             | TowerEvent.StairwayAscended nextFloorNum ->
               AnsiConsole.Clear()
