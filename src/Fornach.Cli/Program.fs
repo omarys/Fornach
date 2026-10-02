@@ -451,11 +451,22 @@ module Program =
       |> Option.map (fun i -> i + 1 >= args.Length || args.[i + 1].StartsWith("-"))
       |> Option.defaultValue false
 
+    let isBestiarySwarm = hasFlag "--bestiary-swarm" || hasFlag "--monster-swarm" || hasFlag "-ms"
     let isPeerMatrix = hasFlag "--peer-matrix" || hasFlag "--peer-balance" || hasFlag "-pbm"
     let isMatrix = hasFlag "--balance-matrix" || hasFlag "--matrix" || hasFlag "-b"
     let isSim = hasFlag "--sim" || hasGroupFlag || isStandaloneSimFlag || hasFlag "-a1" || hasFlag "--solo"
 
-    if isPeerMatrix then
+    if isBestiarySwarm then
+      let tierArg = findArg ["-t"; "--tier"] ""
+      let tierOpt =
+        match tierArg.ToLowerInvariant() with
+        | "novice" -> Some CombatTier.Novice
+        | "veteran" -> Some CombatTier.Veteran
+        | "master" -> Some CombatTier.Master
+        | "grandmaster" | "gm" -> Some CombatTier.GrandMaster
+        | _ -> None
+      RunBestiarySwarmMatrix tierOpt
+    elif isPeerMatrix then
       RunPeerBalanceMatrix
     elif isMatrix then
       RunBalanceMatrix
@@ -707,6 +718,11 @@ module Program =
   [<EntryPoint>]
   let main (args: string array) =
     match parseCliArgs args with
+    | RunBestiarySwarmMatrix tierOpt ->
+      printBanner()
+      Simulation.renderBestiarySwarmMatrix tierOpt
+      0
+
     | RunPeerBalanceMatrix ->
       printBanner()
       Simulation.renderPeerBalanceMatrix()
@@ -782,7 +798,7 @@ module Program =
           Display.promptWithVim(
             SelectionPrompt<string>()
               .Title(promptTitle)
-              .PageSize(11)
+              .PageSize(12)
               .AddChoices([
                 formatMenuItem "󰈙 " "Interactive Story Mode" "Narrative prologue & aspect battles" Theme.Cyan
                 formatMenuItem "󰒋 " "Ascend The Infinite Tower" "Roguelike procedural dungeon crawl" Theme.Yellow
@@ -793,6 +809,7 @@ module Program =
                 formatMenuItem "󰂺 " "View Archetype Roster" (sprintf "Inspect %d mastery archetypes" Archetypes.allArchetypes.Length) Theme.Purple
                 formatMenuItem "󰓥 " "Peer Class 1v1 Balance Matrix" "Cross-tier 100-run pairwise duel benchmark" Theme.Green
                 formatMenuItem "󰈷 " "Swarm Tipping Point Balance Matrix" "128-matchup macro balance benchmark" Theme.Yellow
+                formatMenuItem "󰞁 " "Bestiary Monster Swarm Matrix" "Swarm tipping point for all 21 monsters vs classes" Theme.Red
                 formatMenuItem "󰒋 " "Symbol & Glyph Reference Manual" "Exhaustive guide to icons, meters & hazards" Theme.Yellow
                 formatMenuItem "󰗼 " "Exit" "Close the Fornach Arena" Theme.Red
               ])
@@ -834,6 +851,29 @@ module Program =
 
         elif choice.Contains("Swarm Tipping Point Balance Matrix") then
           Simulation.renderBalanceMatrix ()
+          AnsiConsole.MarkupLine(sprintf "[%s]Press any key to return to menu...[/]" Theme.Comment)
+          Console.ReadKey(true) |> ignore
+
+        elif choice.Contains("Bestiary Monster Swarm Matrix") then
+          let tierChoice =
+            Display.promptWithVim(
+              SelectionPrompt<string>()
+                .Title("[bold yellow]Select Champion Progression Tier for Bestiary Swarm Benchmark:[/]")
+                .AddChoices([
+                  "All Tiers (Novice, Veteran, Master, GrandMaster)"
+                  "Novice Tier (Level 1 Adventurers)"
+                  "Veteran Tier (Level 40 Champions)"
+                  "Master Tier (Level 100 Champions)"
+                  "GrandMaster Tier (Level 200 Paragons)"
+                ])
+            )
+          let selectedTier =
+            if tierChoice.Contains("Novice") then Some CombatTier.Novice
+            elif tierChoice.Contains("Veteran") then Some CombatTier.Veteran
+            elif tierChoice.Contains("Master") && not (tierChoice.Contains("GrandMaster")) then Some CombatTier.Master
+            elif tierChoice.Contains("GrandMaster") then Some CombatTier.GrandMaster
+            else None
+          Simulation.renderBestiarySwarmMatrix selectedTier
           AnsiConsole.MarkupLine(sprintf "[%s]Press any key to return to menu...[/]" Theme.Comment)
           Console.ReadKey(true) |> ignore
 

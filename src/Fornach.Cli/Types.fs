@@ -89,3 +89,4 @@ type CliOptions =
   | RunGroupSimulation of soloName: string * mobName: string * mobCount: int * iterations: int
   | RunPeerBalanceMatrix
   | RunBalanceMatrix
+  | RunBestiarySwarmMatrix of selectedTier: CombatTier option

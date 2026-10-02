@@ -19,6 +19,7 @@
     <Compile Include="VisionResolverTests.fs" />
     <Compile Include="ParallelDeterminismTests.fs" />
     <Compile Include="BestiaryTests.fs" />
+    <Compile Include="BestiarySwarmTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

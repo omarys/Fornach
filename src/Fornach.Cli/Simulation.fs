@@ -1076,3 +1076,167 @@ module Simulation =
     AnsiConsole.WriteLine()
     AnsiConsole.Write(legendPanel)
     AnsiConsole.WriteLine()
+
+  type MonsterSwarmResultRow = {
+    Monster: MonsterTemplate
+    Tier: CombatTier
+    TippingPoints: Map<CharacterClass, TippingPointResult>
+  }
+
+  /// Runs a headless batch evaluating all 21 Bestiary monsters as swarms against the 6 canonical classes at a given tier
+  let runBestiarySwarmBatch
+    (tier: CombatTier)
+    (maxMobCount: int)
+    (iterationsPerProbe: int)
+    (roller: DiceRoller)
+    (onProgress: unit -> unit)
+    : MonsterSwarmResultRow list =
+    let classes = [
+      CharacterClass.Berserker
+      CharacterClass.Duelist
+      CharacterClass.Warden
+      CharacterClass.Inquisitor
+      CharacterClass.Mesmer
+      CharacterClass.Abjurer
+    ]
+    Bestiary.allMonsters
+    |> List.map (fun monster ->
+      let tpMap =
+        classes
+        |> List.map (fun cls ->
+          let champFactory () = TierFactory.createClassTier cls tier
+          let mobFactory () = Bestiary.createMonster monster
+          let tp = findSwarmTippingPoint champFactory mobFactory maxMobCount iterationsPerProbe roller
+          onProgress ()
+          (cls, tp))
+        |> Map.ofList
+      { Monster = monster; Tier = tier; TippingPoints = tpMap })
+
+  /// Evaluates and renders a comprehensive Bestiary Monster Swarm Tipping Point matrix across classes for a given tier (or all tiers)
+  let renderBestiarySwarmMatrix (selectedTierOpt: CombatTier option) =
+    let tiersToRender =
+      match selectedTierOpt with
+      | Some t -> [ t ]
+      | None -> [ CombatTier.Novice; CombatTier.Veteran; CombatTier.Master; CombatTier.GrandMaster ]
+
+    let classes = [
+      CharacterClass.Berserker
+      CharacterClass.Duelist
+      CharacterClass.Warden
+      CharacterClass.Inquisitor
+      CharacterClass.Mesmer
+      CharacterClass.Abjurer
+    ]
+
+    let maxMobCount = 25
+    let iterations = 10
+    let rng = Random(42)
+    let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
+    let totalMatchups = float (tiersToRender.Length * Bestiary.allMonsters.Length * classes.Length)
+
+    let allResults = ResizeArray<MonsterSwarmResultRow>()
+
+    AnsiConsole.Progress()
+      .AutoClear(false)
+      .Columns([|
+        TaskDescriptionColumn() :> ProgressColumn
+        ProgressBarColumn() :> ProgressColumn
+        PercentageColumn() :> ProgressColumn
+        RemainingTimeColumn() :> ProgressColumn
+      |])
+      .Start(fun ctx ->
+        let task = ctx.AddTask(sprintf "[bold %s]Simulating Bestiary Monster Swarms vs 6 Classes across Tiers...[/]" Theme.Red, maxValue = totalMatchups)
+        let gate = obj()
+        let increment () = lock gate (fun () -> task.Increment 1.0)
+
+        for tier in tiersToRender do
+          let tierRows = runBestiarySwarmBatch tier maxMobCount iterations roller increment
+          allResults.AddRange tierRows
+      )
+
+    let formatTP (tp: TippingPointResult) =
+      match tp with
+      | Impenetrable cap -> sprintf "[bold %s]%d+ (Impenetrable)[/]" Theme.Green cap
+      | OverrunBy 1 -> sprintf "[bold %s]1 (Lethal 1v1)[/]" Theme.Red
+      | OverrunBy n when n <= 3 -> sprintf "[bold %s]%d (Deadly Pack)[/]" Theme.Orange n
+      | OverrunBy n when n <= 8 -> sprintf "[bold %s]%d[/]" Theme.Yellow n
+      | OverrunBy n -> sprintf "[bold %s]%d[/]" Theme.Cyan n
+
+    for tier in tiersToRender do
+      let tierLevel = ProgressionScale.tierToLevel tier
+      let tierColor =
+        match tier with
+        | Novice -> Theme.Comment
+        | Veteran -> Theme.Cyan
+        | Master -> Theme.Yellow
+        | GrandMaster -> Theme.Purple
+
+      AnsiConsole.WriteLine()
+      AnsiConsole.Write(
+        Rule(sprintf "[bold %s]FORNACH BESTIARY SWARM BENCHMARK: %A TIER (Level %d Champions)[/]" tierColor tier tierLevel)
+          .Centered()
+          .RuleStyle(Theme.StyleCurrentLine)
+      )
+      AnsiConsole.WriteLine()
+
+      let table = Table().Border(TableBorder.Rounded).BorderColor(Theme.ColorCurrentLine)
+      table.AddColumn(TableColumn(sprintf "[bold %s]Monster Adversary[/]" Theme.Foreground)) |> ignore
+      table.AddColumn(TableColumn(sprintf "[bold %s]Biome[/]" Theme.Cyan)) |> ignore
+      table.AddColumn(TableColumn(sprintf "[bold %s]Role / Family[/]" Theme.Comment)) |> ignore
+      table.AddColumn(TableColumn(sprintf "[bold %s]Monster Lv & Tier[/]" Theme.Yellow)) |> ignore
+      table.AddColumn(TableColumn(sprintf "[bold %s]vs. Berserker[/]" Theme.Red).Centered()) |> ignore
+      table.AddColumn(TableColumn(sprintf "[bold %s]vs. Duelist[/]" Theme.Green).Centered()) |> ignore
+      table.AddColumn(TableColumn(sprintf "[bold %s]vs. Warden[/]" Theme.Yellow).Centered()) |> ignore
+      table.AddColumn(TableColumn(sprintf "[bold %s]vs. Inquisitor[/]" Theme.Purple).Centered()) |> ignore
+      table.AddColumn(TableColumn(sprintf "[bold %s]vs. Mesmer[/]" Theme.Pink).Centered()) |> ignore
+      table.AddColumn(TableColumn(sprintf "[bold %s]vs. Abjurer[/]" Theme.Cyan).Centered()) |> ignore
+
+      let tierRows = allResults |> Seq.filter (fun r -> r.Tier = tier) |> Seq.toList
+      for r in tierRows do
+        let m = r.Monster
+        let monsterGlyphAndName = sprintf "[bold %s]%c[/] [bold %s]%s[/]" m.ColorHex m.Glyph Theme.Foreground m.Name
+        let biomeName = m.NativeBiome.Name
+        let roleAndFamily = sprintf "%A %A" m.Family m.Role
+        let monsterTierStr = sprintf "Lv %d (%A)" m.Level m.Tier
+
+        let getTP cls =
+          match Map.tryFind cls r.TippingPoints with
+          | Some tp -> formatTP tp
+          | None -> "-"
+
+        table.AddRow(
+          Markup(monsterGlyphAndName),
+          Markup(sprintf "[%s]%s[/]" Theme.Cyan biomeName),
+          Markup(sprintf "[%s]%s[/]" Theme.Comment roleAndFamily),
+          Markup(sprintf "[%s]%s[/]" Theme.Yellow monsterTierStr),
+          Markup(getTP CharacterClass.Berserker),
+          Markup(getTP CharacterClass.Duelist),
+          Markup(getTP CharacterClass.Warden),
+          Markup(getTP CharacterClass.Inquisitor),
+          Markup(getTP CharacterClass.Mesmer),
+          Markup(getTP CharacterClass.Abjurer)
+        ) |> ignore
+
+      AnsiConsole.Write(table)
+      AnsiConsole.WriteLine()
+
+    let legendGrid = Grid()
+    legendGrid.AddColumn(GridColumn()) |> ignore
+    legendGrid.AddColumn(GridColumn()) |> ignore
+    legendGrid.AddRow(
+      Markup(sprintf "[bold %s]Metric (N*):[/] Average monster mob count required to achieve >= 50%% win rate against Champion." Theme.Cyan),
+      Markup(sprintf "[bold %s]Scale:[/] [bold %s]25+[/] Impenetrable  [bold %s]9-24[/] Swarm  [bold %s]4-8[/] Pack  [bold %s]2-3[/] Deadly  [bold %s]1[/] Lethal 1v1" Theme.Yellow Theme.Green Theme.Cyan Theme.Yellow Theme.Orange Theme.Red)
+    ) |> ignore
+    legendGrid.AddRow(
+      Markup(sprintf "[bold %s]Swarm Mechanics:[/] Encirclement Flank Penalty (-(N-1) Defense Hits), Cleave splashes, Bastion frontline cap (3), Mirror decoys." Theme.Comment),
+      Markup(sprintf "[bold %s]Scope:[/] All 21 Bestiary monsters across all 7 Tower biomes pitted against all 6 canonical classes." Theme.Comment)
+    ) |> ignore
+
+    let legendPanel =
+      Panel(legendGrid)
+        .Border(BoxBorder.Rounded)
+        .BorderStyle(Theme.StyleCurrentLine)
+        .Header(sprintf "[bold %s] 󰞁 BESTIARY SWARM BENCHMARK TELEMETRY & TIPPING POINT KEY [/]" Theme.Yellow)
+
+    AnsiConsole.Write(legendPanel)
+    AnsiConsole.WriteLine()
