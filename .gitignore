@@ -6,3 +6,4 @@ obj/
 .vs/
 .idea/
 .ionide/
+logs/

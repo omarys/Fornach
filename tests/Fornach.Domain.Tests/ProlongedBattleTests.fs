@@ -649,3 +649,136 @@ module ProlongedBattleTests =
     Assert.True(resAcumen.Actor.ArcaneWard > resIntellect.Actor.ArcaneWard,
       sprintf "Acumen specialist ward (%d) should be stronger than off-specialist ward (%d)"
         resAcumen.Actor.ArcaneWard resIntellect.Actor.ArcaneWard)
+
+  [<Fact>]
+  let ``SteadyForm and CenterMind build bounded Study Stacks and never explode into dozens`` () =
+    let roller = fixedRoller 1
+    // Veteran fighter with Prowess 170 (like Stone Gargoyle)
+    let gargoyleFighter = createFighter 180 220 230 240 170 200
+    let opponent = createFighter 100 100 100 100 100 100
+
+    let resSteady = ActionResolver.resolve roller (RecoveryAction SteadyForm) gargoyleFighter opponent
+    // Must gain 6 stacks (clamped from 42!), NOT 42 stacks!
+    Assert.Equal(6, resSteady.Actor.StudyStacks)
+
+    let stabilizedEvt =
+      resSteady.Events
+      |> List.tryPick (function
+        | CombatEvent.FormStabilized(_, _, gained) -> Some gained
+        | _ -> None)
+    Assert.True(stabilizedEvt.IsSome)
+    Assert.Equal(6, stabilizedEvt.Value)
+
+    // CenterMind with Acumen 170
+    let mentalFighter = createMage 100 100 100 100 170 140
+    let resCenter = ActionResolver.resolve roller (RecoveryAction CenterMind) mentalFighter opponent
+    Assert.Equal(6, resCenter.Actor.StudyStacks)
+
+    // Combatant.addStudyStacks is clamped at 15
+    let flooded = resSteady.Actor |> Combatant.addStudyStacks 100
+    Assert.Equal(15, flooded.StudyStacks)
+
+  [<Fact>]
+  let ``SteadyBreathing vents all dynamic status meters and restores Morale`` () =
+    let roller = fixedRoller 1
+    let strainedFighter =
+      createFighter 100 100 100 100 100 100
+      |> Combatant.updateMeters (fun _ ->
+        { Recklessness = Meter.Create 50
+          Exhaustion = Meter.Create 60
+          Overwhelm = Meter.Create 55
+          Frustration = Meter.Create 65
+          CognitiveFatigue = Meter.Create 50
+          Confusion = Meter.Create 70
+          Provoke = Meter.Create 45 })
+      |> fun c -> { c with Morale = c.Morale.ApplyDelta -50 }
+    let opponent = createFighter 100 100 100 100 100 100
+
+    let res = ActionResolver.resolve roller (RecoveryAction SteadyBreathing) strainedFighter opponent
+    let m = res.Actor.Meters
+
+    // All 7 meters must be substantially reduced
+    Assert.True(m.Recklessness.Value < 50, "Recklessness should be reduced")
+    Assert.True(m.Exhaustion.Value < 60, "Exhaustion should be reduced")
+    Assert.True(m.Overwhelm.Value < 55, "Overwhelm should be reduced")
+    Assert.True(m.Frustration.Value < 65, "Frustration should be reduced")
+    Assert.True(m.CognitiveFatigue.Value < 50, "CognitiveFatigue should be reduced")
+    Assert.True(m.Confusion.Value < 70, "Confusion should be reduced")
+    Assert.True(m.Provoke.Value < 45, "Provoke should be reduced")
+
+    // Morale restored
+    Assert.True(res.Actor.Morale.Current > strainedFighter.Morale.Current, "Morale should be restored")
+
+    // BreathStabilized event emitted
+    let breathEvt =
+      res.Events
+      |> List.tryPick (function
+        | CombatEvent.BreathStabilized(_, summary, mor) -> Some (summary, mor)
+        | _ -> None)
+    Assert.True(breathEvt.IsSome, "BreathStabilized event must be emitted")
+
+  [<Fact>]
+  let ``SteadyBreathing and recovery resets stabilize a Collapsed combatant when strain drops below 100`` () =
+    let roller = fixedRoller 1
+    // Fighter collapsed from 100 Frustration
+    let collapsedFighter =
+      createFighter 100 100 100 100 100 100
+      |> Combatant.updateMeters (fun _ ->
+        { StatusMeters.Zero with Frustration = Meter.Max })
+      |> Combatant.evaluateCollapse
+    let opponent = createFighter 100 100 100 100 100 100
+
+    Assert.True(CollapseState.isCollapsed collapsedFighter.Collapse)
+    Assert.True(collapsedFighter.IsExecuteEligible)
+
+    let res = ActionResolver.resolve roller (RecoveryAction SteadyBreathing) collapsedFighter opponent
+
+    // Frustration dropped below 100, so collapse state must be cleared back to Stable!
+    Assert.True(res.Actor.Meters.Frustration.Value < 100)
+    Assert.False(CollapseState.isCollapsed res.Actor.Collapse)
+    Assert.False(res.Actor.IsExecuteEligible)
+
+    let hasRecoveredEvt =
+      res.Events
+      |> List.exists (function CombatEvent.CollapseRecovered _ -> true | _ -> false)
+    Assert.True(hasRecoveredEvt, "CollapseRecovered event must be emitted")
+
+  [<Fact>]
+  let ``SteadyForm drains Frustration and Overwhelm in addition to Exhaustion`` () =
+    let roller = fixedRoller 1
+    let strainedFighter =
+      createFighter 100 100 100 100 100 100
+      |> Combatant.updateMeters (fun _ ->
+        { StatusMeters.Zero with
+            Exhaustion = Meter.Create 50
+            Overwhelm = Meter.Create 50
+            Frustration = Meter.Create 50 })
+    let opponent = createFighter 100 100 100 100 100 100
+
+    let res = ActionResolver.resolve roller (RecoveryAction SteadyForm) strainedFighter opponent
+    let m = res.Actor.Meters
+
+    Assert.True(m.Exhaustion.Value < 50, "SteadyForm should drain Exhaustion")
+    Assert.True(m.Overwhelm.Value < 50, "SteadyForm should drain Overwhelm")
+    Assert.True(m.Frustration.Value < 50, "SteadyForm should drain Frustration")
+
+  [<Fact>]
+  let ``CenterMind drains Provoke and Frustration in addition to Confusion and Fatigue`` () =
+    let roller = fixedRoller 1
+    let strainedMage =
+      createMage 100 100 100 100 100 100
+      |> Combatant.updateMeters (fun _ ->
+        { StatusMeters.Zero with
+            Confusion = Meter.Create 50
+            CognitiveFatigue = Meter.Create 50
+            Provoke = Meter.Create 50
+            Frustration = Meter.Create 50 })
+    let opponent = createFighter 100 100 100 100 100 100
+
+    let res = ActionResolver.resolve roller (RecoveryAction CenterMind) strainedMage opponent
+    let m = res.Actor.Meters
+
+    Assert.True(m.Confusion.Value < 50, "CenterMind should drain Confusion")
+    Assert.True(m.CognitiveFatigue.Value < 50, "CenterMind should drain CognitiveFatigue")
+    Assert.True(m.Provoke.Value < 50, "CenterMind should drain Provoke")
+    Assert.True(m.Frustration.Value < 50, "CenterMind should drain Frustration")

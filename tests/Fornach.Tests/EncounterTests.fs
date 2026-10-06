@@ -396,3 +396,72 @@ let ``TowerDisplay inspectTile formats inspection detail for encounters`` () =
   Assert.True(detail.EntitySummary.IsSome)
   Assert.Contains("SACRIFICIAL ALTAR: Altar of the Iron Quarryman", detail.EntitySummary.Value)
   Assert.Contains("Sacrifice 25 Health", detail.EntitySummary.Value)
+
+[<Fact>]
+let ``createAmbush scales monster tiers according to floor progression and prevents high-level brutes on Floor 1`` () =
+  // 1. Floor 1 (Prologue): Pack of Novice swarmers (Slag Hounds) only - never Master Quarry Overseer
+  let f1Ambush = WorldEvents.createAmbush FloorTheme.QuarryPlazas 1
+  Assert.Equal("Slag Hound", f1Ambush.Pack.Leader.Name)
+  Assert.Equal(CombatTier.Novice, f1Ambush.Pack.Leader.Tier)
+  Assert.All(f1Ambush.Pack.Minions, fun m -> Assert.Equal("Slag Hound", m.Name))
+  Assert.Contains("Pack of Slag Hounds", f1Ambush.Name)
+  Assert.DoesNotContain("Quarry Overseer", f1Ambush.Name)
+
+  // 2. Floors 2-3: Veteran skirmisher leading Novice swarmers
+  let f2Ambush = WorldEvents.createAmbush FloorTheme.PineCloisters 2
+  Assert.Equal("Thorn Weaver", f2Ambush.Pack.Leader.Name)
+  Assert.Equal(CombatTier.Veteran, f2Ambush.Pack.Leader.Tier)
+  Assert.All(f2Ambush.Pack.Minions, fun m -> Assert.Equal("Blight Sprite", m.Name))
+
+  // 3. Floors 4+: Elite Master brute leading seasoned pack
+  let f4Ambush = WorldEvents.createAmbush FloorTheme.QuarryPlazas 4
+  Assert.Equal("Quarry Overseer", f4Ambush.Pack.Leader.Name)
+  Assert.Equal(CombatTier.Master, f4Ambush.Pack.Leader.Tier)
+  Assert.Contains("Quarry Overseer Vanguard", f4Ambush.Name)
+
+[<Fact>]
+let ``ascendFloor resets player combat strain meters to zero`` () =
+  let player = createTestPlayer ()
+  let state = TowerSession.initSession player 42 1
+  let strainedPlayer =
+    state.Player
+    |> Combatant.updateMeters (fun _ ->
+      { Recklessness = Meter.Create 45
+        Exhaustion = Meter.Create 60
+        Overwhelm = Meter.Create 30
+        Frustration = Meter.Create 70
+        CognitiveFatigue = Meter.Create 40
+        Confusion = Meter.Create 55
+        Provoke = Meter.Create 20 })
+  let strainedState = { state with Player = strainedPlayer }
+
+  let nextState = TowerSession.ascendFloor strainedState
+  Assert.Equal(StatusMeters.Zero, nextState.Player.Meters)
+
+[<Fact>]
+let ``Shrine communion resets player combat strain meters to zero`` () =
+  let player = createTestPlayer ()
+  let state = TowerSession.initSession player 42 1
+  let shrinePos = { X = state.PlayerPosition.X + 1; Y = state.PlayerPosition.Y }
+  let shrine =
+    { Id = "sanctuary_test"
+      Name = "Sanctuary of Clarity"
+      BlessingDescription = "Purges all strain"
+      IsUsed = false }
+  let stateWithShrine =
+    { state with
+        CurrentFloor =
+          { state.CurrentFloor with
+              Tiles = state.CurrentFloor.Tiles |> Map.add shrinePos (Floor SurfaceType.PavedStone)
+              Entities = state.CurrentFloor.Entities |> Map.add shrinePos (EntityShrine shrine) }
+        Player =
+          state.Player
+          |> Combatant.updateMeters (fun _ ->
+            { StatusMeters.Zero with
+                Exhaustion = Meter.Create 80
+                Frustration = Meter.Create 85
+                Confusion = Meter.Create 90 }) }
+
+  let updatedState, events = TowerSession.stepPlayer Direction.East stateWithShrine
+  Assert.Equal(StatusMeters.Zero, updatedState.Player.Meters)
+  Assert.Contains(events, fun e -> match e with TowerEvent.ShrineActivated s -> s.Id = shrine.Id | _ -> false)

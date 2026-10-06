@@ -70,6 +70,14 @@ module WeaponCondition =
     | WeaponCondition.Damaged -> WeaponCondition.Broken
     | WeaponCondition.Broken -> WeaponCondition.Broken
 
+  let repair = function
+    | WeaponCondition.Broken -> WeaponCondition.Damaged
+    | WeaponCondition.Damaged -> WeaponCondition.Notched
+    | WeaponCondition.Notched -> WeaponCondition.Pristine
+    | WeaponCondition.Pristine -> WeaponCondition.Pristine
+
+  let restorePristine (_: WeaponCondition) = WeaponCondition.Pristine
+
   let effectiveness = function
     | WeaponCondition.Pristine -> 1.0
     | WeaponCondition.Notched -> 0.90

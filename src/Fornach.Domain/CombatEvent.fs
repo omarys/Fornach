@@ -44,6 +44,12 @@ type CombatEvent =
   /// Defensive recovery stabilized posture and drained entropy
   | FormStabilized of actorId: CombatantId * drainedRecklessness: int * gainedStudyStacks: int
 
+  /// Steady breathing vented dynamic status meters and restored composure
+  | BreathStabilized of actorId: CombatantId * summary: string * moraleRestored: int
+
+  /// Actor recovered from a Collapsed state by stabilizing meters below threshold
+  | CollapseRecovered of actorId: CombatantId
+
   /// Reactive or offensive equipment hook executed
   | EquipmentProcTriggered of itemName: string * sourceId: CombatantId * description: string
 

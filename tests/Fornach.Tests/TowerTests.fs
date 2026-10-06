@@ -196,11 +196,15 @@ let ``TowerSession bumping into chest awards relic and marks chest open`` () =
     Assert.Contains(chest.ItemReward.Value, postStepState.InventoryItems)
 
 [<Fact>]
-let ``TowerSession bumping into shrine restores Morale and clears Recklessness`` () =
+let ``TowerSession bumping into shrine fully restores Health, Morale, Armor, and clears Recklessness`` () =
   let basePlayer = createTestPlayer ()
   let strainedPlayer =
     { basePlayer with
+        Health = basePlayer.Health.ApplyDelta -80
         Morale = basePlayer.Morale.ApplyDelta -50
+        Armor = basePlayer.Armor.Shred 30
+        WeaponCondition = WeaponCondition.Damaged
+        BleedStacks = 3
         Meters = { basePlayer.Meters with Recklessness = Meter.Create 60 } }
 
   let state = TowerSession.initSession strainedPlayer 42 1
@@ -226,8 +230,12 @@ let ``TowerSession bumping into shrine restores Morale and clears Recklessness``
     events |> List.exists (function TowerEvent.ShrineActivated _ -> true | _ -> false)
   Assert.True(shrineActivated)
 
-  // Morale restored by 40, Recklessness reset to 0
-  Assert.Equal(strainedPlayer.Morale.Current + 40, postStepState.Player.Morale.Current)
+  // Full restoration of Health, Morale, Armor, and Weapon; Bleed purged; Recklessness reset to 0
+  Assert.Equal(strainedPlayer.Health.Maximum, postStepState.Player.Health.Current)
+  Assert.Equal(strainedPlayer.Morale.Maximum, postStepState.Player.Morale.Current)
+  Assert.Equal(strainedPlayer.Armor.Max, postStepState.Player.Armor.Current)
+  Assert.Equal(WeaponCondition.Pristine, postStepState.Player.WeaponCondition)
+  Assert.Equal(0, postStepState.Player.BleedStacks)
   Assert.Equal(0, postStepState.Player.Meters.Recklessness.Value)
 
 [<Fact>]

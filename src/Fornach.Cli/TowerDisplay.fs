@@ -479,10 +479,20 @@ module TowerDisplay =
     grid.AddRow(Markup(sprintf "[bold %s]─── 󰓥 TACTICAL VITALS ───[/]" Theme.Yellow)) |> ignore
     grid.AddRow(Markup(Display.renderBar "󰋑 Health" p.Health.Current p.Health.Maximum Theme.Red)) |> ignore
     grid.AddRow(Markup(Display.renderBar "󰧑 Morale" p.Morale.Current p.Morale.Maximum Theme.Cyan)) |> ignore
-    let armorText = sprintf "%-22s [%s]%d / %d[/] [%s](%d%% soak)[/]" " Armor Integrity" Theme.Comment p.Armor.Current p.Armor.Max Theme.Yellow (int (p.Armor.AbsorptionRatio * 100.0))
+    let armorText =
+      if p.Armor.IsShredded then
+        sprintf "%-22s [bold blink %s]SHREDDED (0%% soak) ⚠[/]" " Armor Integrity" Theme.Red
+      else
+        sprintf "%-22s [%s]%d / %d[/] [%s](%d%% soak)[/]" " Armor Integrity" Theme.Comment p.Armor.Current p.Armor.Max Theme.Yellow (int (p.Armor.AbsorptionRatio * 100.0))
     grid.AddRow(Markup(armorText)) |> ignore
 
-    // Stance or Complex Form
+    // Prominent low health warning banner
+    if p.Health.Current <= p.Health.Maximum / 4 then
+      grid.AddRow(Markup("[bold blink red]⚠ CRITICAL HEALTH: Rest or visit Shrine before combat![/]")) |> ignore
+    elif p.Health.Current <= p.Health.Maximum / 2 then
+      grid.AddRow(Markup("[bold yellow]⚠ WOUNDED: Health below 50%. Triage or rest recommended.[/]")) |> ignore
+
+    // Stance, Complex Form, and Weapon Integrity
     if p.Plane = Mental then
       let formColor, formName =
         match p.ComplexForm with
@@ -498,6 +508,14 @@ module TowerDisplay =
         | CombatStance.AgilityStance -> Theme.Green
         | CombatStance.DisciplineStance -> Theme.Purple
       grid.AddRow(Markup(sprintf "%-22s [bold %s]%A[/]" "󰓥 Combat Stance" stanceColor p.Stance)) |> ignore
+
+      let weaponCondColor, weaponCondDesc =
+        match p.WeaponCondition with
+        | WeaponCondition.Pristine -> Theme.Green, "Pristine (100% dmg)"
+        | WeaponCondition.Notched -> Theme.Yellow, "Notched (-10% dmg)"
+        | WeaponCondition.Damaged -> Theme.Orange, "Damaged (-25% dmg) ⚠"
+        | WeaponCondition.Broken -> Theme.Red, "Broken (-50% dmg) ☠"
+      grid.AddRow(Markup(sprintf "%-22s [bold %s]%s[/]" "󰚌 Weapon Integrity" weaponCondColor weaponCondDesc)) |> ignore
 
     // Emotional Meters
     grid.AddRow(Markup(Display.renderMeter "󰈸 Recklessness" p.Meters.Recklessness Theme.Red)) |> ignore
@@ -823,10 +841,21 @@ module TowerDisplay =
               if choice.Contains("Engage in Tactical") then
                 let outcome, updatedPlayer = onCombatDuel state.Player enemy.Combatant
                 if outcome = CombatOutcome.PlayerVictorious then
-                  state <- { state with Player = updatedPlayer }
                   state <- TowerSession.resolveEnemyDefeat enemy.Id state
 
                   if isBoss then
+                    // Overcoming the trauma aspect grants total catharsis:
+                    let catharticPlayer =
+                      { updatedPlayer with
+                          Health = Pool.Create updatedPlayer.Health.Maximum
+                          Morale = Pool.Create updatedPlayer.Morale.Maximum
+                          Armor = ArmorIntegrity.Create updatedPlayer.Armor.Max
+                          WeaponCondition = WeaponCondition.Pristine
+                          BleedStacks = 0
+                          LimbDebuff = 0
+                          Meters = StatusMeters.Zero }
+                    state <- { state with Player = catharticPlayer }
+
                     let memoryTitle, memoryDesc =
                       match state.CurrentFloor.FloorNumber with
                       | 1 -> "Shattered Windshield", "In the puddle at your feet, you see the reflection of a crumpled sedan, a shattered crosswalk signal, and a girl's hand slipping from your grasp."
@@ -836,7 +865,7 @@ module TowerDisplay =
                       | 5 -> "The Empty Bedroom", "The suffocating stillness of walking past an untouched bedroom. The weight of absence."
                       | _ -> "The Crosswalk Intersection", "The white lilies blur into headlights and rain. The collision was not your fault. Acceptance at last."
                     let memPanel =
-                      Panel(Markup(sprintf "[bold gold1]★ TRAUMA MEMORY OVERCOME:[/] [bold white]%s[/]\n[italic grey]%s[/]" memoryTitle memoryDesc))
+                      Panel(Markup(sprintf "[bold gold1]★ TRAUMA MEMORY OVERCOME:[/] [bold white]%s[/]\n[italic grey]%s[/]\n[bold green]✦ Psychological breakthrough: Health, Morale, Armor, and Weapon restored to Pristine![/]" memoryTitle memoryDesc))
                         .Border(BoxBorder.Heavy)
                         .BorderStyle(Style(foreground = Nullable Color.Gold1))
                     AnsiConsole.Clear()
@@ -846,7 +875,27 @@ module TowerDisplay =
                     AnsiConsole.MarkupLine(sprintf "[%s]Press any key to resume exploration...[/]" Theme.Comment)
                     Console.ReadKey(true) |> ignore
                   else
-                    AnsiConsole.MarkupLine(sprintf "\n[bold %s]Adversary vanquished! You harvest their souls and alchemical trophies.[/]" Theme.Green)
+                    // Field triage, armor salvage & weapon maintenance
+                    let healthHeal = Math.Max(50, int (float updatedPlayer.Health.Maximum * 0.25))
+                    let moraleHeal = Math.Max(40, int (float updatedPlayer.Morale.Maximum * 0.25))
+                    let armorRepair = Math.Max(15, int (float updatedPlayer.Armor.Max * 0.30))
+                    let honedWeapon = WeaponCondition.repair updatedPlayer.WeaponCondition
+                    let recoveredPlayer =
+                      { updatedPlayer with
+                          Health = updatedPlayer.Health.ApplyDelta healthHeal
+                          Morale = updatedPlayer.Morale.ApplyDelta moraleHeal
+                          Armor = { updatedPlayer.Armor with Current = Math.Min(updatedPlayer.Armor.Max, updatedPlayer.Armor.Current + armorRepair) }
+                          WeaponCondition = honedWeapon
+                          BleedStacks = 0
+                          LimbDebuff = 0
+                          Meters = StatusMeters.Zero }
+                    state <- { state with Player = recoveredPlayer }
+                    let weaponMsg =
+                      if honedWeapon <> updatedPlayer.WeaponCondition then
+                        sprintf ", weapon honed to %A" honedWeapon
+                      else ""
+                    AnsiConsole.MarkupLine(sprintf "\n[bold %s]Adversary vanquished! Field triage: +%d HP, +%d Morale, +%d Armor repaired, and combat strain meters vented%s.[/]"
+                      Theme.Green healthHeal moraleHeal armorRepair weaponMsg)
                     Thread.Sleep(900)
                 else
                   onDefeatAnimation()
@@ -856,6 +905,7 @@ module TowerDisplay =
                         Health = Pool.Create state.Player.Health.Maximum
                         Morale = Pool.Create state.Player.Morale.Maximum
                         Armor = ArmorIntegrity.Create state.Player.Armor.Max
+                        WeaponCondition = WeaponCondition.Pristine
                         Meters = StatusMeters.Zero }
                   // Respawn non-boss grinding mobs so player can grind again
                   let respawnedEntities =
@@ -879,7 +929,8 @@ module TowerDisplay =
                 let strainedPlayer =
                   { state.Player with
                       Health = state.Player.Health.ApplyDelta -15
-                      Morale = state.Player.Morale.ApplyDelta -10 }
+                      Morale = state.Player.Morale.ApplyDelta -10
+                      Meters = StatusMeters.Zero }
                 state <- { state with Player = strainedPlayer }
                 state <- TowerSession.resolveEnemyDefeat enemy.Id state
                 AnsiConsole.MarkupLine(sprintf "\n[bold %s]With steady resolve, you shatter the foe's stance![/]" Theme.Green)
@@ -1040,6 +1091,19 @@ module TowerDisplay =
               AnsiConsole.MarkupLine(sprintf "\n[bold green]󰄬 %s[/]" msg)
               Thread.Sleep(700)
 
+            | TowerEvent.ShrineActivated shrine ->
+              AnsiConsole.WriteLine()
+              let panel =
+                Panel(Markup(sprintf "[bold %s]† SANCTUARY EMBRACE: %s[/]\n[italic white]%s[/]\n[bold %s]✦ Health & Morale fully restored! Armor repaired to maximum! Weapon restored to Pristine![/]"
+                  Theme.Yellow shrine.Name shrine.BlessingDescription Theme.Green))
+                  .Border(BoxBorder.Heavy)
+                  .BorderStyle(Style(foreground = Nullable Theme.ColorYellow))
+              AnsiConsole.Clear()
+              AnsiConsole.Write(panel)
+              AnsiConsole.WriteLine()
+              AnsiConsole.MarkupLine(sprintf "[%s]Press any key to resume exploration...[/]" Theme.Comment)
+              Console.ReadKey(true) |> ignore
+
             | TowerEvent.StairwayAscended nextFloorNum ->
               if state.IsStoryMode && nextFloorNum = 7 then
                 EnvironmentScenes.playCrosswalkTowerTransition ()
@@ -1082,8 +1146,20 @@ module TowerDisplay =
         | None ->
           match key.Key with
           | ConsoleKey.Spacebar | ConsoleKey.OemPeriod | ConsoleKey.NumPad5 ->
-            let logMsg = "You steady your stance and observe the ambient flow of the chamber."
-            state <- { state with MessageLog = logMsg :: state.MessageLog }
+            let restedMorale = state.Player.Morale.ApplyDelta 15
+            let restedMeters = StatusMeters.Zero
+            let honedWeapon = WeaponCondition.repair state.Player.WeaponCondition
+            let restedPlayer =
+              { state.Player with
+                  Morale = restedMorale
+                  Meters = restedMeters
+                  WeaponCondition = honedWeapon }
+            let weaponMsg =
+              if honedWeapon <> state.Player.WeaponCondition then
+                sprintf ", honed weapon to %A" honedWeapon
+              else ""
+            let logMsg = sprintf "You steady your stance, breathe deeply, and recenter your focus (+15 Morale, all status strain vented%s)." weaponMsg
+            state <- { state with Player = restedPlayer; MessageLog = logMsg :: state.MessageLog }
 
           | ConsoleKey.F1 ->
             showHelpManual ()

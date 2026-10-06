@@ -444,3 +444,63 @@ let ``Aegis Lattice reflects 50% damage and 15 Frustration when Arcane Ward abso
   Assert.True(reflectDmg > 0, "Reflected damage must be positive.")
   Assert.Equal(15, frust)
   Assert.True(result.Actor.Meters.Frustration.Value >= 15, "Attacker must suffer +15 Frustration from Aegis Lattice reflection.")
+
+[<Fact>]
+let ``Combat action choices are ordered by class archetype vector`` () =
+  let dummyEnemy = TierFactory.createClassLevel CharacterClass.Warrior 1
+
+  // 1. Berserker (Power Vector): Force / Fortitude must be top choices
+  let berserker = TierFactory.createClassLevel CharacterClass.Berserker 1
+  let berserkerChoices = Program.buildActionChoices berserker dummyEnemy
+  Assert.Contains("Force Strike: Standard Cleave", berserkerChoices.[0])
+  Assert.Contains("Force Strike: Wild Blow", berserkerChoices.[1])
+
+  // 2. Duelist (Agility Vector): Finesse / Reflex must be top choices
+  let duelist = TierFactory.createClassLevel CharacterClass.Duelist 1
+  let duelistChoices = Program.buildActionChoices duelist dummyEnemy
+  Assert.Contains("Finesse Cadence: Rapid Probing", duelistChoices.[0])
+  Assert.Contains("Finesse Cadence: Relentless Blitz", duelistChoices.[1])
+
+  // 3. Warden (Discipline Vector): Prowess / Poise must be top choices
+  let warden = TierFactory.createClassLevel CharacterClass.Warden 1
+  let wardenChoices = Program.buildActionChoices warden dummyEnemy
+  Assert.Contains("Prowess Strike: Stance Pressure", wardenChoices.[0])
+  Assert.Contains("Prowess Strike: Invitational Bait", wardenChoices.[1])
+
+  // 4. Inquisitor (Power Mental Vector): Arcane Cataclysm must be top choice
+  let inquisitor = TierFactory.createClassLevel CharacterClass.Inquisitor 1
+  let inquisitorChoices = Program.buildActionChoices inquisitor dummyEnemy
+  Assert.Contains("Arcane Cataclysm: Elemental Blast", inquisitorChoices.[0])
+
+  // 5. Mesmer (Agility Mental Vector): Synaptic Glamour must be top choice
+  let mesmer = TierFactory.createClassLevel CharacterClass.Mesmer 1
+  let mesmerChoices = Program.buildActionChoices mesmer dummyEnemy
+  Assert.Contains("Synaptic Glamour: Neural Static", mesmerChoices.[0])
+
+  // 6. Abjurer (Discipline Mental Vector): Runic Ward Trap must be top choice
+  let abjurer = TierFactory.createClassLevel CharacterClass.Abjurer 1
+  let abjurerChoices = Program.buildActionChoices abjurer dummyEnemy
+  Assert.Contains("Runic Ward Trap: Abjuration Glyph", abjurerChoices.[0])
+
+[<Fact>]
+let ``All built action choices parse successfully to non-fallback ActionIntent`` () =
+  let dummyEnemy = TierFactory.createClassLevel CharacterClass.Warrior 1
+  let classes = [
+    CharacterClass.Berserker
+    CharacterClass.Duelist
+    CharacterClass.Warden
+    CharacterClass.Inquisitor
+    CharacterClass.Mesmer
+    CharacterClass.Abjurer
+  ]
+
+  for cls in classes do
+    let player = TierFactory.createClassLevel cls 1
+    let choices = Program.buildActionChoices player dummyEnemy
+    for choice in choices do
+      let intent = Program.parseActionChoice choice
+      if not (choice.Contains("Steady Form")) then
+        match intent with
+        | ActionIntent.RecoveryAction SteadyForm ->
+          Assert.True(false, sprintf "Choice '%s' unexpectedly fell through to default SteadyForm fallback!" choice)
+        | _ -> ()

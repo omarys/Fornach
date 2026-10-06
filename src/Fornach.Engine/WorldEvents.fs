@@ -10,21 +10,44 @@ module WorldEvents =
   /// Creates a monster pack ambush tailored to floor theme and progression
   let createAmbush (theme: FloorTheme) (floorNum: int) : AmbushData =
     let themeMonsters = Bestiary.byBiome theme
-    let leader, minions =
+    let leader, minions, packName, triggerDesc =
       match themeMonsters with
       | [] ->
-        Bestiary.slagHound, [ Bestiary.slagHound ]
+        Bestiary.slagHound, [ Bestiary.slagHound; Bestiary.slagHound ],
+        "Ambush: Pack of Slag Hounds",
+        "The shadows twist violently! A feral pack of Slag Hounds lunges from the colonnade!"
       | [ single ] ->
-        single, [ single ]
+        single, [ single; single ],
+        sprintf "Ambush: Pack of %ss" single.Name,
+        sprintf "The shadows twist violently! A pack of %ss lunges from the colonnade!" single.Name
       | first :: second :: rest ->
-        let leader = if rest.IsEmpty then second else rest.Head
-        let minion = first
-        leader, [ minion; minion ]
+        if floorNum <= 1 then
+          // Floor 1 (Prologue): Pack of Novice swarmers matching early player progression (no instant one-shots!)
+          let leader = first
+          let minions = [ first; first ]
+          leader, minions,
+          sprintf "Ambush: Pack of %ss" first.Name,
+          sprintf "The shadows twist violently! A ravenous pack of %ss lunges from the colonnade!" first.Name
+        elif floorNum <= 3 then
+          // Floors 2-3: Veteran skirmisher accompanied by Novice swarmers
+          let leader = second
+          let minions = [ first; first ]
+          leader, minions,
+          sprintf "Ambush: %s & %s Pack" second.Name first.Name,
+          sprintf "The shadows twist violently! A %s accompanied by %ss lunges from the colonnade!" second.Name first.Name
+        else
+          // Floors 4+: Elite Master brute leading seasoned skirmishers
+          let leader = if rest.IsEmpty then second else rest.Head
+          let minion1 = second
+          let minion2 = first
+          leader, [ minion1; minion2 ],
+          sprintf "Ambush: %s Vanguard" leader.Name,
+          sprintf "The shadows twist violently! A colossal %s emerges at the head of a deadly strike pack!" leader.Name
 
     { Id = sprintf "ambush_floor_%d" floorNum
-      Name = sprintf "Ambush: Pack of %ss" leader.Name
+      Name = packName
       Pack = { Leader = leader; Minions = minions }
-      TriggerDescription = sprintf "The shadows twist violently! A pack of %ss lunges from the colonnade!" leader.Name
+      TriggerDescription = triggerDesc
       IsTriggered = false }
 
   /// Creates an ancient sacrificial altar presenting risk vs reward dilemmas

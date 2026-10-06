@@ -61,7 +61,7 @@ module Program =
     prompt.AddChoices(Archetypes.allArchetypes) |> ignore
     Display.promptWithVim prompt
 
-  let private parseActionChoice (choice: string) : ActionIntent =
+  let parseActionChoice (choice: string) : ActionIntent =
     if choice.Contains("EXECUTE FINISHER (Physical") then
       ExecuteStrike Physical
     elif choice.Contains("EXECUTE FINISHER (Mental") then
@@ -140,10 +140,12 @@ module Program =
       RecoveryAction SteadyForm
     elif choice.Contains("Center Mind") then
       RecoveryAction CenterMind
+    elif choice.Contains("Steady Breathing") then
+      RecoveryAction SteadyBreathing
     else
       RecoveryAction SteadyForm
 
-  let private buildActionChoices (player: Combatant) (enemy: Combatant) : string list =
+  let buildActionChoices (player: Combatant) (enemy: Combatant) : string list =
     [
       // Finisher (only for the player's operative discipline)
       if enemy.IsExecuteEligible then
@@ -165,27 +167,59 @@ module Program =
         sprintf "⚓ [bold %s]Trauma: Apathy Doldrums[/] (Discipline Gambit: Inflict 40 Cognitive Fatigue)" Theme.Comment
 
       if player.Plane = Physical then
-        // Physical Martial Strikes
-        sprintf "⚔️  [%s]Force Strike: Standard Cleave[/] (Power - Cleave vs. Fortitude)" Theme.Red
-        sprintf "⚡ [bold %s]Force Strike: Wild Blow[/] (Power Gambit: +30 Recklessness, 1.5x Dmg)" Theme.Red
-        sprintf "⚔️  [%s]Finesse Cadence: Rapid Probing[/] (Agility - Probing Cadence vs. Reflex)" Theme.Green
-        sprintf "⚡ [bold %s]Finesse Cadence: Relentless Blitz[/] (Agility Gambit: +25 Recklessness)" Theme.Green
-        sprintf "⚔️  [%s]Prowess Strike: Stance Pressure[/] (Discipline - Study Stacks vs. Poise)" Theme.Purple
-        sprintf "⚡ [bold %s]Prowess Strike: Invitational Bait[/] (Discipline Gambit: +35 Recklessness)" Theme.Purple
+        // Physical Martial Strikes grouped by vector
+        let powerStrikes = [
+          sprintf "⚔️  [%s]Force Strike: Standard Cleave[/] (Power - Cleave vs. Fortitude)" Theme.Red
+          sprintf "⚡ [bold %s]Force Strike: Wild Blow[/] (Power Gambit: +30 Recklessness, 1.5x Dmg)" Theme.Red
+        ]
 
-        // Dedicated Discipline Gambits (cost Study Stacks with 0 Recklessness!)
-        if player.StudyStacks >= 2 then
-          sprintf "🎯 [bold %s]Calculated Flaw Strike[/] (Discipline Gambit: Spend Study Stacks for Vital Opening, 0 Recklessness)" Theme.Purple
-        if player.StudyStacks >= 3 then
-          sprintf "⚔️  [bold %s]Masterful Disarm[/] (Discipline Gambit: Spend Study Stacks to Degrade Opponent Weapon, 0 Recklessness)" Theme.Purple
+        let agilityStrikes = [
+          sprintf "⚔️  [%s]Finesse Cadence: Rapid Probing[/] (Agility - Probing Cadence vs. Reflex)" Theme.Green
+          sprintf "⚡ [bold %s]Finesse Cadence: Relentless Blitz[/] (Agility Gambit: +25 Recklessness)" Theme.Green
+        ]
 
-        // Tactical Stance Shifts
-        if player.Stance <> CombatStance.PowerStance then
-          sprintf "↺ [bold %s]Shift Stance: Power Stance[/] (Sweeping Cleaves & Sunder Armor/Weapon)" Theme.Red
-        if player.Stance <> CombatStance.AgilityStance then
-          sprintf "↺ [bold %s]Shift Stance: Agility Stance[/] (Probing Cadence & Overwhelm Crits; -20%% AoO vs Flanks)" Theme.Green
-        if player.Stance <> CombatStance.DisciplineStance then
-          sprintf "↺ [bold %s]Shift Stance: Discipline Stance[/] (Chained Strikes, Study Stacks & Unpenalized AoO)" Theme.Purple
+        let disciplineStrikes = [
+          sprintf "⚔️  [%s]Prowess Strike: Stance Pressure[/] (Discipline - Study Stacks vs. Poise)" Theme.Purple
+          sprintf "⚡ [bold %s]Prowess Strike: Invitational Bait[/] (Discipline Gambit: +35 Recklessness)" Theme.Purple
+          // Dedicated Discipline Gambits (cost Study Stacks with 0 Recklessness!)
+          if player.StudyStacks >= 2 then
+            sprintf "🎯 [bold %s]Calculated Flaw Strike[/] (Discipline Gambit: Spend Study Stacks for Vital Opening, 0 Recklessness)" Theme.Purple
+          if player.StudyStacks >= 3 then
+            sprintf "⚔️  [bold %s]Masterful Disarm[/] (Discipline Gambit: Spend Study Stacks to Degrade Opponent Weapon, 0 Recklessness)" Theme.Purple
+        ]
+
+        // Order strikes prioritizing player's primary class archetype vector
+        let martialStrikes =
+          match player.Class.Vector with
+          | Vector.Power -> powerStrikes @ agilityStrikes @ disciplineStrikes
+          | Vector.Agility -> agilityStrikes @ disciplineStrikes @ powerStrikes
+          | Vector.Discipline -> disciplineStrikes @ powerStrikes @ agilityStrikes
+
+        yield! martialStrikes
+
+        // Tactical Stance Shifts ordered by class archetype preference
+        let powerStanceShift =
+          if player.Stance <> CombatStance.PowerStance then
+            [ sprintf "↺ [bold %s]Shift Stance: Power Stance[/] (Sweeping Cleaves & Sunder Armor/Weapon)" Theme.Red ]
+          else []
+
+        let agilityStanceShift =
+          if player.Stance <> CombatStance.AgilityStance then
+            [ sprintf "↺ [bold %s]Shift Stance: Agility Stance[/] (Probing Cadence & Overwhelm Crits; -20%% AoO vs Flanks)" Theme.Green ]
+          else []
+
+        let disciplineStanceShift =
+          if player.Stance <> CombatStance.DisciplineStance then
+            [ sprintf "↺ [bold %s]Shift Stance: Discipline Stance[/] (Chained Strikes, Study Stacks & Unpenalized AoO)" Theme.Purple ]
+          else []
+
+        let stanceShifts =
+          match player.Class.Vector with
+          | Vector.Power -> powerStanceShift @ agilityStanceShift @ disciplineStanceShift
+          | Vector.Agility -> agilityStanceShift @ disciplineStanceShift @ powerStanceShift
+          | Vector.Discipline -> disciplineStanceShift @ powerStanceShift @ agilityStanceShift
+
+        yield! stanceShifts
 
         // Physical Defensive Reset
         sprintf "🛡️  [%s]Steady Form[/] (Physical Reset: Drain Recklessness via Poise, build Study)" Theme.Green
@@ -200,28 +234,63 @@ module Program =
           if prof < 85 then sprintf " [%s](%d%% Prof - Off-School Strain)[/]" Theme.Comment prof
           else sprintf " [bold %s](%d%% Prof - Specialization)[/]" Theme.Green prof
 
-        sprintf "✨ [%s]Arcane Cataclysm: Elemental Blast[/] (Power - Intellect vs. Resolve)%s" Theme.Pink (strainTag powProf)
-        if player.ComplexForm <> Some ComplexForm.AegisLattice then
-          sprintf "⚡ [bold %s]Arcane Cataclysm: Overchannel[/] (Power Gambit: +35 Recklessness, Splash)%s" Theme.Pink (strainTag powProf)
-        sprintf "✨ [%s]Synaptic Glamour: Neural Static[/] (Agility - Acuity vs. Intuition)%s" Theme.Purple (strainTag agiProf)
-        sprintf "⚡ [bold %s]Synaptic Glamour: Mind Fracture[/] (Agility Gambit: +25 Recklessness)%s" Theme.Purple (strainTag agiProf)
-        sprintf "🪞 [%s]Mirror Illusion: Phantasmal Decoys[/] (Agility - Weave Mirror Clones)%s" Theme.Purple (strainTag agiProf)
-        sprintf "⚡ [bold %s]Mirror Illusion: Decoy Swarm[/] (Agility Gambit: +25 Recklessness, Extra Clones)%s" Theme.Purple (strainTag agiProf)
-        sprintf "🛡️  [%s]Runic Ward Trap: Abjuration Glyph[/] (Discipline - Acumen vs. Composure, Ward)%s" Theme.Cyan (strainTag disProf)
-        sprintf "⚡ [bold %s]Runic Ward Trap: Anomalous Glyph[/] (Discipline Gambit: +30 Recklessness, Heavy Ward)%s" Theme.Cyan (strainTag disProf)
-        sprintf "🌀 [%s]Disorienting Shockwave: Balance Disruption[/] (Discipline - Break Posture & Tempo)%s" Theme.Orange (strainTag disProf)
-        sprintf "⚡ [bold %s]Disorienting Shockwave: Staggering Pulse[/] (Discipline Gambit: +25 Recklessness, Swarm Pulse)%s" Theme.Orange (strainTag disProf)
+        let powerSpells = [
+          sprintf "✨ [%s]Arcane Cataclysm: Elemental Blast[/] (Power - Intellect vs. Resolve)%s" Theme.Pink (strainTag powProf)
+          if player.ComplexForm <> Some ComplexForm.AegisLattice then
+            sprintf "⚡ [bold %s]Arcane Cataclysm: Overchannel[/] (Power Gambit: +35 Recklessness, Splash)%s" Theme.Pink (strainTag powProf)
+        ]
+
+        let agilitySpells = [
+          sprintf "✨ [%s]Synaptic Glamour: Neural Static[/] (Agility - Acuity vs. Intuition)%s" Theme.Purple (strainTag agiProf)
+          sprintf "⚡ [bold %s]Synaptic Glamour: Mind Fracture[/] (Agility Gambit: +25 Recklessness)%s" Theme.Purple (strainTag agiProf)
+          sprintf "🪞 [%s]Mirror Illusion: Phantasmal Decoys[/] (Agility - Weave Mirror Clones)%s" Theme.Purple (strainTag agiProf)
+          sprintf "⚡ [bold %s]Mirror Illusion: Decoy Swarm[/] (Agility Gambit: +25 Recklessness, Extra Clones)%s" Theme.Purple (strainTag agiProf)
+        ]
+
+        let disciplineSpells = [
+          sprintf "🛡️  [%s]Runic Ward Trap: Abjuration Glyph[/] (Discipline - Acumen vs. Composure, Ward)%s" Theme.Cyan (strainTag disProf)
+          sprintf "⚡ [bold %s]Runic Ward Trap: Anomalous Glyph[/] (Discipline Gambit: +30 Recklessness, Heavy Ward)%s" Theme.Cyan (strainTag disProf)
+          sprintf "🌀 [%s]Disorienting Shockwave: Balance Disruption[/] (Discipline - Break Posture & Tempo)%s" Theme.Orange (strainTag disProf)
+          sprintf "⚡ [bold %s]Disorienting Shockwave: Staggering Pulse[/] (Discipline Gambit: +25 Recklessness, Swarm Pulse)%s" Theme.Orange (strainTag disProf)
+        ]
+
+        let spells =
+          match player.Class.Vector with
+          | Vector.Power -> powerSpells @ agilitySpells @ disciplineSpells
+          | Vector.Agility -> agilitySpells @ disciplineSpells @ powerSpells
+          | Vector.Discipline -> disciplineSpells @ powerSpells @ agilitySpells
+
+        yield! spells
 
         // Tactical Complex Form Threading (Mental Stance Shifts)
-        if player.ComplexForm <> Some ComplexForm.ResonanceSpike then
-          sprintf "🧵 [bold %s]Thread Form: Resonance Spike[/] (+25%% Spell Dmg & Fatigue; Fading Drain)" Theme.Pink
-        if player.ComplexForm <> Some ComplexForm.PhantasmalDiffusion then
-          sprintf "🧵 [bold %s]Thread Form: Phantasmal Diffusion[/] (Decoy Evasion Swap, Passive Clones; -15%% Dmg)" Theme.Green
-        if player.ComplexForm <> Some ComplexForm.AegisLattice then
-          sprintf "🧵 [bold %s]Thread Form: Aegis Lattice[/] (+15 Ward/turn, Retribution Ward; Locks Overchannel)" Theme.Cyan
+        let powerForm =
+          if player.ComplexForm <> Some ComplexForm.ResonanceSpike then
+            [ sprintf "🧵 [bold %s]Thread Form: Resonance Spike[/] (+25%% Spell Dmg & Fatigue; Fading Drain)" Theme.Pink ]
+          else []
+
+        let agilityForm =
+          if player.ComplexForm <> Some ComplexForm.PhantasmalDiffusion then
+            [ sprintf "🧵 [bold %s]Thread Form: Phantasmal Diffusion[/] (Decoy Evasion Swap, Passive Clones; -15%% Dmg)" Theme.Green ]
+          else []
+
+        let disciplineForm =
+          if player.ComplexForm <> Some ComplexForm.AegisLattice then
+            [ sprintf "🧵 [bold %s]Thread Form: Aegis Lattice[/] (+15 Ward/turn, Retribution Ward; Locks Overchannel)" Theme.Cyan ]
+          else []
+
+        let forms =
+          match player.Class.Vector with
+          | Vector.Power -> powerForm @ agilityForm @ disciplineForm
+          | Vector.Agility -> agilityForm @ disciplineForm @ powerForm
+          | Vector.Discipline -> disciplineForm @ powerForm @ agilityForm
+
+        yield! forms
 
         // Mental Defensive Reset
         sprintf "🧠 [%s]Center Mind[/] (Mental Reset: Drain Recklessness, clear Confusion, restore Arcane Ward)" Theme.Cyan
+
+      // Universal Respiratory Regulation Reset (always available across all disciplines)
+      sprintf "🌬️  [%s]Steady Breathing[/] (Universal Reset: Deep breath vents Confusion, Frustration, Exhaustion & Overwhelm, restores Morale)" Theme.Cyan
     ]
 
   let private runInteractiveDuel (playerArch: ArchetypeInfo) (enemyArch: ArchetypeInfo) =
@@ -232,6 +301,14 @@ module Program =
     let mutable enemy = enemyArch.Factory ()
     let mutable round = 1
     let mutable combatOver = false
+    let mutable outcome = "PlayerDefeated"
+
+    let session =
+      CombatLogger.startSession
+        (sprintf "%s vs %s" playerArch.Name enemyArch.Name)
+        "Arena Tactical Duel"
+        player
+        enemy
 
     while not combatOver do
       Display.renderHUD player enemy round
@@ -247,10 +324,15 @@ module Program =
 
       let playerIntent = parseActionChoice choice
 
+      let playerBefore = player
+      let enemyBefore = enemy
+
       AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes %s...[/]" Theme.Green player.Name choice)
       let playerResult = ActionResolver.resolve roller playerIntent player enemy
       player <- playerResult.Actor
       enemy <- playerResult.Target
+
+      CombatLogger.recordTurn session round 1 choice playerBefore enemyBefore playerResult
 
       Display.renderRollBreakdown choice player.Name playerResult.Contest
       playerResult.Events |> List.iter Display.logEvent
@@ -261,6 +343,7 @@ module Program =
 
       if playerExecutedEnemy || enemy.Health.IsDepleted || enemy.Morale.IsDepleted then
         combatOver <- true
+        outcome <- "PlayerVictorious"
         AnsiConsole.WriteLine()
         AnsiConsole.Write(
           Rule(sprintf "[bold %s]★★★ VICTORY: %s HAS PREVAILED OVER %s! ★★★[/]" Theme.Green player.Name enemy.Name)
@@ -271,11 +354,17 @@ module Program =
         // 2. Enemy AI Turn
         AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s evaluates the field and responds...[/]" Theme.Pink enemy.Name)
         let enemyIntent = AI.chooseIntent enemy player
+
+        let enemyBeforeTurn = enemy
+        let playerBeforeTurn = player
+
         let enemyResult = ActionResolver.resolve roller enemyIntent enemy player
         enemy <- enemyResult.Actor
         player <- enemyResult.Target
 
         let intentDesc = sprintf "%A" enemyIntent
+        CombatLogger.recordTurn session round 2 intentDesc enemyBeforeTurn playerBeforeTurn enemyResult
+
         Display.renderRollBreakdown intentDesc enemy.Name enemyResult.Contest
         enemyResult.Events |> List.iter Display.logEvent
 
@@ -285,6 +374,7 @@ module Program =
 
         if enemyExecutedPlayer || player.Health.IsDepleted || player.Morale.IsDepleted then
           combatOver <- true
+          outcome <- "PlayerDefeated"
           AnsiConsole.WriteLine()
           AnsiConsole.Write(
             Rule(sprintf "[bold %s]☠☠☠ DEFEAT: %s HAS FALLEN TO %s! ☠☠☠[/]" Theme.Red player.Name enemy.Name)
@@ -298,7 +388,9 @@ module Program =
         Console.ReadKey(true) |> ignore
         round <- round + 1
 
+    let latestLog, _ = CombatLogger.writeSession session outcome player enemy
     AnsiConsole.WriteLine()
+    AnsiConsole.MarkupLine(sprintf "[dim grey]Tactical combat log saved to: %s[/]" latestLog)
     AnsiConsole.Markup(sprintf "[bold %s]Combat concluded. Press any key to return to menu...[/]" Theme.Yellow)
     Console.ReadKey(true) |> ignore
 
@@ -498,6 +590,13 @@ module Program =
     let mutable combatOver = false
     let mutable outcome = CombatOutcome.PlayerDefeated
 
+    let session =
+      CombatLogger.startSession
+        (sprintf "%s vs %s" currentCombatant.Name currentBoss.Name)
+        "Story / Tower Tactical Duel"
+        currentCombatant
+        currentBoss
+
     while not combatOver do
       Display.renderHUD currentCombatant currentBoss round
 
@@ -512,10 +611,15 @@ module Program =
 
       let playerIntent = parseActionChoice choice
 
+      let playerBefore = currentCombatant
+      let bossBefore = currentBoss
+
       AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes %s...[/]" Theme.Green currentCombatant.Name choice)
       let playerResult = ActionResolver.resolve roller playerIntent currentCombatant currentBoss
       currentCombatant <- playerResult.Actor
       currentBoss <- playerResult.Target
+
+      CombatLogger.recordTurn session round 1 choice playerBefore bossBefore playerResult
 
       Display.renderRollBreakdown choice currentCombatant.Name playerResult.Contest
       playerResult.Events |> List.iter Display.logEvent
@@ -537,11 +641,17 @@ module Program =
         // 2. Enemy AI Turn
         AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s lashes out with psychological fury...[/]" Theme.Pink currentBoss.Name)
         let enemyIntent = AI.chooseIntent currentBoss currentCombatant
+
+        let bossBeforeTurn = currentBoss
+        let playerBeforeTurn = currentCombatant
+
         let enemyResult = ActionResolver.resolve roller enemyIntent currentBoss currentCombatant
         currentBoss <- enemyResult.Actor
         currentCombatant <- enemyResult.Target
 
         let intentDesc = sprintf "%A" enemyIntent
+        CombatLogger.recordTurn session round 2 intentDesc bossBeforeTurn playerBeforeTurn enemyResult
+
         Display.renderRollBreakdown intentDesc currentBoss.Name enemyResult.Contest
         enemyResult.Events |> List.iter Display.logEvent
 
@@ -564,6 +674,11 @@ module Program =
         AnsiConsole.Markup(sprintf "[%s]Press any key to proceed to next round...[/]" Theme.Comment)
         Console.ReadKey(true) |> ignore
         round <- round + 1
+
+    let outcomeStr = if outcome = CombatOutcome.PlayerVictorious then "PlayerVictorious" else "PlayerDefeated"
+    let latestLog, _ = CombatLogger.writeSession session outcomeStr currentCombatant currentBoss
+    AnsiConsole.WriteLine()
+    AnsiConsole.MarkupLine(sprintf "[dim grey]Tactical combat log saved to: %s[/]" latestLog)
 
     outcome, currentCombatant
 

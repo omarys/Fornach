@@ -429,19 +429,29 @@ module ActionResolver =
       let prowess = resetActor.GetStat Prowess
       let reckDrain = poise + 10
       let exhaustDrain = 15 + (poise / 4)
-      let studyGain = Math.Max(1, prowess / 4)
+      let overwhelmDrain = 15 + (poise / 4)
+      let frustrateDrain = 15 + (poise / 4)
+      let studyGain = Math.Clamp(Math.Max(1, prowess / 4), 1, 6)
 
       let updatedActor =
         resetActor
         |> Combatant.updateMeters (fun m ->
           { m with
               Recklessness = m.Recklessness - reckDrain
-              Exhaustion = m.Exhaustion - exhaustDrain })
+              Exhaustion = m.Exhaustion - exhaustDrain
+              Overwhelm = m.Overwhelm - overwhelmDrain
+              Frustration = m.Frustration - frustrateDrain })
         |> Combatant.addStudyStacks studyGain
+        |> Combatant.stabilizeCollapse
+
+      let collapseEvts =
+        if CollapseState.isCollapsed resetActor.Collapse && not (CollapseState.isCollapsed updatedActor.Collapse) then
+          [ CombatEvent.CollapseRecovered actor.Id ]
+        else []
 
       { Actor = updatedActor
         Target = target
-        Events = [ resetEvt; CombatEvent.FormStabilized(actor.Id, reckDrain, studyGain) ]
+        Events = [ resetEvt; CombatEvent.FormStabilized(actor.Id, reckDrain, studyGain) ] @ collapseEvts
         Contest = None }
 
     | CenterMind ->
@@ -449,7 +459,10 @@ module ActionResolver =
       let acumen = resetActor.GetStat Acumen
       let reckDrain = composure + 10
       let fatigueDrain = 15 + (composure / 4)
-      let studyGain = Math.Max(1, acumen / 4)
+      let confusionDrain = Math.Max(15, composure / 2)
+      let provokeDrain = 15 + (composure / 4)
+      let frustrateDrain = 15 + (composure / 4)
+      let studyGain = Math.Clamp(Math.Max(1, acumen / 4), 1, 6)
       let profRatio = resetActor.GetArcaneProficiency Discipline
       let wardRestore = int (float acumen * 0.40 * profRatio)
 
@@ -458,19 +471,67 @@ module ActionResolver =
         |> Combatant.updateMeters (fun m ->
           { m with
               Recklessness = m.Recklessness - reckDrain
-              Confusion = m.Confusion - (composure / 2)
-              CognitiveFatigue = m.CognitiveFatigue - fatigueDrain })
+              Confusion = m.Confusion - confusionDrain
+              CognitiveFatigue = m.CognitiveFatigue - fatigueDrain
+              Provoke = m.Provoke - provokeDrain
+              Frustration = m.Frustration - frustrateDrain })
         |> Combatant.addStudyStacks studyGain
         |> Combatant.addWard wardRestore
+        |> Combatant.stabilizeCollapse
 
       let wardEvts =
         if wardRestore > 0 then
           [ CombatEvent.ArcaneWardErected(actor.Id, wardRestore, updatedActor.ArcaneWard) ]
         else []
 
+      let collapseEvts =
+        if CollapseState.isCollapsed resetActor.Collapse && not (CollapseState.isCollapsed updatedActor.Collapse) then
+          [ CombatEvent.CollapseRecovered actor.Id ]
+        else []
+
       { Actor = updatedActor
         Target = target
-        Events = [ resetEvt; CombatEvent.FormStabilized(actor.Id, reckDrain, studyGain) ] @ wardEvts
+        Events = [ resetEvt; CombatEvent.FormStabilized(actor.Id, reckDrain, studyGain) ] @ wardEvts @ collapseEvts
+        Contest = None }
+
+    | SteadyBreathing ->
+      let poise = resetActor.GetStat Poise
+      let composure = resetActor.GetStat Composure
+      let reckDrain = 20 + (poise + composure) / 6
+      let exhaustDrain = 20 + (poise / 4)
+      let overwhelmDrain = 20 + (poise / 4)
+      let frustrateDrain = 25 + (poise + composure) / 5
+      let fatigueDrain = 20 + (composure / 4)
+      let confusionDrain = 25 + (composure / 3)
+      let provokeDrain = 20 + (composure / 4)
+      let moraleRestore = 15 + (composure / 4)
+
+      let updatedActor =
+        resetActor
+        |> Combatant.updateMeters (fun m ->
+          { m with
+              Recklessness = m.Recklessness - reckDrain
+              Exhaustion = m.Exhaustion - exhaustDrain
+              Overwhelm = m.Overwhelm - overwhelmDrain
+              Frustration = m.Frustration - frustrateDrain
+              CognitiveFatigue = m.CognitiveFatigue - fatigueDrain
+              Confusion = m.Confusion - confusionDrain
+              Provoke = m.Provoke - provokeDrain })
+        |> fun a -> { a with Morale = a.Morale.ApplyDelta moraleRestore }
+        |> Combatant.stabilizeCollapse
+
+      let collapseEvts =
+        if CollapseState.isCollapsed resetActor.Collapse && not (CollapseState.isCollapsed updatedActor.Collapse) then
+          [ CombatEvent.CollapseRecovered actor.Id ]
+        else []
+
+      let summary =
+        sprintf "Vented %d Recklessness, %d Exhaustion, %d Overwhelm, %d Frustration, %d Fatigue, %d Confusion, %d Provoke"
+          reckDrain exhaustDrain overwhelmDrain frustrateDrain fatigueDrain confusionDrain provokeDrain
+
+      { Actor = updatedActor
+        Target = target
+        Events = [ resetEvt; CombatEvent.BreathStabilized(actor.Id, summary, moraleRestore) ] @ collapseEvts
         Contest = None }
 
   let private resolveShiftStance (newStance: CombatStance) (actor: Combatant) (target: Combatant) : ActionResult =

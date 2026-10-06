@@ -131,10 +131,12 @@ type AttackClassification =
 
 /// Defensive recoveries used to bleed accumulated Recklessness and re-center posture
 type DefensiveReset =
-  /// Physical reset: uses Poise to bleed Recklessness and generates Study Stacks
+  /// Physical reset: uses Poise to bleed Recklessness, vents physical strain, and generates Study Stacks
   | SteadyForm
-  /// Mental/Social reset: uses Composure to bleed Recklessness, clears Confusion, and generates Insight
+  /// Mental/Social reset: uses Composure to bleed Recklessness, clears mental strain, and generates Insight
   | CenterMind
+  /// Universal respiratory regulation: vents all dynamic status meters (Confusion, Frustration, Exhaustion, Overwhelm, etc.) and restores Morale
+  | SteadyBreathing
 
 /// Top-level intent dispatched to the resolution engine each turn
 type ActionIntent =

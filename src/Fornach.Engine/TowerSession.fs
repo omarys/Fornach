@@ -109,6 +109,7 @@ module TowerSession =
     let nextFloor = TowerGenerator.generateFloorWithMode state.Seed nextFloorNum state.IsStoryMode
     let nextState =
       { state with
+          Player = { state.Player with Meters = StatusMeters.Zero }
           CurrentFloor = nextFloor
           PlayerPosition = nextFloor.SpawnLocation
           Facing = Some Direction.North
@@ -205,11 +206,16 @@ module TowerSession =
         let updatedEntities = Map.add targetPt (EntityShrine updatedShrine) state.CurrentFloor.Entities
         let updatedFloor = { state.CurrentFloor with Entities = updatedEntities }
 
-        // Blessing: restore 40 morale, reset recklessness to 0
+        // Blessing: fully restore health and morale, repair armor, restore weapon, purge debuffs, reset recklessness to 0
         let blessedPlayer =
           { state.Player with
-              Morale = state.Player.Morale.ApplyDelta 40
-              Meters = { state.Player.Meters with Recklessness = Meter.Zero } }
+              Health = Pool.Create state.Player.Health.Maximum
+              Morale = Pool.Create state.Player.Morale.Maximum
+              Armor = ArmorIntegrity.Create state.Player.Armor.Max
+              WeaponCondition = WeaponCondition.Pristine
+              BleedStacks = 0
+              LimbDebuff = 0
+              Meters = StatusMeters.Zero }
 
         events <- [ TowerEvent.ShrineActivated shrine ]
         let logMsg = sprintf "Communed with %s: %s" shrine.Name shrine.BlessingDescription

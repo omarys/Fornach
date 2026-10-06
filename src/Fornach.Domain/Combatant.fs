@@ -213,10 +213,10 @@ type Combatant =
   static member updateMeters (updater: StatusMeters -> StatusMeters) (c: Combatant) =
     { c with Meters = updater c.Meters }
 
-  /// Adds or drains study/insight stacks, bounded at zero
+  /// Adds or drains study/insight stacks, bounded between 0 and 15
   static member addStudyStacks delta (c: Combatant) =
     { c with
-        StudyStacks = Math.Max(0, c.StudyStacks + delta) }
+        StudyStacks = Math.Clamp(c.StudyStacks + delta, 0, 15) }
 
   /// Modifies active Arcane Ward barrier absorption pool
   static member addWard delta (c: Combatant) =
@@ -313,3 +313,22 @@ type Combatant =
         { c with
             Collapse = CollapseState.Collapsed reason }
       | None -> c
+
+  /// Restores a collapsed combatant to Stable if all status meters have dropped below 100%
+  static member stabilizeCollapse(c: Combatant) : Combatant =
+    match c.Collapse with
+    | CollapseState.Collapsed _ ->
+      let m = c.Meters
+      let hasBreached =
+        m.Recklessness.Value >= 100
+        || m.Exhaustion.Value >= 100
+        || m.Overwhelm.Value >= 100
+        || m.Frustration.Value >= 100
+        || m.CognitiveFatigue.Value >= 100
+        || m.Confusion.Value >= 100
+        || m.Provoke.Value >= 100
+      if not hasBreached then
+        { c with Collapse = CollapseState.Stable }
+      else
+        c
+    | CollapseState.Stable -> c

@@ -101,11 +101,26 @@ module Display =
   let renderBar (label: string) (current: int) (maxVal: int) (colorHex: string) =
     let safeMax = Math.Max(1, maxVal)
     let safeCurr = Math.Clamp(current, 0, safeMax)
-    let pct = Math.Clamp(int (Math.Round((float safeCurr / float safeMax) * 20.0)), 0, 20)
-    let filled = String('█', pct)
-    let empty = String('░', 20 - pct)
-    sprintf "%-22s [%s]%s[/][%s]%s[/] [bold %s]%5d[/] [%s]/[/] [%s]%-5d[/]"
-      label colorHex filled Theme.CurrentLine empty Theme.Foreground safeCurr Theme.Comment Theme.Comment safeMax
+    let pctRatio = float safeCurr / float safeMax
+    let pctInt = int (Math.Round(pctRatio * 100.0))
+    let barUnits = Math.Clamp(int (Math.Round(pctRatio * 20.0)), 0, 20)
+    let filled = String('█', barUnits)
+    let empty = String('░', 20 - barUnits)
+
+    let dynamicColor, alertTag =
+      if label.Contains("HP") || label.Contains("Health") then
+        if pctInt > 60 then Theme.Green, ""
+        elif pctInt >= 25 then Theme.Yellow, sprintf " [%s](Wounded)[/]" Theme.Yellow
+        else Theme.Red, sprintf " [bold blink %s]⚠ CRITICAL[/]" Theme.Red
+      elif label.Contains("Morale") then
+        if pctInt > 60 then colorHex, ""
+        elif pctInt >= 25 then Theme.Yellow, sprintf " [%s](Shaken)[/]" Theme.Yellow
+        else Theme.Red, sprintf " [bold blink %s]⚠ BREAKING[/]" Theme.Red
+      else
+        colorHex, ""
+
+    sprintf "%-22s [%s]%s[/][grey27]%s[/] [bold %s]%5d[/] [%s]/[/] [%s]%-5d[/] [bold %s](%3d%%)[/]%s"
+      label dynamicColor filled empty dynamicColor safeCurr Theme.Comment Theme.Comment safeMax dynamicColor pctInt alertTag
 
   let renderMeter (label: string) (m: Meter) (colorHex: string) =
     let pct = Math.Clamp(int (Math.Round((float m.Value / 100.0) * 15.0)), 0, 15)
@@ -335,6 +350,12 @@ module Display =
 
     | CombatEvent.FormStabilized (_, drained, gained) ->
       AnsiConsole.MarkupLine(sprintf "  [bold %s]✓ FORM STABILIZED:[/] Drained [bold %s]%d Recklessness[/], gained [bold %s]%d Study Stacks[/]." Theme.Green Theme.Green drained Theme.Purple gained)
+
+    | CombatEvent.BreathStabilized (_, summary, morale) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🌬 STEADY BREATHING:[/] %s (+[bold %s]%d Morale[/])." Theme.Cyan summary Theme.Green morale)
+
+    | CombatEvent.CollapseRecovered _ ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]✦ POSTURE RECOVERED:[/] All strain meters vented below critical thresholds; collapsed state cleared!" Theme.Green)
 
     | CombatEvent.ComboReset (_, reason) ->
       AnsiConsole.MarkupLine(sprintf "  [%s]• COMBO RESET:[/] %s" Theme.Comment reason)

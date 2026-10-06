@@ -367,7 +367,7 @@ module TowerGenerator =
     let shrine =
       { Id = sprintf "shrine_floor_%d" floorNumber
         Name = sprintf "Monolith of %s" theme.Name
-        BlessingDescription = "Restores 40 Morale and calms accumulated Recklessness."
+        BlessingDescription = "Fully restores Health and Morale, repairs damaged Armor, restores Weapon to Pristine, and calms accumulated Recklessness."
         IsUsed = false }
 
     entities <- Map.add shrinePos (EntityShrine shrine) entities
