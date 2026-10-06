@@ -20,6 +20,7 @@
     <Compile Include="ParallelDeterminismTests.fs" />
     <Compile Include="BestiaryTests.fs" />
     <Compile Include="BestiarySwarmTests.fs" />
+    <Compile Include="CliMarkupTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

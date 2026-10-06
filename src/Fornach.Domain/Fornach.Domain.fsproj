@@ -48,6 +48,9 @@
 
     <!-- 12. The Infinite Roguelike Tower Domain Model -->
     <Compile Include="TowerModel.fs" />
+
+    <!-- 13. Grief Aspect Bosses and Story Combatants -->
+    <Compile Include="Bosses.fs" />
   </ItemGroup>
 
   <ItemGroup>

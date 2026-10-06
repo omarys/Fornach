@@ -28,24 +28,28 @@ let ``StoryRunner properly invokes bound F# callbacks when stepping through Ink 
 
   let awardedMemories = ResizeArray<string>()
 
+  let mutable chosenClass = ""
   let runner =
     StoryRunner(
       inkJson,
       player,
-      onMemoryAwarded = (fun mem -> awardedMemories.Add mem.Id)
+      onMemoryAwarded = (fun mem -> awardedMemories.Add mem.Id),
+      onClassChosen = (fun cls -> chosenClass <- cls)
     )
 
   // 1. Initial waking text
   let initialEvents = runner.ContinueToNextEvent()
   Assert.NotEmpty initialEvents
-  Assert.Equal(2, runner.CurrentChoices.Length)
+  Assert.Equal(4, runner.CurrentChoices.Length)
 
-  // 2. Select choice 0: Scavenge the belt for weapons -> leads to boy_encounter
+  // 2. Select choice 0: Draw two-handed greatsword (Berserker) -> leads to boy_encounter
   runner.ChooseChoice 0
   let boyEvents = runner.ContinueToNextEvent()
   Assert.NotEmpty boyEvents
 
-  // Assert callback was invoked for rain_and_headlights
+  // Assert callbacks were invoked
+  Assert.Equal("Berserker", chosenClass)
+  Assert.Contains("prepared_mind", awardedMemories)
   Assert.Contains("rain_and_headlights", awardedMemories)
 
 [<Fact>]
@@ -56,9 +60,9 @@ let ``Memory tags awarded in story accurately reflect on the player's aggregate 
   let inkJson = StoryRunner.LoadPrologueJson ()
   let runner = StoryRunner(inkJson, player)
 
-  // Step waking -> choice 1 (inspect pouches -> prepared_mind)
+  // Step waking -> choice 0 (greatsword -> prepared_mind awarded)
   runner.ContinueToNextEvent() |> ignore
-  runner.ChooseChoice 1
+  runner.ChooseChoice 0
   runner.ContinueToNextEvent() |> ignore
 
   // Both prepared_mind and rain_and_headlights should be in runner.Memories
@@ -128,7 +132,7 @@ let ``Losing an encounter successfully reroutes the Ink story engine to the game
   Assert.Contains("oncoming truck", textJoined)
   Assert.Contains("phantom horn", textJoined)
   // Story has looped back to waking choices
-  Assert.Equal(2, runner.CurrentChoices.Length)
+  Assert.Equal(4, runner.CurrentChoices.Length)
 
 [<Fact>]
 let ``Winning combat encounter advances story to post_combat and awards shattered windshield``
@@ -165,11 +169,11 @@ let ``Winning combat encounter advances story to post_combat and awards shattere
 [<Fact>]
 let ``StoryBosses resolves all 5 Grief Aspects with correct stances and pools`` () =
   let testCases =
-    [ ("denial_aspect", "Aspect of Denial", CombatStance.AgilityStance, 240)
-      ("anger_aspect", "Aspect of Anger", CombatStance.PowerStance, 420)
-      ("bargaining_aspect", "Aspect of Bargaining", CombatStance.DisciplineStance, 310)
-      ("depression_aspect", "Aspect of Depression", CombatStance.DisciplineStance, 480)
-      ("acceptance_aspect", "Aspect of Acceptance", CombatStance.DisciplineStance, 350) ]
+    [ ("denial_aspect", "Aspect of Denial", CombatStance.AgilityStance, 2600)
+      ("anger_aspect", "Aspect of Anger", CombatStance.PowerStance, 3300)
+      ("bargaining_aspect", "Aspect of Bargaining", CombatStance.DisciplineStance, 3100)
+      ("depression_aspect", "Aspect of Depression", CombatStance.DisciplineStance, 3800)
+      ("acceptance_aspect", "Aspect of Acceptance", CombatStance.DisciplineStance, 4400) ]
 
   for (enemyId, expectedName, expectedStance, expectedHealth) in testCases do
     let boss = StoryBosses.createEnemy enemyId
@@ -184,7 +188,7 @@ let ``Denial Aspect initializes with mirror clones and evasion focus`` () =
   Assert.Equal(2, denial.MirrorClones)
   Assert.True(denial.Stats.Get StatId.Finesse >= 100)
   Assert.True(denial.Stats.Get StatId.Reflex >= 100)
-  Assert.Equal(30, denial.Armor.Max)
+  Assert.Equal(120, denial.Armor.Max)
 
 [<Fact>]
 let ``Anger Aspect initializes with high initial recklessness and overpowering kinetic stats`` () =
@@ -198,7 +202,7 @@ let ``Anger Aspect initializes with high initial recklessness and overpowering k
 let ``Depression Aspect initializes with cognitive fatigue and impenetrable fortitude`` () =
   let depression = StoryBosses.createEnemy "depression"
   Assert.Equal(40, depression.Meters.CognitiveFatigue.Value)
-  Assert.Equal(120, depression.Armor.Max)
+  Assert.Equal(200, depression.Armor.Max)
   Assert.True(depression.Stats.Get StatId.Fortitude >= 130)
 
 [<Fact>]
@@ -206,7 +210,7 @@ let ``Acceptance Aspect initializes with equilibrium meters and high resolve`` (
   let acceptance = StoryBosses.createEnemy "acceptance"
   Assert.Equal(0, acceptance.Meters.Recklessness.Value)
   Assert.Equal(0, acceptance.Meters.CognitiveFatigue.Value)
-  Assert.Equal(500, acceptance.Morale.Current)
+  Assert.Equal(4100, acceptance.Morale.Current)
   Assert.True(acceptance.Stats.Get StatId.Resolve >= 90)
 
 [<Fact>]

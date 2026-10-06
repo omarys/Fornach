@@ -262,11 +262,11 @@ module EnvironmentScenes =
             grid.AddRow(Text("")) |> ignore
 
           let beamColor = if step % 2 = 0 then "bold yellow on black" else "bold white on yellow3"
-          let row0 = sprintf "[%s]%s[/]" beamColor cars.[0]
-          let row1 = sprintf "[bold red]%s[/]" cars.[1]
-          let row2 = sprintf "[grey]%s[/]" cars.[2]
-          let row3 = sprintf "[bold cyan]%s[/]" cars.[3]
-          let row4 = sprintf "[bold gold1]%s[/]" cars.[4]
+          let row0 = sprintf "[%s]%s[/]" beamColor (Markup.Escape cars.[0])
+          let row1 = sprintf "[bold red]%s[/]" (Markup.Escape cars.[1])
+          let row2 = sprintf "[grey]%s[/]" (Markup.Escape cars.[2])
+          let row3 = sprintf "[bold cyan]%s[/]" (Markup.Escape cars.[3])
+          let row4 = sprintf "[bold gold1]%s[/]" (Markup.Escape cars.[4])
 
           grid.AddRow(Markup(row0)) |> ignore
           grid.AddRow(Markup(row1)) |> ignore

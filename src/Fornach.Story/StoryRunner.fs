@@ -11,12 +11,14 @@ type StoryRunner
     inkJson: string,
     player: Combatant,
     ?onDeathAnimation: unit -> unit,
-    ?onMemoryAwarded: StoryMemory -> unit
+    ?onMemoryAwarded: StoryMemory -> unit,
+    ?onClassChosen: string -> unit
   ) =
   let story = Story(inkJson)
   let mutable state = NarrativeState.Create player
   let deathAnim = defaultArg onDeathAnimation ignore
   let memoryCallback = defaultArg onMemoryAwarded ignore
+  let classCallback = defaultArg onClassChosen ignore
 
   let mutable pendingCombatEnemyId: string option = None
   let mutable lastCombatOutcome: CombatOutcome option = None
@@ -52,12 +54,24 @@ type StoryRunner
         box hasPrep)
     )
 
+    // 4. Bind external function: choose_class(class_name)
+    story.BindExternalFunction(
+      "choose_class",
+      Func<string, obj>(fun (className: string) ->
+        classCallback className
+        box ())
+    )
+
   member this.Story = story
   member this.State = state
   member this.Player = state.Player
   member this.Memories = state.Memories
   member this.PendingCombat = pendingCombatEnemyId
   member this.CanContinue = story.canContinue
+
+  /// Updates the player combatant in the story state (e.g. after class selection or victory rewards)
+  member this.UpdatePlayer(updated: Combatant) =
+    state <- { state with Player = updated }
   member this.LastCombatOutcome = lastCombatOutcome
 
   /// Continues the story and yields text events until a choice point, combat trigger, or story end.

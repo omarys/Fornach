@@ -127,11 +127,11 @@ module TowerDisplay =
             None
           | LockedByKey(_, keyName, hint) ->
             "⮝", "Sealed Ascension Door",
-            sprintf "Heavy iron vault portal sealed tight. Requires: [%s]. Hint: %s" keyName hint,
+            sprintf "Heavy iron vault portal sealed tight. Requires: [[%s]]. Hint: %s" keyName hint,
             Some (sprintf "[bold %s]LOCKED:[/] Collect key to unlock." Theme.Orange)
           | LockedByQuest(_, questTitle, req) ->
             "⮝", "Barred Ascension Portal",
-            sprintf "Ascension barred by architectural trial: [%s]. Requirement: %s" questTitle req,
+            sprintf "Ascension barred by architectural trial: [[%s]]. Requirement: %s" questTitle req,
             Some (sprintf "[bold %s]TRIAL ACTIVE:[/] Complete trial to pass." Theme.Purple)
         | None ->
           " ", "Chamber Void", "Unbounded space outside chamber walls.", None
@@ -191,7 +191,7 @@ module TowerDisplay =
                 sprintf "%A" c.Stance
             let familyPrefix =
               match c.MonsterFamily with
-              | Some f -> sprintf "[bold %s][%s][/] " Theme.Purple f.Name
+              | Some f -> sprintf "[bold %s][[%s]][/] " Theme.Purple f.Name
               | None -> ""
             let traitsSuffix =
               if c.MonsterTraits.IsEmpty then ""
@@ -554,8 +554,8 @@ module TowerDisplay =
       grid.AddRow(Markup(sprintf "[bold %s]─── 󱁕 ACTIVE TRIALS ───[/]" Theme.Purple)) |> ignore
       for q in state.CurrentFloor.ActiveQuests do
         let status =
-          if q.IsCompleted then sprintf "[bold %s][COMPLETED][/]" Theme.Green
-          else sprintf "[bold %s][IN PROGRESS][/]" Theme.Yellow
+          if q.IsCompleted then sprintf "[bold %s][[COMPLETED]][/]" Theme.Green
+          else sprintf "[bold %s][[IN PROGRESS]][/]" Theme.Yellow
         grid.AddRow(Markup(sprintf "• %s: %s" q.Title status)) |> ignore
 
     // Legend
@@ -580,7 +580,7 @@ module TowerDisplay =
 
     let logText =
       recent
-      |> List.map (sprintf "[%s]󰁔[/] [bold %s]%s[/]" Theme.Pink Theme.Foreground)
+      |> List.map (fun msg -> sprintf "[%s]󰁔[/] [bold %s]%s[/]" Theme.Pink Theme.Foreground (Markup.Escape msg))
       |> String.concat "\n"
 
     Panel(Markup(logText))
@@ -649,16 +649,17 @@ module TowerDisplay =
   let showHelpManual () =
     Display.showSymbolAndGlyphLegend ()
 
-  /// Main interactive turn loop for Tower dungeon crawling
-  let runTowerCrawl
+  /// Main interactive turn loop for Tower dungeon crawling and Story Mode stage exploration
+  let runTowerCrawlWithMode
     (initialPlayer: Combatant)
     (startFloor: int)
     (onCombatDuel: Combatant -> Combatant -> (CombatOutcome * Combatant))
-    (onDefeatAnimation: unit -> unit) : unit =
+    (onDefeatAnimation: unit -> unit)
+    (isStory: bool) : unit =
 
     let rng = Random()
     let seed = rng.Next(10000, 99999)
-    let mutable state = TowerSession.initSession initialPlayer seed startFloor
+    let mutable state = TowerSession.initSessionWithMode initialPlayer seed startFloor isStory
     let mutable sessionActive = true
     let mutable inspectCursor : Point option = None
 
@@ -681,12 +682,28 @@ module TowerDisplay =
             .Centered()
             .RuleStyle(Theme.StyleYellow)
         | None ->
-          Rule(sprintf "[bold %s]󰒋 FORNACH: THE INFINITE TOWER ── FLOOR %d: %s[/]"
-            state.CurrentFloor.Theme.ColorHex
-            state.CurrentFloor.FloorNumber
-            state.CurrentFloor.Theme.Name)
-            .Centered()
-            .RuleStyle(Style(foreground = Nullable (themeColor state.CurrentFloor.Theme)))
+          if state.IsStoryMode && state.CurrentFloor.FloorNumber <= 6 then
+            let stageName =
+              match state.CurrentFloor.FloorNumber with
+              | 1 -> "PROLOGUE: GUILT & HESITATION"
+              | 2 -> "STAGE 1: DENIAL"
+              | 3 -> "STAGE 2: ANGER"
+              | 4 -> "STAGE 3: BARGAINING"
+              | 5 -> "STAGE 4: DEPRESSION"
+              | _ -> "STAGE 5: ACCEPTANCE"
+            Rule(sprintf "[bold %s]󰈙 FORNACH: %s ── %s[/]"
+              state.CurrentFloor.Theme.ColorHex
+              stageName
+              state.CurrentFloor.Theme.Name)
+              .Centered()
+              .RuleStyle(Style(foreground = Nullable (themeColor state.CurrentFloor.Theme)))
+          else
+            Rule(sprintf "[bold %s]󰒋 FORNACH: THE INFINITE TOWER ── FLOOR %d: %s[/]"
+              state.CurrentFloor.Theme.ColorHex
+              state.CurrentFloor.FloorNumber
+              state.CurrentFloor.Theme.Name)
+              .Centered()
+              .RuleStyle(Style(foreground = Nullable (themeColor state.CurrentFloor.Theme)))
 
       AnsiConsole.Write(floorRule)
       match inspectCursor with
@@ -781,9 +798,20 @@ module TowerDisplay =
             match ev with
             | TowerEvent.CombatTriggered enemy ->
               AnsiConsole.WriteLine()
+              let isBoss = enemy.Id.StartsWith("boss_") || enemy.Name.StartsWith("Aspect of")
+
+              if isBoss then
+                let scene = EnvironmentScenes.getSceneForEnemy enemy.Name
+                AnsiConsole.Clear()
+                AnsiConsole.Write(EnvironmentScenes.renderSceneHeader scene)
+                AnsiConsole.WriteLine()
+                AnsiConsole.Write(EnvironmentScenes.renderBossEncounterCard enemy.Combatant scene)
+                AnsiConsole.WriteLine()
+
               let choice =
                 Display.promptSelectionWithHelp
-                  (sprintf "[bold red]󰈸 A formidable foe blocks your path: %s![/]" enemy.Name)
+                  (sprintf "[bold red]󰈸 %s blocks your path: %s![/]"
+                    (if isBoss then "TRAUMA MANIFESTATION" else "A formidable foe") enemy.Name)
                   [
                     "󰓥  Engage in Tactical Dueling Combat"
                     "⚡  Quick Resolve (Overcome with Standard Prowess)"
@@ -797,21 +825,55 @@ module TowerDisplay =
                 if outcome = CombatOutcome.PlayerVictorious then
                   state <- { state with Player = updatedPlayer }
                   state <- TowerSession.resolveEnemyDefeat enemy.Id state
-                  AnsiConsole.MarkupLine(sprintf "\n[bold %s]Guardian vanquished! You reclaim control of the floor.[/]" Theme.Green)
-                  Thread.Sleep(900)
+
+                  if isBoss then
+                    let memoryTitle, memoryDesc =
+                      match state.CurrentFloor.FloorNumber with
+                      | 1 -> "Shattered Windshield", "In the puddle at your feet, you see the reflection of a crumpled sedan, a shattered crosswalk signal, and a girl's hand slipping from your grasp."
+                      | 2 -> "Broken Yellow Umbrella", "A crumpled yellow umbrella crushed beneath tire treads. The mist parts as the illusion shatters."
+                      | 3 -> "Shouting in the Hallway", "Harsh, regretful words screamed just minutes before the fatal crossing. The burning rage cools into quiet ash."
+                      | 4 -> "Hospital Heart Monitors", "The steady, frantic beeping of intensive care monitors. The desperate trades whispered in the dark."
+                      | 5 -> "The Empty Bedroom", "The suffocating stillness of walking past an untouched bedroom. The weight of absence."
+                      | _ -> "The Crosswalk Intersection", "The white lilies blur into headlights and rain. The collision was not your fault. Acceptance at last."
+                    let memPanel =
+                      Panel(Markup(sprintf "[bold gold1]★ TRAUMA MEMORY OVERCOME:[/] [bold white]%s[/]\n[italic grey]%s[/]" memoryTitle memoryDesc))
+                        .Border(BoxBorder.Heavy)
+                        .BorderStyle(Style(foreground = Nullable Color.Gold1))
+                    AnsiConsole.Clear()
+                    AnsiConsole.Write(memPanel)
+                    AnsiConsole.WriteLine()
+                    AnsiConsole.MarkupLine(sprintf "[bold %s]The Ascension Door unlocks! You may now step through the portal.[/]\n" Theme.Green)
+                    AnsiConsole.MarkupLine(sprintf "[%s]Press any key to resume exploration...[/]" Theme.Comment)
+                    Console.ReadKey(true) |> ignore
+                  else
+                    AnsiConsole.MarkupLine(sprintf "\n[bold %s]Adversary vanquished! You harvest their souls and alchemical trophies.[/]" Theme.Green)
+                    Thread.Sleep(900)
                 else
                   onDefeatAnimation()
-                  // Player defeat: reset at floor spawn with restored vitals
+                  // Player defeat: reset at floor spawn with 100% restored vitals
                   let restoredPlayer =
                     { state.Player with
-                        Health = state.Player.Health.ApplyDelta 100
-                        Morale = state.Player.Morale.ApplyDelta 100 }
+                        Health = Pool.Create state.Player.Health.Maximum
+                        Morale = Pool.Create state.Player.Morale.Maximum
+                        Armor = ArmorIntegrity.Create state.Player.Armor.Max
+                        Meters = StatusMeters.Zero }
+                  // Respawn non-boss grinding mobs so player can grind again
+                  let respawnedEntities =
+                    state.CurrentFloor.Entities
+                    |> Map.map (fun _ ent ->
+                      match ent with
+                      | EntityEnemy e when not (e.Id.StartsWith("boss_")) -> EntityEnemy { e with IsDefeated = false }
+                      | other -> other)
+                  let updatedFloor = { state.CurrentFloor with Entities = respawnedEntities }
                   state <-
                     { state with
                         Player = restoredPlayer
                         PlayerPosition = state.CurrentFloor.SpawnLocation
-                        MessageLog = "Rewound through the misty intersection. You awaken at the chamber entrance." :: state.MessageLog }
+                        CurrentFloor = updatedFloor
+                        MessageLog = "Truck-kun strikes! Rewound through the trauma loop. You awaken at the entrance. All souls, trophies, and gear preserved!" :: state.MessageLog }
                   state <- TowerSession.updateFov state
+                  AnsiConsole.MarkupLine(sprintf "\n[bold red]Trauma loop reset! Rewound to entrance. Health restored, progression preserved. Grind and prepare![/]")
+                  Thread.Sleep(1200)
 
               elif choice.Contains("Quick Resolve") then
                 let strainedPlayer =
@@ -820,12 +882,54 @@ module TowerDisplay =
                       Morale = state.Player.Morale.ApplyDelta -10 }
                 state <- { state with Player = strainedPlayer }
                 state <- TowerSession.resolveEnemyDefeat enemy.Id state
-                AnsiConsole.MarkupLine(sprintf "\n[bold %s]With steady resolve, you shatter the guardian's stance![/]" Theme.Green)
+                AnsiConsole.MarkupLine(sprintf "\n[bold %s]With steady resolve, you shatter the foe's stance![/]" Theme.Green)
                 Thread.Sleep(700)
 
               else
                 // Disengage
                 ()
+
+            | TowerEvent.ChestOpened(chest, _, _) when chest.Id = "battered_chest" ->
+              AnsiConsole.WriteLine()
+              let choices =
+                [ "🗡️ Two-handed Greatsword (Berserker) — Ferocious momentum, sweeping cleaves & high force"
+                  "🤺 Paired Stiletto & Rapier (Duelist) — Fencing precision, high reflex, agile cadences"
+                  "🛡️ Arming Sword & Reinforced Shield (Warden) — Bastion defense, fortress poise, counterplay"
+                  "🪄 Carved Ash Staff (Inquisitor) — Arcane resonance, psionic intellect, mental clarity" ]
+              let choice =
+                Display.promptSelectionWithHelp
+                  (sprintf "[bold %s]⌹ SCAVENGING THE BATTERED CHEST (Lock Broken)[/]\n[italic %s]Choose your weapon armament and awaken your class:[/]"
+                    Theme.Yellow Theme.Comment)
+                  choices
+                  None
+                  (fun () -> ())
+              let chosenClass =
+                if choice.Contains("Berserker") then "berserker"
+                elif choice.Contains("Duelist") then "duelist"
+                elif choice.Contains("Warden") then "warden"
+                else "inquisitor"
+              let updatedPlayer = StoryBosses.createProloguePlayer chosenClass
+              state <- { state with Player = updatedPlayer; InventoryItems = updatedPlayer.EquippedItems @ state.InventoryItems }
+              let weapon = updatedPlayer.EquippedItems |> List.tryHead |> Option.map (fun w -> w.Name) |> Option.defaultValue "Armament"
+              let panel =
+                Panel(Markup(sprintf "[bold %s]󰓥 CLASS AWAKENED: %s[/]\n[italic white]Equipped: %s  •  Combat Stance: %A[/]\n[grey]Bundle of sharpened caltrops recovered inside lid.[/]"
+                  Theme.Green (updatedPlayer.Class.Name.ToUpperInvariant()) weapon updatedPlayer.Stance))
+                  .Border(BoxBorder.Heavy)
+                  .BorderStyle(Style(foreground = Nullable Theme.ColorGreen))
+              AnsiConsole.Clear()
+              AnsiConsole.Write(panel)
+              AnsiConsole.WriteLine()
+              AnsiConsole.MarkupLine(sprintf "[%s]Press any key to step into the quarry...[/]" Theme.Comment)
+              Console.ReadKey(true) |> ignore
+
+            | TowerEvent.ChestOpened(chest, itemOpt, _) ->
+              AnsiConsole.WriteLine()
+              let rewardText =
+                match itemOpt with
+                | Some item -> sprintf "[bold %s]Relic Discovered:[/] %s\n[italic grey]%s[/]" Theme.Yellow item.Name item.Description
+                | None -> "The chest mechanisms yield."
+              AnsiConsole.MarkupLine(sprintf "\n[bold %s]⌹ %s[/]\n%s" Theme.Yellow chest.Description rewardText)
+              Thread.Sleep(900)
 
             | TowerEvent.NpcInteracted(npc, _) ->
               showNpcDialog npc
@@ -894,7 +998,7 @@ module TowerDisplay =
               AnsiConsole.WriteLine()
               let puzzleInfo =
                 match vault.Puzzle with
-                | KeyholeLock (_, name, hint) -> sprintf "Locked by key: [%s] (%s)" name hint
+                | KeyholeLock (_, name, hint) -> sprintf "Locked by key: [[%s]] (%s)" name hint
                 | StatCheck (stat, req, desc) -> sprintf "Stat Requirement: %d %A (%s)" req stat desc
                 | MemoryCipher (riddle, _) -> sprintf "Cipher: \"%s\"" riddle
 
@@ -937,15 +1041,41 @@ module TowerDisplay =
               Thread.Sleep(700)
 
             | TowerEvent.StairwayAscended nextFloorNum ->
-              AnsiConsole.Clear()
-              AnsiConsole.Write(
-                Rule(sprintf "[bold %s]★★★ ASCENDED TO FLOOR %d: %s ★★★[/]" Theme.Yellow nextFloorNum state.CurrentFloor.Theme.Name)
-                  .Centered()
-                  .RuleStyle(Theme.StyleYellow)
-              )
-              AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s[/]" Theme.Foreground state.CurrentFloor.Theme.Description)
-              AnsiConsole.MarkupLine(sprintf "[%s]Stepping into the vast new chamber...[/]" Theme.Comment)
-              Thread.Sleep(1200)
+              if state.IsStoryMode && nextFloorNum = 7 then
+                EnvironmentScenes.playCrosswalkTowerTransition ()
+                AnsiConsole.Clear()
+                AnsiConsole.Write(
+                  Rule(sprintf "[bold %s]★★★ THE INFINITE TOWER UNLOCKED ★★★[/]" Theme.Yellow)
+                    .Centered()
+                    .RuleStyle(Theme.StyleYellow)
+                )
+                AnsiConsole.MarkupLine(sprintf "\n[bold %s]You have conquered the 5 Grief Stages and freed yourself from the trauma loop.[/]" Theme.Green)
+                AnsiConsole.MarkupLine(sprintf "[%s]The boundless, infinite floors of the Tower now stretch endlessly before you...[/]\n" Theme.Comment)
+                AnsiConsole.MarkupLine(sprintf "[%s]Press any key to begin ascending the Infinite Tower...[/]" Theme.Yellow)
+                Console.ReadKey(true) |> ignore
+              elif state.IsStoryMode && nextFloorNum <= 6 then
+                let nextScene = EnvironmentScenes.getSceneForEnemy (
+                  match nextFloorNum with
+                  | 2 -> "denial_aspect"
+                  | 3 -> "anger_aspect"
+                  | 4 -> "bargaining_aspect"
+                  | 5 -> "depression_aspect"
+                  | _ -> "acceptance_aspect")
+                AnsiConsole.Clear()
+                AnsiConsole.Write(EnvironmentScenes.renderSceneHeader nextScene)
+                AnsiConsole.WriteLine()
+                AnsiConsole.MarkupLine(sprintf "[bold %s]Ascended to %s! Stepping into the new stage...[/]" Theme.Yellow nextScene.LocationName)
+                Thread.Sleep(1500)
+              else
+                AnsiConsole.Clear()
+                AnsiConsole.Write(
+                  Rule(sprintf "[bold %s]★★★ ASCENDED TO FLOOR %d: %s ★★★[/]" Theme.Yellow nextFloorNum state.CurrentFloor.Theme.Name)
+                    .Centered()
+                    .RuleStyle(Theme.StyleYellow)
+                )
+                AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s[/]" Theme.Foreground state.CurrentFloor.Theme.Description)
+                AnsiConsole.MarkupLine(sprintf "[%s]Stepping into the vast new chamber...[/]" Theme.Comment)
+                Thread.Sleep(1200)
 
             | _ -> ()
 
@@ -972,3 +1102,19 @@ module TowerDisplay =
             showHelpManual ()
 
           | _ -> ()
+
+  /// Standard roguelike tower crawl entry point
+  let runTowerCrawl
+    (initialPlayer: Combatant)
+    (startFloor: int)
+    (onCombatDuel: Combatant -> Combatant -> (CombatOutcome * Combatant))
+    (onDefeatAnimation: unit -> unit) : unit =
+    runTowerCrawlWithMode initialPlayer startFloor onCombatDuel onDefeatAnimation false
+
+  /// Interactive story mode stage expedition entry point
+  let runStoryCrawl
+    (initialPlayer: Combatant)
+    (startFloor: int)
+    (onCombatDuel: Combatant -> Combatant -> (CombatOutcome * Combatant))
+    (onDefeatAnimation: unit -> unit) : unit =
+    runTowerCrawlWithMode initialPlayer startFloor onCombatDuel onDefeatAnimation true

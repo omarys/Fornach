@@ -495,8 +495,8 @@ module Display =
     | CombatEvent.AlchemicalTrophyHarvested (_, trophyName, value) ->
       AnsiConsole.MarkupLine(sprintf "  [bold %s]💎 TROPHY HARVESTED:[/] Obtained [bold %s]%s[/] (Essence Value: [bold %s]%d[/])!" Theme.Cyan Theme.Yellow trophyName Theme.Cyan value)
 
-  /// Displays a comprehensive interactive modal with the full symbol and glyph legend across Tower and Story modes
-  let showSymbolAndGlyphLegend () =
+  /// Creates the Panel for the comprehensive Symbol & Glyph Reference Guide
+  let createSymbolAndGlyphLegendPanel () : Panel =
     let grid = Grid()
     grid.AddColumn(GridColumn()) |> ignore
 
@@ -559,7 +559,7 @@ module Display =
     hazardTable.AddRow(Markup("[bold #8be9fd] ≋ [/]"), Markup("[bold #8be9fd]Deep Current[/]"), Markup("[bold purple]+15 Exhaustion[/] inflicted from wading through heavy water currents.")) |> ignore
     hazardTable.AddRow(Markup("[bold #ff79c6] ❀ [/]"), Markup("[bold #ff79c6]Calming Spores[/]"), Markup("[bold green]Resets Recklessness to 0[/] via fragrant psychotropic blossom spores.")) |> ignore
     hazardTable.AddRow(Markup("[bold white] ∏ ♠ ▲ ☗ ⛩ ✦ [/]"), Markup("Colonnade Pillar"), Markup("Massive stone monoliths. Impassable; blocks movement and line-of-sight.")) |> ignore
-    hazardTable.AddRow(Markup("[grey] [Space] [/]"), Markup("Abyssal Chasm / Void"), Markup("Endless drop. Impassable; blocks movement, but allows vision & ranged line-of-sight.")) |> ignore
+    hazardTable.AddRow(Markup("[grey] [[Space]] [/]"), Markup("Abyssal Chasm / Void"), Markup("Endless drop. Impassable; blocks movement, but allows vision & ranged line-of-sight.")) |> ignore
 
     grid.AddRow(hazardTable) |> ignore
 
@@ -582,7 +582,7 @@ module Display =
     vitalsTable.AddRow(Markup("[bold gold1]󰮯[/]"), Markup("Souls"), Markup("Primary currency harvested from fallen adversaries for spectral merchant wares.")) |> ignore
     vitalsTable.AddRow(Markup("[bold cyan]💎[/]"), Markup("Alchemical Trophies"), Markup("Rare monster remnants (Cores, Silk, Dust) required for legendary wares.")) |> ignore
     vitalsTable.AddRow(Markup("[bold yellow]󰌆[/]"), Markup("Vault Keys"), Markup("Collected keys used to unlock sealed ascension doors and vaults.")) |> ignore
-    vitalsTable.AddRow(Markup("[bold pink]󰆧[/]"), Markup("Equipment Relics"), Markup("Ancient artifacts offering permanent stat boosts and reactive combat triggers.")) |> ignore
+    vitalsTable.AddRow(Markup(sprintf "[bold %s]󰆧[/]" Theme.Pink), Markup("Equipment Relics"), Markup("Ancient artifacts offering permanent stat boosts and reactive combat triggers.")) |> ignore
     vitalsTable.AddRow(Markup("[bold gold1]★[/]"), Markup("Story Memory"), Markup("Unlocked narrative milestone illuminating amnesia and the lost twin (Lyra).")) |> ignore
     vitalsTable.AddRow(Markup("[bold red]⚔️[/]"), Markup("Tactical Duel"), Markup("Turn-based contested roll battle against manifestations or guardians.")) |> ignore
     vitalsTable.AddRow(Markup("[bold yellow]󰍹[/]"), Markup("Inspection Reticle"), Markup("Reticle mode (press 'x' or ';') for inspecting distant cells and hazards.")) |> ignore
@@ -591,18 +591,20 @@ module Display =
 
     grid.AddRow(Markup(sprintf "\n[%s]Press any key to resume...[/]" Theme.Comment)) |> ignore
 
-    let panel =
-      Panel(grid)
-        .Border(BoxBorder.Double)
-        .BorderStyle(Theme.StylePurple)
-        .Expand()
+    Panel(grid)
+      .Border(BoxBorder.Double)
+      .BorderStyle(Theme.StylePurple)
+      .Expand()
 
+  /// Displays a comprehensive interactive modal with the full symbol and glyph legend across Tower and Story modes
+  let showSymbolAndGlyphLegend () : unit =
+    let panel = createSymbolAndGlyphLegendPanel ()
     AnsiConsole.Clear()
     AnsiConsole.Write(panel)
     Console.ReadKey(true) |> ignore
 
   [<Literal>]
-  let HelpChoiceLabel = "󰋜  [Help & Legend] View Symbol & Glyph Guide (? / F1)"
+  let HelpChoiceLabel = "󰋜  [bold #f1fa8c][[Help & Legend]][/] View Symbol & Glyph Guide (? / F1)"
 
   /// Prompts for a selection with Vim navigation and '?' / F1 help hotkey support.
   /// If the user presses '?' or F1, or selects the Help option, the symbol/glyph legend
@@ -627,7 +629,7 @@ module Display =
       | None -> ()
 
       let selected = promptWithVimAndHelp p
-      if selected = HelpChoiceLabel || selected.Contains("[Help & Legend]") then
+      if selected = HelpChoiceLabel || selected.Contains("Help & Legend") then
         showSymbolAndGlyphLegend ()
       else
         result <- Some selected

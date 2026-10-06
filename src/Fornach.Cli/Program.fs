@@ -567,153 +567,80 @@ module Program =
 
     outcome, currentCombatant
 
+  let private createProloguePlayer (className: string) : Combatant =
+    StoryBosses.createProloguePlayer className
+
   let private runInteractiveStory () =
     AnsiConsole.Clear()
     AnsiConsole.Write(
-      Rule(sprintf "[bold %s]FORNACH: THE TRAUMA LOOP & THE INFINITE TOWER[/]" Theme.Yellow)
+      Rule(sprintf "[bold %s]FORNACH: THE TRAUMA LOOP & THE GRIEF STAGES[/]" Theme.Yellow)
         .Centered()
         .RuleStyle(Theme.StylePurple)
     )
     AnsiConsole.WriteLine()
 
-    // Create Protagonist Combatant
-    let stats =
-      StatBlock.Create
-        [ StatId.Force, 80
-          StatId.Fortitude, 75
-          StatId.Finesse, 80
-          StatId.Reflex, 75
-          StatId.Prowess, 70
-          StatId.Poise, 70
-          StatId.Intellect, 65
-          StatId.Resolve, 85
-          StatId.Acuity, 65
-          StatId.Intuition, 70
-          StatId.Acumen, 65
-          StatId.Composure, 60 ]
+    // 1. Atmospheric Prologue Introduction
+    let introText =
+      "The asphalt was slick with evening drizzle... Headlights tore through the downpour, metal screamed, and the cold darkness took you.\n\n" +
+      "Now, the roar of screaming metal recedes into the sound of rhythmic rain drumming against wet shale.\n" +
+      "You peel your face out of the mud of the Abandoned Iron Quarry. Your past is an empty, dark vault.\n\n" +
+      "Beside you in the muck lies a battered chest, its iron lock already broken and hanging loose."
 
-    let mutable player = Combatant.create (CombatantId.New()) "Protagonist" 280 220 stats
+    let introPanel =
+      Panel(Markup(sprintf "[bold %s]%s[/]" Theme.Foreground (Markup.Escape introText)))
+        .Header(sprintf "[bold %s] PROLOGUE: THE FATAL CROSSING [/]" Theme.Cyan)
+        .Border(BoxBorder.Rounded)
+        .BorderStyle(Style(foreground = Nullable Theme.ColorCyan))
 
-    let sword =
-      { Name = "Notched Iron Broadsword"
-        Slot = EquipmentSlot.Weapon
-        Description = "A blade found in the quarry mud. Heavy, worn, but sturdy."
-        StatModifiers = [ StatId.Force, 10 ]
-        HealthBonus = 0
-        MoraleBonus = 0
-        StartingRecklessnessDelta = 0
-        Triggers = [] }
-
-    player <- { player with EquippedItems = [ sword ] }
-
-    let inkJson = StoryRunner.LoadPrologueJson()
-    let runner =
-      StoryRunner(
-        inkJson,
-        player,
-        onDeathAnimation = DeathAnimation.playTruckReplay,
-        onMemoryAwarded = (fun mem ->
-          let panel =
-            Panel(Markup(sprintf "[bold gold1]★ MEMORY UNLOCKED:[/] [bold white]%s[/]\n[italic grey]%s[/]" mem.Name mem.Description))
-              .Border(BoxBorder.Heavy)
-              .BorderStyle(Style(foreground = Nullable Color.Gold1))
-          AnsiConsole.WriteLine()
-          AnsiConsole.Write(panel)
-          AnsiConsole.WriteLine())
-      )
-
-    let mutable storyActive = true
-
-    while storyActive do
-      let events = runner.ContinueToNextEvent()
-
-      for ev in events do
-        match ev with
-        | StoryEvent.TextProduced text ->
-          if text.Contains("crosswalk") && text.Contains("The Tower") then
-            EnvironmentScenes.playCrosswalkTowerTransition()
-          else
-            let panel =
-              Panel(Markup(sprintf "[bold %s]%s[/]" Theme.Foreground text))
-                .Border(BoxBorder.Rounded)
-                .BorderStyle(Style(foreground = Nullable Theme.ColorComment))
-            AnsiConsole.Write(panel)
-            AnsiConsole.WriteLine()
-
-        | StoryEvent.CombatInitiated(enemyId, boss) ->
-          let scene = EnvironmentScenes.getSceneForEnemy enemyId
-          AnsiConsole.WriteLine()
-          AnsiConsole.Write(EnvironmentScenes.renderSceneHeader scene)
-          AnsiConsole.WriteLine()
-          AnsiConsole.Write(EnvironmentScenes.renderBossEncounterCard boss scene)
-          AnsiConsole.WriteLine()
-
-          let renderCombatHeader () =
-            AnsiConsole.Clear()
-            AnsiConsole.Write(EnvironmentScenes.renderSceneHeader scene)
-            AnsiConsole.WriteLine()
-            AnsiConsole.Write(EnvironmentScenes.renderBossEncounterCard boss scene)
-            AnsiConsole.WriteLine()
-
-          let combatChoice =
-            Display.promptSelectionWithHelp
-              "[bold red]Face the Manifestation (Press '?' or F1 for Symbol Legend):[/]"
-              [
-                "⚔️ Enter Tactical Combat Duel"
-                "⚡ Quick Resolve Encounter"
-              ]
-              None
-              renderCombatHeader
-
-          let outcome, updatedPlayer =
-            if combatChoice.Contains("Quick Resolve") then
-              AnsiConsole.MarkupLine("[bold green]With focused resolve, you cut through the emotional fog![/]")
-              CombatOutcome.PlayerVictorious, player
-            else
-              runStoryDuel player boss
-
-          player <- updatedPlayer
-
-          match outcome with
-          | CombatOutcome.PlayerVictorious ->
-            let nextKnot =
-              match enemyId.ToLowerInvariant() with
-              | "guilt_aspect" | "guiltaspect" -> "post_combat"
-              | "denial_aspect" | "denialaspect" | "denial" -> "post_denial"
-              | "anger_aspect" | "angeraspect" | "anger" -> "post_anger"
-              | "bargaining_aspect" | "bargainingaspect" | "bargaining" -> "post_bargaining"
-              | "depression_aspect" | "depressionaspect" | "depression" -> "post_depression"
-              | "acceptance_aspect" | "acceptanceaspect" | "acceptance" -> "post_acceptance"
-              | _ -> "post_combat"
-
-            runner.ResolveCombat(CombatOutcome.PlayerVictorious, nextKnot)
-          | CombatOutcome.PlayerDefeated ->
-            runner.ResolveCombat CombatOutcome.PlayerDefeated
-
-        | _ -> ()
-
-      if runner.CurrentChoices.Length > 0 then
-        let choiceTexts = runner.CurrentChoices |> List.map snd
-        let selectedText =
-          Display.promptSelectionWithHelp
-            (sprintf "[bold %s]Choose your response (Press '?' or F1 for Symbol Legend):[/]" Theme.Yellow)
-            choiceTexts
-            None
-            (fun () -> ())
-        let selectedIdx = runner.CurrentChoices |> List.findIndex (fun (_, t) -> t = selectedText)
-        runner.ChooseChoice selectedIdx
-      elif not runner.CanContinue then
-        storyActive <- false
-
+    AnsiConsole.Write(introPanel)
     AnsiConsole.WriteLine()
-    AnsiConsole.MarkupLine(sprintf "[bold %s]Narrative chapter completed. The gates of the Infinite Tower stand open before you.[/]" Theme.Yellow)
-    let enterTower =
-      AnsiConsole.Confirm(sprintf "[bold %s]Step through the threshold and begin ascending the Infinite Tower?[/]" Theme.Cyan, true)
-    if enterTower then
-      TowerDisplay.runTowerCrawl player 1 runStoryDuel DeathAnimation.playTruckReplay
-    else
-      AnsiConsole.MarkupLine(sprintf "[%s]Press any key to return to menu...[/]" Theme.Comment)
-      Console.ReadKey(true) |> ignore
+
+    // 2. Scavenger Chest Class Selection
+    let choices =
+      [ "🗡️ Two-handed Greatsword (Berserker) — Ferocious momentum, sweeping cleaves & high force"
+        "🤺 Paired Stiletto & Rapier (Duelist) — Fencing precision, high reflex, agile cadences"
+        "🛡️ Arming Sword & Reinforced Shield (Warden) — Bastion defense, fortress poise, counterplay"
+        "🪄 Carved Ash Staff (Inquisitor) — Arcane resonance, psionic intellect, mental clarity" ]
+
+    let choice =
+      Display.promptSelectionWithHelp
+        (sprintf "[bold %s]Scavenge the battered chest (Choose your weapon armament and awaken your class):[/]" Theme.Yellow)
+        choices
+        None
+        (fun () -> ())
+
+    let chosenClass =
+      if choice.Contains("Berserker") then "berserker"
+      elif choice.Contains("Duelist") then "duelist"
+      elif choice.Contains("Warden") then "warden"
+      else "inquisitor"
+
+    let player = StoryBosses.createProloguePlayer chosenClass
+    let weapon = player.EquippedItems |> List.tryHead |> Option.map (fun w -> w.Name) |> Option.defaultValue "Armament"
+    let desc =
+      match player.Class with
+      | CharacterClass.Berserker -> "Power Specialist • Sweeping Cleaves & Wild Blows"
+      | CharacterClass.Duelist -> "Agility Specialist • Probing Finesse & Stacking Bleeds"
+      | CharacterClass.Warden -> "Discipline Specialist • Bastion Defense & Counterplay"
+      | _ -> "Mental Power Arcanist • Psionic Cataclysms & Cognitive Strain"
+
+    let panel =
+      Panel(Markup(sprintf "[bold %s]󰓥 CLASS AWAKENED: %s[/] [grey](%s)[/]\n[italic white]Equipped: %s  •  Combat Stance: %A[/]\n[grey]Bundle of sharpened caltrops recovered inside lid.[/]"
+        Theme.Green (player.Class.Name.ToUpperInvariant()) desc (Markup.Escape weapon) player.Stance))
+        .Border(BoxBorder.Heavy)
+        .BorderStyle(Style(foreground = Nullable Theme.ColorGreen))
+
+    AnsiConsole.Clear()
+    AnsiConsole.Write(panel)
+    AnsiConsole.WriteLine()
+    AnsiConsole.MarkupLine(sprintf "[bold %s]A child's terrified scream cuts through the metallic clangor of the quarry...[/]" Theme.Yellow)
+    AnsiConsole.MarkupLine(sprintf "[italic %s]Ahead lies the sprawling 2D spatial map of the Iron Quarry. Navigate, explore, grind, and conquer the shadows.[/]" Theme.Comment)
+    AnsiConsole.WriteLine()
+    AnsiConsole.MarkupLine(sprintf "[%s]Press any key to enter the quarry map and begin your expedition...[/]" Theme.Comment)
+    Console.ReadKey(true) |> ignore
+
+    // 3. Launch 2D Spatial Map Loop for Story Campaign
+    TowerDisplay.runStoryCrawl player 1 runStoryDuel DeathAnimation.playTruckReplay
 
   [<EntryPoint>]
   let main (args: string array) =

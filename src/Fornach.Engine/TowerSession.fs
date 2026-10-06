@@ -37,7 +37,8 @@ type TowerRunState =
     Seed: int
     Souls: int
     Trophies: (AlchemicalTrophy * int) list
-    DiscoveredEchoes: Set<string> }
+    DiscoveredEchoes: Set<string>
+    IsStoryMode: bool }
 
 module TowerSession =
 
@@ -61,9 +62,25 @@ module TowerSession =
 
     { state with CurrentFloor = updatedFloor }
 
-  /// Initializes a new Tower run session starting at a given floor
-  let initSession (player: Combatant) (seed: int) (startFloor: int) : TowerRunState =
-    let floor = TowerGenerator.generateFloor seed startFloor
+  /// Completes an active quest on the floor and awards its reward
+  let completeQuest (questId: string) (state: TowerRunState) : TowerRunState =
+    let updatedQuests =
+      state.CurrentFloor.ActiveQuests
+      |> List.map (fun q -> if q.Id = questId then { q with IsCompleted = true } else q)
+
+    let updatedFloor =
+      { state.CurrentFloor with
+          ActiveQuests = updatedQuests }
+      |> (fun f -> f.UnlockStairway())
+
+    { state with
+        CurrentFloor = updatedFloor
+        CompletedQuests = state.CompletedQuests.Add questId
+        MessageLog = sprintf "Quest '%s' completed! The Ascension Portal is unlocked." questId :: state.MessageLog }
+
+  /// Initializes a new Tower run session starting at a given floor with specified story mode
+  let initSessionWithMode (player: Combatant) (seed: int) (startFloor: int) (isStory: bool) : TowerRunState =
+    let floor = TowerGenerator.generateFloorWithMode seed startFloor isStory
     let initial =
       { Player = player
         CurrentFloor = floor
@@ -77,14 +94,19 @@ module TowerSession =
         Seed = seed
         Souls = 0
         Trophies = []
-        DiscoveredEchoes = Set.empty }
+        DiscoveredEchoes = Set.empty
+        IsStoryMode = isStory }
 
     updateFov initial
+
+  /// Initializes a new Tower run session starting at a given floor
+  let initSession (player: Combatant) (seed: int) (startFloor: int) : TowerRunState =
+    initSessionWithMode player seed startFloor false
 
   /// Advances to the next floor via the Stairway Door
   let ascendFloor (state: TowerRunState) : TowerRunState =
     let nextFloorNum = state.CurrentFloor.FloorNumber + 1
-    let nextFloor = TowerGenerator.generateFloor state.Seed nextFloorNum
+    let nextFloor = TowerGenerator.generateFloorWithMode state.Seed nextFloorNum state.IsStoryMode
     let nextState =
       { state with
           CurrentFloor = nextFloor
@@ -122,9 +144,30 @@ module TowerSession =
 
       | Some (EntityNpc npc) ->
         let questAccepted = npc.Quest.IsSome
-        events <- [ TowerEvent.NpcInteracted(npc, questAccepted) ]
-        let logMsg = sprintf "Spoke with %s: \"%s\"" npc.Name (List.head npc.Dialogue)
-        { nextState with MessageLog = logMsg :: nextState.MessageLog }, events
+        // Check if quest can be completed (e.g. at least one enemy was defeated on this floor)
+        let defeatedEnemies =
+          state.CurrentFloor.Entities
+          |> Map.values
+          |> Seq.filter (function EntityEnemy e -> e.IsDefeated | _ -> false)
+          |> Seq.length
+        if npc.Quest.IsSome && not npc.HasGivenReward && defeatedEnemies > 0 then
+          let q = npc.Quest.Value
+          let updatedNpc = { npc with HasGivenReward = true; Quest = Some { q with IsCompleted = true } }
+          let updatedEntities = Map.add targetPt (EntityNpc updatedNpc) state.CurrentFloor.Entities
+          let updatedFloor = { state.CurrentFloor with Entities = updatedEntities }
+          let completedState = completeQuest q.Id { nextState with CurrentFloor = updatedFloor }
+          let rewardMoralePlayer = { completedState.Player with Morale = completedState.Player.Morale.ApplyDelta 40 }
+          let rewardedState =
+            { completedState with
+                Player = rewardMoralePlayer
+                Souls = completedState.Souls + 50
+                MessageLog = sprintf "Trial complete! %s thanks you: %s (+50 Souls, +40 Morale)" npc.Name q.RewardDescription :: completedState.MessageLog }
+          events <- [ TowerEvent.NpcInteracted(updatedNpc, true) ]
+          rewardedState, events
+        else
+          events <- [ TowerEvent.NpcInteracted(npc, questAccepted) ]
+          let logMsg = sprintf "Spoke with %s: \"%s\"" npc.Name (List.head npc.Dialogue)
+          { nextState with MessageLog = logMsg :: nextState.MessageLog }, events
 
       | Some (EntityChest chest) when not chest.IsOpen ->
         let updatedChest = { chest with IsOpen = true }
@@ -612,19 +655,3 @@ module TowerSession =
         Souls = newSouls
         Trophies = newTrophies
         MessageLog = logMessages }
-
-  /// Completes an active quest on the floor and awards its reward
-  let completeQuest (questId: string) (state: TowerRunState) : TowerRunState =
-    let updatedQuests =
-      state.CurrentFloor.ActiveQuests
-      |> List.map (fun q -> if q.Id = questId then { q with IsCompleted = true } else q)
-
-    let updatedFloor =
-      { state.CurrentFloor with
-          ActiveQuests = updatedQuests }
-      |> (fun f -> f.UnlockStairway())
-
-    { state with
-        CurrentFloor = updatedFloor
-        CompletedQuests = state.CompletedQuests.Add questId
-        MessageLog = sprintf "Quest '%s' completed! The Ascension Portal is unlocked." questId :: state.MessageLog }

@@ -1,6 +1,7 @@
 EXTERNAL start_combat(enemy_id)
 EXTERNAL award_memory(memory_id)
 EXTERNAL check_preparation(prep_name)
+EXTERNAL choose_class(class_name)
 
 VAR checkpoint = "waking"
 
@@ -9,12 +10,29 @@ VAR checkpoint = "waking"
 === waking ===
 The roar of screaming metal and the blinding flash of white light violently recede, leaving only the sound of cold, rhythmic rain drumming against wet shale.
 You peel your face out of the mud. Your head throbs with blinding static; your past is an empty, dark vault.
-Beside you in the muck lies an abandoned weapon belt.
-+ [Scavenge the belt for weapons]
-    You unbuckle the waterlogged sheath, drawing a notched iron broadsword. It feels heavy, familiar, yet laden with dread.
+Beside you in the muck lies a battered chest, its iron lock already broken and hanging loose.
++ [Draw the two-handed greatsword (Berserker)]
+    You lift the massive greatsword from the chest. Its weight demands ferocious, unyielding momentum—the instinct of a Berserker.
+    Inside the lid, you also recover a bundle of sharpened caltrops wrapped in oiled cloth.
+    ~ choose_class("Berserker")
+    ~ award_memory("prepared_mind")
     -> boy_encounter
-+ [Inspect the pouches for supplies]
-    Inside a leather pouch, you discover a bundle of sharpened caltrops wrapped in oiled cloth.
++ [Take the paired stiletto and rapier (Duelist)]
+    You draw the twin blades from their rain-soaked sheaths. Light, sharp, balanced for rapid fencing cadences—the instinct of a Duelist.
+    Inside the lid, you also recover a bundle of sharpened caltrops wrapped in oiled cloth.
+    ~ choose_class("Duelist")
+    ~ award_memory("prepared_mind")
+    -> boy_encounter
++ [Equip the arming sword and reinforced shield (Warden)]
+    You strap the notched arming sword to your side and brace the iron-rimmed shield. Grounded, unyielding, fortified against any blow—the instinct of a Warden.
+    Inside the lid, you also recover a bundle of sharpened caltrops wrapped in oiled cloth.
+    ~ choose_class("Warden")
+    ~ award_memory("prepared_mind")
+    -> boy_encounter
++ [Reach for the carved ash staff (Inquisitor)]
+    Your fingers curl around the polished runic wood. A surge of arcane static ripples through your thoughts, igniting mental resonance—the instinct of an Inquisitor.
+    Inside the lid, you also recover a bundle of sharpened caltrops wrapped in oiled cloth.
+    ~ choose_class("Inquisitor")
     ~ award_memory("prepared_mind")
     -> boy_encounter
 

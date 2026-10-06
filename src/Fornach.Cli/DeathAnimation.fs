@@ -9,7 +9,7 @@ module DeathAnimation =
   let private truckFrames =
     [| @"   ______                    "
        @"  /|_||_\`.__                "
-       @" (   _    _ _\  [==HONK!==]  "
+       @" (   _    _ _\  [[==HONK!==]]  "
        @" =`-(_)--(_)-'               " |]
 
   let private impactFrames =
