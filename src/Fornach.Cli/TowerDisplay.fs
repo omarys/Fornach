@@ -198,8 +198,12 @@ module TowerDisplay =
               else
                 let traitNames = c.MonsterTraits |> List.map (fun t -> t.Name) |> String.concat ", "
                 sprintf " | Traits: [%s]%s[/]" Theme.Yellow traitNames
-            Some (sprintf "[bold %s]! HOSTILE GUARDIAN: %s%s[/] [grey]| Lv.%d %s | HP: %d/%d | Morale: %d/%d | %s: %s%s[/]"
-              Theme.Red familyPrefix e.Name c.Level c.Class.Name c.Health.Current c.Health.Maximum c.Morale.Current c.Morale.Maximum (if c.Plane = Mental then "Form" else "Stance") stanceOrForm traitsSuffix)
+            let assess = TacticalAssessment.assess state.Player c
+            let vulnSnippet = match assess.VulnerabilitySummary with Some v -> sprintf " | Opening: %s" v | None -> ""
+            let readSnippet = sprintf "\n  󰓥 [bold %s]Tactical Read (%s):[/] %s%s\n  [italic %s]💡 %s[/]"
+                                Theme.Yellow assess.Headline assess.PrimarySummary vulnSnippet Theme.Comment assess.StrategicAdvice
+            Some (sprintf "[bold %s]! HOSTILE GUARDIAN: %s%s[/] [grey]| Lv.%d %s | HP: %d/%d | Morale: %d/%d | %s: %s%s[/]%s"
+              Theme.Red familyPrefix e.Name c.Level c.Class.Name c.Health.Current c.Health.Maximum c.Morale.Current c.Morale.Maximum (if c.Plane = Mental then "Form" else "Stance") stanceOrForm traitsSuffix readSnippet)
         | Some (EntityNpc n) ->
           let trialText = match n.Quest with Some q -> sprintf " [bold %s](Trial Offered: %s)[/]" Theme.Yellow q.Title | None -> ""
           Some (sprintf "[bold %s]? INHABITANT: %s[/] [italic %s](%s)[/]%s" Theme.Cyan n.Name Theme.Comment n.Role trialText)

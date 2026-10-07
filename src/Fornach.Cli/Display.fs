@@ -133,7 +133,7 @@ module Display =
     sprintf "%-22s [%s]%s[/][%s]%s[/] [bold %s]%3d%%[/]"
       label warnColor filled Theme.CurrentLine empty Theme.Foreground m.Value
 
-  let createCombatantPanel (c: Combatant) (borderColor: Color) (headerColor: string) =
+  let createCombatantPanel (c: Combatant) (borderColor: Color) (headerColor: string) (observerOpt: Combatant option) =
     let grid = Grid()
     grid.AddColumn(GridColumn()) |> ignore
 
@@ -187,6 +187,28 @@ module Display =
       let cloneText = if c.MirrorClones > 0 then sprintf "[bold %s]🪞 %d Mirror Clones[/] " Theme.Purple c.MirrorClones else ""
       grid.AddRow(Markup(sprintf "%-22s %s%s%s%s" "󱁕 Special State" wardText cloneText bleedText limbText)) |> ignore
 
+    // Tactical Assessment (Acumen vs Composure)
+    match observerOpt with
+    | Some obs ->
+      let assess = TacticalAssessment.assess obs c
+      let headlineColor =
+        match assess.InsightLevel with
+        | Penetrating -> Theme.Green
+        | Keen -> Theme.Yellow
+        | Discerning -> Theme.Orange
+        | Obscured -> Theme.Comment
+
+      grid.AddRow(Rule().RuleStyle(Theme.StyleCurrentLine)) |> ignore
+      grid.AddRow(Rule(sprintf "[bold %s] 󰓥 TACTICAL ASSESSMENT ── %s [/]" headlineColor assess.Headline).RuleStyle(Theme.StyleCurrentLine)) |> ignore
+      grid.AddRow(Markup(sprintf "%-22s %s" "󰈸 Primary Stat" assess.PrimarySummary)) |> ignore
+      match assess.VulnerabilitySummary with
+      | Some vuln ->
+        grid.AddRow(Markup(sprintf "%-22s %s" "🎯 Defensive Opening" vuln)) |> ignore
+      | None -> ()
+      grid.AddRow(Markup(sprintf "%-22s [italic %s]%s[/]" "💡 Tactical Advice" Theme.Yellow assess.StrategicAdvice)) |> ignore
+      grid.AddRow(Markup(sprintf "%-22s [grey]%s[/]" "󰄬 Scrutiny vs Tell" (sprintf "Effective Acumen %d vs Composure %d (Ratio: %.2fx)" assess.EffectiveAcumen assess.TargetComposure assess.Ratio))) |> ignore
+    | None -> ()
+
     grid.AddRow(Rule().RuleStyle(Theme.StyleCurrentLine)) |> ignore
 
     // Shared Entropy & Momentum
@@ -220,8 +242,8 @@ module Display =
       .Expand()
 
   let renderHUD (player: Combatant) (enemy: Combatant) (roundNumber: int) =
-    let pnlPlayer = createCombatantPanel player Theme.ColorGreen Theme.Green
-    let pnlEnemy = createCombatantPanel enemy Theme.ColorPink Theme.Pink
+    let pnlPlayer = createCombatantPanel player Theme.ColorGreen Theme.Green None
+    let pnlEnemy = createCombatantPanel enemy Theme.ColorPink Theme.Pink (Some player)
     let grid = Grid()
     grid.AddColumn(GridColumn()) |> ignore
     grid.AddColumn(GridColumn()) |> ignore

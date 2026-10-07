@@ -166,20 +166,61 @@ module Program =
       elif player.Name.Contains("Depression") then
         sprintf "⚓ [bold %s]Trauma: Apathy Doldrums[/] (Discipline Gambit: Inflict 40 Cognitive Fatigue)" Theme.Comment
 
+      let assess = TacticalAssessment.assess player enemy
+
       if player.Plane = Physical then
+        let fortSuffix =
+          match assess.InsightLevel with
+          | Penetrating | Keen ->
+            let fortVal = enemy.GetStat StatId.Fortitude
+            if fst assess.WeakestDefense = StatId.Fortitude then sprintf " [bold %s][%d ★ Opening][/]" Theme.Green fortVal
+            elif fst assess.BestDefense = StatId.Fortitude then sprintf " [%s][%d ⚠ Guarded][/]" Theme.Orange fortVal
+            else sprintf " [%s][%d][/]" Theme.Comment fortVal
+          | Discerning ->
+            if fst assess.WeakestDefense = StatId.Fortitude then sprintf " [bold %s][Opening][/]" Theme.Green
+            elif fst assess.BestDefense = StatId.Fortitude then sprintf " [%s][Guarded][/]" Theme.Orange
+            else ""
+          | Obscured -> ""
+
+        let refSuffix =
+          match assess.InsightLevel with
+          | Penetrating | Keen ->
+            let refVal = enemy.GetStat StatId.Reflex
+            if fst assess.WeakestDefense = StatId.Reflex then sprintf " [bold %s][%d ★ Opening][/]" Theme.Green refVal
+            elif fst assess.BestDefense = StatId.Reflex then sprintf " [%s][%d ⚠ Guarded][/]" Theme.Orange refVal
+            else sprintf " [%s][%d][/]" Theme.Comment refVal
+          | Discerning ->
+            if fst assess.WeakestDefense = StatId.Reflex then sprintf " [bold %s][Opening][/]" Theme.Green
+            elif fst assess.BestDefense = StatId.Reflex then sprintf " [%s][Guarded][/]" Theme.Orange
+            else ""
+          | Obscured -> ""
+
+        let poiseSuffix =
+          match assess.InsightLevel with
+          | Penetrating | Keen ->
+            let poiseVal = enemy.GetStat StatId.Poise
+            if fst assess.WeakestDefense = StatId.Poise then sprintf " [bold %s][%d ★ Opening][/]" Theme.Green poiseVal
+            elif fst assess.BestDefense = StatId.Poise then sprintf " [%s][%d ⚠ Guarded][/]" Theme.Orange poiseVal
+            else sprintf " [%s][%d][/]" Theme.Comment poiseVal
+          | Discerning ->
+            if fst assess.WeakestDefense = StatId.Poise then sprintf " [bold %s][Opening][/]" Theme.Green
+            elif fst assess.BestDefense = StatId.Poise then sprintf " [%s][Guarded][/]" Theme.Orange
+            else ""
+          | Obscured -> ""
+
         // Physical Martial Strikes grouped by vector
         let powerStrikes = [
-          sprintf "⚔️  [%s]Force Strike: Standard Cleave[/] (Power - Cleave vs. Fortitude)" Theme.Red
+          sprintf "⚔️  [%s]Force Strike: Standard Cleave[/] (Power - Cleave vs. Fortitude%s)" Theme.Red fortSuffix
           sprintf "⚡ [bold %s]Force Strike: Wild Blow[/] (Power Gambit: +30 Recklessness, 1.5x Dmg)" Theme.Red
         ]
 
         let agilityStrikes = [
-          sprintf "⚔️  [%s]Finesse Cadence: Rapid Probing[/] (Agility - Probing Cadence vs. Reflex)" Theme.Green
+          sprintf "⚔️  [%s]Finesse Cadence: Rapid Probing[/] (Agility - Probing Cadence vs. Reflex%s)" Theme.Green refSuffix
           sprintf "⚡ [bold %s]Finesse Cadence: Relentless Blitz[/] (Agility Gambit: +25 Recklessness)" Theme.Green
         ]
 
         let disciplineStrikes = [
-          sprintf "⚔️  [%s]Prowess Strike: Stance Pressure[/] (Discipline - Study Stacks vs. Poise)" Theme.Purple
+          sprintf "⚔️  [%s]Prowess Strike: Stance Pressure[/] (Discipline - Study Stacks vs. Poise%s)" Theme.Purple poiseSuffix
           sprintf "⚡ [bold %s]Prowess Strike: Invitational Bait[/] (Discipline Gambit: +35 Recklessness)" Theme.Purple
           // Dedicated Discipline Gambits (cost Study Stacks with 0 Recklessness!)
           if player.StudyStacks >= 2 then
@@ -234,21 +275,60 @@ module Program =
           if prof < 85 then sprintf " [%s](%d%% Prof - Off-School Strain)[/]" Theme.Comment prof
           else sprintf " [bold %s](%d%% Prof - Specialization)[/]" Theme.Green prof
 
+        let resolveSuffix =
+          match assess.InsightLevel with
+          | Penetrating | Keen ->
+            let resVal = enemy.GetStat StatId.Resolve
+            if fst assess.WeakestDefense = StatId.Resolve then sprintf " [bold %s][%d ★ Opening][/]" Theme.Green resVal
+            elif fst assess.BestDefense = StatId.Resolve then sprintf " [%s][%d ⚠ Guarded][/]" Theme.Orange resVal
+            else sprintf " [%s][%d][/]" Theme.Comment resVal
+          | Discerning ->
+            if fst assess.WeakestDefense = StatId.Resolve then sprintf " [bold %s][Opening][/]" Theme.Green
+            elif fst assess.BestDefense = StatId.Resolve then sprintf " [%s][Guarded][/]" Theme.Orange
+            else ""
+          | Obscured -> ""
+
+        let intuitionSuffix =
+          match assess.InsightLevel with
+          | Penetrating | Keen ->
+            let intVal = enemy.GetStat StatId.Intuition
+            if fst assess.WeakestDefense = StatId.Intuition then sprintf " [bold %s][%d ★ Opening][/]" Theme.Green intVal
+            elif fst assess.BestDefense = StatId.Intuition then sprintf " [%s][%d ⚠ Guarded][/]" Theme.Orange intVal
+            else sprintf " [%s][%d][/]" Theme.Comment intVal
+          | Discerning ->
+            if fst assess.WeakestDefense = StatId.Intuition then sprintf " [bold %s][Opening][/]" Theme.Green
+            elif fst assess.BestDefense = StatId.Intuition then sprintf " [%s][Guarded][/]" Theme.Orange
+            else ""
+          | Obscured -> ""
+
+        let composureSuffix =
+          match assess.InsightLevel with
+          | Penetrating | Keen ->
+            let compVal = enemy.GetStat StatId.Composure
+            if fst assess.WeakestDefense = StatId.Composure then sprintf " [bold %s][%d ★ Opening][/]" Theme.Green compVal
+            elif fst assess.BestDefense = StatId.Composure then sprintf " [%s][%d ⚠ Guarded][/]" Theme.Orange compVal
+            else sprintf " [%s][%d][/]" Theme.Comment compVal
+          | Discerning ->
+            if fst assess.WeakestDefense = StatId.Composure then sprintf " [bold %s][Opening][/]" Theme.Green
+            elif fst assess.BestDefense = StatId.Composure then sprintf " [%s][Guarded][/]" Theme.Orange
+            else ""
+          | Obscured -> ""
+
         let powerSpells = [
-          sprintf "✨ [%s]Arcane Cataclysm: Elemental Blast[/] (Power - Intellect vs. Resolve)%s" Theme.Pink (strainTag powProf)
+          sprintf "✨ [%s]Arcane Cataclysm: Elemental Blast[/] (Power - Intellect vs. Resolve%s)%s" Theme.Pink resolveSuffix (strainTag powProf)
           if player.ComplexForm <> Some ComplexForm.AegisLattice then
             sprintf "⚡ [bold %s]Arcane Cataclysm: Overchannel[/] (Power Gambit: +35 Recklessness, Splash)%s" Theme.Pink (strainTag powProf)
         ]
 
         let agilitySpells = [
-          sprintf "✨ [%s]Synaptic Glamour: Neural Static[/] (Agility - Acuity vs. Intuition)%s" Theme.Purple (strainTag agiProf)
+          sprintf "✨ [%s]Synaptic Glamour: Neural Static[/] (Agility - Acuity vs. Intuition%s)%s" Theme.Purple intuitionSuffix (strainTag agiProf)
           sprintf "⚡ [bold %s]Synaptic Glamour: Mind Fracture[/] (Agility Gambit: +25 Recklessness)%s" Theme.Purple (strainTag agiProf)
           sprintf "🪞 [%s]Mirror Illusion: Phantasmal Decoys[/] (Agility - Weave Mirror Clones)%s" Theme.Purple (strainTag agiProf)
           sprintf "⚡ [bold %s]Mirror Illusion: Decoy Swarm[/] (Agility Gambit: +25 Recklessness, Extra Clones)%s" Theme.Purple (strainTag agiProf)
         ]
 
         let disciplineSpells = [
-          sprintf "🛡️  [%s]Runic Ward Trap: Abjuration Glyph[/] (Discipline - Acumen vs. Composure, Ward)%s" Theme.Cyan (strainTag disProf)
+          sprintf "🛡️  [%s]Runic Ward Trap: Abjuration Glyph[/] (Discipline - Acumen vs. Composure%s, Ward)%s" Theme.Cyan composureSuffix (strainTag disProf)
           sprintf "⚡ [bold %s]Runic Ward Trap: Anomalous Glyph[/] (Discipline Gambit: +30 Recklessness, Heavy Ward)%s" Theme.Cyan (strainTag disProf)
           sprintf "🌀 [%s]Disorienting Shockwave: Balance Disruption[/] (Discipline - Break Posture & Tempo)%s" Theme.Orange (strainTag disProf)
           sprintf "⚡ [bold %s]Disorienting Shockwave: Staggering Pulse[/] (Discipline Gambit: +25 Recklessness, Swarm Pulse)%s" Theme.Orange (strainTag disProf)

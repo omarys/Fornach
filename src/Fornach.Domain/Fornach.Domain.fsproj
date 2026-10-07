@@ -33,6 +33,7 @@
 
     <!-- 7. Aggregate Root and State Evaluators (Consumes all prior types) -->
     <Compile Include="Combatant.fs" />
+    <Compile Include="TacticalAssessment.fs" />
 
     <!-- 8. Tiered Archetypes and Combat Mastery Factories -->
     <Compile Include="TierFactory.fs" />
