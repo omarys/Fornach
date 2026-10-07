@@ -1,0 +1,17 @@
+schema: spec-driven
+openlore:
+  version: 1.2.0
+  generatedAt: 2026-10-07T19:42:03.650Z
+  domains:
+    - context
+    - fornach-cli
+    - fornach-domain
+    - fornach-engine
+    - fornach-spatial
+    - fornach-story
+  confidence: 0.95
+context: |-
+  # Auto-detected by openlore
+  Tech stack: F#, .NET
+  Architecture: Layered (routes → controllers → services → repositories)
+  Domains: context, fornach-cli, fornach-domain, fornach-engine, fornach-spatial, fornach-story

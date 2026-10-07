@@ -173,12 +173,12 @@ module Program =
           match assess.InsightLevel with
           | Penetrating | Keen ->
             let fortVal = enemy.GetStat StatId.Fortitude
-            if fst assess.WeakestDefense = StatId.Fortitude then sprintf " [bold %s][%d ★ Opening][/]" Theme.Green fortVal
-            elif fst assess.BestDefense = StatId.Fortitude then sprintf " [%s][%d ⚠ Guarded][/]" Theme.Orange fortVal
-            else sprintf " [%s][%d][/]" Theme.Comment fortVal
+            if fst assess.WeakestDefense = StatId.Fortitude then sprintf " - [bold %s]%d ★ Opening[/]" Theme.Green fortVal
+            elif fst assess.BestDefense = StatId.Fortitude then sprintf " - [%s]%d ⚠ Guarded[/]" Theme.Orange fortVal
+            else sprintf " - [%s]%d[/]" Theme.Comment fortVal
           | Discerning ->
-            if fst assess.WeakestDefense = StatId.Fortitude then sprintf " [bold %s][Opening][/]" Theme.Green
-            elif fst assess.BestDefense = StatId.Fortitude then sprintf " [%s][Guarded][/]" Theme.Orange
+            if fst assess.WeakestDefense = StatId.Fortitude then sprintf " - [bold %s]Opening[/]" Theme.Green
+            elif fst assess.BestDefense = StatId.Fortitude then sprintf " - [%s]Guarded[/]" Theme.Orange
             else ""
           | Obscured -> ""
 
@@ -186,12 +186,12 @@ module Program =
           match assess.InsightLevel with
           | Penetrating | Keen ->
             let refVal = enemy.GetStat StatId.Reflex
-            if fst assess.WeakestDefense = StatId.Reflex then sprintf " [bold %s][%d ★ Opening][/]" Theme.Green refVal
-            elif fst assess.BestDefense = StatId.Reflex then sprintf " [%s][%d ⚠ Guarded][/]" Theme.Orange refVal
-            else sprintf " [%s][%d][/]" Theme.Comment refVal
+            if fst assess.WeakestDefense = StatId.Reflex then sprintf " - [bold %s]%d ★ Opening[/]" Theme.Green refVal
+            elif fst assess.BestDefense = StatId.Reflex then sprintf " - [%s]%d ⚠ Guarded[/]" Theme.Orange refVal
+            else sprintf " - [%s]%d[/]" Theme.Comment refVal
           | Discerning ->
-            if fst assess.WeakestDefense = StatId.Reflex then sprintf " [bold %s][Opening][/]" Theme.Green
-            elif fst assess.BestDefense = StatId.Reflex then sprintf " [%s][Guarded][/]" Theme.Orange
+            if fst assess.WeakestDefense = StatId.Reflex then sprintf " - [bold %s]Opening[/]" Theme.Green
+            elif fst assess.BestDefense = StatId.Reflex then sprintf " - [%s]Guarded[/]" Theme.Orange
             else ""
           | Obscured -> ""
 
@@ -199,12 +199,12 @@ module Program =
           match assess.InsightLevel with
           | Penetrating | Keen ->
             let poiseVal = enemy.GetStat StatId.Poise
-            if fst assess.WeakestDefense = StatId.Poise then sprintf " [bold %s][%d ★ Opening][/]" Theme.Green poiseVal
-            elif fst assess.BestDefense = StatId.Poise then sprintf " [%s][%d ⚠ Guarded][/]" Theme.Orange poiseVal
-            else sprintf " [%s][%d][/]" Theme.Comment poiseVal
+            if fst assess.WeakestDefense = StatId.Poise then sprintf " - [bold %s]%d ★ Opening[/]" Theme.Green poiseVal
+            elif fst assess.BestDefense = StatId.Poise then sprintf " - [%s]%d ⚠ Guarded[/]" Theme.Orange poiseVal
+            else sprintf " - [%s]%d[/]" Theme.Comment poiseVal
           | Discerning ->
-            if fst assess.WeakestDefense = StatId.Poise then sprintf " [bold %s][Opening][/]" Theme.Green
-            elif fst assess.BestDefense = StatId.Poise then sprintf " [%s][Guarded][/]" Theme.Orange
+            if fst assess.WeakestDefense = StatId.Poise then sprintf " - [bold %s]Opening[/]" Theme.Green
+            elif fst assess.BestDefense = StatId.Poise then sprintf " - [%s]Guarded[/]" Theme.Orange
             else ""
           | Obscured -> ""
 
@@ -279,12 +279,12 @@ module Program =
           match assess.InsightLevel with
           | Penetrating | Keen ->
             let resVal = enemy.GetStat StatId.Resolve
-            if fst assess.WeakestDefense = StatId.Resolve then sprintf " [bold %s][%d ★ Opening][/]" Theme.Green resVal
-            elif fst assess.BestDefense = StatId.Resolve then sprintf " [%s][%d ⚠ Guarded][/]" Theme.Orange resVal
-            else sprintf " [%s][%d][/]" Theme.Comment resVal
+            if fst assess.WeakestDefense = StatId.Resolve then sprintf " - [bold %s]%d ★ Opening[/]" Theme.Green resVal
+            elif fst assess.BestDefense = StatId.Resolve then sprintf " - [%s]%d ⚠ Guarded[/]" Theme.Orange resVal
+            else sprintf " - [%s]%d[/]" Theme.Comment resVal
           | Discerning ->
-            if fst assess.WeakestDefense = StatId.Resolve then sprintf " [bold %s][Opening][/]" Theme.Green
-            elif fst assess.BestDefense = StatId.Resolve then sprintf " [%s][Guarded][/]" Theme.Orange
+            if fst assess.WeakestDefense = StatId.Resolve then sprintf " - [bold %s]Opening[/]" Theme.Green
+            elif fst assess.BestDefense = StatId.Resolve then sprintf " - [%s]Guarded[/]" Theme.Orange
             else ""
           | Obscured -> ""
 
@@ -292,12 +292,12 @@ module Program =
           match assess.InsightLevel with
           | Penetrating | Keen ->
             let intVal = enemy.GetStat StatId.Intuition
-            if fst assess.WeakestDefense = StatId.Intuition then sprintf " [bold %s][%d ★ Opening][/]" Theme.Green intVal
-            elif fst assess.BestDefense = StatId.Intuition then sprintf " [%s][%d ⚠ Guarded][/]" Theme.Orange intVal
-            else sprintf " [%s][%d][/]" Theme.Comment intVal
+            if fst assess.WeakestDefense = StatId.Intuition then sprintf " - [bold %s]%d ★ Opening[/]" Theme.Green intVal
+            elif fst assess.BestDefense = StatId.Intuition then sprintf " - [%s]%d ⚠ Guarded[/]" Theme.Orange intVal
+            else sprintf " - [%s]%d[/]" Theme.Comment intVal
           | Discerning ->
-            if fst assess.WeakestDefense = StatId.Intuition then sprintf " [bold %s][Opening][/]" Theme.Green
-            elif fst assess.BestDefense = StatId.Intuition then sprintf " [%s][Guarded][/]" Theme.Orange
+            if fst assess.WeakestDefense = StatId.Intuition then sprintf " - [bold %s]Opening[/]" Theme.Green
+            elif fst assess.BestDefense = StatId.Intuition then sprintf " - [%s]Guarded[/]" Theme.Orange
             else ""
           | Obscured -> ""
 
@@ -305,12 +305,12 @@ module Program =
           match assess.InsightLevel with
           | Penetrating | Keen ->
             let compVal = enemy.GetStat StatId.Composure
-            if fst assess.WeakestDefense = StatId.Composure then sprintf " [bold %s][%d ★ Opening][/]" Theme.Green compVal
-            elif fst assess.BestDefense = StatId.Composure then sprintf " [%s][%d ⚠ Guarded][/]" Theme.Orange compVal
-            else sprintf " [%s][%d][/]" Theme.Comment compVal
+            if fst assess.WeakestDefense = StatId.Composure then sprintf " - [bold %s]%d ★ Opening[/]" Theme.Green compVal
+            elif fst assess.BestDefense = StatId.Composure then sprintf " - [%s]%d ⚠ Guarded[/]" Theme.Orange compVal
+            else sprintf " - [%s]%d[/]" Theme.Comment compVal
           | Discerning ->
-            if fst assess.WeakestDefense = StatId.Composure then sprintf " [bold %s][Opening][/]" Theme.Green
-            elif fst assess.BestDefense = StatId.Composure then sprintf " [%s][Guarded][/]" Theme.Orange
+            if fst assess.WeakestDefense = StatId.Composure then sprintf " - [bold %s]Opening[/]" Theme.Green
+            elif fst assess.BestDefense = StatId.Composure then sprintf " - [%s]Guarded[/]" Theme.Orange
             else ""
           | Obscured -> ""
 

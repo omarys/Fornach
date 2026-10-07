@@ -3,6 +3,7 @@ namespace Fornach.Domain.Tests
 open System
 open Xunit
 open Spectre.Console
+open Fornach.Domain
 open Fornach.Cli
 
 module CliMarkupTests =
@@ -104,3 +105,22 @@ module CliMarkupTests =
     for t in titles do
       let m = Markup(t)
       Assert.NotNull(m)
+
+  [<Fact>]
+  let ``Combat action choices for all classes against all monsters parse cleanly in Markup without style errors`` () =
+    let classes = [ "berserker"; "duelist"; "warden"; "inquisitor" ]
+    let enemies = [
+      Bestiary.slagHound.ToCombatant (CombatantId.New())
+      Bestiary.stoneGargoyle.ToCombatant (CombatantId.New())
+      Bestiary.quarryOverseer.ToCombatant (CombatantId.New())
+      StoryBosses.createGuiltAspect ()
+      StoryBosses.createDenialAspect ()
+    ]
+
+    for cls in classes do
+      let player = StoryBosses.createProloguePlayer cls
+      for enemy in enemies do
+        let choices = Program.buildActionChoices player enemy
+        for choice in choices do
+          let m = Markup(choice)
+          Assert.NotNull(m)

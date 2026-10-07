@@ -151,7 +151,7 @@ module TacticalAssessment =
           elif bestVal >= 100 then "Moderate"
           else "Low"
         "DISCERNING READ",
-        sprintf "%A (~%d-%d [%s %s])" bestStat (Math.Max(1, bestVal - 20)) (bestVal + 20) tierDesc roleStr,
+        sprintf "%A (~%d-%d (%s %s))" bestStat (Math.Max(1, bestVal - 20)) (bestVal + 20) tierDesc roleStr,
         Some (sprintf "%A appears to be their lowest defense" (fst weakestDef))
       | Obscured ->
         let desc = Attributes.descriptorOf bestStat

@@ -199,13 +199,13 @@ module Display =
         | Obscured -> Theme.Comment
 
       grid.AddRow(Rule().RuleStyle(Theme.StyleCurrentLine)) |> ignore
-      grid.AddRow(Rule(sprintf "[bold %s] 󰓥 TACTICAL ASSESSMENT ── %s [/]" headlineColor assess.Headline).RuleStyle(Theme.StyleCurrentLine)) |> ignore
-      grid.AddRow(Markup(sprintf "%-22s %s" "󰈸 Primary Stat" assess.PrimarySummary)) |> ignore
+      grid.AddRow(Rule(sprintf "[bold %s] 󰓥 TACTICAL ASSESSMENT ── %s [/]" headlineColor (Markup.Escape assess.Headline)).RuleStyle(Theme.StyleCurrentLine)) |> ignore
+      grid.AddRow(Markup(sprintf "%-22s %s" "󰈸 Primary Stat" (Markup.Escape assess.PrimarySummary))) |> ignore
       match assess.VulnerabilitySummary with
       | Some vuln ->
-        grid.AddRow(Markup(sprintf "%-22s %s" "🎯 Defensive Opening" vuln)) |> ignore
+        grid.AddRow(Markup(sprintf "%-22s %s" "🎯 Defensive Opening" (Markup.Escape vuln))) |> ignore
       | None -> ()
-      grid.AddRow(Markup(sprintf "%-22s [italic %s]%s[/]" "💡 Tactical Advice" Theme.Yellow assess.StrategicAdvice)) |> ignore
+      grid.AddRow(Markup(sprintf "%-22s [italic %s]%s[/]" "💡 Tactical Advice" Theme.Yellow (Markup.Escape assess.StrategicAdvice))) |> ignore
       grid.AddRow(Markup(sprintf "%-22s [grey]%s[/]" "󰄬 Scrutiny vs Tell" (sprintf "Effective Acumen %d vs Composure %d (Ratio: %.2fx)" assess.EffectiveAcumen assess.TargetComposure assess.Ratio))) |> ignore
     | None -> ()
 

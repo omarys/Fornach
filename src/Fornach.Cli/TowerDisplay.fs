@@ -199,9 +199,9 @@ module TowerDisplay =
                 let traitNames = c.MonsterTraits |> List.map (fun t -> t.Name) |> String.concat ", "
                 sprintf " | Traits: [%s]%s[/]" Theme.Yellow traitNames
             let assess = TacticalAssessment.assess state.Player c
-            let vulnSnippet = match assess.VulnerabilitySummary with Some v -> sprintf " | Opening: %s" v | None -> ""
+            let vulnSnippet = match assess.VulnerabilitySummary with Some v -> sprintf " | Opening: %s" (Markup.Escape v) | None -> ""
             let readSnippet = sprintf "\n  󰓥 [bold %s]Tactical Read (%s):[/] %s%s\n  [italic %s]💡 %s[/]"
-                                Theme.Yellow assess.Headline assess.PrimarySummary vulnSnippet Theme.Comment assess.StrategicAdvice
+                                Theme.Yellow (Markup.Escape assess.Headline) (Markup.Escape assess.PrimarySummary) vulnSnippet Theme.Comment (Markup.Escape assess.StrategicAdvice)
             Some (sprintf "[bold %s]! HOSTILE GUARDIAN: %s%s[/] [grey]| Lv.%d %s | HP: %d/%d | Morale: %d/%d | %s: %s%s[/]%s"
               Theme.Red familyPrefix e.Name c.Level c.Class.Name c.Health.Current c.Health.Maximum c.Morale.Current c.Morale.Maximum (if c.Plane = Mental then "Form" else "Stance") stanceOrForm traitsSuffix readSnippet)
         | Some (EntityNpc n) ->
