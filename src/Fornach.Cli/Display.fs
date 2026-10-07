@@ -559,6 +559,7 @@ module Display =
     controlsTable.AddRow(Markup("[bold white]Y / U / B / N (Keypad)[/]"), Markup("Tower Mode (Locomotion)"), Markup("Diagonal movement: NW (Y/7), NE (U/9), SW (B/1), SE (N/3).")) |> ignore
     controlsTable.AddRow(Markup("[bold white]X [/] or [bold white]Semicolon (;)[/]"), Markup("Tower Mode"), Markup("Toggle Tile & Hazard Reticle Inspection Mode to examine distant cells.")) |> ignore
     controlsTable.AddRow(Markup("[bold white]Spacebar [/] or [bold white]Period (.)[/]"), Markup("Tower Mode"), Markup("Stand ground / Wait a turn to observe ambient flow and effects.")) |> ignore
+    controlsTable.AddRow(Markup("[bold white]C [/]"), Markup("Tower Mode"), Markup("Open the Character Sheet: level, mastery tier, XP progress, and the full 12-attribute matrix.")) |> ignore
     controlsTable.AddRow(Markup("[bold white]J / K [/] or [bold white]Arrows[/]"), Markup("Story & Duel Prompts"), Markup("Vim navigation up/down through tactical menus and story choices.")) |> ignore
     controlsTable.AddRow(Markup("[bold white]Q [/] or [bold white]Escape[/]"), Markup("Tower Mode / Inspect"), Markup("Exit reticle inspection mode or retreat from tower expedition to menu.")) |> ignore
 

@@ -595,6 +595,31 @@ module TowerSession =
                  MessageLog = logMsg :: state.MessageLog }
     | _ -> Error "No vault found at this location."
 
+  /// Applies combat experience to the run's player, rescaling stats on level-up.
+  /// Returns the updated player and chronicle notification lines (newest first).
+  let applyExperience (player: Combatant) (xp: int) : Combatant * string list =
+    let previousLevel = player.Level
+    let profile, levelsGained = player.Progression.GrantXP xp
+    let withProfile = { player with Progression = profile }
+
+    if levelsGained = 0 then
+      withProfile,
+      [ sprintf "Gained %d XP. (%d / %d toward Level %d)" xp profile.CurrentXP profile.ExperienceToNext (profile.Level + 1) ]
+    else
+      let leveled = TierFactory.rescaleToLevel withProfile profile.Level
+      let previousTier = ProgressionScale.levelToTier previousLevel
+      let currentTier = ProgressionScale.levelToTier profile.Level
+
+      let rankLine =
+        if currentTier <> previousTier then
+          sprintf " You have attained the rank of %s!" (currentTier.ToString())
+        else
+          ""
+
+      leveled,
+      [ sprintf "LEVEL UP! You are now Level %d (from %d). All attributes, Health, Morale, and Armor scale to your new mastery.%s"
+          profile.Level previousLevel rankLine ]
+
   /// Marks a defeated enemy on the floor and awards its dropped key, souls, and alchemical trophies
   let resolveEnemyDefeat (enemyId: string) (state: TowerRunState) : TowerRunState =
     let mutable droppedKeyOpt = None
@@ -612,10 +637,12 @@ module TowerSession =
     let mutable newKeys = state.CollectedKeys
     let mutable newSouls = state.Souls
     let mutable newTrophies = state.Trophies
+    let mutable newXp = 0
     let mutable logMessages = state.MessageLog
 
     match defeatedEnemyOpt with
     | Some e ->
+      newXp <- e.Combatant.Level * 10 + 25
       // Look up monster loot in Bestiary
       let monsterTemplateOpt =
         Bestiary.allMonsters
@@ -655,9 +682,15 @@ module TowerSession =
     | None -> ()
 
     let updatedFloor = { state.CurrentFloor with Entities = updatedEntities }
+
+    let leveledPlayer, xpMessages =
+      if newXp > 0 then applyExperience state.Player newXp
+      else state.Player, []
+
     { state with
+        Player = leveledPlayer
         CurrentFloor = updatedFloor
         CollectedKeys = newKeys
         Souls = newSouls
         Trophies = newTrophies
-        MessageLog = logMessages }
+        MessageLog = xpMessages @ logMessages }

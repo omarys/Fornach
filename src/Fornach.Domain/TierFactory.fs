@@ -23,6 +23,13 @@ module ProgressionScale =
     | Master -> 100
     | GrandMaster -> 200
 
+  /// Resolves the mastery tier for an arbitrary (uncapped) character level.
+  let levelToTier (level: int) : CombatTier =
+    if level >= 200 then GrandMaster
+    elif level >= 100 then Master
+    elif level >= 40 then Veteran
+    else Novice
+
   /// Computes (primary, secondary, tertiary, minor, offDefensive, offOffensive) for physical classes based on 1.0 : 0.75 : 0.75 ratio
   let physicalStatsForLevel (level: int) : int * int * int * int * int * int =
     let l = Math.Max(1, level)
@@ -217,3 +224,39 @@ module TierFactory =
     let fighter = createClassLevel cls level
     let tierName = sprintf "%s %s" (tier.ToString()) cls.Name
     { fighter with Name = tierName }
+
+  /// Rescales an existing combatant to a new level, preserving identity, gear, stance, and
+  /// current resource ratios. Reuses the canonical ProgressionScale formulas so level-ups
+  /// stay consistent with combatants generated directly at that level.
+  let rescaleToLevel (c: Combatant) (level: int) : Combatant =
+    let template = createClassLevel c.Class level
+
+    let scaledRatio (current: int) (max: int) =
+      if max <= 0 then 1.0 else float current / float max
+
+    let scaledValue (current: int) (oldMax: int) (newMax: int) =
+      int (Math.Round(float newMax * scaledRatio current oldMax))
+
+    let primaryStat =
+      if c.Plane = Physical then
+        let prim, _, _, _, _, _ = ProgressionScale.physicalStatsForLevel level
+        prim
+      else
+        let prim, _, _, _, _ = ProgressionScale.magicStatsForLevel level
+        prim
+
+    { c with
+        Stats = template.Stats
+        Health =
+          { Current = scaledValue c.Health.Current c.Health.Maximum template.Health.Maximum
+            Maximum = template.Health.Maximum }
+        Morale =
+          { Current = scaledValue c.Morale.Current c.Morale.Maximum template.Morale.Maximum
+            Maximum = template.Morale.Maximum }
+        Armor =
+          { Current = scaledValue c.Armor.Current c.Armor.Max template.Armor.Max
+            Max = template.Armor.Max }
+        Progression =
+          { c.Progression with
+              Level = level
+              PrimaryStat = primaryStat } }

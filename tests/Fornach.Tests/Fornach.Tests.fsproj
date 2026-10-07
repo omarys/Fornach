@@ -10,6 +10,7 @@
     <Compile Include="StorySpatialTests.fs" />
     <Compile Include="TowerTests.fs" />
     <Compile Include="EncounterTests.fs" />
+    <Compile Include="ProgressionTests.fs" />
     <Compile Include="ClassBalanceTests.fs" />
     <Compile Include="CombatLoggerTests.fs" />
   </ItemGroup>

@@ -209,6 +209,30 @@ type ProgressionProfile = {
     let estimatedPrimaryStat = 45 + (Math.Max(1, level) - 1) * 4
     ProgressionProfile.createWithStat cls level estimatedPrimaryStat
 
+  /// Experience required to advance from the given level to the next (uncapped linear curve).
+  static member ExperienceForNextLevel (level: int) : int =
+    Math.Max(1, level) * 100
+
+  /// Experience still required to reach the next level from this profile.
+  member this.ExperienceToNext : int =
+    ProgressionProfile.ExperienceForNextLevel this.Level
+
+  /// Adds experience, applying as many level-ups as the amount crosses.
+  /// Returns the updated profile and the number of levels gained.
+  member this.GrantXP (amount: int) : ProgressionProfile * int =
+    let mutable xp = this.CurrentXP + Math.Max(0, amount)
+    let mutable level = this.Level
+    let mutable gained = 0
+
+    while xp >= ProgressionProfile.ExperienceForNextLevel level do
+      xp <- xp - ProgressionProfile.ExperienceForNextLevel level
+      level <- level + 1
+      gained <- gained + 1
+
+    ({ this with
+        Level = level
+        CurrentXP = xp }, gained)
+
   /// Total remaining uses across all equipped preparation slots
   member this.TotalRemainingPrepUses : int =
     this.Preparations |> List.sumBy (fun s -> s.RemainingUses)

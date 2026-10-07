@@ -584,7 +584,7 @@ module TowerDisplay =
     grid.AddRow(Markup(sprintf "[bold %s]─── 󰋜 ARCHITECTURAL LEGEND ───[/]" Theme.Comment)) |> ignore
     grid.AddRow(Markup(sprintf "[bold %s]@[/] You  [bold %s]![/] Enemy  [bold %s]?[/] NPC  [bold %s]⌹[/] Chest/Vault  [bold %s]†[/] Shrine  [bold #bd93f9]♨[/] Altar  [bold #8be9fd]$[/] Trader  [bold #50fa7b]✦[/] Echo  [bold #ff5555]✕[/] Trap"
       Theme.Yellow Theme.Red Theme.Cyan Theme.Yellow Theme.Green)) |> ignore
-    grid.AddRow(Markup(sprintf "[%s]󰌌 Keys: Arrows/Vim: Move | x/; : Inspect | Space: Wait | ? / F1: Symbol & Glyph Legend | Q: Quit[/]" Theme.Comment)) |> ignore
+    grid.AddRow(Markup(sprintf "[%s]󰌌 Keys: Arrows/Vim: Move | x/; : Inspect | C: Character | Space: Wait | ? / F1: Symbol & Glyph Legend | Q: Quit[/]" Theme.Comment)) |> ignore
 
     Panel(grid)
       .Header(sprintf "[bold %s]󰍹 CHAMBER OBSERVATIONS[/]" Theme.Yellow)
@@ -670,6 +670,100 @@ module TowerDisplay =
   /// Shows the comprehensive symbol, glyph, and control manual
   let showHelpManual () =
     Display.showSymbolAndGlyphLegend ()
+
+  /// Renders the full character sheet: mastery tier, XP progress, and the 12-attribute matrix.
+  let renderCharacterSheet (state: TowerRunState) : Panel =
+    let p = state.Player
+    let grid = Grid()
+    grid.AddColumn(GridColumn()) |> ignore
+    grid.AddColumn(GridColumn().NoWrap()) |> ignore
+
+    let tier = ProgressionScale.levelToTier p.Level
+
+    grid.AddRow(Markup(sprintf "[bold %s]%s[/]  [grey](%s • Level %d)[/]" Theme.Yellow p.Name p.Class.Name p.Level)) |> ignore
+    grid.AddRow(Markup(sprintf "Mastery Tier: [bold %s]%s[/]    Plane: [bold %s]%s[/]" Theme.Cyan (tier.ToString()) Theme.Purple (p.Plane.ToString()))) |> ignore
+    grid.AddRow(Markup(sprintf "Experience: [bold %s]%d / %d[/] toward Level %d" Theme.Green p.Progression.CurrentXP p.Progression.ExperienceToNext (p.Level + 1))) |> ignore
+    grid.AddRow(Rule().RuleStyle(Theme.StyleComment)) |> ignore
+
+    grid.AddRow(Markup(sprintf "[bold %s]─── 󰓥 VITALS ───[/]" Theme.Yellow)) |> ignore
+    grid.AddRow(Markup(Display.renderBar "󰋑 Health" p.Health.Current p.Health.Maximum Theme.Red)) |> ignore
+    grid.AddRow(Markup(Display.renderBar "󰧑 Morale" p.Morale.Current p.Morale.Maximum Theme.Cyan)) |> ignore
+    grid.AddRow(Markup(sprintf "%-22s [%s]%d / %d[/] [%s](%d%% soak)[/]" " Armor Integrity" Theme.Comment p.Armor.Current p.Armor.Max Theme.Yellow (int (p.Armor.AbsorptionRatio * 100.0)))) |> ignore
+
+    let renderPlane (plane: Plane) (planeColor: string) =
+      grid.AddRow(Markup(sprintf "[bold %s]─── %s PLANE ───[/]" planeColor (plane.ToString().ToUpperInvariant()))) |> ignore
+
+      for vector in [ Vector.Power; Vector.Agility; Vector.Discipline ] do
+        let cells =
+          Attributes.all
+          |> List.filter (fun stat ->
+            let d = Attributes.descriptorOf stat
+            d.Plane = plane && d.Vector = vector)
+          |> List.map (fun stat ->
+            let d = Attributes.descriptorOf stat
+            let tag = if d.Orientation = Offense then "OFF" else "DEF"
+            sprintf "[%s]%s[/] [bold white]%d[/] [grey]%s[/]" planeColor d.CanonicalName (p.Stats.Get stat) tag)
+          |> String.concat "      "
+
+        grid.AddRow(Markup(sprintf "[grey]%s[/]  %s" (vector.ToString()) cells)) |> ignore
+
+    renderPlane Physical Theme.Red
+    renderPlane Mental Theme.Purple
+
+    grid.AddRow(Rule().RuleStyle(Theme.StyleComment)) |> ignore
+
+    if p.Plane = Mental then
+      let formName = p.ComplexForm |> Option.map (fun f -> f.Name) |> Option.defaultValue "Unthreaded"
+      grid.AddRow(Markup(sprintf "Complex Form: [bold %s]%s[/]" Theme.Pink formName)) |> ignore
+    else
+      grid.AddRow(Markup(sprintf "Combat Stance: [bold %s]%A[/]" Theme.Green p.Stance)) |> ignore
+
+    if not p.Preparations.IsEmpty then
+      grid.AddRow(Markup(sprintf "[bold %s]─── TACTICAL PREPARATIONS ───[/]" Theme.Cyan)) |> ignore
+
+      for slot in p.Preparations do
+        grid.AddRow(Markup(sprintf "• [bold white]%A[/]  [grey]%d / %d uses[/]" slot.Type slot.RemainingUses slot.MaxUses)) |> ignore
+
+    Panel(grid)
+      .Header(sprintf "[bold %s]󰒋 CHARACTER SHEET[/]" Theme.Cyan)
+      .Border(BoxBorder.Rounded)
+      .BorderStyle(Theme.StyleCurrentLine)
+      .Expand()
+
+  /// Opens the character sheet modal and waits for dismissal.
+  let showCharacterSheet (state: TowerRunState) : unit =
+    AnsiConsole.Clear()
+    AnsiConsole.Write(renderCharacterSheet state)
+    AnsiConsole.WriteLine()
+    AnsiConsole.MarkupLine(sprintf "[%s]Press any key to return to the chamber...[/]" Theme.Comment)
+    Console.ReadKey(true) |> ignore
+
+  /// Displays a celebratory banner when the player has gained a level.
+  let showLevelUpBanner (state: TowerRunState) (previousLevel: int) : unit =
+    let p = state.Player
+
+    if p.Level > previousLevel then
+      let previousTier = ProgressionScale.levelToTier previousLevel
+      let currentTier = ProgressionScale.levelToTier p.Level
+
+      let rankLine =
+        if currentTier <> previousTier then
+          sprintf "\n[bold gold1]★ RANK BREAKTHROUGH — %s ★[/]" (currentTier.ToString())
+        else
+          ""
+
+      let panel =
+        Panel(Markup(sprintf "[bold green]⬆ LEVEL UP![/]  [bold white]Level %d → %d[/]%s\n[italic grey]All attributes, Health, Morale, and Armor scale to your new mastery.[/]"
+          previousLevel p.Level rankLine))
+          .Header(sprintf "[bold %s]󰒋 ASCENSION[/]" Theme.Green)
+          .Border(BoxBorder.Double)
+          .BorderStyle(Style(foreground = Nullable Color.Green))
+
+      AnsiConsole.Clear()
+      AnsiConsole.Write(Align.Center(panel))
+      AnsiConsole.WriteLine()
+      AnsiConsole.MarkupLine(sprintf "[%s]Press any key to continue...[/]" Theme.Comment)
+      Console.ReadKey(true) |> ignore
 
   /// Main interactive turn loop for Tower dungeon crawling and Story Mode stage exploration
   let runTowerCrawlWithMode
@@ -843,10 +937,9 @@ module TowerDisplay =
                   (fun () -> ())
 
               if choice.Contains("Engage in Tactical") then
+                let levelBefore = state.Player.Level
                 let outcome, updatedPlayer = onCombatDuel state.Player enemy.Combatant
                 if outcome = CombatOutcome.PlayerVictorious then
-                  state <- TowerSession.resolveEnemyDefeat enemy.Id state
-
                   if isBoss then
                     // Overcoming the trauma aspect grants total catharsis:
                     let catharticPlayer =
@@ -901,6 +994,9 @@ module TowerDisplay =
                     AnsiConsole.MarkupLine(sprintf "\n[bold %s]Adversary vanquished! Field triage: +%d HP, +%d Morale, +%d Armor repaired, and combat strain meters vented%s.[/]"
                       Theme.Green healthHeal moraleHeal armorRepair weaponMsg)
                     Thread.Sleep(900)
+
+                  state <- TowerSession.resolveEnemyDefeat enemy.Id state
+                  showLevelUpBanner state levelBefore
                 else
                   onDefeatAnimation()
                   // Player defeat: reset at floor spawn with 100% restored vitals
@@ -930,6 +1026,7 @@ module TowerDisplay =
                   Thread.Sleep(1200)
 
               elif choice.Contains("Quick Resolve") then
+                let levelBefore = state.Player.Level
                 let strainedPlayer =
                   { state.Player with
                       Health = state.Player.Health.ApplyDelta -15
@@ -939,6 +1036,7 @@ module TowerDisplay =
                 state <- TowerSession.resolveEnemyDefeat enemy.Id state
                 AnsiConsole.MarkupLine(sprintf "\n[bold %s]With steady resolve, you shatter the foe's stance![/]" Theme.Green)
                 Thread.Sleep(700)
+                showLevelUpBanner state levelBefore
 
               else
                 // Disengage
@@ -1173,6 +1271,9 @@ module TowerDisplay =
               AnsiConsole.Confirm(sprintf "[bold %s]Do you wish to retreat from the Tower and return to the main menu?[/]" Theme.Yellow, false)
             if confirm then
               sessionActive <- false
+
+          | _ when key.KeyChar = 'c' || key.KeyChar = 'C' ->
+            showCharacterSheet state
 
           | _ when key.KeyChar = 'x' || key.KeyChar = 'X' || key.KeyChar = ';' ->
             // Enter Inspect Mode centered on player position
