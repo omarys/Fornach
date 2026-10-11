@@ -226,16 +226,29 @@ module TierFactory =
     { fighter with Name = tierName }
 
   /// Rescales an existing combatant to a new level, preserving identity, gear, stance, and
-  /// current resource ratios. Reuses the canonical ProgressionScale formulas so level-ups
-  /// stay consistent with combatants generated directly at that level.
+  /// current resource ratios. Applies only the per-level growth between the canonical
+  /// templates for the old and new level, so hand-authored or equipment-modified base
+  /// stats are preserved rather than reset to the generic class formula.
   let rescaleToLevel (c: Combatant) (level: int) : Combatant =
     let template = createClassLevel c.Class level
+    let previousTemplate = createClassLevel c.Class c.Level
 
-    let scaledRatio (current: int) (max: int) =
-      if max <= 0 then 1.0 else float current / float max
+    let growth (oldValue: int) (newValue: int) = newValue - oldValue
+
+    let scaledStats =
+      Attributes.all
+      |> List.fold
+        (fun (stats: StatBlock) stat ->
+          stats.Modify(stat, growth (previousTemplate.Stats.Get stat) (template.Stats.Get stat)))
+        c.Stats
+
+    let newHealthMax = c.Health.Maximum + growth previousTemplate.Health.Maximum template.Health.Maximum
+    let newMoraleMax = c.Morale.Maximum + growth previousTemplate.Morale.Maximum template.Morale.Maximum
+    let newArmorMax = c.Armor.Max + growth previousTemplate.Armor.Max template.Armor.Max
 
     let scaledValue (current: int) (oldMax: int) (newMax: int) =
-      int (Math.Round(float newMax * scaledRatio current oldMax))
+      if oldMax <= 0 then newMax
+      else int (Math.Round(float newMax * (float current / float oldMax)))
 
     let primaryStat =
       if c.Plane = Physical then
@@ -246,16 +259,16 @@ module TierFactory =
         prim
 
     { c with
-        Stats = template.Stats
+        Stats = scaledStats
         Health =
-          { Current = scaledValue c.Health.Current c.Health.Maximum template.Health.Maximum
-            Maximum = template.Health.Maximum }
+          { Current = scaledValue c.Health.Current c.Health.Maximum newHealthMax
+            Maximum = newHealthMax }
         Morale =
-          { Current = scaledValue c.Morale.Current c.Morale.Maximum template.Morale.Maximum
-            Maximum = template.Morale.Maximum }
+          { Current = scaledValue c.Morale.Current c.Morale.Maximum newMoraleMax
+            Maximum = newMoraleMax }
         Armor =
-          { Current = scaledValue c.Armor.Current c.Armor.Max template.Armor.Max
-            Max = template.Armor.Max }
+          { Current = scaledValue c.Armor.Current c.Armor.Max newArmorMax
+            Max = newArmorMax }
         Progression =
           { c.Progression with
               Level = level

@@ -454,7 +454,12 @@ module TowerGenerator =
             if biomeMonsters.IsEmpty then Bestiary.slagHound
             else
               let available =
-                if floorNumber <= 1 then
+                if isStory && floorNumber <= 3 then
+                  // Story stages 1-3 are narrative tutorial tiers: keep encounters to the
+                  // Novice-tier biome mob so a Veteran (e.g. Thorn Weaver) never opens on
+                  // the level-35 protagonist.
+                  [ biomeMonsters.[0] ]
+                elif floorNumber <= 1 then
                   // Floor 1: First plazas have Novice mobs (e.g. Slag Hound), later plazas have Veteran mobs (e.g. Stone Gargoyle)
                   if i < 2 then [ biomeMonsters.[0] ]
                   else [ biomeMonsters.[Math.Min(1, biomeMonsters.Length - 1)] ]

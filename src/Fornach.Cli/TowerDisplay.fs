@@ -683,6 +683,7 @@ module TowerDisplay =
     grid.AddRow(Markup(sprintf "[bold %s]%s[/]  [grey](%s • Level %d)[/]" Theme.Yellow p.Name p.Class.Name p.Level)) |> ignore
     grid.AddRow(Markup(sprintf "Mastery Tier: [bold %s]%s[/]    Plane: [bold %s]%s[/]" Theme.Cyan (tier.ToString()) Theme.Purple (p.Plane.ToString()))) |> ignore
     grid.AddRow(Markup(sprintf "Experience: [bold %s]%d / %d[/] toward Level %d" Theme.Green p.Progression.CurrentXP p.Progression.ExperienceToNext (p.Level + 1))) |> ignore
+    grid.AddRow(Markup(sprintf "[grey]Attributes are stance-adjusted: +15%% matching vector, -10%% the plane's other vectors.[/]")) |> ignore
     grid.AddRow(Rule().RuleStyle(Theme.StyleComment)) |> ignore
 
     grid.AddRow(Markup(sprintf "[bold %s]─── 󰓥 VITALS ───[/]" Theme.Yellow)) |> ignore
@@ -702,7 +703,7 @@ module TowerDisplay =
           |> List.map (fun stat ->
             let d = Attributes.descriptorOf stat
             let tag = if d.Orientation = Offense then "OFF" else "DEF"
-            sprintf "[%s]%s[/] [bold white]%d[/] [grey]%s[/]" planeColor d.CanonicalName (p.Stats.Get stat) tag)
+            sprintf "[%s]%s[/] [bold white]%d[/] [grey]%s[/]" planeColor d.CanonicalName (p.GetCombatStat stat) tag)
           |> String.concat "      "
 
         grid.AddRow(Markup(sprintf "[grey]%s[/]  %s" (vector.ToString()) cells)) |> ignore

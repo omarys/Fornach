@@ -118,6 +118,30 @@ type Combatant =
         rawVal
     int (Math.Round(float penalized * this.EffectiveDefenseMultiplier))
 
+  /// Retrieves a stance-adjusted stat for opposed combat resolution: adopting a stance boosts
+  /// the stats of its vector and penalizes the plane's other vectors. Canonical `GetStat` and
+  /// `Stats` remain stance-neutral; this is the combat-only view used by ActionResolver.
+  member this.GetCombatStat(stat: StatId) =
+    let baseValue = this.GetStat stat
+
+    let stanceVector =
+      match this.Stance with
+      | CombatStance.PowerStance -> Vector.Power
+      | CombatStance.AgilityStance -> Vector.Agility
+      | CombatStance.DisciplineStance -> Vector.Discipline
+
+    let descriptor = Attributes.descriptorOf stat
+
+    if descriptor.Plane <> this.Plane then
+      baseValue
+    elif descriptor.Vector = stanceVector then
+      Math.Max(1, int (Math.Round(float baseValue * 1.10)))
+    elif descriptor.Orientation = Offense then
+      // Trade-off: the plane's other vectors lose offensive sharpness, but keep their guard.
+      Math.Max(1, int (Math.Round(float baseValue * 0.90)))
+    else
+      baseValue
+
   /// Dominant arcane vector focus based on mental attribute allocation
   member this.ArcaneFocus : Vector =
     let i = this.GetStat Intellect

@@ -606,7 +606,15 @@ module TowerSession =
       withProfile,
       [ sprintf "Gained %d XP. (%d / %d toward Level %d)" xp profile.CurrentXP profile.ExperienceToNext (profile.Level + 1) ]
     else
-      let leveled = TierFactory.rescaleToLevel withProfile profile.Level
+      // rescaleToLevel treats c.Progression.Level as the old level, so pass the
+      // pre-level-up player, then reattach the XP profile (which carries CurrentXP).
+      let leveled = TierFactory.rescaleToLevel player profile.Level
+
+      let leveled =
+        { leveled with
+            Progression =
+              { profile with
+                  PrimaryStat = leveled.Progression.PrimaryStat } }
       let previousTier = ProgressionScale.levelToTier previousLevel
       let currentTier = ProgressionScale.levelToTier profile.Level
 

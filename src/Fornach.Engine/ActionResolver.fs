@@ -959,8 +959,8 @@ module ActionResolver =
       match atk with
       // 1. Physical Attacks
       | ForceStrike isWild ->
-        let off = currentActor.GetStat Force
-        let def = (currentTarget.GetStat Fortitude + currentTarget.GetStat Resolve) / 2
+        let off = currentActor.GetCombatStat Force
+        let def = (currentTarget.GetCombatStat Fortitude + currentTarget.GetCombatStat Resolve) / 2
         let stanceMult = if currentActor.Stance = CombatStance.PowerStance then 1.25 else 1.0
         let wildMult = (if isWild then 1.35 else 1.0) * stanceMult
         let ratio = float off / Math.Max(1.0, float def)
@@ -980,8 +980,8 @@ module ActionResolver =
         off, def, wildMult, disp, upd
 
       | FinesseCadence isRelentless ->
-        let off = currentActor.GetStat Finesse
-        let def = (currentTarget.GetStat Reflex + currentTarget.GetStat Intuition) / 2
+        let off = currentActor.GetCombatStat Finesse
+        let def = (currentTarget.GetCombatStat Reflex + currentTarget.GetCombatStat Intuition) / 2
         let hits = if isRelentless then 3 else 1
         let reckMult = 1.0 + (float currentTarget.Meters.Recklessness.Value / 100.0)
         // Probing cadence deals reduced base damage (0.95x) while seeking openings; Relentless Cadence gambit unleashes a 1.35x flurry
@@ -1003,8 +1003,8 @@ module ActionResolver =
         off, def, baseProbingMult, disp, upd
 
       | ProwessStrike isInvitational ->
-        let off = currentActor.GetStat Prowess
-        let def = (currentTarget.GetStat Poise + currentTarget.GetStat Composure) / 2
+        let off = currentActor.GetCombatStat Prowess
+        let def = (currentTarget.GetCombatStat Poise + currentTarget.GetCombatStat Composure) / 2
         let studyMult = 1.0 + (float currentActor.StudyStacks * 0.15)
         let baitMult = if isInvitational then 1.25 else 1.0
         let stanceMult = if currentActor.Stance = CombatStance.DisciplineStance then 1.10 else 1.0
@@ -1026,8 +1026,8 @@ module ActionResolver =
 
 
       | CalculatedFlawStrike stacks ->
-        let off = currentActor.GetStat Prowess
-        let def = (currentTarget.GetStat Poise + currentTarget.GetStat Composure) / 2
+        let off = currentActor.GetCombatStat Prowess
+        let def = (currentTarget.GetCombatStat Poise + currentTarget.GetCombatStat Composure) / 2
         let disparity = Math.Max(0, off - def)
         let spend = Math.Min(currentActor.StudyStacks, Math.Max(2, stacks))
         let mult = 1.2 + (0.35 * float spend)
@@ -1041,8 +1041,8 @@ module ActionResolver =
         off, def, mult, disp, upd
 
       | MasterfulDisarm _ ->
-        let off = currentActor.GetStat Prowess
-        let def = (currentTarget.GetStat Poise + currentTarget.GetStat Composure) / 2
+        let off = currentActor.GetCombatStat Prowess
+        let def = (currentTarget.GetCombatStat Poise + currentTarget.GetCombatStat Composure) / 2
         let disp = fun _ -> Some DisarmOrLimbDisable
 
         let upd _ (m: StatusMeters) =
@@ -1054,8 +1054,8 @@ module ActionResolver =
 
       // 2. Social Attacks
       | AuthorityDecree isImperious ->
-        let off = currentActor.GetStat Intellect
-        let def = (currentTarget.GetStat Fortitude + currentTarget.GetStat Resolve) / 2
+        let off = currentActor.GetCombatStat Intellect
+        let def = (currentTarget.GetCombatStat Fortitude + currentTarget.GetCombatStat Resolve) / 2
         let disparity = Math.Max(0, off - def)
         let disparityReck = int (Math.Round(float disparity / 15.0))
         let imperiousMult = if isImperious then 1.3 else 1.0
@@ -1072,8 +1072,8 @@ module ActionResolver =
         off, def, imperiousMult, disp, upd
 
       | GuileDeception isConfidenceTrap ->
-        let off = currentActor.GetStat Acuity
-        let def = (currentTarget.GetStat Reflex + currentTarget.GetStat Intuition) / 2
+        let off = currentActor.GetCombatStat Acuity
+        let def = (currentTarget.GetCombatStat Reflex + currentTarget.GetCombatStat Intuition) / 2
         let disparity = Math.Max(0, off - def)
         let disparityReck = int (Math.Round(float disparity / 10.0))
         let args = if isConfidenceTrap then 3 else 1
@@ -1089,8 +1089,8 @@ module ActionResolver =
         off, def, (float args * reckMult), disp, upd
 
       | AcumenInterrogation isCheckmate ->
-        let off = currentActor.GetStat Acumen
-        let def = (currentTarget.GetStat Poise + currentTarget.GetStat Composure) / 2
+        let off = currentActor.GetCombatStat Acumen
+        let def = (currentTarget.GetCombatStat Poise + currentTarget.GetCombatStat Composure) / 2
         let disparity = Math.Max(0, off - def)
         let disparityReck = int (Math.Round(float disparity / 10.0))
         let studyMult = 1.0 + (float currentActor.StudyStacks * 0.25)
@@ -1109,8 +1109,8 @@ module ActionResolver =
 
       // 3. Arcane Attacks
       | ArcaneCataclysm isOverchannel ->
-        let off = currentActor.GetStat Intellect
-        let rawDef = (currentTarget.GetStat Fortitude + currentTarget.GetStat Resolve) / 2
+        let off = currentActor.GetCombatStat Intellect
+        let rawDef = (currentTarget.GetCombatStat Fortitude + currentTarget.GetCombatStat Resolve) / 2
         let def = if currentTarget.Class = CharacterClass.Warden || currentTarget.Class = CharacterClass.Justicar then int (float rawDef * 1.25) else rawDef
         let disparity = Math.Max(0, off - def)
         let disparityReck = int (Math.Round(float disparity / 15.0))
@@ -1136,8 +1136,8 @@ module ActionResolver =
         off, def, cataclysmMult, disp, upd
 
       | SynapticGlamour isMindFracture ->
-        let off = currentActor.GetStat Acuity
-        let rawDef = (currentTarget.GetStat Reflex + currentTarget.GetStat Intuition) / 2
+        let off = currentActor.GetCombatStat Acuity
+        let rawDef = (currentTarget.GetCombatStat Reflex + currentTarget.GetCombatStat Intuition) / 2
         let def = if currentTarget.Class = CharacterClass.Warden || currentTarget.Class = CharacterClass.Justicar then int (float rawDef * 1.25) else rawDef
         let disparity = Math.Max(0, off - def)
         let disparityReck = int (Math.Round(float disparity / 10.0))
@@ -1153,8 +1153,8 @@ module ActionResolver =
         off, def, (float pulses * profMult), disp, upd
 
       | MirrorIllusion isDecoySwarm ->
-        let off = currentActor.GetStat Acuity
-        let rawDef = (currentTarget.GetStat Reflex + currentTarget.GetStat Intuition) / 2
+        let off = currentActor.GetCombatStat Acuity
+        let rawDef = (currentTarget.GetCombatStat Reflex + currentTarget.GetCombatStat Intuition) / 2
         let def = if currentTarget.Class = CharacterClass.Warden || currentTarget.Class = CharacterClass.Justicar then int (float rawDef * 1.25) else rawDef
         let disparity = Math.Max(0, off - def)
         let disparityReck = int (Math.Round(float disparity / 12.0))
@@ -1170,8 +1170,8 @@ module ActionResolver =
         off, def, (0.85 * float swarms * profMult), disp, upd
 
       | RunicWardTrap isAnomalousGlyph ->
-        let off = currentActor.GetStat Acumen
-        let rawDef = (currentTarget.GetStat Poise + currentTarget.GetStat Composure) / 2
+        let off = currentActor.GetCombatStat Acumen
+        let rawDef = (currentTarget.GetCombatStat Poise + currentTarget.GetCombatStat Composure) / 2
         let def = if currentTarget.Class = CharacterClass.Warden || currentTarget.Class = CharacterClass.Justicar then int (float rawDef * 1.25) else rawDef
         let disparity = Math.Max(0, off - def)
         let disparityReck = int (Math.Round(float disparity / 12.0))
@@ -1190,8 +1190,8 @@ module ActionResolver =
         off, def, (studyMult * glyphMult * profMult), disp, upd
 
       | DisorientingShockwave isStaggeringPulse ->
-        let off = currentActor.GetStat Acumen
-        let rawDef = (currentTarget.GetStat Poise + currentTarget.GetStat Composure) / 2
+        let off = currentActor.GetCombatStat Acumen
+        let rawDef = (currentTarget.GetCombatStat Poise + currentTarget.GetCombatStat Composure) / 2
         let def = if currentTarget.Class = CharacterClass.Warden || currentTarget.Class = CharacterClass.Justicar then int (float rawDef * 1.25) else rawDef
         let disparity = Math.Max(0, off - def)
         let disparityReck = int (Math.Round(float disparity / 12.0))
@@ -1211,8 +1211,8 @@ module ActionResolver =
         off, def, (studyMult * pulseMult * profMult), disp, upd
 
       | TraumaAttack DenialPhaseShift ->
-        let off = currentActor.GetStat Finesse
-        let def = (currentTarget.GetStat Reflex + currentTarget.GetStat Intuition) / 2
+        let off = currentActor.GetCombatStat Finesse
+        let def = (currentTarget.GetCombatStat Reflex + currentTarget.GetCombatStat Intuition) / 2
         let disparity = Math.Max(0, off - def)
         let disp = fun isCrit -> if isCrit then Some DialecticalParalysis else None
         let upd isCrit (m: StatusMeters) =
@@ -1222,8 +1222,8 @@ module ActionResolver =
         off, def, 1.25, disp, upd
 
       | TraumaAttack BasaltEruption ->
-        let off = currentActor.GetStat Force
-        let def = (currentTarget.GetStat Fortitude + currentTarget.GetStat Resolve) / 2
+        let off = currentActor.GetCombatStat Force
+        let def = (currentTarget.GetCombatStat Fortitude + currentTarget.GetCombatStat Resolve) / 2
         let disparity = Math.Max(0, off - def)
         let disp = fun isCrit -> if isCrit then Some(CrushingBlow(35 + (disparity / 10))) else None
         let upd isCrit (m: StatusMeters) =
@@ -1235,8 +1235,8 @@ module ActionResolver =
         off, def, 1.50, disp, upd
 
       | TraumaAttack CoerciveBargain ->
-        let off = currentActor.GetStat Acumen
-        let def = (currentTarget.GetStat Poise + currentTarget.GetStat Composure) / 2
+        let off = currentActor.GetCombatStat Acumen
+        let def = (currentTarget.GetCombatStat Poise + currentTarget.GetCombatStat Composure) / 2
         let disparity = Math.Max(0, off - def)
         let disp = fun isCrit -> if isCrit then Some DialecticalParalysis else None
         let upd isCrit (m: StatusMeters) =
@@ -1248,8 +1248,8 @@ module ActionResolver =
         off, def, 1.15, disp, upd
 
       | TraumaAttack ApathyDoldrums ->
-        let off = currentActor.GetStat Fortitude
-        let def = (currentTarget.GetStat Poise + currentTarget.GetStat Composure) / 2
+        let off = currentActor.GetCombatStat Fortitude
+        let def = (currentTarget.GetCombatStat Poise + currentTarget.GetCombatStat Composure) / 2
         let disparity = Math.Max(0, off - def)
         let disp = fun isCrit -> if isCrit then Some(CognitiveRupture(40)) else None
         let upd isCrit (m: StatusMeters) =
@@ -1259,8 +1259,8 @@ module ActionResolver =
         off, def, 0.70, disp, upd
 
       | TraumaAttack SereneResolution ->
-        let off = currentActor.GetStat Composure
-        let def = (currentTarget.GetStat Fortitude + currentTarget.GetStat Resolve) / 2
+        let off = currentActor.GetCombatStat Composure
+        let def = (currentTarget.GetCombatStat Fortitude + currentTarget.GetCombatStat Resolve) / 2
         let disp = fun _ -> None
         let upd _ (m: StatusMeters) =
           { m with
