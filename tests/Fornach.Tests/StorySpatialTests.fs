@@ -28,11 +28,11 @@ module StorySpatialTests =
     Combatant.create (CombatantId.New()) "Protagonist" 250 250 stats
 
   [<Fact>]
-  let ``Story Mode Stage 1 generates battered chest, shivering boy NPC, grinding mobs, and Aspect of Guilt boss`` () =
+  let ``Story Mode Stage 1 opens in a rain-soaked forest with the shivering boy, grinding mobs, and the Bandit Leader`` () =
     let floor = TowerGenerator.generateFloorWithMode 42 1 true
 
     Assert.Equal(1, floor.FloorNumber)
-    Assert.Equal(FloorTheme.QuarryPlazas, floor.Theme)
+    Assert.Equal(FloorTheme.PineCloisters, floor.Theme)
 
     let entities = floor.Entities |> Map.values |> Seq.toList
 
@@ -54,17 +54,23 @@ module StorySpatialTests =
     Assert.True(npcOpt.IsSome, "Stage 1 must include The Shivering Boy NPC")
     Assert.Equal("The Shivering Boy", npcOpt.Value.Name)
     Assert.True(npcOpt.Value.Quest.IsSome, "The Shivering Boy must offer a side quest")
-    Assert.Equal("quest_quarry_hounds", npcOpt.Value.Quest.Value.Id)
+    Assert.Equal("quest_save_lyra", npcOpt.Value.Quest.Value.Id)
+    Assert.Equal(Some "Bandit Leader", npcOpt.Value.Quest.Value.RequiredEnemyName)
 
-    // 3. Stage Boss: Aspect of Guilt
+    // 3. Stage Boss: the Bandit Leader (no grief aspect on the tutorial floor)
     let bossOpt =
       entities
       |> List.tryPick (function
         | EntityEnemy e when e.Id = "boss_stage_1" -> Some e
         | _ -> None)
-    Assert.True(bossOpt.IsSome, "Stage 1 must include Aspect of Guilt boss")
-    Assert.Equal("Aspect of Guilt", bossOpt.Value.Name)
+    Assert.True(bossOpt.IsSome, "Stage 1 must include the Bandit Leader boss")
+    Assert.Equal("Bandit Leader", bossOpt.Value.Name)
     Assert.Equal(Some "keystone_stage_1", bossOpt.Value.DropsKeyId)
+    Assert.DoesNotContain(
+      entities,
+      function
+      | EntityEnemy e -> e.Name.StartsWith "Aspect of"
+      | _ -> false)
 
     // 4. Multiple grinding mobs across the colonnades
     let grindingMobs =
@@ -82,12 +88,13 @@ module StorySpatialTests =
       Assert.Fail(sprintf "Expected stairway portal locked by keystone_stage_1, got %A" other)
 
   [<Theory>]
-  [<InlineData(2, "Aspect of Denial", "keystone_stage_2", "quest_denial_weavers")>]
-  [<InlineData(3, "Aspect of Anger", "keystone_stage_3", "quest_anger_magma")>]
-  [<InlineData(4, "Aspect of Bargaining", "keystone_stage_4", "quest_bargain_harpies")>]
-  [<InlineData(5, "Aspect of Depression", "keystone_stage_5", "quest_depression_leeches")>]
-  [<InlineData(6, "Aspect of Acceptance", "keystone_stage_6", "quest_acceptance_harmony")>]
-  let ``Story Mode stages 2 through 6 configure grief bosses, thematic NPCs, and locked portals``
+  [<InlineData(2, "Aspect of Guilt", "keystone_stage_2", "quest_quarry_hounds")>]
+  [<InlineData(3, "Aspect of Denial", "keystone_stage_3", "quest_denial_weavers")>]
+  [<InlineData(4, "Aspect of Anger", "keystone_stage_4", "quest_anger_magma")>]
+  [<InlineData(5, "Aspect of Bargaining", "keystone_stage_5", "quest_bargain_harpies")>]
+  [<InlineData(6, "Aspect of Depression", "keystone_stage_6", "quest_depression_leeches")>]
+  [<InlineData(7, "Aspect of Acceptance", "keystone_stage_7", "quest_acceptance_harmony")>]
+  let ``Story Mode stages 2 through 7 configure grief bosses, thematic NPCs, and locked portals``
     (stageNum: int) (bossName: string) (keyId: string) (questId: string) =
     let floor = TowerGenerator.generateFloorWithMode (100 + stageNum) stageNum true
     let entities = floor.Entities |> Map.values |> Seq.toList
@@ -130,6 +137,16 @@ module StorySpatialTests =
     Assert.Equal(CharacterClass.Inquisitor, inquisitor.Class)
     Assert.Equal(CombatStance.PowerStance, inquisitor.Stance)
     Assert.Contains("Staff", inquisitor.EquippedItems.Head.Name)
+
+    let mesmer = StoryBosses.createProloguePlayer "mesmer"
+    Assert.Equal(CharacterClass.Mesmer, mesmer.Class)
+    Assert.Equal(CombatStance.AgilityStance, mesmer.Stance)
+    Assert.Contains("Mirror", mesmer.EquippedItems.Head.Name)
+
+    let abjurer = StoryBosses.createProloguePlayer "abjurer"
+    Assert.Equal(CharacterClass.Abjurer, abjurer.Class)
+    Assert.Equal(CombatStance.DisciplineStance, abjurer.Stance)
+    Assert.Contains("Tome", abjurer.EquippedItems.Head.Name)
 
   [<Fact>]
   let ``Player defeat rewinds position and restores vitals while preserving earned souls, trophies, and quests`` () =
@@ -187,77 +204,68 @@ module StorySpatialTests =
     Assert.Equal("Slag Hound Core", (fst rewoundState.Trophies.Head).Name)
 
   [<Fact>]
-  let ``Interacting with stage NPC after defeating mobs fulfills side quest and awards bonus souls and morale`` () =
+  let ``Interacting with Lyra after the Bandit Leader falls fulfills the rescue quest and awards bonus souls and morale`` () =
     let player = createTestPlayer ()
     let state = TowerSession.initSessionWithMode player 42 1 true
 
-    // Find the NPC position
-    let npcEntryOpt =
+    // Find Lyra's position beside the Bandit Leader
+    let lyraEntryOpt =
       state.CurrentFloor.Entities
       |> Map.tryFindKey (fun _ ent ->
         match ent with
-        | EntityNpc n when n.Id = "npc_shivering_boy" -> true
+        | EntityNpc n when n.Id = "npc_lyra" -> true
         | _ -> false)
-    Assert.True(npcEntryOpt.IsSome, "Shivering boy NPC must exist on floor")
-    let npcPos = npcEntryOpt.Value
+    Assert.True(lyraEntryOpt.IsSome, "Lyra NPC must stand beside the Bandit Leader")
+    let lyraPos = lyraEntryOpt.Value
 
-    // Find a grinding mob and defeat it
-    let mobKeyOpt =
-      state.CurrentFloor.Entities
-      |> Map.tryFindKey (fun _ ent ->
-        match ent with
-        | EntityEnemy e when e.Id.StartsWith("grind_mob_") -> true
-        | _ -> false)
-    Assert.True(mobKeyOpt.IsSome, "Grinding mob must exist on floor")
-    let mobEnemy = match state.CurrentFloor.Entities.[mobKeyOpt.Value] with EntityEnemy e -> e | _ -> failwith "unreachable"
+    // The rescue is gated: speaking to Lyra before the leader dies does nothing.
+    let adjacentState = { state with PlayerPosition = { X = lyraPos.X - 1; Y = lyraPos.Y } }
+    let blockedState, _ = TowerSession.stepPlayer Direction.East adjacentState
+    Assert.DoesNotContain("quest_save_lyra", blockedState.CompletedQuests)
 
-    let stateAfterDefeat = TowerSession.resolveEnemyDefeat mobEnemy.Id state
-    Assert.True(stateAfterDefeat.Souls > 0, "Defeating grinding mob should yield souls")
+    // Defeat the Bandit Leader, then reunite Lyra with her brother.
+    let afterLeader = TowerSession.resolveEnemyDefeat "boss_stage_1" blockedState
+    Assert.True(afterLeader.Souls > 0, "Defeating the Bandit Leader should yield souls")
 
-    // Move player adjacent to NPC and bump into NPC
-    let playerAdjState = { stateAfterDefeat with PlayerPosition = { X = npcPos.X - 1; Y = npcPos.Y } }
-    let nextState, events = TowerSession.stepPlayer Direction.East playerAdjState
-
-    // Verify quest completion
-    Assert.Contains("quest_quarry_hounds", nextState.CompletedQuests)
-    Assert.True(nextState.Souls >= stateAfterDefeat.Souls + 50, "Side quest should grant at least 50 bonus souls")
-    Assert.Contains(events, (function TowerEvent.NpcInteracted(n, true) when n.Quest.Value.IsCompleted -> true | _ -> false))
+    let reunionState, events = TowerSession.stepPlayer Direction.East afterLeader
+    Assert.Contains("quest_save_lyra", reunionState.CompletedQuests)
+    Assert.True(reunionState.Souls >= afterLeader.Souls + 50, "Rescue quest should grant at least 50 bonus souls")
+    Assert.Contains(events, (function TowerEvent.NpcInteracted(n, true) when n.Name = "Lyra" -> true | _ -> false))
 
   [<Fact>]
-  let ``Prologue player starting stats scale competitively against Veteran Bestiary monsters`` () =
+  let ``Prologue player wakes at level 1 with class weapons and caltrops folded into base stats`` () =
     let berserker = StoryBosses.createProloguePlayer "berserker"
     let duelist = StoryBosses.createProloguePlayer "duelist"
     let warden = StoryBosses.createProloguePlayer "warden"
     let inquisitor = StoryBosses.createProloguePlayer "inquisitor"
+    let mesmer = StoryBosses.createProloguePlayer "mesmer"
+    let abjurer = StoryBosses.createProloguePlayer "abjurer"
 
-    // Vitals must scale to Veteran tier (~2000+ Health and Morale, >= 90 Armor)
-    Assert.True(berserker.Health.Maximum >= 2500, "Berserker HP should be at least 2500")
-    Assert.True(duelist.Health.Maximum >= 2200, "Duelist HP should be at least 2200")
-    Assert.True(warden.Armor.Max >= 150, "Warden Armor should be at least 150")
-    Assert.True(inquisitor.Morale.Maximum >= 2500, "Inquisitor Morale should be at least 2500")
+    // The story now opens as a level-1 recruit, not a Veteran.
+    for player in [ berserker; duelist; warden; inquisitor; mesmer; abjurer ] do
+      Assert.Equal(1, player.Level)
 
-    // Primary stats must scale to compete with Veteran mobs (e.g. Stone Gargoyle with stats 170-240)
-    let gargoyle = Bestiary.byId "stone_gargoyle" |> Option.get
-    let gargoylePoise = gargoyle.Stats |> List.find (fun (s, _) -> s = StatId.Poise) |> snd
-    let wardenProwess = warden.Stats.Get StatId.Prowess
-
-    // DicePool calculation ratio should not result in a blowout whiff
-    let poolSize = DicePool.computePoolSize wardenProwess gargoylePoise
-    let wardenFloorHits = DicePool.computeFloorHits wardenProwess
-    let gargoyleFloorHits = DicePool.computeFloorHits gargoylePoise
-
-    Assert.True(poolSize >= 8, sprintf "Dice pool should be competitive (actual: %d)" poolSize)
-    Assert.True(wardenFloorHits >= 13, sprintf "Warden should have solid floor hits (actual: %d)" wardenFloorHits)
-    Assert.True(abs (wardenFloorHits - gargoyleFloorHits) <= 3, "Floor hits should be evenly matched between Warden and Stone Gargoyle")
+    // Starting weapon and caltrops bonuses are real, folded into the base stats at creation.
+    Assert.Equal(70, berserker.Stats.Get StatId.Force) // 45 + greatsword 25
+    Assert.Equal(49, berserker.Stats.Get StatId.Reflex) // 34 + caltrops 15
+    Assert.Equal(80, duelist.Stats.Get StatId.Finesse) // 45 + stiletto 25 + caltrops 10
+    Assert.Equal(65, warden.Stats.Get StatId.Poise) // 45 + buckler 20
+    Assert.Equal(65, inquisitor.Stats.Get StatId.Intellect) // 40 + staff 25
 
   [<Fact>]
-  let ``Stage 1 grinding mobs spawn Novice Slag Hounds near spawn and boy before Stone Gargoyles`` () =
+  let ``Stage 1 grinding mobs mix woodland creatures and bandits ahead of the Bandit Leader`` () =
     let floor = TowerGenerator.generateFloorWithMode 42 1 true
-    let firstGrindMob =
+    let mobs =
       floor.Entities
-      |> Map.tryPick (fun _ ent ->
-        match ent with
-        | EntityEnemy e when e.Id = "grind_mob_1_0" -> Some e
+      |> Map.values
+      |> Seq.choose (function
+        | EntityEnemy e when e.Id.StartsWith("grind_mob_") -> Some e
         | _ -> None)
-    Assert.True(firstGrindMob.IsSome, "First grinding mob should exist on floor")
-    Assert.Equal("Slag Hound", firstGrindMob.Value.Name)
+      |> Seq.toList
+    Assert.True(mobs.Length >= 2, "Tutorial floor must provide grinding mobs")
+
+    // A mix of low-level bandits and PineCloisters woodland creatures.
+    Assert.Contains(mobs, (fun e -> e.Name = "Bandit" || e.Name = "Bandit Scout"))
+    Assert.Contains(mobs, (fun e -> e.Name = "Forest Wolf" || e.Name = "Bramble Boar"))
+    for mob in mobs |> List.filter (fun e -> e.Name.StartsWith "Bandit") do
+      Assert.True(mob.Combatant.Level <= 8, sprintf "Bandits must be fightable at level 1 (got %s lvl %d)" mob.Name mob.Combatant.Level)

@@ -49,8 +49,8 @@ module TowerGenerator =
     let rng = Random(seed + floorNumber * 1009)
 
     // 1. Determine Floor Theme
-    let theme =
-      match (floorNumber - 1) % 7 with
+    let themeOfIndex (index: int) =
+      match index with
       | 0 -> QuarryPlazas
       | 1 -> PineCloisters
       | 2 -> BasaltCalderas
@@ -58,6 +58,15 @@ module TowerGenerator =
       | 4 -> SunkenBoulevards
       | 5 -> ElysianSanctuaries
       | _ -> CelestialSpires
+
+    let theme =
+      if isStory then
+        // Story floor 1 is the rain-soaked forest tutorial; the six grief stages shift
+        // down one slot (floor 2 = Guilt quarry ... floor 7 = Acceptance meadow).
+        if floorNumber = 1 then PineCloisters
+        else themeOfIndex ((floorNumber - 2) % 7)
+      else
+        themeOfIndex ((floorNumber - 1) % 7)
 
     let surface = surfaceForTheme theme
     let hazard = hazardForTheme theme
@@ -158,17 +167,20 @@ module TowerGenerator =
     let questIdForFloor = sprintf "quest_floor_%d" floorNumber
 
     let doorState, requiredKey, requiredQuest =
-      if isStory && floorNumber <= 6 then
+      if isStory && floorNumber <= 7 then
         let kId = sprintf "keystone_stage_%d" floorNumber
         let bossName =
           match floorNumber with
-          | 1 -> "Aspect of Guilt"
-          | 2 -> "Aspect of Denial"
-          | 3 -> "Aspect of Anger"
-          | 4 -> "Aspect of Bargaining"
-          | 5 -> "Aspect of Depression"
+          | 1 -> "Bandit Leader"
+          | 2 -> "Aspect of Guilt"
+          | 3 -> "Aspect of Denial"
+          | 4 -> "Aspect of Anger"
+          | 5 -> "Aspect of Bargaining"
+          | 6 -> "Aspect of Depression"
           | _ -> "Aspect of Acceptance"
-        let hint = sprintf "Held by the %s in the central arena" bossName
+        let hint =
+          if floorNumber = 1 then "Held by the Bandit Leader at the cave-mouth descending to the quarry"
+          else sprintf "Held by the %s in the central arena" bossName
         DoorState.LockedByKey(kId, sprintf "%s's Keystone" bossName, hint), Some kId, None
       else
         match floorNumber % 3 with
@@ -220,20 +232,39 @@ module TowerGenerator =
             Name = "The Shivering Boy"
             Role = "Lost Child"
             Dialogue =
-              [ "M-mister... please! They dragged Lyra toward the iron pit! My twin sister... they said she was a tithe!"
-                "Feral slag hounds and quarry deserters prowl the colonnades. Please, clear them and save her!"
-                "The leader carries a heavy quarry hammer from the deep forge. He doesn't speak. He just crushes everything!" ]
+              [ "M-mister... please! Bandits dragged my twin sister Lyra into the black pines! They said she was their bounty!"
+                "Their leader camps by the cave-mouth in the woods, near the old quarry shaft. He wears iron and hits like a falling tree!"
+                "Please... cut through them and bring my sister home." ]
+            Quest =
+              Some {
+                Id = "quest_save_lyra"
+                Title = "The Boy's Plea: Rescue Lyra"
+                Description = "Cut through the bandit warband and defeat their leader to save the boy's twin sister."
+                IsCompleted = false
+                RewardKeyId = Some "lyra_keepsake"
+                RewardDescription = "Awards +40 Morale, 50 Souls, and a keepsake from Lyra."
+                RequiredEnemyName = Some "Bandit Leader"
+              }
+            HasGivenReward = false }
+        | 2 ->
+          { Id = "npc_quarry_foreman"
+            Name = "The Quarry Foreman"
+            Role = "Iron Taskmaster"
+            Dialogue =
+              [ "So you are the one who pulled the girl from the bandits? Lyra, was it? The forest keeps what it takes... but you got her back."
+                "These quarry colonnades crawl with feral slag hounds and stone gargoyles. Clear them and the deep roads will open." ]
             Quest =
               Some {
                 Id = "quest_quarry_hounds"
-                Title = "The Boy's Plea: Cull the Feral Slag Hounds"
+                Title = "Trial of Guilt: Cull the Feral Slag Hounds"
                 Description = "Defeat the feral beasts prowling the quarry colonnades."
                 IsCompleted = false
                 RewardKeyId = Some "quarry_talisman"
                 RewardDescription = "Awards +40 Morale, 50 Souls, and the Talisman of Poise."
+                RequiredEnemyName = None
               }
             HasGivenReward = false }
-        | 2 ->
+        | 3 ->
           { Id = "npc_hermit_mist"
             Name = "Hermit of the Mist"
             Role = "Keeper of Memories"
@@ -248,9 +279,10 @@ module TowerGenerator =
                 IsCompleted = false
                 RewardKeyId = Some "cloak_clarity"
                 RewardDescription = "Awards +40 Morale, 60 Souls, and the Cloak of Clarity."
+                RequiredEnemyName = None
               }
             HasGivenReward = false }
-        | 3 ->
+        | 4 ->
           { Id = "npc_slag_alchemist"
             Name = "The Slag Alchemist"
             Role = "Volcanic Hermit"
@@ -265,9 +297,10 @@ module TowerGenerator =
                 IsCompleted = false
                 RewardKeyId = Some "cinder_sigil"
                 RewardDescription = "Awards +50 Health, 75 Souls, and the Cinder-Forged Sigil."
+                RequiredEnemyName = None
               }
             HasGivenReward = false }
-        | 4 ->
+        | 5 ->
           { Id = "npc_storm_navigator"
             Name = "The Storm Navigator"
             Role = "Promontory Lookout"
@@ -282,9 +315,10 @@ module TowerGenerator =
                 IsCompleted = false
                 RewardKeyId = Some "gale_pendant"
                 RewardDescription = "Awards +40 Morale, 90 Souls, and the Gale-Wind Pendant."
+                RequiredEnemyName = None
               }
             HasGivenReward = false }
-        | 5 ->
+        | 6 ->
           { Id = "npc_priestess_waters"
             Name = "Priestess of Still Waters"
             Role = "Oracle of the Drowned"
@@ -299,9 +333,10 @@ module TowerGenerator =
                 IsCompleted = false
                 RewardKeyId = Some "anchor_resolve"
                 RewardDescription = "Awards +50 Morale, 100 Souls, and the Anchor of Resolve."
+                RequiredEnemyName = None
               }
             HasGivenReward = false }
-        | 6 ->
+        | 7 ->
           { Id = "npc_keeper_blossoms"
             Name = "Keeper of White Blossoms"
             Role = "Guardian of Acceptance"
@@ -316,6 +351,7 @@ module TowerGenerator =
                 IsCompleted = false
                 RewardKeyId = Some "keepsake_pendant"
                 RewardDescription = "Awards full vitality restoration and the Keepsake Pendant."
+                RequiredEnemyName = None
               }
             HasGivenReward = false }
         | _ ->
@@ -336,6 +372,7 @@ module TowerGenerator =
               IsCompleted = false
               RewardKeyId = None
               RewardDescription = "Unlocks the stairway portal to the next floor."
+              RequiredEnemyName = None
             }
           | None -> None
 
@@ -359,7 +396,31 @@ module TowerGenerator =
 
     entities <- Map.add npcPos (EntityNpc npc) entities
 
-    // C. Floor Shrines
+    // B2. Story Stage 1 places the captive sister beside the Bandit Leader's den. Her
+    // quest only resolves once the leader falls, so the payoff reads as a reunion.
+    if isStory && floorNumber = 1 then
+      let lyraPlaza = plazas.[4]
+      let lyraPos = { X = lyraPlaza.Center.X + 2; Y = lyraPlaza.Center.Y }
+      tiles <- Map.add lyraPos (Floor surface) tiles
+      let lyra =
+        { Id = "npc_lyra"
+          Name = "Lyra"
+          Role = "The Boy's Twin Sister"
+          Dialogue =
+            [ "You... you came for me? The bandits are broken — you truly did it!"
+              "I thought I would never see my brother again. Tell him I am coming home." ]
+          Quest =
+            Some {
+              Id = "quest_save_lyra"
+              Title = "The Boy's Plea: Rescue Lyra"
+              Description = "Cut through the bandit warband and defeat their leader to save the boy's twin sister."
+              IsCompleted = false
+              RewardKeyId = Some "lyra_keepsake"
+              RewardDescription = "Awards +40 Morale, 50 Souls, and a keepsake from Lyra."
+              RequiredEnemyName = Some "Bandit Leader"
+            }
+          HasGivenReward = false }
+      entities <- Map.add lyraPos (EntityNpc lyra) entities
     let shrinePlaza = plazas.[2]
     let shrinePos = { X = shrinePlaza.Center.X - 2; Y = shrinePlaza.Center.Y }
     tiles <- Map.add shrinePos (Floor surface) tiles
@@ -404,23 +465,30 @@ module TowerGenerator =
     let biomeMonsters = Bestiary.byBiome theme
 
     let guardianEnemy =
-      if isStory && floorNumber <= 6 then
+      if isStory && floorNumber <= 7 then
         let bossCombatant =
-          match floorNumber with
-          | 1 -> StoryBosses.createGuiltAspect ()
-          | 2 -> StoryBosses.createDenialAspect ()
-          | 3 -> StoryBosses.createAngerAspect ()
-          | 4 -> StoryBosses.createBargainingAspect ()
-          | 5 -> StoryBosses.createDepressionAspect ()
-          | _ -> StoryBosses.createAcceptanceAspect ()
+          if floorNumber = 1 then
+            // The tutorial guardian is a mundane bandit chieftain, not a Grief Aspect.
+            let chieftain = TierFactory.createClassLevel CharacterClass.Warrior 32
+            { chieftain with Name = "Bandit Leader" }
+          else
+            match floorNumber with
+            | 2 -> StoryBosses.createGuiltAspect ()
+            | 3 -> StoryBosses.createDenialAspect ()
+            | 4 -> StoryBosses.createAngerAspect ()
+            | 5 -> StoryBosses.createBargainingAspect ()
+            | 6 -> StoryBosses.createDepressionAspect ()
+            | _ -> StoryBosses.createAcceptanceAspect ()
         let bossName =
-          match floorNumber with
-          | 1 -> "Aspect of Guilt"
-          | 2 -> "Aspect of Denial"
-          | 3 -> "Aspect of Anger"
-          | 4 -> "Aspect of Bargaining"
-          | 5 -> "Aspect of Depression"
-          | _ -> "Aspect of Acceptance"
+          if floorNumber = 1 then "Bandit Leader"
+          else
+            match floorNumber with
+            | 2 -> "Aspect of Guilt"
+            | 3 -> "Aspect of Denial"
+            | 4 -> "Aspect of Anger"
+            | 5 -> "Aspect of Bargaining"
+            | 6 -> "Aspect of Depression"
+            | _ -> "Aspect of Acceptance"
         { Id = sprintf "boss_stage_%d" floorNumber
           Name = bossName
           Combatant = bossCombatant
@@ -450,31 +518,50 @@ module TowerGenerator =
         let mobPos = { X = p.Center.X - 2; Y = p.Center.Y + 2 }
         tiles <- Map.add mobPos (Floor surface) tiles
         if not (Map.containsKey mobPos entities) && mobPos <> spawn && mobPos <> stairway then
-          let mobTemplate =
-            if biomeMonsters.IsEmpty then Bestiary.slagHound
+          let mobName, mobCombatant =
+            if isStory && floorNumber = 1 then
+              // Tutorial floor: alternate low-level bandits (Warrior / Rogue) with equally
+              // low-level woodland creatures so a level-1 protagonist always has survivable
+              // fights. The PineCloisters Novice template (Blight Sprite) is level 20 and would
+              // one-shot a level-1 player, so creatures are generated at the tutorial level.
+              if i % 2 = 0 then
+                let cls = if (i / 2) % 2 = 0 then CharacterClass.Warrior else CharacterClass.Rogue
+                let lvl = Math.Min(8, 1 + i * 2)
+                let name = if cls = CharacterClass.Warrior then "Bandit" else "Bandit Scout"
+                let combatant = TierFactory.createClassLevel cls lvl
+                name, { combatant with Name = name }
+              else
+                let cls = if (i / 2) % 2 = 0 then CharacterClass.Rogue else CharacterClass.Warrior
+                let lvl = Math.Min(8, 2 + i * 2)
+                let name = if cls = CharacterClass.Rogue then "Forest Wolf" else "Bramble Boar"
+                let combatant = TierFactory.createClassLevel cls lvl
+                name, { combatant with Name = name }
             else
-              let available =
-                if isStory && floorNumber <= 3 then
-                  // Story stages 1-3 are narrative tutorial tiers: keep encounters to the
-                  // Novice-tier biome mob so a Veteran (e.g. Thorn Weaver) never opens on
-                  // the level-35 protagonist.
-                  [ biomeMonsters.[0] ]
-                elif floorNumber <= 1 then
-                  // Floor 1: First plazas have Novice mobs (e.g. Slag Hound), later plazas have Veteran mobs (e.g. Stone Gargoyle)
-                  if i < 2 then [ biomeMonsters.[0] ]
-                  else [ biomeMonsters.[Math.Min(1, biomeMonsters.Length - 1)] ]
-                elif floorNumber <= 3 then
-                  // Floors 2-3: Novice and Veteran mobs
-                  biomeMonsters |> List.truncate 2
+              let mobTemplate =
+                if biomeMonsters.IsEmpty then Bestiary.slagHound
                 else
-                  // Floors 4+: Full spectrum of biome mobs
-                  biomeMonsters
-              let mIdx = (floorNumber + i) % available.Length
-              available.[mIdx]
-          let mobCombatant = Bestiary.createMonster mobTemplate
+                  let available =
+                    if isStory && floorNumber <= 3 then
+                      // Story stages 2-3 are narrative tutorial tiers: keep encounters to the
+                      // Novice-tier biome mob so a Veteran (e.g. Thorn Weaver) never opens on
+                      // the protagonist.
+                      [ biomeMonsters.[0] ]
+                    elif floorNumber <= 1 then
+                      // Floor 1: First plazas have Novice mobs (e.g. Slag Hound), later plazas have Veteran mobs (e.g. Stone Gargoyle)
+                      if i < 2 then [ biomeMonsters.[0] ]
+                      else [ biomeMonsters.[Math.Min(1, biomeMonsters.Length - 1)] ]
+                    elif floorNumber <= 3 then
+                      // Floors 2-3: Novice and Veteran mobs
+                      biomeMonsters |> List.truncate 2
+                    else
+                      // Floors 4+: Full spectrum of biome mobs
+                      biomeMonsters
+                  let mIdx = (floorNumber + i) % available.Length
+                  available.[mIdx]
+              mobTemplate.Name, Bestiary.createMonster mobTemplate
           let mobEnemy =
             { Id = sprintf "grind_mob_%d_%d" floorNumber i
-              Name = mobTemplate.Name
+              Name = mobName
               Combatant = mobCombatant
               DropsKeyId = None
               IsDefeated = false }

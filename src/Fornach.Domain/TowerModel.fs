@@ -36,14 +36,17 @@ type TowerTile =
     | Hazard _
     | StairwayPortal _ -> false
 
-/// Quests offered by floor NPCs
+/// Quests offered by floor NPCs.
+/// When `RequiredEnemyName` is set, the quest cannot be completed until the named
+/// enemy on the current floor has been defeated.
 type TowerQuest =
   { Id: string
     Title: string
     Description: string
     IsCompleted: bool
     RewardKeyId: string option
-    RewardDescription: string }
+    RewardDescription: string
+    RequiredEnemyName: string option }
 
 /// NPCs found throughout the Tower with dialogue, lore, and quests
 type TowerNpc =

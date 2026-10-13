@@ -2126,6 +2126,21 @@ module ActionResolver =
   let resolve (roller: DiceRoller) (intent: ActionIntent) (actor: Combatant) (target: Combatant) : ActionResult =
     resolveEx roller intent actor target 0
 
+  /// Resolves an action but prevents a single turn from reducing the target's Health or
+  /// Morale from above zero to zero. Used by the story tutorial so a level-1 protagonist
+  /// cannot be one-shot. Applied nowhere else, so global balance is untouched.
+  let resolveWithoutLethal (roller: DiceRoller) (intent: ActionIntent) (actor: Combatant) (target: Combatant) : ActionResult =
+    let res = resolve roller intent actor target
+
+    let clamp (before: Pool) (after: Pool) =
+      if before.Current > 0 && after.Current <= 0 then { after with Current = 1 } else after
+
+    { res with
+        Target =
+          { res.Target with
+              Health = clamp target.Health res.Target.Health
+              Morale = clamp target.Morale res.Target.Morale } }
+
   /// Resolves an action turn against a primary target, and if in Power or Discipline stance against multiple opponents,
   /// resolves secondary cleave or chained attacks according to martial stance rules.
   let resolveGroupTurn

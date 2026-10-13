@@ -286,6 +286,13 @@ type Combatant =
   static member setComplexForm form (c: Combatant) =
     { c with ComplexForm = form }
 
+  /// Permanently folds an item's stat modifiers into a combatant's base Stats
+  /// (each stat clamped to a minimum of 1). Story pickups use this so that an
+  /// EquipmentItem's StatModifiers are reflected by GetStat without an equip step.
+  static member applyItemBonus (item: EquipmentItem) (c: Combatant) : Combatant =
+    if List.isEmpty item.StatModifiers then c
+    else { c with Stats = c.Stats.ApplyModifiers item.StatModifiers }
+
   /// Degrades weapon condition down one progressive stage
   static member degradeWeapon (c: Combatant) =
     { c with WeaponCondition = WeaponCondition.degradation c.WeaponCondition }

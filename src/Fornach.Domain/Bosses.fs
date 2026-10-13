@@ -338,9 +338,10 @@ module StoryBosses =
     | "acceptance" -> createAcceptanceAspect ()
     | _ -> createGuiltAspect ()
 
-  /// Creates the player protagonist archetype for story mode with initial stats, weapon, and caltrops
+  /// Creates the story protagonist at LEVEL 1 with canonical class stats from TierFactory,
+  /// then folds in the class weapon and caltrops stat bonuses so the starting items are real.
+  /// Signature is unchanged: (className: string) -> Combatant.
   let createProloguePlayer (className: string) : Combatant =
-    let id = CombatantId.New()
     let caltrops =
       { Name = "Sharpened Caltrops"
         Slot = EquipmentSlot.MentalRelic
@@ -351,23 +352,10 @@ module StoryBosses =
         StartingRecklessnessDelta = 0
         Triggers = [] }
 
-    match className.ToLowerInvariant() with
-    | "berserker" ->
-      let stats =
-        StatBlock.Create
-          [ StatId.Force, 210
-            StatId.Fortitude, 190
-            StatId.Finesse, 140
-            StatId.Reflex, 135
-            StatId.Prowess, 165
-            StatId.Poise, 160
-            StatId.Intellect, 70
-            StatId.Resolve, 150
-            StatId.Acuity, 90
-            StatId.Intuition, 100
-            StatId.Acumen, 120
-            StatId.Composure, 140 ]
-      let sword =
+    let cls, weapon =
+      match className.ToLowerInvariant() with
+      | "berserker" ->
+        CharacterClass.Berserker,
         { Name = "Heavy Iron Greatsword"
           Slot = EquipmentSlot.Weapon
           Description = "A two-handed cleaver with brutal momentum and jagged edges."
@@ -376,28 +364,8 @@ module StoryBosses =
           MoraleBonus = 0
           StartingRecklessnessDelta = 10
           Triggers = [] }
-      let c = Combatant.createWithClass id "Protagonist" 2600 1800 stats CharacterClass.Berserker 35
-      { c with
-          Armor = ArmorIntegrity.Create 120
-          EquippedItems = [ sword; caltrops ]
-          Stance = CombatStance.PowerStance }
-
-    | "duelist" ->
-      let stats =
-        StatBlock.Create
-          [ StatId.Force, 140
-            StatId.Fortitude, 135
-            StatId.Finesse, 220
-            StatId.Reflex, 210
-            StatId.Prowess, 165
-            StatId.Poise, 150
-            StatId.Intellect, 80
-            StatId.Resolve, 140
-            StatId.Acuity, 150
-            StatId.Intuition, 160
-            StatId.Acumen, 110
-            StatId.Composure, 130 ]
-      let rapier =
+      | "duelist" ->
+        CharacterClass.Duelist,
         { Name = "Twin Stiletto & Rapier"
           Slot = EquipmentSlot.Weapon
           Description = "Finely balanced blades forged for fluid, relentless fencing cadences."
@@ -406,28 +374,8 @@ module StoryBosses =
           MoraleBonus = 0
           StartingRecklessnessDelta = 0
           Triggers = [] }
-      let c = Combatant.createWithClass id "Protagonist" 2300 2100 stats CharacterClass.Duelist 35
-      { c with
-          Armor = ArmorIntegrity.Create 100
-          EquippedItems = [ rapier; caltrops ]
-          Stance = CombatStance.AgilityStance }
-
-    | "warden" ->
-      let stats =
-        StatBlock.Create
-          [ StatId.Force, 155
-            StatId.Fortitude, 200
-            StatId.Finesse, 135
-            StatId.Reflex, 140
-            StatId.Prowess, 205
-            StatId.Poise, 215
-            StatId.Intellect, 75
-            StatId.Resolve, 170
-            StatId.Acuity, 95
-            StatId.Intuition, 140
-            StatId.Acumen, 130
-            StatId.Composure, 175 ]
-      let shieldSet =
+      | "warden" ->
+        CharacterClass.Warden,
         { Name = "Iron Arming Sword & Tower Buckler"
           Slot = EquipmentSlot.Weapon
           Description = "A notched steel blade paired with an iron-banded buckler for unyielding defense."
@@ -436,28 +384,28 @@ module StoryBosses =
           MoraleBonus = 100
           StartingRecklessnessDelta = -10
           Triggers = [] }
-      let c = Combatant.createWithClass id "Protagonist" 2800 2000 stats CharacterClass.Warden 35
-      { c with
-          Armor = ArmorIntegrity.Create 160
-          EquippedItems = [ shieldSet; caltrops ]
-          Stance = CombatStance.DisciplineStance }
-
-    | _ -> // Inquisitor / Arcanist
-      let stats =
-        StatBlock.Create
-          [ StatId.Force, 90
-            StatId.Fortitude, 140
-            StatId.Finesse, 120
-            StatId.Reflex, 130
-            StatId.Prowess, 130
-            StatId.Poise, 145
-            StatId.Intellect, 225
-            StatId.Resolve, 210
-            StatId.Acuity, 165
-            StatId.Intuition, 160
-            StatId.Acumen, 160
-            StatId.Composure, 155 ]
-      let staff =
+      | "mesmer" ->
+        CharacterClass.Mesmer,
+        { Name = "Silvered Hand Mirror"
+          Slot = EquipmentSlot.Weapon
+          Description = "A cracked silver mirror that folds light into phantasmal decoys and sensory static."
+          StatModifiers = [ StatId.Acuity, 25; StatId.Intuition, 15 ]
+          HealthBonus = 0
+          MoraleBonus = 250
+          StartingRecklessnessDelta = 0
+          Triggers = [] }
+      | "abjurer" ->
+        CharacterClass.Abjurer,
+        { Name = "Dusty Tome"
+          Slot = EquipmentSlot.Weapon
+          Description = "A composure-woven grimoire of warding runes and abjuration barriers."
+          StatModifiers = [ StatId.Acumen, 25; StatId.Composure, 15 ]
+          HealthBonus = 0
+          MoraleBonus = 250
+          StartingRecklessnessDelta = 0
+          Triggers = [] }
+      | _ ->
+        CharacterClass.Inquisitor,
         { Name = "Carved Ash Staff"
           Slot = EquipmentSlot.Weapon
           Description = "A runic focus humming with psychic resonance and mental clarity."
@@ -466,8 +414,12 @@ module StoryBosses =
           MoraleBonus = 250
           StartingRecklessnessDelta = 0
           Triggers = [] }
-      let c = Combatant.createWithClass id "Protagonist" 2200 2600 stats CharacterClass.Inquisitor 35
-      { c with
-          Armor = ArmorIntegrity.Create 90
-          EquippedItems = [ staff; caltrops ]
-          Stance = CombatStance.PowerStance }
+
+    let equipped = [ weapon; caltrops ]
+    let geared =
+      equipped
+      |> List.fold (fun (c: Combatant) item -> Combatant.applyItemBonus item c) (TierFactory.createClassLevel cls 1)
+
+    { geared with
+        Name = "Protagonist"
+        EquippedItems = equipped }

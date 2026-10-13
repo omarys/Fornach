@@ -7,45 +7,43 @@ open Fornach.Domain
 module TacticalAssessmentTests =
 
   [<Fact>]
-  let ``Prologue Berserker reads Stone Gargoyle primary stat as Reflex right away with Keen insight`` () =
+  let ``Prologue Berserker reads Stone Gargoyle primary stat with guarded posture at level 1`` () =
     let player = StoryBosses.createProloguePlayer "berserker"
     let gargoyle = Bestiary.stoneGargoyle.ToCombatant (CombatantId.New())
 
     let assess = TacticalAssessment.assess player gargoyle
 
     // Stone Gargoyle stats: Reflex 240, Fortitude 220, Finesse 230, Poise 200, Force 180, Composure 150
+    Assert.Equal(1, player.Level)
     Assert.Equal(StatId.Reflex, assess.PrimaryStat)
     Assert.Equal(240, assess.PrimaryStatValue)
     Assert.Equal("Agility Defense", assess.PrimaryStatRole)
-    Assert.Equal(TacticalInsightLevel.Keen, assess.InsightLevel)
-    Assert.Equal(120 + 25, assess.EffectiveAcumen) // Acumen 120 + Intuition 100/4 = 145
+    // Level-1 Acumen 19 + Intuition 15/4 (3) = 22 vs Composure 150 -> Obscured
+    Assert.Equal(TacticalInsightLevel.Obscured, assess.InsightLevel)
+    Assert.Equal(19 + 15 / 4, assess.EffectiveAcumen)
     Assert.Equal(150, assess.TargetComposure)
-    Assert.True(assess.Ratio >= 0.75 && assess.Ratio < 1.15)
+    Assert.True(assess.Ratio < 0.40)
     Assert.Equal((StatId.Poise, 200), assess.WeakestDefense)
-    Assert.Equal("KEEN INSIGHT", assess.Headline)
-    Assert.True(assess.PrimarySummary.Contains("Reflex: 240"))
-    Assert.True(assess.StrategicAdvice.Contains("Primary threat: Reflex (240)"))
+    Assert.Equal("GUARDED POSTURE", assess.Headline)
+    Assert.True(assess.StrategicAdvice.Contains("build Study Stacks"))
 
   [<Fact>]
-  let ``Prologue Inquisitor achieves Penetrating insight on Stone Gargoyle right away`` () =
+  let ``Prologue Inquisitor leads all classes in scrutiny yet still reads Stone Gargoyle as guarded at level 1`` () =
     let player = StoryBosses.createProloguePlayer "inquisitor"
     let gargoyle = Bestiary.stoneGargoyle.ToCombatant (CombatantId.New())
 
     let assess = TacticalAssessment.assess player gargoyle
 
-    // Inquisitor has Acumen 160 + Intuition 150/4 = 197 vs Composure 150 (Ratio ~1.31)
-    Assert.Equal(TacticalInsightLevel.Penetrating, assess.InsightLevel)
-    Assert.Equal("PENETRATING INSIGHT", assess.Headline)
+    // Inquisitor Acumen 30 + Intuition 30/4 (7) = 37 vs Composure 150 (Ratio ~0.25)
+    Assert.Equal(TacticalInsightLevel.Obscured, assess.InsightLevel)
+    Assert.Equal("GUARDED POSTURE", assess.Headline)
+    Assert.Equal(30 + 30 / 4, assess.EffectiveAcumen)
     Assert.Equal(StatId.Reflex, assess.PrimaryStat)
     Assert.Equal(240, assess.PrimaryStatValue)
-    match assess.VulnerabilitySummary with
-    | Some vuln ->
-      Assert.True(vuln.Contains("Poise: 200"))
-      Assert.True(vuln.Contains("Critical Flaw"))
-    | None -> Assert.True(false, "Expected vulnerability summary for Penetrating insight")
+    Assert.True(assess.VulnerabilitySummary.IsNone)
 
   [<Fact>]
-  let ``Prologue classes reveal Slag Hound primary stat as Force and weakness as Reflex`` () =
+  let ``Prologue classes discern Slag Hound primary stat as Force and weakest defense as Poise`` () =
     let player = StoryBosses.createProloguePlayer "duelist"
     let hound = Bestiary.slagHound.ToCombatant (CombatantId.New())
 
@@ -55,9 +53,10 @@ module TacticalAssessmentTests =
     Assert.Equal(StatId.Force, assess.PrimaryStat)
     Assert.Equal(105, assess.PrimaryStatValue)
     Assert.Equal((StatId.Poise, 70), assess.WeakestDefense)
-    Assert.Equal(TacticalInsightLevel.Penetrating, assess.InsightLevel)
-    Assert.True(assess.StrategicAdvice.Contains("Primary threat: Force (105)"))
-    Assert.True(assess.StrategicAdvice.Contains("Exploit lower Poise (70)"))
+    // Duelist Acumen 15 + Intuition 22/4 (5) = 20 vs Composure 50 -> Discerning (0.40)
+    Assert.Equal(TacticalInsightLevel.Discerning, assess.InsightLevel)
+    Assert.Equal("DISCERNING READ", assess.Headline)
+    Assert.True(assess.StrategicAdvice.Contains("immense kinetic striking power"))
 
   [<Fact>]
   let ``Aspect of Guilt primary stat is Force and defensive flaw is Reflex`` () =
@@ -70,23 +69,25 @@ module TacticalAssessmentTests =
     Assert.Equal(StatId.Force, assess.PrimaryStat)
     Assert.Equal(210, assess.PrimaryStatValue)
     Assert.Equal((StatId.Reflex, 95), assess.WeakestDefense)
-    Assert.True(assess.StrategicAdvice.Contains("Exploit lower Reflex (95)"))
+    // A level-1 Warden cannot read a Guilt Aspect's exact form yet.
+    Assert.Equal(TacticalInsightLevel.Obscured, assess.InsightLevel)
+    Assert.True(assess.StrategicAdvice.Contains("build Study Stacks"))
 
   [<Fact>]
-  let ``Study Stacks sharpen tactical insight from Keen to Penetrating`` () =
-    let player = StoryBosses.createProloguePlayer "berserker" // Ratio ~0.97 (Keen)
+  let ``Study Stacks sharpen tactical insight from Obscured to Discerning`` () =
+    let player = StoryBosses.createProloguePlayer "berserker" // Acumen 19 + Intuition 15/4 (3) = 22
     let gargoyle = Bestiary.stoneGargoyle.ToCombatant (CombatantId.New())
 
     let initialAssess = TacticalAssessment.assess player gargoyle
-    Assert.Equal(TacticalInsightLevel.Keen, initialAssess.InsightLevel)
+    Assert.Equal(TacticalInsightLevel.Obscured, initialAssess.InsightLevel)
 
-    // Add 3 study stacks (+45 effective Acumen: 145 + 45 = 190 / 150 = 1.26 -> Penetrating)
+    // Add 3 study stacks (+45 effective Acumen: 22 + 45 = 67 / 150 = 0.44 -> Discerning)
     let studiedPlayer = { player with StudyStacks = 3 }
     let studiedAssess = TacticalAssessment.assess studiedPlayer gargoyle
 
-    Assert.Equal(TacticalInsightLevel.Penetrating, studiedAssess.InsightLevel)
-    Assert.Equal(190, studiedAssess.EffectiveAcumen)
-    Assert.Equal("PENETRATING INSIGHT", studiedAssess.Headline)
+    Assert.Equal(TacticalInsightLevel.Discerning, studiedAssess.InsightLevel)
+    Assert.Equal(67, studiedAssess.EffectiveAcumen)
+    Assert.Equal("DISCERNING READ", studiedAssess.Headline)
 
   [<Fact>]
   let ``Zero composure target like Anger Aspect does not divide by zero and yields Penetrating insight`` () =

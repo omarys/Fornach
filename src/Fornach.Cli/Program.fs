@@ -660,7 +660,7 @@ module Program =
         RunSimulation(arch1, arch2, iters)
 
 
-  let private runStoryDuel (player: Combatant) (boss: Combatant) : CombatOutcome * Combatant =
+  let private runStoryDuel (floorNumber: int) (player: Combatant) (boss: Combatant) : CombatOutcome * Combatant =
     let rng = Random()
     let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
 
@@ -725,7 +725,12 @@ module Program =
         let bossBeforeTurn = currentBoss
         let playerBeforeTurn = currentCombatant
 
-        let enemyResult = ActionResolver.resolve roller enemyIntent currentBoss currentCombatant
+        let enemyResult =
+          if floorNumber = 1 then
+            // Tutorial grace: the level-1 protagonist cannot be one-shot on the opening stage.
+            ActionResolver.resolveWithoutLethal roller enemyIntent currentBoss currentCombatant
+          else
+            ActionResolver.resolve roller enemyIntent currentBoss currentCombatant
         currentBoss <- enemyResult.Actor
         currentCombatant <- enemyResult.Target
 
@@ -762,6 +767,157 @@ module Program =
 
     outcome, currentCombatant
 
+  /// Renders a compact battle HUD for a multi-enemy engagement.
+  let private renderGroupHud (player: Combatant) (enemies: TowerEnemy list) (round: int) =
+    AnsiConsole.Clear()
+    AnsiConsole.Write(
+      Rule(sprintf "[bold %s]⚔ MULTI-ENEMY ENGAGEMENT — ROUND %d[/]" Theme.Yellow round)
+        .Centered()
+        .RuleStyle(Theme.StyleYellow)
+    )
+    AnsiConsole.MarkupLine(sprintf "[bold %s]%s[/]  •  Health %d/%d  •  Morale %d/%d  •  Stance %A"
+      Theme.Green player.Name player.Health.Current player.Health.Maximum player.Morale.Current player.Morale.Maximum player.Stance)
+    for e in enemies do
+      let status =
+        if e.IsDefeated || e.Combatant.Health.IsDepleted || e.Combatant.Morale.IsDepleted then "[bold red]DEFEATED[/]"
+        else sprintf "Health %d/%d  •  Morale %d/%d" e.Combatant.Health.Current e.Combatant.Health.Maximum e.Combatant.Morale.Current e.Combatant.Morale.Maximum
+      AnsiConsole.MarkupLine(sprintf "   [bold red]%s[/] — %s" e.Name status)
+    AnsiConsole.WriteLine()
+
+  /// Interactive duel against a pack of enemies, modelled on runStoryDuel. The lone player resolves
+  /// actions through the group-turn resolver (cleaves/splashes) while each surviving enemy strikes
+  /// back in turn. When canFlee, the player may disengage at the cost of one parting strike per foe.
+  let private runStoryGroupDuel (floorNumber: int) (player: Combatant) (enemies: TowerEnemy list) (canFlee: bool) : TowerDisplay.GroupDuelResult =
+    let rng = Random()
+    let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
+
+    let mutable currentPlayer = player
+    let mutable currentEnemies = enemies
+    let mutable round = 1
+    let mutable priorDefenses = 0
+    let mutable combatOver = false
+    let mutable outcome = TowerDisplay.GroupDuelOutcome.Victorious
+
+    let isLiving (e: TowerEnemy) =
+      not e.IsDefeated && not e.Combatant.Health.IsDepleted && not e.Combatant.Morale.IsDepleted
+
+    let living () = currentEnemies |> List.filter isLiving
+
+    while not combatOver && not (living ()).IsEmpty do
+      priorDefenses <- 0
+      renderGroupHud currentPlayer currentEnemies round
+      let livingNow = living ()
+
+      // 1. Target selection (only meaningful with more than one foe standing)
+      let target =
+        match livingNow with
+        | [ only ] -> only
+        | many ->
+          let indexed = many |> List.mapi (fun i e -> (sprintf "%d.  %s" (i + 1) e.Name, e))
+          let pick =
+            Display.promptSelectionWithHelp
+              (sprintf "[bold %s]Choose your target:[/]" Theme.Yellow)
+              (indexed |> List.map fst)
+              None
+              (fun () -> renderGroupHud currentPlayer currentEnemies round)
+          indexed |> List.find (fun (label, _) -> label = pick) |> snd
+
+      // 2. Action selection (with an optional disengage)
+      let targetCombatant = target.Combatant
+      let actionChoices =
+        buildActionChoices currentPlayer targetCombatant
+        @ (if canFlee then [ "🏃  Disengage (withdraw — each foe strikes as you break away)" ] else [])
+
+      let choice =
+        Display.promptSelectionWithHelp
+          (sprintf "[bold %s]Round %d - Action against %s (Press '?' or F1 for Symbol Legend):[/]" Theme.Yellow round target.Name)
+          actionChoices
+          (Some 11)
+          (fun () -> renderGroupHud currentPlayer currentEnemies round)
+
+      if choice.Contains("Disengage") then
+        // Parting strikes from every living enemy.
+        AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s breaks away, but the pack lashes out![/]" Theme.Yellow currentPlayer.Name)
+        let mutable survived = true
+        for e in living () do
+          let intent = AI.chooseIntent e.Combatant currentPlayer
+          let r =
+            if floorNumber = 1 then
+              ActionResolver.resolveWithoutLethal roller intent e.Combatant currentPlayer
+            else
+              ActionResolver.resolveEx roller intent e.Combatant currentPlayer priorDefenses
+          currentPlayer <- r.Target
+          currentEnemies <- currentEnemies |> List.map (fun en -> if en.Id = e.Id then { en with Combatant = r.Actor } else en)
+          priorDefenses <- priorDefenses + 1
+          if currentPlayer.Health.IsDepleted || currentPlayer.Morale.IsDepleted then survived <- false
+        if survived then
+          outcome <- TowerDisplay.GroupDuelOutcome.Fled
+          AnsiConsole.MarkupLine(sprintf "\n[bold %s]You slip away from the pack![/]" Theme.Green)
+        else
+          outcome <- TowerDisplay.GroupDuelOutcome.Defeated
+        combatOver <- true
+      else
+        // 3. Player action via the group-turn resolver (cleave/splash onto nearby foes)
+        let intent = parseActionChoice choice
+        let otherLiving = livingNow |> List.filter (fun e -> e.Id <> target.Id) |> List.map (fun e -> e.Combatant)
+        AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes %s...[/]" Theme.Green currentPlayer.Name choice)
+        let res = ActionResolver.resolveGroupTurn roller intent currentPlayer targetCombatant otherLiving
+        currentPlayer <- res.Actor
+        currentEnemies <-
+          currentEnemies
+          |> List.map (fun e ->
+            if e.Id = target.Id then { e with Combatant = res.PrimaryTarget }
+            else
+              match res.SecondaryTargets |> List.tryFind (fun (c: Combatant) -> c.Id = e.Combatant.Id) with
+              | Some c -> { e with Combatant = c }
+              | None -> e)
+
+        if (living ()).IsEmpty then
+          outcome <- TowerDisplay.GroupDuelOutcome.Victorious
+          combatOver <- true
+          AnsiConsole.WriteLine()
+          AnsiConsole.Write(
+            Rule(sprintf "[bold %s]★★★ PACK VANQUISHED: %s PREVAILED! ★★★[/]" Theme.Green currentPlayer.Name)
+              .Centered()
+              .RuleStyle(Theme.StyleGreen)
+          )
+        else
+          // 4. Enemy turn: each surviving foe strikes in deterministic order
+          AnsiConsole.MarkupLine(sprintf "\n[bold %s]The pack retaliates...[/]" Theme.Pink)
+          for e in living () do
+            if not combatOver then
+              let intent = AI.chooseIntent e.Combatant currentPlayer
+              let r =
+                if floorNumber = 1 then
+                  ActionResolver.resolveWithoutLethal roller intent e.Combatant currentPlayer
+                else
+                  ActionResolver.resolveEx roller intent e.Combatant currentPlayer priorDefenses
+              currentPlayer <- r.Target
+              currentEnemies <- currentEnemies |> List.map (fun en -> if en.Id = e.Id then { en with Combatant = r.Actor } else en)
+              priorDefenses <- priorDefenses + 1
+              let executed = r.Events |> List.exists (function CombatEvent.Executed _ -> true | _ -> false)
+              if executed || currentPlayer.Health.IsDepleted || currentPlayer.Morale.IsDepleted then
+                outcome <- TowerDisplay.GroupDuelOutcome.Defeated
+                combatOver <- true
+                AnsiConsole.WriteLine()
+                AnsiConsole.Write(
+                  Rule(sprintf "[bold %s]☠☠☠ OVERWHELMED: %s HAS FALLEN! ☠☠☠[/]" Theme.Red currentPlayer.Name)
+                    .Centered()
+                    .RuleStyle(Theme.StyleRed)
+                )
+
+      if not combatOver then
+        AnsiConsole.WriteLine()
+        AnsiConsole.Markup(sprintf "[%s]Press any key to proceed to next round...[/]" Theme.Comment)
+        Console.ReadKey(true) |> ignore
+        round <- round + 1
+
+    let finalEnemies =
+      currentEnemies
+      |> List.map (fun e -> if isLiving e then e else { e with IsDefeated = true })
+
+    { Outcome = outcome; Player = currentPlayer; Enemies = finalEnemies }
+
   let private createProloguePlayer (className: string) : Combatant =
     StoryBosses.createProloguePlayer className
 
@@ -777,9 +933,9 @@ module Program =
     // 1. Atmospheric Prologue Introduction
     let introText =
       "The asphalt was slick with evening drizzle... Headlights tore through the downpour, metal screamed, and the cold darkness took you.\n\n" +
-      "Now, the roar of screaming metal recedes into the sound of rhythmic rain drumming against wet shale.\n" +
-      "You peel your face out of the mud of the Abandoned Iron Quarry. Your past is an empty, dark vault.\n\n" +
-      "Beside you in the muck lies a battered chest, its iron lock already broken and hanging loose."
+      "Now, the roar of screaming metal recedes into the steady hiss of rain through black pine boughs.\n" +
+      "You peel your face out of the wet loam of a rain-soaked forest. Your past is an empty, dark vault.\n\n" +
+      "Beside you among the roots lies a battered chest, its iron lock already broken and hanging loose."
 
     let introPanel =
       Panel(Markup(sprintf "[bold %s]%s[/]" Theme.Foreground (Markup.Escape introText)))
@@ -795,7 +951,9 @@ module Program =
       [ "🗡️ Two-handed Greatsword (Berserker) — Ferocious momentum, sweeping cleaves & high force"
         "🤺 Paired Stiletto & Rapier (Duelist) — Fencing precision, high reflex, agile cadences"
         "🛡️ Arming Sword & Reinforced Shield (Warden) — Bastion defense, fortress poise, counterplay"
-        "🪄 Carved Ash Staff (Inquisitor) — Arcane resonance, psionic intellect, mental clarity" ]
+        "🪄 Carved Ash Staff (Inquisitor) — Arcane resonance, psionic intellect, mental clarity"
+        "🪞 Silvered Hand Mirror (Mesmer) — Phantasmal decoys, mirror clones & sensory static"
+        "📖 Dusty Tome (Abjurer) — Runic wards, composure barriers & destabilizing runes" ]
 
     let choice =
       Display.promptSelectionWithHelp
@@ -808,6 +966,8 @@ module Program =
       if choice.Contains("Berserker") then "berserker"
       elif choice.Contains("Duelist") then "duelist"
       elif choice.Contains("Warden") then "warden"
+      elif choice.Contains("Mesmer") then "mesmer"
+      elif choice.Contains("Abjurer") then "abjurer"
       else "inquisitor"
 
     let player = StoryBosses.createProloguePlayer chosenClass
@@ -817,6 +977,8 @@ module Program =
       | CharacterClass.Berserker -> "Power Specialist • Sweeping Cleaves & Wild Blows"
       | CharacterClass.Duelist -> "Agility Specialist • Probing Finesse & Stacking Bleeds"
       | CharacterClass.Warden -> "Discipline Specialist • Bastion Defense & Counterplay"
+      | CharacterClass.Mesmer -> "Agility Specialist • Mirror Clones & Phantasmal Decoys"
+      | CharacterClass.Abjurer -> "Discipline Specialist • Runic Wards & Abjuration Barriers"
       | _ -> "Mental Power Arcanist • Psionic Cataclysms & Cognitive Strain"
 
     let panel =
@@ -828,14 +990,14 @@ module Program =
     AnsiConsole.Clear()
     AnsiConsole.Write(panel)
     AnsiConsole.WriteLine()
-    AnsiConsole.MarkupLine(sprintf "[bold %s]A child's terrified scream cuts through the metallic clangor of the quarry...[/]" Theme.Yellow)
-    AnsiConsole.MarkupLine(sprintf "[italic %s]Ahead lies the sprawling 2D spatial map of the Iron Quarry. Navigate, explore, grind, and conquer the shadows.[/]" Theme.Comment)
+    AnsiConsole.MarkupLine(sprintf "[bold %s]A child's terrified scream cuts through the hiss of the rain and the creak of the pines...[/]" Theme.Yellow)
+    AnsiConsole.MarkupLine(sprintf "[italic %s]Ahead lies the rain-soaked forest floor. Navigate, explore, and fight your way to the bandit camp at the cave-mouth descending into the quarry.[/]" Theme.Comment)
     AnsiConsole.WriteLine()
-    AnsiConsole.MarkupLine(sprintf "[%s]Press any key to enter the quarry map and begin your expedition...[/]" Theme.Comment)
+    AnsiConsole.MarkupLine(sprintf "[%s]Press any key to enter the forest and begin your expedition...[/]" Theme.Comment)
     Console.ReadKey(true) |> ignore
 
     // 3. Launch 2D Spatial Map Loop for Story Campaign
-    TowerDisplay.runStoryCrawl player 1 runStoryDuel DeathAnimation.playTruckReplay
+    TowerDisplay.runStoryCrawl player 1 runStoryDuel runStoryGroupDuel DeathAnimation.playTruckReplay
 
   [<EntryPoint>]
   let main (args: string array) =
@@ -942,7 +1104,7 @@ module Program =
         elif choice.Contains("Ascend The Infinite Tower") then
           let playerArch = promptSelectArchetype (sprintf "[bold %s]Select Expedition Champion:[/]" Theme.Yellow)
           let player = playerArch.Factory()
-          TowerDisplay.runTowerCrawl player 1 runStoryDuel DeathAnimation.playTruckReplay
+          TowerDisplay.runTowerCrawl player 1 runStoryDuel runStoryGroupDuel DeathAnimation.playTruckReplay
         elif choice.Contains("Interactive Duel Arena") then
           let playerArch = promptSelectArchetype (sprintf "[bold %s]Select Player Combatant:[/]" Theme.Green)
           let enemyArch = promptSelectArchetype (sprintf "[bold %s]Select Opponent Combatant:[/]" Theme.Pink)

@@ -87,6 +87,8 @@ module CliMarkupTests =
         "🤺 Paired Stiletto & Rapier (Duelist) — Fencing precision, high reflex, agile cadences"
         "🛡️ Arming Sword & Reinforced Shield (Warden) — Bastion defense, fortress poise, counterplay"
         "🪄 Carved Ash Staff (Inquisitor) — Arcane resonance, psionic intellect, mental clarity"
+        "🪞 Silvered Hand Mirror (Mesmer) — Phantasmal decoys, mirror clones & sensory static"
+        "📖 Dusty Tome (Abjurer) — Runic wards, composure barriers & destabilizing runes"
         Display.HelpChoiceLabel ]
     let m = Markup(title)
     Assert.NotNull(m)
@@ -108,7 +110,7 @@ module CliMarkupTests =
 
   [<Fact>]
   let ``Combat action choices for all classes against all monsters parse cleanly in Markup without style errors`` () =
-    let classes = [ "berserker"; "duelist"; "warden"; "inquisitor" ]
+    let classes = [ "berserker"; "duelist"; "warden"; "inquisitor"; "mesmer"; "abjurer" ]
     let enemies = [
       Bestiary.slagHound.ToCombatant (CombatantId.New())
       Bestiary.stoneGargoyle.ToCombatant (CombatantId.New())

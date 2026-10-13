@@ -8,7 +8,9 @@
   <ItemGroup>
     <Compile Include="StoryBridgeTests.fs" />
     <Compile Include="StorySpatialTests.fs" />
+    <Compile Include="StoryTutorialTests.fs" />
     <Compile Include="TowerTests.fs" />
+    <Compile Include="EnemyMovementTests.fs" />
     <Compile Include="EncounterTests.fs" />
     <Compile Include="ProgressionTests.fs" />
     <Compile Include="BalanceRegressionTests.fs" />

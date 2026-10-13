@@ -22,6 +22,7 @@ type TowerEvent =
   | TrapDisarmed of trap: TrapGauntletData * message: string
   | EchoDiscovered of echo: MemoryEchoData
   | AmbushTriggered of ambush: AmbushData * spawnedEnemies: TowerEnemy list
+  | GroupCombatTriggered of enemies: TowerEnemy list
 
 /// The running aggregate state of an active Tower dungeon ascent
 type TowerRunState =
@@ -61,6 +62,125 @@ module TowerSession =
           Explored = updatedExplored }
 
     { state with CurrentFloor = updatedFloor }
+
+  /// Chebyshev radius within which a living enemy takes notice of the player and gives chase
+  let aggroRadius = 8
+
+  /// Living enemies within the aggro radius that have an unobstructed line of sight to the player
+  let enemiesAggroed (state: TowerRunState) : TowerEnemy list =
+    state.CurrentFloor.Entities
+    |> Map.toList
+    |> List.choose (fun (pt, ent) ->
+      match ent with
+      | EntityEnemy e when not e.IsDefeated -> Some(pt, e)
+      | _ -> None)
+    |> List.filter (fun (pt, _) ->
+      Distance.chebyshev pt state.PlayerPosition <= aggroRadius
+      && Los.check state.CurrentFloor.IsOpaque pt state.PlayerPosition)
+    |> List.map snd
+
+  /// Living enemies adjacent (Chebyshev distance 1) to the player
+  let adjacentEnemies (state: TowerRunState) : TowerEnemy list =
+    state.CurrentFloor.Entities
+    |> Map.toList
+    |> List.choose (fun (pt, ent) ->
+      match ent with
+      | EntityEnemy e when not e.IsDefeated && Distance.chebyshev pt state.PlayerPosition = 1 -> Some e
+      | _ -> None)
+
+  /// True when at least one neighbouring tile is walkable and free of blocking entities,
+  /// i.e. the player is not completely encircled and may disengage
+  let canEscape (state: TowerRunState) : bool =
+    Point.allNeighbors state.PlayerPosition
+    |> List.exists (fun p ->
+      let walkable =
+        match Map.tryFind p state.CurrentFloor.Tiles with
+        | Some t -> t.IsWalkable
+        | None -> false
+      let blocked =
+        match Map.tryFind p state.CurrentFloor.Entities with
+        | Some ent -> ent.BlocksMovement
+        | None -> false
+      walkable && not blocked)
+
+  /// True when no enemy is adjacent or actively pursuing the player, so out-of-combat recovery is allowed
+  let isSafe (state: TowerRunState) : bool =
+    (adjacentEnemies state).IsEmpty && (enemiesAggroed state).IsEmpty
+
+  /// Snapshot a combatant's armor and weapon condition before a fight so the wear taken during
+  /// it can be discarded when combat ends: armor penetration and weapon damage are combat debuffs.
+  let combatCondition (c: Combatant) : ArmorIntegrity * WeaponCondition =
+    c.Armor, c.WeaponCondition
+
+  /// Restore a combatant's pre-fight armor and weapon condition, clearing any in-combat wear.
+  let restoreCombatCondition (armor: ArmorIntegrity) (weapon: WeaponCondition) (c: Combatant) : Combatant =
+    { c with Armor = armor; WeaponCondition = weapon }
+
+  /// Writes an enemy record back into the current floor's entity map by Id
+  let updateEnemy (enemy: TowerEnemy) (state: TowerRunState) : TowerRunState =
+    let updatedEntities =
+      state.CurrentFloor.Entities
+      |> Map.map (fun _ ent ->
+        match ent with
+        | EntityEnemy e when e.Id = enemy.Id -> EntityEnemy enemy
+        | other -> other)
+    { state with CurrentFloor = { state.CurrentFloor with Entities = updatedEntities } }
+
+  /// The enemy phase of a turn: aggroed living enemies pursue the player one tile at a time in
+  /// deterministic order (nearest first, ties by Id), then any enemies adjacent to the player
+  /// raise a group engagement. Bosses and defeated enemies never move; enemies never stack or
+  /// step onto the player's tile.
+  let stepEnemies (state: TowerRunState) : TowerRunState * TowerEvent list =
+    let orderedAggro =
+      state.CurrentFloor.Entities
+      |> Map.toList
+      |> List.choose (fun (pt, ent) ->
+        match ent with
+        | EntityEnemy e when not e.IsDefeated -> Some(pt, e)
+        | _ -> None)
+      |> List.filter (fun (pt, _) ->
+        Distance.chebyshev pt state.PlayerPosition <= aggroRadius
+        && Los.check state.CurrentFloor.IsOpaque pt state.PlayerPosition)
+      |> List.sortBy (fun (pt, e) -> Distance.chebyshev pt state.PlayerPosition, e.Id)
+
+    let mutable workingState = state
+
+    for (_, enemy) in orderedAggro do
+      // Re-read the enemy's position: an earlier move this phase may have overwritten it.
+      let currentPt =
+        workingState.CurrentFloor.Entities
+        |> Map.toList
+        |> List.tryPick (fun (p, ent) -> match ent with EntityEnemy e when e.Id = enemy.Id -> Some p | _ -> None)
+
+      match currentPt with
+      | Some pt when Distance.chebyshev pt workingState.PlayerPosition > 1 && not (enemy.Id.StartsWith("boss_")) ->
+        let isPassable (p: Point) =
+          p = workingState.PlayerPosition
+          || ((match Map.tryFind p workingState.CurrentFloor.Tiles with
+               | Some t -> t.IsWalkable
+               | None -> false)
+              && (match Map.tryFind p workingState.CurrentFloor.Entities with
+                  | Some ent -> not ent.BlocksMovement
+                  | None -> true))
+
+        match Pathfinding.aStar isPassable pt workingState.PlayerPosition with
+        | Some (_ :: step :: _) when
+            (match Map.tryFind step workingState.CurrentFloor.Entities with
+             | Some ent -> not ent.BlocksMovement
+             | None -> true) ->
+          let vacated = { workingState.CurrentFloor with Entities = Map.remove pt workingState.CurrentFloor.Entities }
+          let movedFloor = { vacated with Entities = Map.add step (EntityEnemy enemy) vacated.Entities }
+          workingState <- { workingState with CurrentFloor = movedFloor }
+        | _ -> ()
+      | _ -> ()
+
+    let adjacent = adjacentEnemies workingState
+
+    let events =
+      if List.isEmpty adjacent then []
+      else [ TowerEvent.GroupCombatTriggered adjacent ]
+
+    workingState, events
 
   /// Completes an active quest on the floor and awards its reward
   let completeQuest (questId: string) (state: TowerRunState) : TowerRunState =
@@ -151,7 +271,19 @@ module TowerSession =
           |> Map.values
           |> Seq.filter (function EntityEnemy e -> e.IsDefeated | _ -> false)
           |> Seq.length
-        if npc.Quest.IsSome && not npc.HasGivenReward && defeatedEnemies > 0 then
+        // A quest may pin its completion to a named enemy (e.g. the tutorial Bandit Leader).
+        let requiredEnemyDefeated =
+          match npc.Quest |> Option.bind (fun q -> q.RequiredEnemyName) with
+          | None -> true
+          | Some requiredName ->
+            state.CurrentFloor.Entities
+            |> Map.exists (fun _ ent ->
+              match ent with
+              | EntityEnemy e -> e.IsDefeated && e.Name = requiredName
+              | _ -> false)
+        let questAlreadyCompleted =
+          npc.Quest |> Option.exists (fun q -> state.CompletedQuests.Contains q.Id)
+        if npc.Quest.IsSome && not npc.HasGivenReward && defeatedEnemies > 0 && requiredEnemyDefeated && not questAlreadyCompleted then
           let q = npc.Quest.Value
           let updatedNpc = { npc with HasGivenReward = true; Quest = Some { q with IsCompleted = true } }
           let updatedEntities = Map.add targetPt (EntityNpc updatedNpc) state.CurrentFloor.Entities
@@ -177,6 +309,7 @@ module TowerSession =
 
         let mutable newKeys = state.CollectedKeys
         let mutable newItems = state.InventoryItems
+        let mutable newPlayer = state.Player
         let mutable rewardMsg = "The chest is empty."
 
         match chest.LootKeyId with
@@ -188,12 +321,14 @@ module TowerSession =
         match chest.ItemReward with
         | Some item ->
           newItems <- item :: newItems
+          newPlayer <- Combatant.applyItemBonus item newPlayer
           rewardMsg <- sprintf "Obtained relic: %s!" item.Name
         | None -> ()
 
         events <- [ TowerEvent.ChestOpened(chest, chest.ItemReward, chest.LootKeyId) ]
         let updatedState =
           { nextState with
+              Player = newPlayer
               CurrentFloor = updatedFloor
               CollectedKeys = newKeys
               InventoryItems = newItems
@@ -492,6 +627,7 @@ module TowerSession =
         newKeys <- newKeys.Add kId
       | RelicReward item ->
         newItems <- item :: newItems
+        rewardedPlayer <- Combatant.applyItemBonus item rewardedPlayer
 
       let updatedAltar = { altar with IsUsed = true }
       let updatedEntities = Map.add altarPt (EntityEncounter (SacrificialAltar updatedAltar)) state.CurrentFloor.Entities
@@ -556,6 +692,7 @@ module TowerSession =
                    CurrentFloor = updatedFloor
                    Souls = state.Souls - ware.CostSouls
                    Trophies = updatedTrophies
+                   Player = Combatant.applyItemBonus ware.Item state.Player
                    InventoryItems = ware.Item :: state.InventoryItems
                    MessageLog = logMsg :: state.MessageLog }
     | _ -> Error "No merchant found at this location."
@@ -591,6 +728,7 @@ module TowerSession =
           Ok { state with
                  CurrentFloor = updatedFloor
                  Souls = state.Souls + vault.BonusSouls
+                 Player = vault.Relics |> List.fold (fun p it -> Combatant.applyItemBonus it p) state.Player
                  InventoryItems = vault.Relics @ state.InventoryItems
                  MessageLog = logMsg :: state.MessageLog }
     | _ -> Error "No vault found at this location."
@@ -650,7 +788,22 @@ module TowerSession =
 
     match defeatedEnemyOpt with
     | Some e ->
-      newXp <- e.Combatant.Level * 10 + 25
+      let baseXp = e.Combatant.Level * 10 + 25
+      // Story floor 1 is the rain-soaked forest tutorial: accelerate leveling so the
+      // level-1 protagonist reaches roughly level 30-35 by the time the Bandit Leader
+      // falls. Later floors and non-story runs use the normal per-kill value.
+      if state.IsStoryMode && state.CurrentFloor.FloorNumber = 1 then
+        if e.Name = "Bandit Leader" then
+          let targetLevel = 32
+          let profile = state.Player.Progression
+          let mutable needed = -profile.CurrentXP
+          for lvl in profile.Level .. targetLevel - 1 do
+            needed <- needed + ProgressionProfile.ExperienceForNextLevel lvl
+          newXp <- baseXp + max 0 needed
+        else
+          newXp <- baseXp + 2500
+      else
+        newXp <- baseXp
       // Look up monster loot in Bestiary
       let monsterTemplateOpt =
         Bestiary.allMonsters

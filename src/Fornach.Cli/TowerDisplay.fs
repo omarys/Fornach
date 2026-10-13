@@ -11,6 +11,20 @@ open Fornach.Story
 
 module TowerDisplay =
 
+  /// Outcome of a multi-enemy (group) engagement
+  [<RequireQualifiedAccess>]
+  type GroupDuelOutcome =
+    | Victorious
+    | Defeated
+    | Fled
+
+  /// Result of a multi-enemy (group) engagement: the resolved outcome plus the updated
+  /// player and enemy records so the caller can write them back into the run state
+  type GroupDuelResult =
+    { Outcome: GroupDuelOutcome
+      Player: Combatant
+      Enemies: TowerEnemy list }
+
   let private themeColor (theme: FloorTheme) : Color =
     match theme with
     | QuarryPlazas -> Theme.ColorComment
@@ -683,7 +697,7 @@ module TowerDisplay =
     grid.AddRow(Markup(sprintf "[bold %s]%s[/]  [grey](%s • Level %d)[/]" Theme.Yellow p.Name p.Class.Name p.Level)) |> ignore
     grid.AddRow(Markup(sprintf "Mastery Tier: [bold %s]%s[/]    Plane: [bold %s]%s[/]" Theme.Cyan (tier.ToString()) Theme.Purple (p.Plane.ToString()))) |> ignore
     grid.AddRow(Markup(sprintf "Experience: [bold %s]%d / %d[/] toward Level %d" Theme.Green p.Progression.CurrentXP p.Progression.ExperienceToNext (p.Level + 1))) |> ignore
-    grid.AddRow(Markup(sprintf "[grey]Attributes are stance-adjusted: +15%% matching vector, -10%% the plane's other vectors.[/]")) |> ignore
+    grid.AddRow(Markup(sprintf "[grey]Attributes are stance-adjusted: +10%% matching vector, -10%% the plane's other vectors.[/]")) |> ignore
     grid.AddRow(Rule().RuleStyle(Theme.StyleComment)) |> ignore
 
     grid.AddRow(Markup(sprintf "[bold %s]─── 󰓥 VITALS ───[/]" Theme.Yellow)) |> ignore
@@ -770,7 +784,8 @@ module TowerDisplay =
   let runTowerCrawlWithMode
     (initialPlayer: Combatant)
     (startFloor: int)
-    (onCombatDuel: Combatant -> Combatant -> (CombatOutcome * Combatant))
+    (onCombatDuel: int -> Combatant -> Combatant -> (CombatOutcome * Combatant))
+    (onGroupCombat: int -> Combatant -> TowerEnemy list -> bool -> GroupDuelResult)
     (onDefeatAnimation: unit -> unit)
     (isStory: bool) : unit =
 
@@ -779,6 +794,106 @@ module TowerDisplay =
     let mutable state = TowerSession.initSessionWithMode initialPlayer seed startFloor isStory
     let mutable sessionActive = true
     let mutable inspectCursor : Point option = None
+    let mutable fleeGrace = 0
+
+    // Resolves a multi-enemy engagement and applies its outcome to the run state.
+    let handleGroup (floorNum: int) (engaged: TowerEnemy list) =
+      if not engaged.IsEmpty then
+        let canFlee = TowerSession.canEscape state
+        // Armor/weapon wear during the fight is a debuff: snapshot, then restore when it ends.
+        let playerConditionBefore = TowerSession.combatCondition state.Player
+        let enemyConditionsBefore =
+          engaged |> List.map (fun e -> e.Id, TowerSession.combatCondition e.Combatant)
+        let result = onGroupCombat floorNum state.Player engaged canFlee
+        let armorBefore, weaponBefore = playerConditionBefore
+        state <- { state with Player = TowerSession.restoreCombatCondition armorBefore weaponBefore result.Player }
+        // Persist every updated enemy with its pre-fight condition, then award each one the group put down.
+        let restoredEnemies =
+          result.Enemies
+          |> List.map (fun e ->
+            match enemyConditionsBefore |> List.tryFind (fun (id, _) -> id = e.Id) with
+            | Some (_, (armor, weapon)) -> { e with Combatant = TowerSession.restoreCombatCondition armor weapon e.Combatant }
+            | None -> e)
+        for e in restoredEnemies do
+          state <- TowerSession.updateEnemy e state
+        for e in restoredEnemies do
+          if e.IsDefeated then
+            let levelBefore = state.Player.Level
+            state <- TowerSession.resolveEnemyDefeat e.Id state
+            showLevelUpBanner state levelBefore
+
+        match result.Outcome with
+        | GroupDuelOutcome.Victorious ->
+          ()
+
+        | GroupDuelOutcome.Defeated ->
+          onDefeatAnimation()
+          // Player defeat: reset at floor spawn with 100% restored vitals
+          let restoredPlayer =
+            { state.Player with
+                Health = Pool.Create state.Player.Health.Maximum
+                Morale = Pool.Create state.Player.Morale.Maximum
+                Armor = ArmorIntegrity.Create state.Player.Armor.Max
+                WeaponCondition = WeaponCondition.Pristine
+                Meters = StatusMeters.Zero }
+          // Respawn non-boss grinding mobs so player can grind again
+          let respawnedEntities =
+            state.CurrentFloor.Entities
+            |> Map.map (fun _ ent ->
+              match ent with
+              | EntityEnemy e when not (e.Id.StartsWith("boss_")) -> EntityEnemy { e with IsDefeated = false }
+              | other -> other)
+          let updatedFloor = { state.CurrentFloor with Entities = respawnedEntities }
+          state <-
+            { state with
+                Player = restoredPlayer
+                PlayerPosition = state.CurrentFloor.SpawnLocation
+                CurrentFloor = updatedFloor
+                MessageLog = "Truck-kun strikes! Rewound through the trauma loop. You awaken at the entrance. All souls, trophies, and gear preserved!" :: state.MessageLog }
+          state <- TowerSession.updateFov state
+          AnsiConsole.MarkupLine(sprintf "\n[bold red]Trauma loop reset! Rewound to entrance. Health restored, progression preserved. Grind and prepare![/]")
+          Thread.Sleep(1200)
+
+        | GroupDuelOutcome.Fled ->
+          // Break away to the free neighbouring tile furthest from the pack.
+          let neighbours =
+            Point.allNeighbors state.PlayerPosition
+            |> List.filter (fun p ->
+              let walkable =
+                match Map.tryFind p state.CurrentFloor.Tiles with
+                | Some t -> t.IsWalkable
+                | None -> false
+              let blocked =
+                match Map.tryFind p state.CurrentFloor.Entities with
+                | Some ent -> ent.BlocksMovement
+                | None -> false
+              walkable && not blocked)
+          let enemyPoints =
+            state.CurrentFloor.Entities
+            |> Map.toList
+            |> List.choose (fun (p, ent) -> match ent with EntityEnemy e when not e.IsDefeated -> Some p | _ -> None)
+          match neighbours with
+          | [] -> ()
+          | _ ->
+            let escapePt =
+              neighbours
+              |> List.maxBy (fun p ->
+                enemyPoints |> List.map (fun ep -> Distance.chebyshev p ep) |> List.fold min Int32.MaxValue)
+            state <- { state with PlayerPosition = escapePt }
+            state <- TowerSession.updateFov state
+            fleeGrace <- 1
+
+    // Runs the enemy pursuit/engagement phase after a turn-consuming action.
+    let runEnemyPhase () =
+      if fleeGrace > 0 then
+        fleeGrace <- fleeGrace - 1
+      else
+        let s2, evs = TowerSession.stepEnemies state
+        state <- s2
+        for ev in evs do
+          match ev with
+          | TowerEvent.GroupCombatTriggered enemies -> handleGroup state.CurrentFloor.FloorNumber enemies
+          | _ -> ()
 
     while sessionActive do
       AnsiConsole.Clear()
@@ -799,15 +914,16 @@ module TowerDisplay =
             .Centered()
             .RuleStyle(Theme.StyleYellow)
         | None ->
-          if state.IsStoryMode && state.CurrentFloor.FloorNumber <= 6 then
+          if state.IsStoryMode && state.CurrentFloor.FloorNumber <= 7 then
             let stageName =
               match state.CurrentFloor.FloorNumber with
-              | 1 -> "PROLOGUE: GUILT & HESITATION"
-              | 2 -> "STAGE 1: DENIAL"
-              | 3 -> "STAGE 2: ANGER"
-              | 4 -> "STAGE 3: BARGAINING"
-              | 5 -> "STAGE 4: DEPRESSION"
-              | _ -> "STAGE 5: ACCEPTANCE"
+              | 1 -> "PROLOGUE: THE RAIN-SOAKED FOREST"
+              | 2 -> "STAGE 1: GUILT & HESITATION"
+              | 3 -> "STAGE 2: DENIAL"
+              | 4 -> "STAGE 3: ANGER"
+              | 5 -> "STAGE 4: BARGAINING"
+              | 6 -> "STAGE 5: DEPRESSION"
+              | _ -> "STAGE 6: ACCEPTANCE"
             Rule(sprintf "[bold %s]󰈙 FORNACH: %s ── %s[/]"
               state.CurrentFloor.Theme.ColorHex
               stageName
@@ -908,11 +1024,16 @@ module TowerDisplay =
 
         match dirOpt with
         | Some dir ->
+          let posBefore = state.PlayerPosition
           let nextState, events = TowerSession.stepPlayer dir state
           state <- nextState
 
           for ev in events do
             match ev with
+            | TowerEvent.CombatTriggered _ when (TowerSession.adjacentEnemies state).Length > 1 ->
+              // More than one foe is on us: resolve the whole pack as a group engagement.
+              handleGroup state.CurrentFloor.FloorNumber (TowerSession.adjacentEnemies state)
+
             | TowerEvent.CombatTriggered enemy ->
               AnsiConsole.WriteLine()
               let isBoss = enemy.Id.StartsWith("boss_") || enemy.Name.StartsWith("Aspect of")
@@ -939,7 +1060,9 @@ module TowerDisplay =
 
               if choice.Contains("Engage in Tactical") then
                 let levelBefore = state.Player.Level
-                let outcome, updatedPlayer = onCombatDuel state.Player enemy.Combatant
+                // Armor/weapon wear is a combat debuff: snapshot, then restore when the fight ends.
+                let armorBefore, weaponBefore = TowerSession.combatCondition state.Player
+                let outcome, updatedPlayer = onCombatDuel state.CurrentFloor.FloorNumber state.Player enemy.Combatant
                 if outcome = CombatOutcome.PlayerVictorious then
                   if isBoss then
                     // Overcoming the trauma aspect grants total catharsis:
@@ -973,27 +1096,10 @@ module TowerDisplay =
                     AnsiConsole.MarkupLine(sprintf "[%s]Press any key to resume exploration...[/]" Theme.Comment)
                     Console.ReadKey(true) |> ignore
                   else
-                    // Field triage, armor salvage & weapon maintenance
-                    let healthHeal = Math.Max(50, int (float updatedPlayer.Health.Maximum * 0.25))
-                    let moraleHeal = Math.Max(40, int (float updatedPlayer.Morale.Maximum * 0.25))
-                    let armorRepair = Math.Max(15, int (float updatedPlayer.Armor.Max * 0.30))
-                    let honedWeapon = WeaponCondition.repair updatedPlayer.WeaponCondition
-                    let recoveredPlayer =
-                      { updatedPlayer with
-                          Health = updatedPlayer.Health.ApplyDelta healthHeal
-                          Morale = updatedPlayer.Morale.ApplyDelta moraleHeal
-                          Armor = { updatedPlayer.Armor with Current = Math.Min(updatedPlayer.Armor.Max, updatedPlayer.Armor.Current + armorRepair) }
-                          WeaponCondition = honedWeapon
-                          BleedStacks = 0
-                          LimbDebuff = 0
-                          Meters = StatusMeters.Zero }
-                    state <- { state with Player = recoveredPlayer }
-                    let weaponMsg =
-                      if honedWeapon <> updatedPlayer.WeaponCondition then
-                        sprintf ", weapon honed to %A" honedWeapon
-                      else ""
-                    AnsiConsole.MarkupLine(sprintf "\n[bold %s]Adversary vanquished! Field triage: +%d HP, +%d Morale, +%d Armor repaired, and combat strain meters vented%s.[/]"
-                      Theme.Green healthHeal moraleHeal armorRepair weaponMsg)
+                    // No post-encounter healing: recover by moving (10%/step) or waiting (33%) instead.
+                    // Armor/weapon debuffs clear now the fight is over; trap damage taken before it is kept.
+                    state <- { state with Player = TowerSession.restoreCombatCondition armorBefore weaponBefore updatedPlayer }
+                    AnsiConsole.MarkupLine(sprintf "\n[bold %s]Adversary vanquished![/]" Theme.Green)
                     Thread.Sleep(900)
 
                   state <- TowerSession.resolveEnemyDefeat enemy.Id state
@@ -1049,7 +1155,9 @@ module TowerDisplay =
                 [ "🗡️ Two-handed Greatsword (Berserker) — Ferocious momentum, sweeping cleaves & high force"
                   "🤺 Paired Stiletto & Rapier (Duelist) — Fencing precision, high reflex, agile cadences"
                   "🛡️ Arming Sword & Reinforced Shield (Warden) — Bastion defense, fortress poise, counterplay"
-                  "🪄 Carved Ash Staff (Inquisitor) — Arcane resonance, psionic intellect, mental clarity" ]
+                  "🪄 Carved Ash Staff (Inquisitor) — Arcane resonance, psionic intellect, mental clarity"
+                  "🪞 Silvered Hand Mirror (Mesmer) — Phantasmal decoys, mirror clones & sensory static"
+                  "📖 Dusty Tome (Abjurer) — Runic wards, composure barriers & destabilizing runes" ]
               let choice =
                 Display.promptSelectionWithHelp
                   (sprintf "[bold %s]⌹ SCAVENGING THE BATTERED CHEST (Lock Broken)[/]\n[italic %s]Choose your weapon armament and awaken your class:[/]"
@@ -1061,6 +1169,8 @@ module TowerDisplay =
                 if choice.Contains("Berserker") then "berserker"
                 elif choice.Contains("Duelist") then "duelist"
                 elif choice.Contains("Warden") then "warden"
+                elif choice.Contains("Mesmer") then "mesmer"
+                elif choice.Contains("Abjurer") then "abjurer"
                 else "inquisitor"
               let updatedPlayer = StoryBosses.createProloguePlayer chosenClass
               state <- { state with Player = updatedPlayer; InventoryItems = updatedPlayer.EquippedItems @ state.InventoryItems }
@@ -1073,7 +1183,7 @@ module TowerDisplay =
               AnsiConsole.Clear()
               AnsiConsole.Write(panel)
               AnsiConsole.WriteLine()
-              AnsiConsole.MarkupLine(sprintf "[%s]Press any key to step into the quarry...[/]" Theme.Comment)
+              AnsiConsole.MarkupLine(sprintf "[%s]Press any key to step out into the rain-soaked forest...[/]" Theme.Comment)
               Console.ReadKey(true) |> ignore
 
             | TowerEvent.ChestOpened(chest, itemOpt, _) ->
@@ -1185,6 +1295,8 @@ module TowerDisplay =
               AnsiConsole.MarkupLine(sprintf "[italic %s]%s[/]" Theme.Foreground ambush.TriggerDescription)
               AnsiConsole.MarkupLine(sprintf "[bold %s]%d monsters emerge from the surrounding colonnades![/]" Theme.Yellow spawned.Length)
               Thread.Sleep(1000)
+              // The ambush pack is already adjacent: hand the encounter to the group combat path.
+              handleGroup state.CurrentFloor.FloorNumber spawned
 
             | TowerEvent.TrapTriggered(_, msg) ->
               AnsiConsole.MarkupLine(sprintf "\n[bold red]⚠ %s[/]" msg)
@@ -1208,7 +1320,7 @@ module TowerDisplay =
               Console.ReadKey(true) |> ignore
 
             | TowerEvent.StairwayAscended nextFloorNum ->
-              if state.IsStoryMode && nextFloorNum = 7 then
+              if state.IsStoryMode && nextFloorNum = 8 then
                 EnvironmentScenes.playCrosswalkTowerTransition ()
                 AnsiConsole.Clear()
                 AnsiConsole.Write(
@@ -1216,17 +1328,18 @@ module TowerDisplay =
                     .Centered()
                     .RuleStyle(Theme.StyleYellow)
                 )
-                AnsiConsole.MarkupLine(sprintf "\n[bold %s]You have conquered the 5 Grief Stages and freed yourself from the trauma loop.[/]" Theme.Green)
+                AnsiConsole.MarkupLine(sprintf "\n[bold %s]You have conquered the 6 Grief Stages and freed yourself from the trauma loop.[/]" Theme.Green)
                 AnsiConsole.MarkupLine(sprintf "[%s]The boundless, infinite floors of the Tower now stretch endlessly before you...[/]\n" Theme.Comment)
                 AnsiConsole.MarkupLine(sprintf "[%s]Press any key to begin ascending the Infinite Tower...[/]" Theme.Yellow)
                 Console.ReadKey(true) |> ignore
-              elif state.IsStoryMode && nextFloorNum <= 6 then
+              elif state.IsStoryMode && nextFloorNum <= 7 then
                 let nextScene = EnvironmentScenes.getSceneForEnemy (
                   match nextFloorNum with
-                  | 2 -> "denial_aspect"
-                  | 3 -> "anger_aspect"
-                  | 4 -> "bargaining_aspect"
-                  | 5 -> "depression_aspect"
+                  | 2 -> "guilt_aspect"
+                  | 3 -> "denial_aspect"
+                  | 4 -> "anger_aspect"
+                  | 5 -> "bargaining_aspect"
+                  | 6 -> "depression_aspect"
                   | _ -> "acceptance_aspect")
                 AnsiConsole.Clear()
                 AnsiConsole.Write(EnvironmentScenes.renderSceneHeader nextScene)
@@ -1246,23 +1359,45 @@ module TowerDisplay =
 
             | _ -> ()
 
+          // Out-of-combat recovery: 10% of max Health and Morale per step, only when no enemy is hunting you.
+          if state.PlayerPosition <> posBefore && TowerSession.isSafe state then
+            let heal = Math.Max(1, int (float state.Player.Health.Maximum * 0.10))
+            let morale = Math.Max(1, int (float state.Player.Morale.Maximum * 0.10))
+            state <-
+              { state with
+                  Player =
+                    { state.Player with
+                        Health = state.Player.Health.ApplyDelta heal
+                        Morale = state.Player.Morale.ApplyDelta morale } }
+
+          runEnemyPhase ()
+
         | None ->
           match key.Key with
           | ConsoleKey.Spacebar | ConsoleKey.OemPeriod | ConsoleKey.NumPad5 ->
-            let restedMorale = state.Player.Morale.ApplyDelta 15
-            let restedMeters = StatusMeters.Zero
+            let safe = TowerSession.isSafe state
+            let heal = if safe then Math.Max(1, int (float state.Player.Health.Maximum * 0.33)) else 0
+            let morale = if safe then Math.Max(1, int (float state.Player.Morale.Maximum * 0.33)) else 0
+            let armorRepair = Math.Max(1, int (float state.Player.Armor.Max * 0.25))
             let honedWeapon = WeaponCondition.repair state.Player.WeaponCondition
             let restedPlayer =
               { state.Player with
-                  Morale = restedMorale
-                  Meters = restedMeters
+                  Health = state.Player.Health.ApplyDelta heal
+                  Morale = state.Player.Morale.ApplyDelta morale
+                  Meters = StatusMeters.Zero
+                  Armor = { state.Player.Armor with Current = Math.Min(state.Player.Armor.Max, state.Player.Armor.Current + armorRepair) }
                   WeaponCondition = honedWeapon }
             let weaponMsg =
               if honedWeapon <> state.Player.WeaponCondition then
-                sprintf ", honed weapon to %A" honedWeapon
+                sprintf ", weapon honed to %A" honedWeapon
               else ""
-            let logMsg = sprintf "You steady your stance, breathe deeply, and recenter your focus (+15 Morale, all status strain vented%s)." weaponMsg
+            let logMsg =
+              if safe then
+                sprintf "You rest, breathe, and tend your gear (+%d HP, +%d Morale, armor repaired%s, strain vented)." heal morale weaponMsg
+              else
+                sprintf "You tend your gear, but cannot recover while enemies are near (armor repaired%s, strain vented)." weaponMsg
             state <- { state with Player = restedPlayer; MessageLog = logMsg :: state.MessageLog }
+            runEnemyPhase ()
 
           | ConsoleKey.F1 ->
             showHelpManual ()
@@ -1289,14 +1424,16 @@ module TowerDisplay =
   let runTowerCrawl
     (initialPlayer: Combatant)
     (startFloor: int)
-    (onCombatDuel: Combatant -> Combatant -> (CombatOutcome * Combatant))
+    (onCombatDuel: int -> Combatant -> Combatant -> (CombatOutcome * Combatant))
+    (onGroupCombat: int -> Combatant -> TowerEnemy list -> bool -> GroupDuelResult)
     (onDefeatAnimation: unit -> unit) : unit =
-    runTowerCrawlWithMode initialPlayer startFloor onCombatDuel onDefeatAnimation false
+    runTowerCrawlWithMode initialPlayer startFloor onCombatDuel onGroupCombat onDefeatAnimation false
 
   /// Interactive story mode stage expedition entry point
   let runStoryCrawl
     (initialPlayer: Combatant)
     (startFloor: int)
-    (onCombatDuel: Combatant -> Combatant -> (CombatOutcome * Combatant))
+    (onCombatDuel: int -> Combatant -> Combatant -> (CombatOutcome * Combatant))
+    (onGroupCombat: int -> Combatant -> TowerEnemy list -> bool -> GroupDuelResult)
     (onDefeatAnimation: unit -> unit) : unit =
-    runTowerCrawlWithMode initialPlayer startFloor onCombatDuel onDefeatAnimation true
+    runTowerCrawlWithMode initialPlayer startFloor onCombatDuel onGroupCombat onDefeatAnimation true
