@@ -37,7 +37,7 @@ module Program =
       Panel(telemetryGrid)
         .Border(BoxBorder.Rounded)
         .BorderStyle(Theme.StyleCurrentLine)
-        .Header(sprintf "[bold %s] 󰒋 COMMAND COCKPIT & SYSTEM TELEMETRY [/]" Theme.Yellow)
+        .Header(Display.stripNerdGlyphs (sprintf "[bold %s] 󰒋 COMMAND COCKPIT & SYSTEM TELEMETRY [/]" Theme.Yellow))
         .Expand()
 
     AnsiConsole.Write(telemetryPanel)
@@ -174,11 +174,11 @@ module Program =
           | Penetrating | Keen ->
             let fortVal = enemy.GetStat StatId.Fortitude
             if fst assess.WeakestDefense = StatId.Fortitude then sprintf " - [bold %s]%d ★ Opening[/]" Theme.Green fortVal
-            elif fst assess.BestDefense = StatId.Fortitude then sprintf " - [%s]%d ⚠ Guarded[/]" Theme.Orange fortVal
+            elif fst assess.BestDefense = StatId.Fortitude then sprintf " - [bold %s]%d ⚠ Apex Guard[/]" Theme.Red fortVal
             else sprintf " - [%s]%d[/]" Theme.Comment fortVal
           | Discerning ->
             if fst assess.WeakestDefense = StatId.Fortitude then sprintf " - [bold %s]Opening[/]" Theme.Green
-            elif fst assess.BestDefense = StatId.Fortitude then sprintf " - [%s]Guarded[/]" Theme.Orange
+            elif fst assess.BestDefense = StatId.Fortitude then sprintf " - [bold %s]Apex Guard[/]" Theme.Red
             else ""
           | Obscured -> ""
 
@@ -187,11 +187,11 @@ module Program =
           | Penetrating | Keen ->
             let refVal = enemy.GetStat StatId.Reflex
             if fst assess.WeakestDefense = StatId.Reflex then sprintf " - [bold %s]%d ★ Opening[/]" Theme.Green refVal
-            elif fst assess.BestDefense = StatId.Reflex then sprintf " - [%s]%d ⚠ Guarded[/]" Theme.Orange refVal
+            elif fst assess.BestDefense = StatId.Reflex then sprintf " - [bold %s]%d ⚠ Apex Guard[/]" Theme.Red refVal
             else sprintf " - [%s]%d[/]" Theme.Comment refVal
           | Discerning ->
             if fst assess.WeakestDefense = StatId.Reflex then sprintf " - [bold %s]Opening[/]" Theme.Green
-            elif fst assess.BestDefense = StatId.Reflex then sprintf " - [%s]Guarded[/]" Theme.Orange
+            elif fst assess.BestDefense = StatId.Reflex then sprintf " - [bold %s]Apex Guard[/]" Theme.Red
             else ""
           | Obscured -> ""
 
@@ -200,33 +200,33 @@ module Program =
           | Penetrating | Keen ->
             let poiseVal = enemy.GetStat StatId.Poise
             if fst assess.WeakestDefense = StatId.Poise then sprintf " - [bold %s]%d ★ Opening[/]" Theme.Green poiseVal
-            elif fst assess.BestDefense = StatId.Poise then sprintf " - [%s]%d ⚠ Guarded[/]" Theme.Orange poiseVal
+            elif fst assess.BestDefense = StatId.Poise then sprintf " - [bold %s]%d ⚠ Apex Guard[/]" Theme.Red poiseVal
             else sprintf " - [%s]%d[/]" Theme.Comment poiseVal
           | Discerning ->
             if fst assess.WeakestDefense = StatId.Poise then sprintf " - [bold %s]Opening[/]" Theme.Green
-            elif fst assess.BestDefense = StatId.Poise then sprintf " - [%s]Guarded[/]" Theme.Orange
+            elif fst assess.BestDefense = StatId.Poise then sprintf " - [bold %s]Apex Guard[/]" Theme.Red
             else ""
           | Obscured -> ""
 
-        // Physical Martial Strikes grouped by vector
+        // Physical Martial Strikes grouped by vector (attacks fluidly transition combat stance)
         let powerStrikes = [
-          sprintf "⚔️  [%s]Force Strike: Standard Cleave[/] (Power - Cleave vs. Fortitude%s)" Theme.Red fortSuffix
-          sprintf "⚡ [bold %s]Force Strike: Wild Blow[/] (Power Gambit: +30 Recklessness, 1.5x Dmg)" Theme.Red
+          sprintf "⚔️  [%s]Force Strike: Standard Cleave[/] (Power Stance • Cleave vs. Fortitude%s)" Theme.Red fortSuffix
+          sprintf "⚡ [bold %s]Force Strike: Wild Blow[/] (Power Stance Gambit: +30 Recklessness, 1.5x Dmg)" Theme.Red
         ]
 
         let agilityStrikes = [
-          sprintf "⚔️  [%s]Finesse Cadence: Rapid Probing[/] (Agility - Probing Cadence vs. Reflex%s)" Theme.Green refSuffix
-          sprintf "⚡ [bold %s]Finesse Cadence: Relentless Blitz[/] (Agility Gambit: +25 Recklessness)" Theme.Green
+          sprintf "⚔️  [%s]Finesse Cadence: Rapid Probing[/] (Agility Stance • Probing Cadence vs. Reflex%s)" Theme.Green refSuffix
+          sprintf "⚡ [bold %s]Finesse Cadence: Relentless Blitz[/] (Agility Stance Gambit: +25 Recklessness)" Theme.Green
         ]
 
         let disciplineStrikes = [
-          sprintf "⚔️  [%s]Prowess Strike: Stance Pressure[/] (Discipline - Study Stacks vs. Poise%s)" Theme.Purple poiseSuffix
-          sprintf "⚡ [bold %s]Prowess Strike: Invitational Bait[/] (Discipline Gambit: +35 Recklessness)" Theme.Purple
+          sprintf "⚔️  [%s]Prowess Strike: Stance Pressure[/] (Discipline Stance • Study Stacks vs. Poise%s)" Theme.Purple poiseSuffix
+          sprintf "⚡ [bold %s]Prowess Strike: Invitational Bait[/] (Discipline Stance Gambit: +35 Recklessness)" Theme.Purple
           // Dedicated Discipline Gambits (cost Study Stacks with 0 Recklessness!)
           if player.StudyStacks >= 2 then
-            sprintf "🎯 [bold %s]Calculated Flaw Strike[/] (Discipline Gambit: Spend Study Stacks for Vital Opening, 0 Recklessness)" Theme.Purple
+            sprintf "🎯 [bold %s]Calculated Flaw Strike[/] (Discipline Stance Gambit: Spend Study Stacks for Vital Opening, 0 Recklessness)" Theme.Purple
           if player.StudyStacks >= 3 then
-            sprintf "⚔️  [bold %s]Masterful Disarm[/] (Discipline Gambit: Spend Study Stacks to Degrade Opponent Weapon, 0 Recklessness)" Theme.Purple
+            sprintf "⚔️  [bold %s]Masterful Disarm[/] (Discipline Stance Gambit: Spend Study Stacks to Degrade Opponent Weapon, 0 Recklessness)" Theme.Purple
         ]
 
         // Order strikes prioritizing player's primary class archetype vector
@@ -237,30 +237,6 @@ module Program =
           | Vector.Discipline -> disciplineStrikes @ powerStrikes @ agilityStrikes
 
         yield! martialStrikes
-
-        // Tactical Stance Shifts ordered by class archetype preference
-        let powerStanceShift =
-          if player.Stance <> CombatStance.PowerStance then
-            [ sprintf "↺ [bold %s]Shift Stance: Power Stance[/] (Sweeping Cleaves & Sunder Armor/Weapon)" Theme.Red ]
-          else []
-
-        let agilityStanceShift =
-          if player.Stance <> CombatStance.AgilityStance then
-            [ sprintf "↺ [bold %s]Shift Stance: Agility Stance[/] (Probing Cadence & Overwhelm Crits; -20%% AoO vs Flanks)" Theme.Green ]
-          else []
-
-        let disciplineStanceShift =
-          if player.Stance <> CombatStance.DisciplineStance then
-            [ sprintf "↺ [bold %s]Shift Stance: Discipline Stance[/] (Chained Strikes, Study Stacks & Unpenalized AoO)" Theme.Purple ]
-          else []
-
-        let stanceShifts =
-          match player.Class.Vector with
-          | Vector.Power -> powerStanceShift @ agilityStanceShift @ disciplineStanceShift
-          | Vector.Agility -> agilityStanceShift @ disciplineStanceShift @ powerStanceShift
-          | Vector.Discipline -> disciplineStanceShift @ powerStanceShift @ agilityStanceShift
-
-        yield! stanceShifts
 
         // Physical Defensive Reset
         sprintf "🛡️  [%s]Steady Form[/] (Physical Reset: Drain Recklessness via Poise, build Study)" Theme.Green
@@ -280,11 +256,11 @@ module Program =
           | Penetrating | Keen ->
             let resVal = enemy.GetStat StatId.Resolve
             if fst assess.WeakestDefense = StatId.Resolve then sprintf " - [bold %s]%d ★ Opening[/]" Theme.Green resVal
-            elif fst assess.BestDefense = StatId.Resolve then sprintf " - [%s]%d ⚠ Guarded[/]" Theme.Orange resVal
+            elif fst assess.BestDefense = StatId.Resolve then sprintf " - [bold %s]%d ⚠ Apex Guard[/]" Theme.Red resVal
             else sprintf " - [%s]%d[/]" Theme.Comment resVal
           | Discerning ->
             if fst assess.WeakestDefense = StatId.Resolve then sprintf " - [bold %s]Opening[/]" Theme.Green
-            elif fst assess.BestDefense = StatId.Resolve then sprintf " - [%s]Guarded[/]" Theme.Orange
+            elif fst assess.BestDefense = StatId.Resolve then sprintf " - [bold %s]Apex Guard[/]" Theme.Red
             else ""
           | Obscured -> ""
 
@@ -293,11 +269,11 @@ module Program =
           | Penetrating | Keen ->
             let intVal = enemy.GetStat StatId.Intuition
             if fst assess.WeakestDefense = StatId.Intuition then sprintf " - [bold %s]%d ★ Opening[/]" Theme.Green intVal
-            elif fst assess.BestDefense = StatId.Intuition then sprintf " - [%s]%d ⚠ Guarded[/]" Theme.Orange intVal
+            elif fst assess.BestDefense = StatId.Intuition then sprintf " - [bold %s]%d ⚠ Apex Guard[/]" Theme.Red intVal
             else sprintf " - [%s]%d[/]" Theme.Comment intVal
           | Discerning ->
             if fst assess.WeakestDefense = StatId.Intuition then sprintf " - [bold %s]Opening[/]" Theme.Green
-            elif fst assess.BestDefense = StatId.Intuition then sprintf " - [%s]Guarded[/]" Theme.Orange
+            elif fst assess.BestDefense = StatId.Intuition then sprintf " - [bold %s]Apex Guard[/]" Theme.Red
             else ""
           | Obscured -> ""
 
@@ -306,32 +282,32 @@ module Program =
           | Penetrating | Keen ->
             let compVal = enemy.GetStat StatId.Composure
             if fst assess.WeakestDefense = StatId.Composure then sprintf " - [bold %s]%d ★ Opening[/]" Theme.Green compVal
-            elif fst assess.BestDefense = StatId.Composure then sprintf " - [%s]%d ⚠ Guarded[/]" Theme.Orange compVal
+            elif fst assess.BestDefense = StatId.Composure then sprintf " - [bold %s]%d ⚠ Apex Guard[/]" Theme.Red compVal
             else sprintf " - [%s]%d[/]" Theme.Comment compVal
           | Discerning ->
             if fst assess.WeakestDefense = StatId.Composure then sprintf " - [bold %s]Opening[/]" Theme.Green
-            elif fst assess.BestDefense = StatId.Composure then sprintf " - [%s]Guarded[/]" Theme.Orange
+            elif fst assess.BestDefense = StatId.Composure then sprintf " - [bold %s]Apex Guard[/]" Theme.Red
             else ""
           | Obscured -> ""
 
         let powerSpells = [
-          sprintf "✨ [%s]Arcane Cataclysm: Elemental Blast[/] (Power - Intellect vs. Resolve%s)%s" Theme.Pink resolveSuffix (strainTag powProf)
+          sprintf "✨ [%s]Arcane Cataclysm: Elemental Blast[/] (Resonance Spike Form • Intellect vs. Resolve%s)%s" Theme.Pink resolveSuffix (strainTag powProf)
           if player.ComplexForm <> Some ComplexForm.AegisLattice then
-            sprintf "⚡ [bold %s]Arcane Cataclysm: Overchannel[/] (Power Gambit: +35 Recklessness, Splash)%s" Theme.Pink (strainTag powProf)
+            sprintf "⚡ [bold %s]Arcane Cataclysm: Overchannel[/] (Resonance Spike Gambit: +35 Recklessness, Splash)%s" Theme.Pink (strainTag powProf)
         ]
 
         let agilitySpells = [
-          sprintf "✨ [%s]Synaptic Glamour: Neural Static[/] (Agility - Acuity vs. Intuition%s)%s" Theme.Purple intuitionSuffix (strainTag agiProf)
-          sprintf "⚡ [bold %s]Synaptic Glamour: Mind Fracture[/] (Agility Gambit: +25 Recklessness)%s" Theme.Purple (strainTag agiProf)
-          sprintf "🪞 [%s]Mirror Illusion: Phantasmal Decoys[/] (Agility - Weave Mirror Clones)%s" Theme.Purple (strainTag agiProf)
-          sprintf "⚡ [bold %s]Mirror Illusion: Decoy Swarm[/] (Agility Gambit: +25 Recklessness, Extra Clones)%s" Theme.Purple (strainTag agiProf)
+          sprintf "✨ [%s]Synaptic Glamour: Neural Static[/] (Phantasmal Diffusion Form • Acuity vs. Intuition%s)%s" Theme.Purple intuitionSuffix (strainTag agiProf)
+          sprintf "⚡ [bold %s]Synaptic Glamour: Mind Fracture[/] (Phantasmal Diffusion Gambit: +25 Recklessness)%s" Theme.Purple (strainTag agiProf)
+          sprintf "🪞 [%s]Mirror Illusion: Phantasmal Decoys[/] (Phantasmal Diffusion Form • Weave Mirror Clones)%s" Theme.Purple (strainTag agiProf)
+          sprintf "⚡ [bold %s]Mirror Illusion: Decoy Swarm[/] (Phantasmal Diffusion Gambit: +25 Recklessness, Extra Clones)%s" Theme.Purple (strainTag agiProf)
         ]
 
         let disciplineSpells = [
-          sprintf "🛡️  [%s]Runic Ward Trap: Abjuration Glyph[/] (Discipline - Acumen vs. Composure%s, Ward)%s" Theme.Cyan composureSuffix (strainTag disProf)
-          sprintf "⚡ [bold %s]Runic Ward Trap: Anomalous Glyph[/] (Discipline Gambit: +30 Recklessness, Heavy Ward)%s" Theme.Cyan (strainTag disProf)
-          sprintf "🌀 [%s]Disorienting Shockwave: Balance Disruption[/] (Discipline - Break Posture & Tempo)%s" Theme.Orange (strainTag disProf)
-          sprintf "⚡ [bold %s]Disorienting Shockwave: Staggering Pulse[/] (Discipline Gambit: +25 Recklessness, Swarm Pulse)%s" Theme.Orange (strainTag disProf)
+          sprintf "🛡️  [%s]Runic Ward Trap: Abjuration Glyph[/] (Aegis Lattice Form • Acumen vs. Composure%s, Ward)%s" Theme.Cyan composureSuffix (strainTag disProf)
+          sprintf "⚡ [bold %s]Runic Ward Trap: Anomalous Glyph[/] (Aegis Lattice Gambit: +30 Recklessness, Heavy Ward)%s" Theme.Cyan (strainTag disProf)
+          sprintf "🌀 [%s]Disorienting Shockwave: Balance Disruption[/] (Aegis Lattice Form • Break Posture & Tempo)%s" Theme.Orange (strainTag disProf)
+          sprintf "⚡ [bold %s]Disorienting Shockwave: Staggering Pulse[/] (Aegis Lattice Gambit: +25 Recklessness, Swarm Pulse)%s" Theme.Orange (strainTag disProf)
         ]
 
         let spells =
@@ -341,30 +317,6 @@ module Program =
           | Vector.Discipline -> disciplineSpells @ powerSpells @ agilitySpells
 
         yield! spells
-
-        // Tactical Complex Form Threading (Mental Stance Shifts)
-        let powerForm =
-          if player.ComplexForm <> Some ComplexForm.ResonanceSpike then
-            [ sprintf "🧵 [bold %s]Thread Form: Resonance Spike[/] (+25%% Spell Dmg & Fatigue; Fading Drain)" Theme.Pink ]
-          else []
-
-        let agilityForm =
-          if player.ComplexForm <> Some ComplexForm.PhantasmalDiffusion then
-            [ sprintf "🧵 [bold %s]Thread Form: Phantasmal Diffusion[/] (Decoy Evasion Swap, Passive Clones; -15%% Dmg)" Theme.Green ]
-          else []
-
-        let disciplineForm =
-          if player.ComplexForm <> Some ComplexForm.AegisLattice then
-            [ sprintf "🧵 [bold %s]Thread Form: Aegis Lattice[/] (+15 Ward/turn, Retribution Ward; Locks Overchannel)" Theme.Cyan ]
-          else []
-
-        let forms =
-          match player.Class.Vector with
-          | Vector.Power -> powerForm @ agilityForm @ disciplineForm
-          | Vector.Agility -> agilityForm @ disciplineForm @ powerForm
-          | Vector.Discipline -> disciplineForm @ powerForm @ agilityForm
-
-        yield! forms
 
         // Mental Defensive Reset
         sprintf "🧠 [%s]Center Mind[/] (Mental Reset: Drain Recklessness, clear Confusion, restore Arcane Ward)" Theme.Cyan
@@ -902,10 +854,10 @@ module Program =
           (fun () -> renderGroupHud currentPlayer currentEnemies round (logLines ()))
 
       if choice.Contains("Disengage") then
-        // Parting strikes from every living enemy.
+        // Parting strikes from the living enemies that can reach you (eight surrounding tiles at most).
         AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s breaks away, but the pack lashes out![/]" Theme.Yellow currentPlayer.Name)
         let mutable survived = true
-        for e in living () do
+        for e in living () |> List.truncate 8 do
           let intent = AI.chooseIntent e.Combatant currentPlayer
           let playerBeforeTurn = currentPlayer
           let r =
@@ -958,9 +910,10 @@ module Program =
               .RuleStyle(Theme.StyleGreen)
           )
         else
-          // 4. Enemy turn: each surviving foe strikes in deterministic order
+          // 4. Enemy turn: each surviving foe strikes in deterministic order, capped at 8 attackers
+          // (the eight tiles surrounding the player — any extras cannot reach).
           AnsiConsole.MarkupLine(sprintf "\n[bold %s]The pack retaliates...[/]" Theme.Pink)
-          for e in living () do
+          for e in living () |> List.truncate 8 do
             if not combatOver then
               let intent = AI.chooseIntent e.Combatant currentPlayer
               let playerBeforeTurn = currentPlayer
@@ -1042,12 +995,8 @@ module Program =
 
     // 2. Scavenger Chest Class Selection
     let choices =
-      [ "🗡️ Two-handed Greatsword (Berserker) — Ferocious momentum, sweeping cleaves & high force"
-        "🤺 Paired Stiletto & Rapier (Duelist) — Fencing precision, high reflex, agile cadences"
-        "🛡️ Arming Sword & Reinforced Shield (Warden) — Bastion defense, fortress poise, counterplay"
-        "🪄 Carved Ash Staff (Inquisitor) — Arcane resonance, psionic intellect, mental clarity"
-        "🪞 Silvered Hand Mirror (Mesmer) — Phantasmal decoys, mirror clones & sensory static"
-        "📖 Dusty Tome (Abjurer) — Runic wards, composure barriers & destabilizing runes" ]
+      [ "⚔️ Tempered Arming Sword & Reinforced Shield (Fighter) — Balanced martial master of kinetic momentum, agile parries, and bastion guard"
+        "🪄 Carved Ash Staff (Mage) — Arcane practitioner channeling cognitive resonance, phantasmal static, and protective wards" ]
 
     let choice =
       Display.promptSelectionWithHelp
@@ -1056,24 +1005,17 @@ module Program =
         None
         (fun () -> ())
 
-    let chosenClass =
-      if choice.Contains("Berserker") then "berserker"
-      elif choice.Contains("Duelist") then "duelist"
-      elif choice.Contains("Warden") then "warden"
-      elif choice.Contains("Mesmer") then "mesmer"
-      elif choice.Contains("Abjurer") then "abjurer"
-      else "inquisitor"
+    let chosenClass = if choice.Contains("Fighter") then "fighter" else "mage"
 
     let player = StoryBosses.createProloguePlayer chosenClass
-    let weapon = player.EquippedItems |> List.tryHead |> Option.map (fun w -> w.Name) |> Option.defaultValue "Armament"
+    let weapon =
+      player.EquippedItems
+      |> List.map (fun w -> w.Name)
+      |> String.concat ", "
     let desc =
       match player.Class with
-      | CharacterClass.Berserker -> "Power Specialist • Sweeping Cleaves & Wild Blows"
-      | CharacterClass.Duelist -> "Agility Specialist • Probing Finesse & Stacking Bleeds"
-      | CharacterClass.Warden -> "Discipline Specialist • Bastion Defense & Counterplay"
-      | CharacterClass.Mesmer -> "Agility Specialist • Mirror Clones & Phantasmal Decoys"
-      | CharacterClass.Abjurer -> "Discipline Specialist • Runic Wards & Abjuration Barriers"
-      | _ -> "Mental Power Arcanist • Psionic Cataclysms & Cognitive Strain"
+      | CharacterClass.Mage -> "Arcane Practitioner • Resonance Spikes, Phantasmal Weaving & Aegis Lattices"
+      | _ -> "Martial Master • Kinetic Force, Finesse Cadence & Bastion Defense"
 
     let panel =
       Panel(Markup(sprintf "[bold %s]󰓥 CLASS AWAKENED: %s[/] [grey](%s)[/]\n[italic white]Equipped: %s  •  Combat Stance: %A[/]\n[grey]Bundle of sharpened caltrops recovered inside lid.[/]"

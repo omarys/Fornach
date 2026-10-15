@@ -440,12 +440,11 @@ module Simulation =
       else
         // Phase 2: Swarm Turn (All surviving mob members attack Solo concurrently)
         // When BastionZoneControl is active, only the 3 frontline tiles in front of the Warden can swing this round.
-        // For Mesmer, at most 8 enemies can attack per round (the 8 surrounding tiles).
         // Each clone that vanishes/shatters blocks that tile space until the end of the round!
+        // Hard positional limit: at most 8 enemies can swing at the solo (the eight surrounding tiles).
         let initialMaxSwings =
           if solo.HasActivePreparation PreparationType.BastionZoneControl then 3
-          elif solo.Class = CharacterClass.Mesmer then 8
-          else mob.Length
+          else Math.Min(8, mob.Length)
 
         let mutable availableSwings = initialMaxSwings
         let mutable priorDefenses = 0
@@ -464,7 +463,7 @@ module Simulation =
           let cloneShattered =
             mobRes.Events
             |> List.exists (function CombatEvent.MirrorCloneShattered _ | CombatEvent.MirrorMirageDeceived _ -> true | _ -> false)
-          if cloneShattered && solo.Class = CharacterClass.Mesmer then
+          if cloneShattered then
             availableSwings <- Math.Max(0, availableSwings - 1)
 
           let aooHits = mobRes.Events |> List.filter (function CombatEvent.AttackOfOpportunityTriggered _ -> true | _ -> false) |> List.length
@@ -803,6 +802,8 @@ module Simulation =
     )
     AnsiConsole.WriteLine()
 
+    // The benchmark tooling deliberately keeps the legacy specialized archetypes (see Archetypes.fs),
+    // so its rosters stay on the six-class list rather than CharacterClass.PlayerClasses.
     let championClasses = [
       CharacterClass.Berserker
       CharacterClass.Duelist
@@ -1069,7 +1070,7 @@ module Simulation =
       Panel(legendGrid)
         .Border(BoxBorder.Rounded)
         .BorderStyle(Theme.StyleCurrentLine)
-        .Header(sprintf "[bold %s] 󰒋 PEER MATRIX BENCHMARK TELEMETRY & TRAUMA VECTOR KEY [/]" Theme.Yellow)
+        .Header(Display.stripNerdGlyphs (sprintf "[bold %s] 󰒋 PEER MATRIX BENCHMARK TELEMETRY & TRAUMA VECTOR KEY [/]" Theme.Yellow))
 
     AnsiConsole.WriteLine()
     AnsiConsole.Write(matrixTable)
@@ -1236,7 +1237,7 @@ module Simulation =
       Panel(legendGrid)
         .Border(BoxBorder.Rounded)
         .BorderStyle(Theme.StyleCurrentLine)
-        .Header(sprintf "[bold %s] 󰞁 BESTIARY SWARM BENCHMARK TELEMETRY & TIPPING POINT KEY [/]" Theme.Yellow)
+        .Header(Display.stripNerdGlyphs (sprintf "[bold %s] 󰞁 BESTIARY SWARM BENCHMARK TELEMETRY & TIPPING POINT KEY [/]" Theme.Yellow))
 
     AnsiConsole.Write(legendPanel)
     AnsiConsole.WriteLine()

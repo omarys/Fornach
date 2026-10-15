@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:c78796a71e4585735f1f287f936cf401cd2493210a920813bf7f96f318648922",
+  "claims": [
+    {
+      "id": "claim_54b74c8978ec41f0aa0931c1b088fdf7",
+      "statement": "Fornach.Spatial provides 2D integer Point structures with vector arithmetic and 4-way cardinal and 8-way diagonal adjacency calculations.",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Spatial/Point.fs#L4-L42",
+          "version": "repo-lines-v1:sha256:ab6842d1ec7a934ca83321eeae430bbf0ddcf231e45d4627e12e01f5777fa856:eyJzZWxlY3RlZExpbmVDb3VudCI6MzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzYjM2OTU0MjExZGY1N2VmMTIxZjM5NjNiNjhjNjE5MTI4ODRmNWFhMmRiYmQ2ZTBmMDQwZjg0YzU4M2IyOTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQyNDg4Njk3MDgwYzRkZWZlZjM2ZjJhZDQ3MzY3MjVmMDYxNzQwZTc0NjJiNDNjMzhhMzhmODM4ZTg4ZTcyYjUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJmYjA3ZWJjYzQ4YTMyMzMzMjE1ZTUyNzBhMDljZDAxOGM4YjE2ODQxMDg5ZDg1NjZhZDhlMjI1YmIzNjkyMTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_cceec0b4238b41e5bb62dce6253ea6f3",
+      "statement": "Field of view is evaluated via 8-octant recursive shadowcasting that checks obstacle opacity against directional vision cones.",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Spatial/Fov.fs#L17-L70",
+          "version": "repo-lines-v1:sha256:951880f1a71dcd9acbff99ce294cddbcd5f518ae8c9b6b121dc51067ca0d30fb:eyJzZWxlY3RlZExpbmVDb3VudCI6NTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU4MDY1NzBmZGJhNTk0ODljN2M4NTVkYmIyNzY0NTFmOWI4NjQ1MmE2NmI5Y2ExOTMwMjBhOThmNGI0ODdmOTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM5YzJjODZkY2VjNDllODU5OWE2YzQ4NDljZWIxZmI0NmU0ZmI3ZWE5NThiZjJhODgxZDU0YWQ5NjcxMmNhOGYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc0MTVhYWI4YjQxYzQwNTEwNGVkYmVhMmU5NTA1OWRhMzExYTE1N2FmYzI0MmY5ODEzZDk4NTZlYjJjZWFjNTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_66fb5178431545ab80d440d4c56f0c5e",
+      "statement": "TowerSession tracks active floor state, accumulating newly visible tiles into persistent Explored memory to maintain Fog of War.",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Engine/TowerSession.fs#L46-L65",
+          "version": "repo-lines-v1:sha256:71ffcb13ab942a37ca4697315aae08ca07020ca465c7a40f1c166ecd65270a49:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVkYmUxZTM2OTc5MTY4ZDQzNjMwOTY2MDBmYTM4N2E0ODkwOWQ2MGEzMmZkYTVhZmYwYjI5MjVjNWYwODY4ODAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA2Mjk5MGVhMGNlNzg1ODkyODk1Y2Q1ZWEwMjlkM2Q2NGY1M2YxNDc0MmM0MjEwM2RiODM4YThlZWI1MjYyZDIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM0MjZhZTJhNmM1NTk4ZWEyNmYwZTYyMzc4ZmFhMzg0Y2Y0YjhmODcwYmM5ZWZkYWJkYzllNWE3NzgyN2Q0ODUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_6388733a3e1a4271b3f604e574a12e3f",
+      "statement": "Living enemies maintain an aggro radius of 8 Chebyshev tiles with unobstructed line of sight, triggering tactical combat on adjacency.",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Engine/TowerSession.fs#L66-L90",
+          "version": "repo-lines-v1:sha256:bd62b9083541a4dcdb7557fc6040e965c982f7ccabdaa39b4d4102843d32e969:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlmMDdjOWM3YjBjYjhkMzdmNTA4MzczM2Q4MmE4YjM0ZTRjNGE5MTc2YjZiMjFhOWY0YTQ5OGQ1MDcyZjY2ZDAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc4MjVmOWRjZTVlZWRhMGZhMDY4YzNjYzE4YmIwMWQ0YTczYTEwNTM2YzMxM2E1ZDg0NzQ1NDNjMGJhNTU1ZTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE1YWU3ZTU2MDI0MjY3ZDljMDBhNDA1YjNiNTE0OWU1ODYxZDNmMDE2NDIyY2VhOWE2ZmFjMTgyOGY0ZmIyMDIifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-15T19:23:52.290Z"
+  }
+}

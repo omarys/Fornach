@@ -352,8 +352,52 @@ module StoryBosses =
         StartingRecklessnessDelta = 0
         Triggers = [] }
 
-    let cls, weapon =
+    let sword =
+      { Name = "Tempered Arming Sword"
+        Slot = EquipmentSlot.Weapon
+        Description = "A finely-balanced double-edged steel blade suited for precise cuts, thrusts, and heavy cleaves."
+        StatModifiers = [ StatId.Force, 20; StatId.Finesse, 15; StatId.Prowess, 15 ]
+        HealthBonus = 0
+        MoraleBonus = 0
+        StartingRecklessnessDelta = 0
+        Triggers = [] }
+
+    let shield =
+      { Name = "Reinforced Shield"
+        Slot = EquipmentSlot.Armor
+        Description = "An iron-rimmed heater shield designed to deflect blows and hold tactical ground."
+        StatModifiers = [ StatId.Poise, 20; StatId.Fortitude, 20; StatId.Reflex, 10 ]
+        HealthBonus = 200
+        MoraleBonus = 100
+        StartingRecklessnessDelta = -5
+        Triggers = [] }
+
+    let staff =
+      { Name = "Carved Ash Staff"
+        Slot = EquipmentSlot.Weapon
+        Description = "A runic focus staff humming with psychic resonance, phantasmal channels, and warding lattices."
+        StatModifiers = [ StatId.Intellect, 25; StatId.Acuity, 20; StatId.Acumen, 20 ]
+        HealthBonus = 0
+        MoraleBonus = 250
+        StartingRecklessnessDelta = 0
+        Triggers = [] }
+
+    let robes =
+      { Name = "Weaver's Runic Robes"
+        Slot = EquipmentSlot.Armor
+        Description = "Enchanted silk robes woven with protective abjuration glyphs."
+        StatModifiers = [ StatId.Resolve, 20; StatId.Intuition, 15; StatId.Composure, 20 ]
+        HealthBonus = 100
+        MoraleBonus = 300
+        StartingRecklessnessDelta = 0
+        Triggers = [] }
+
+    let cls, weapon, armorOpt =
       match className.ToLowerInvariant() with
+      | "fighter" ->
+        CharacterClass.Fighter, sword, Some shield
+      | "mage" ->
+        CharacterClass.Mage, staff, Some robes
       | "berserker" ->
         CharacterClass.Berserker,
         { Name = "Heavy Iron Greatsword"
@@ -363,7 +407,8 @@ module StoryBosses =
           HealthBonus = 0
           MoraleBonus = 0
           StartingRecklessnessDelta = 10
-          Triggers = [] }
+          Triggers = [] },
+        None
       | "duelist" ->
         CharacterClass.Duelist,
         { Name = "Twin Stiletto & Rapier"
@@ -373,7 +418,8 @@ module StoryBosses =
           HealthBonus = 0
           MoraleBonus = 0
           StartingRecklessnessDelta = 0
-          Triggers = [] }
+          Triggers = [] },
+        None
       | "warden" ->
         CharacterClass.Warden,
         { Name = "Iron Arming Sword & Tower Buckler"
@@ -383,7 +429,8 @@ module StoryBosses =
           HealthBonus = 200
           MoraleBonus = 100
           StartingRecklessnessDelta = -10
-          Triggers = [] }
+          Triggers = [] },
+        None
       | "mesmer" ->
         CharacterClass.Mesmer,
         { Name = "Silvered Hand Mirror"
@@ -393,7 +440,8 @@ module StoryBosses =
           HealthBonus = 0
           MoraleBonus = 250
           StartingRecklessnessDelta = 0
-          Triggers = [] }
+          Triggers = [] },
+        None
       | "abjurer" ->
         CharacterClass.Abjurer,
         { Name = "Dusty Tome"
@@ -403,8 +451,9 @@ module StoryBosses =
           HealthBonus = 0
           MoraleBonus = 250
           StartingRecklessnessDelta = 0
-          Triggers = [] }
-      | _ ->
+          Triggers = [] },
+        None
+      | "inquisitor" ->
         CharacterClass.Inquisitor,
         { Name = "Carved Ash Staff"
           Slot = EquipmentSlot.Weapon
@@ -413,9 +462,12 @@ module StoryBosses =
           HealthBonus = 0
           MoraleBonus = 250
           StartingRecklessnessDelta = 0
-          Triggers = [] }
+          Triggers = [] },
+        None
+      | _ ->
+        CharacterClass.Fighter, sword, Some shield
 
-    let equipped = [ weapon; caltrops ]
+    let equipped = weapon :: (match armorOpt with Some a -> [ a ] | None -> []) @ [ caltrops ]
     let geared =
       equipped
       |> List.fold (fun (c: Combatant) item -> Combatant.applyItemBonus item c) (TierFactory.createClassLevel cls 1)

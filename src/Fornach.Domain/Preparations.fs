@@ -149,7 +149,7 @@ type PreparationType =
         Math.Max(this.BaseDuration, this.BaseDuration + bonus)
 
   /// Retrieves the pair of preparations (1 CrowdControl, 1 SingleTargetDuel) belonging to a class.
-  /// Generic NPC classes (Warrior, Rogue, Soldier, Mage) do not possess specialized preparation abilities.
+  /// Generic NPC classes (Warrior, Rogue, Soldier) do not possess specialized preparation abilities.
   static member ForClass (cls: CharacterClass) : PreparationType list =
     match cls with
     | CharacterClass.Berserker -> [ ShockwaveSlam; BerserkTincture ]
@@ -160,10 +160,13 @@ type PreparationType =
     | CharacterClass.Justicar -> [ BastionZoneControl; ParryingBuckler ]
     | CharacterClass.Abjurer -> [ AegisOfRetribution; SocraticDossier ]
     | CharacterClass.Strategist -> [ HeraldicTreatise; SocraticDossier ]
+    | CharacterClass.Fighter -> [ BastionZoneControl; ParryingBuckler ]
+    // The Mage carries no preparation pair: its kit is the three Complex Forms threaded by the attacks
+    // it declares (Resonance spike, Phantasmal Diffusion, Aegis lattice).
+    | CharacterClass.Mage -> []
     | CharacterClass.Warrior
     | CharacterClass.Rogue
-    | CharacterClass.Soldier
-    | CharacterClass.Mage -> []
+    | CharacterClass.Soldier -> []
 
 /// Individual preparation slot tracking usage availability
 type PreparationSlot = {

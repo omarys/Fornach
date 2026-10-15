@@ -80,6 +80,13 @@ type VimConsole(inner: IAnsiConsole, enableHelpHotkey: bool) =
 
 module Display =
 
+  /// Strips supplementary-plane glyphs (nerd-font icons such as the tree and reticle marks) from
+  /// text destined for a panel header. Spectre measures such a glyph as one cell while it occupies
+  /// two UTF-16 units, so it pads the header line one cell too wide per glyph and the top border
+  /// overhangs the rest of the box. BMP glyphs are measured correctly and pass through untouched.
+  let stripNerdGlyphs (text: string) : string =
+    text |> String.filter (fun c -> not (Char.IsSurrogate c))
+
   /// Executes a prompt with Vim-style navigation enabled (j/J = down, k/K = up)
   let promptWithVim (prompt: IPrompt<'T>) : 'T =
     let prev = AnsiConsole.Console
@@ -201,6 +208,10 @@ module Display =
       grid.AddRow(Rule().RuleStyle(Theme.StyleCurrentLine)) |> ignore
       grid.AddRow(Rule(sprintf "[bold %s] 󰓥 TACTICAL ASSESSMENT ── %s [/]" headlineColor (Markup.Escape assess.Headline)).RuleStyle(Theme.StyleCurrentLine)) |> ignore
       grid.AddRow(Markup(sprintf "%-22s %s" "󰈸 Primary Stat" (Markup.Escape assess.PrimarySummary))) |> ignore
+      match assess.ThreatWarning with
+      | Some threat ->
+        grid.AddRow(Markup(sprintf "%-22s [bold %s]%s[/]" "⚠ Apex Threat" Theme.Red (Markup.Escape threat))) |> ignore
+      | None -> ()
       match assess.VulnerabilitySummary with
       | Some vuln ->
         grid.AddRow(Markup(sprintf "%-22s %s" "🎯 Defensive Opening" (Markup.Escape vuln))) |> ignore
@@ -271,11 +282,15 @@ module Display =
         let assess = TacticalAssessment.assess obs c
         let primary =
           sprintf "%-22s %s" "󰈸 Primary Stat" (Markup.Escape assess.PrimarySummary)
-        match assess.VulnerabilitySummary with
-        | Some vuln ->
-          [ primary
-            sprintf "%-22s %s" "🎯 Opening" (Markup.Escape vuln) ]
-        | None -> [ primary ]
+        let threatLine =
+          match assess.ThreatWarning with
+          | Some t -> [ sprintf "%-22s [bold %s]%s[/]" "⚠ Apex Threat" Theme.Red (Markup.Escape t) ]
+          | None -> []
+        let vulnLine =
+          match assess.VulnerabilitySummary with
+          | Some vuln -> [ sprintf "%-22s %s" "🎯 Opening" (Markup.Escape vuln) ]
+          | None -> []
+        [ primary ] @ threatLine @ vulnLine
       | None -> []
 
     coreLines @ assessmentLines
@@ -373,7 +388,7 @@ module Display =
 
       let summaryPanel =
         Panel(panelContent)
-          .Header(sprintf "[bold %s] 󰓥 Tactical Contest Inspection [/]" Theme.Purple)
+          .Header(stripNerdGlyphs (sprintf "[bold %s] 󰓥 Tactical Contest Inspection [/]" Theme.Purple))
           .Border(BoxBorder.Rounded)
           .BorderColor(Theme.ColorCurrentLine)
           .Expand()

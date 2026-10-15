@@ -1,0 +1,338 @@
+{
+  "root": "openwiki",
+  "generatedAt": "2026-10-15T19:33:43.433Z",
+  "types": [
+    "Section",
+    "concept"
+  ],
+  "nodes": [
+    {
+      "id": "architecture/index",
+      "title": "Architecture",
+      "type": "Section",
+      "description": "",
+      "tags": [],
+      "body": "# Files\n\n- [Solution Architecture and Project Boundaries](overview.md) - Architectural overview of Fornach's 8-project .NET 10 solution hierarchy, dependency layers, domain seams, and zero-warning build invariants.\n",
+      "size": 215,
+      "links": [
+        "architecture/overview"
+      ],
+      "backlinks": []
+    },
+    {
+      "id": "architecture/overview",
+      "title": "Solution Architecture and Project Boundaries",
+      "type": "concept",
+      "description": "Architectural overview of Fornach's 8-project .NET 10 solution hierarchy, dependency layers, domain seams, and zero-warning build invariants.",
+      "tags": [
+        "architecture",
+        "dotnet",
+        "fsharp",
+        "solution-structure",
+        "build"
+      ],
+      "body": "\n# Solution Architecture and Project Boundaries\n\nFornach is an extensible combat simulation and procedural roguelike engine implemented in F# on .NET 10. The solution architecture enforces strict separation of concerns, immutability, and unidirectional project dependencies across spatial geometry, domain aggregates, contest simulation, narrative progression, and terminal presentation.\n\n## Project Structure and Dependency Hierarchy\n\nThe repository is defined by `Fornach.slnx` and consists of five core source libraries and three test projects:\n\n```mermaid\ngraph TD\n    CLI[Fornach.Cli] --> Domain[Fornach.Domain]\n    CLI --> Engine[Fornach.Engine]\n    CLI --> Story[Fornach.Story]\n    Story --> Domain\n    Story --> Engine\n    Engine --> Domain\n    Domain --> Spatial[Fornach.Spatial]\n    \n    Tests[Fornach.Tests] --> CLI\n    Tests --> Story\n    Tests --> Engine\n    Tests --> Domain\n    DomainTests[Fornach.Domain.Tests] --> Domain\n    SpatialTests[Fornach.Spatial.Tests] --> Spatial\n```\n\n### 1. Fornach.Spatial (`src/Fornach.Spatial`)\nThe foundational layer representing 2D grid coordinates, vector mathematics, Manhattan/Chebyshev distances, Bresenham raycasting, field of view (FOV), and line-of-sight algorithms. It carries zero dependencies on combat or game state.\n\n### 2. Fornach.Domain (`src/Fornach.Domain`)\nThe core domain model containing pure data structures and mathematical definitions:\n- **Stat Systems**: The 12-stat vector matrix (`Attributes.fs`, `Stats.fs`).\n- **Resource Meters**: Bounded 0–100 meters (`Meters.fs`) tracking Fatigue, Overwhelm, Frustration, Confusion, and Exhaustion.\n- **Combat Entities**: Immutable `Combatant` records (`Combatant.fs`), Stance representations, Equipment, and preparations.\n- **Assessment Engine**: `TacticalAssessment.fs` evaluating Acumen vs. Composure to discover enemy primary stats, weaknesses, and apex threats.\n- **Progression Scaling**: `TierFactory.fs` generating combatants across Tiers I through IV and Levels 1 to 200, incorporating spell armor calculations and level-based stat caps.\n\n### 3. Fornach.Engine (`src/Fornach.Engine`)\nThe simulation and contest execution layer:\n- **Contest System**: Opposed contest evaluation (`Contest.fs`) using logistic/sigmoid curves.\n- **Combat Resolution**: `ActionResolver.fs` evaluating player and enemy actions, fluid stance shifts, status meter accumulation, and collapse states.\n- **Tower Simulation**: `TowerSession.fs` and `TowerGenerator.fs` managing procedural level generation, enemy placement, and turn loops.\n\n### 4. Fornach.Story (`src/Fornach.Story`)\nThe narrative engine integrating the Ink narrative format (`Qyl27.Ink.Engine`) with the combat engine. Encapsulates script execution, dialogue branches, tutorial encounters, and the five Grief Aspect bosses (Denial, Anger, Bargaining, Depression, Acceptance).\n\n### 5. Fornach.Cli (`src/Fornach.Cli`)\nThe user-facing terminal interface built on `Spectre.Console`:\n- Implements Vim-style keyboard navigation (`h/j/k/l`, `w/b`, `:q`).\n- Dynamic combat HUD with real-time meter tracking, threat warnings, stance displays, and narrative scene renderers.\n- Main application entrypoint (`Program.fs`).\n\n## Test Suites\n\nThe codebase maintains automated verification through three test projects using xUnit and FsUnit:\n- **`Fornach.Domain.Tests`**: Validates stat scaling, balance regressions, meter thresholds, and prolonged battles.\n- **`Fornach.Spatial.Tests`**: Verifies grid algorithms, raycasting precision, and FOV calculations.\n- **`Fornach.Tests`**: Comprehensive integration suite covering the interactive tower crawl, tutorial flow, stance shifts, and combat logger behavior.\n\n## Build and Quality Invariants\n\n- **Zero-Warning Policy**: All code compiles with `TreatWarningsAsErrors` enabled across all solution projects.\n- **Domain Purity**: Domain and Spatial projects remain side-effect free, using immutable F# records and discriminated unions.\n",
+      "size": 3926,
+      "links": [],
+      "backlinks": [
+        "architecture/index",
+        "quickstart"
+      ]
+    },
+    {
+      "id": "combat/fluid-stances",
+      "title": "Fluid Stances and Complex Forms",
+      "type": "concept",
+      "description": "Detailed mechanics of Fornach's automatic stance shifting, stat modifiers, off-vector penalties, and arcane complex forms.",
+      "tags": [
+        "combat",
+        "stances",
+        "fluid-stances",
+        "complex-forms",
+        "action-resolver"
+      ],
+      "body": "\n# Fluid Stances and Complex Forms\n\nCombat in Fornach revolves around fluid transitions rather than rigid, turn-wasting stance toggles. Every strike, cadence, and arcane incantation embodies a tactical posture. Adopting a stance shifts offensive and defensive efficiency along the chosen vector triad.\n\n## Martial Stances (Physical Plane)\n\nPhysical fighters shift dynamically between three martial postures based on the attack executed:\n\n| Stance | Vector Focus | Trigger Actions | Stat Effect |\n| :--- | :--- | :--- | :--- |\n| **PowerStance** | `Power` (Might, Fortitude) | `ForceStrike`, `TraumaAttack BasaltEruption` | +10% Power stats, -10% Agility/Discipline offensive stats |\n| **AgilityStance** | `Agility` (Agility, Reflex) | `FinesseCadence` | +10% Agility stats, -10% Power/Discipline offensive stats |\n| **DisciplineStance** | `Discipline` (Prowess, Poise) | `ProwessStrike`, `CalculatedFlawStrike`, `MasterfulDisarm` | +10% Discipline stats, -10% Power/Agility offensive stats |\n\n### Combat Stat Trade-Offs\n\nWhen resolving opposed physical contests, `Combatant.GetCombatStat` applies situational vector bonuses:\n- **Vector Affinity (+10%)**: All attributes matching the active stance's vector receive a 10% boost (`Math.Round(baseValue * 1.10)`).\n- **Off-Vector Offensive Penalty (-10%)**: Offensive stats belonging to differing vectors in the same plane suffer a 10% reduction (`Math.Round(baseValue * 0.90)`).\n- **Preserved Guard**: Defensive off-vector attributes (such as `Fortitude`, `Reflex`, and `Poise`) do not suffer penalties, ensuring defensive integrity is maintained regardless of stance.\n\n## Arcane Complex Forms (Mental Plane)\n\nArcane practitioners channel their mental vectors through three interlocking psychic structures known as Complex Forms:\n\n### 1. Resonance Spike (`Power` Vector)\n- **Trigger**: `ArcaneCataclysm`\n- **Characteristics**: Volatile psychic overclocking granting +25% spell damage and cognitive fatigue amplification with splash potential.\n- **Cost**: Generates self-fatigue (+10) and increases Recklessness (+15) on fading drain.\n\n### 2. Phantasmal Diffusion (`Agility` Vector)\n- **Trigger**: `SynapticGlamour`, `MirrorIllusion`, `TraumaAttack DenialPhaseShift`\n- **Characteristics**: Sensory static and perceptual jitter. Weaves passive mirror clones and grants a 40% decoy evasion swap when struck by melee attacks.\n- **Cost**: Reduces direct strike damage by 15%.\n\n### 3. Aegis Lattice (`Discipline` Vector)\n- **Trigger**: `RunicWardTrap`, `DisorientingShockwave`, `TraumaAttack CoerciveBargain`\n- **Characteristics**: Interlocking geometric abjuration web generating +15 Arcane Ward per turn. Reflects 50% damage taken and inflicts 15 Frustration on the attacker when the ward absorbs a blow.\n- **Restriction**: Locks out Overchanneling, grounding `ArcaneCataclysm true` back to a standard stable cast.\n\n## Fluid Transitions in ActionResolver\n\nStances and complex forms transition automatically during offensive action resolution in `ActionResolver.fs`:\n1. When an offensive action is declared, `applyFluidTransition` evaluates whether the chosen attack commands a different stance or form.\n2. If a new stance is indicated, the combatant adopts it seamlessly, emitting a `CombatEvent.StanceShifted` or `CombatEvent.ComplexFormThreaded` event.\n3. Attack calculation immediately applies the updated stance multipliers to the resolving strike.\n",
+      "size": 3394,
+      "links": [],
+      "backlinks": [
+        "combat/index",
+        "quickstart"
+      ]
+    },
+    {
+      "id": "combat/index",
+      "title": "Combat",
+      "type": "Section",
+      "description": "",
+      "tags": [],
+      "body": "# Files\n\n- [Fluid Stances and Complex Forms](fluid-stances.md) - Detailed mechanics of Fornach's automatic stance shifting, stat modifiers, off-vector penalties, and arcane complex forms.\n- [Status Meters and Collapse Mechanics](status-meters.md) - Comprehensive specifications for Fornach's 7 dynamic combat gauges, collapse trigger conditions, defensive penalties, and steady breathing recovery.\n- [Tactical Assessment and Threat Warnings](tactical-assessment.md) - How observer Acumen and Study Stacks pierce enemy Composure to uncover stat vectors, defensive openings, and apex threat warnings.\n- [The 12-Stat Vector Matrix and Opposed Contests](vector-matrix.md) - Systematic specification of Fornach's 12-stat vector matrix across Physical and Mental planes, dice pool scaling, and opposed contest resolution.\n",
+      "size": 816,
+      "links": [
+        "combat/fluid-stances",
+        "combat/status-meters",
+        "combat/tactical-assessment",
+        "combat/vector-matrix"
+      ],
+      "backlinks": []
+    },
+    {
+      "id": "combat/status-meters",
+      "title": "Status Meters and Collapse Mechanics",
+      "type": "concept",
+      "description": "Comprehensive specifications for Fornach's 7 dynamic combat gauges, collapse trigger conditions, defensive penalties, and steady breathing recovery.",
+      "tags": [
+        "combat",
+        "meters",
+        "collapse",
+        "status-effects",
+        "steady-breathing"
+      ],
+      "body": "\n# Status Meters and Collapse Mechanics\n\nFornach replaces static status ailments with a dynamic, interconnected meter system. As combatants strain their bodies and minds through intense exertion, gambits, and psychological trauma, seven continuous status meters accumulate entropy.\n\n## The Seven Combat Gauges\n\nAll meters are bounded value objects clamped between `0` and `100` (`Meters.fs`). Strain progresses through four distinct operational bands:\n- **Normal** (`0% – 39%`): Unimpeded combat capability.\n- **Strained** (`40% – 74%`): Noticeable exertion; early tactical warning sign.\n- **Critical** (`75% – 99%`): Severe systemic vulnerability; imminent collapse hazard.\n- **Collapsed** (`100%`): Complete structural or mental failure.\n\n```mermaid\ngraph TD\n    subgraph Shared\n        R[Recklessness] --> CR[Reckless Exposure]\n    end\n    subgraph Physical\n        E[Exhaustion] --> CE[Somatic Anoxia]\n        O[Overwhelm] --> CO[Exsanguination]\n        F[Frustration] --> CF[Stance Failure]\n    end\n    subgraph Mental\n        CFat[Cognitive Fatigue] --> CC[Catatonic Stupor]\n        Conf[Confusion] --> CL[Contradiction Lock]\n        P[Provoke] --> CH[Hysterical Meltdown]\n    end\n```\n\n### 1. Shared Entropy\n- **Recklessness**: Accrues from high-risk gambits (`ForceStrike true`, `FinesseCadence true`, `ProwessStrike true`). Overloading at 100% triggers `RecklessExposure` (extended to 120% for Berserkers or under `BerserkTincture`).\n\n### 2. Physical Status Meters\n- **Exhaustion**: Body stamina and respiratory capacity. Ticks up with sustained movement, heavy weapon swings, and round-over-round combat exertion. Breaching 100% causes `SomaticAnoxia`.\n- **Overwhelm**: Kinetic trauma, internal bleeding, and physical pressure from incoming multi-hits and flankers. Breaching 100% causes `Exsanguination`.\n- **Frustration**: Combat timing disruption, missed strikes, deflection against heavy armor, or thwarted gambits. Breaching 100% causes `StanceFailure`.\n\n### 3. Mental Status Meters\n- **Cognitive Fatigue**: Arcane overchanneling, complex spell maintenance, and psychic drain. Breaching 100% causes `CatatonicStupor`.\n- **Confusion**: Perceptual dissonance, illusory deceptions (`SynapticGlamour`), and contradiction attacks. Breaching 100% causes `ContradictionLock`.\n- **Provoke**: Emotional instability, taunts, psychological goading, and social contest damage. Breaching 100% causes `HystericalMeltdown`.\n\n## Consequences of Collapse\n\nWhen `Combatant.evaluateCollapse` detects any meter meeting or exceeding the 100% threshold:\n1. **Defensive Rupture**: `EffectiveDefenseMultiplier` plummets to `0.25`, stripping 75% of all effective defenses.\n2. **Execute Eligibility**: The combatant becomes `IsExecuteEligible = true`. Any physical or mental `Execute` strike instantly finishes the target without contest mitigation (`ActionResolver.fs`).\n\n## Recovery via Steady Breathing\n\nCombatants are not locked into defeat once meters climb. The **Steady Breathing** action (`ActionResolver.fs`) provides a tactical reset:\n- Drains physical meters (`Exhaustion`, `Overwhelm`, `Frustration`) scaled by `Poise`.\n- Drains mental meters (`CognitiveFatigue`, `Confusion`, `Provoke`) scaled by `Composure`.\n- Drains `Recklessness` and restores Morale.\n- If all seven meters fall below 100%, `Combatant.stabilizeCollapse` immediately clears the collapse state, returning the combatant to `Stable` and revoking execute eligibility.\n",
+      "size": 3434,
+      "links": [],
+      "backlinks": [
+        "combat/index",
+        "quickstart"
+      ]
+    },
+    {
+      "id": "combat/tactical-assessment",
+      "title": "Tactical Assessment and Threat Warnings",
+      "type": "concept",
+      "description": "How observer Acumen and Study Stacks pierce enemy Composure to uncover stat vectors, defensive openings, and apex threat warnings.",
+      "tags": [
+        "combat",
+        "assessment",
+        "acumen",
+        "composure",
+        "threat-warnings",
+        "hud"
+      ],
+      "body": "\n# Tactical Assessment and Threat Warnings\n\nRather than presenting arbitrary enemy health bars or hiding critical mechanics behind trial-and-error, Fornach implements an active perception contest via `TacticalAssessment.fs`. An observer's analytical faculties contest the target's emotional and disciplined composure to uncover combat intelligence in real time.\n\n## Scrutiny vs. Masking Equation\n\nAn observer's analytical acuity is quantified by **Effective Scrutiny**:\n$$\\text{Scrutiny} = \\text{Acumen} + \\left\\lfloor\\frac{\\text{Intuition}}{4}\\right\\rfloor + (\\text{StudyStacks} \\times 15)$$\n\n- **Acumen** provides core analytical deduction (100%).\n- **Intuition** provides instinctive peripheral awareness (25%).\n- **Study Stacks** accrued during battle provide progressive familiarity (+15 effective Acumen per stack).\n\nThis value is divided by the target's **Effective Masking**:\n$$\\text{Masking} = \\max(1, \\text{Composure})$$\n\n$$\\text{Insight Ratio} = \\frac{\\text{Effective Scrutiny}}{\\text{Effective Masking}}$$\n\n## Tactical Insight Tiers\n\nThe resulting ratio unlocks four tiers of intelligence:\n\n| Insight Level | Ratio Range | Information Revealed | Threat Warning |\n| :--- | :--- | :--- | :--- |\n| **Obscured** | $< 0.40$ | Target demeanor stoic and inscrutable | None |\n| **Discerning** | $0.40 \\le R < 0.75$ | Primary stat identity and approximate range ($\\pm 20$) | `⚠ THREAT DETECTED` |\n| **Keen** | $0.75 \\le R < 1.15$ | Exact primary stat number and highest defense | `⚠ APEX THREAT` |\n| **Penetrating** | $\\ge 1.15$ | Full breakdown: primary stat, highest offense, and weakest defense opening | `⚠ APEX THREAT (CRITICAL)` |\n\n```mermaid\nflowchart LR\n    A[Observer Acumen & Intuition] --> B(Scrutiny Formula)\n    S[Study Stacks +15 ea] --> B\n    C[Target Composure] --> D(Masking Formula)\n    B & D --> E{Insight Ratio}\n    E -->|< 0.40| O[Obscured]\n    E -->|0.40 - 0.74| DI[Discerning: ~Range & Threat]\n    E -->|0.75 - 1.14| K[Keen: Exact Stats & Apex Threat]\n    E -->|>= 1.15| P[Penetrating: Weakness Opening Exposed]\n```\n\n## Apex Threat Warnings\n\nAt Discerning tier and above, `TacticalAssessment.generateThreatWarning` identifies the adversary's most lethal offensive attribute and issues actionable tactical advice:\n- **Colossal Force**: Warns of heavy kinetic cleaves that shred Armor and spike Overwhelm. Advises shifting to Agility Stance or deploying Bastion Zone Control.\n- **Deadly Finesse**: Warns of rapid probing cadences that exploit vital openings for critical hits. Advises closing openings with high Poise or Discipline guard.\n- **Martial Prowess**: Warns of disciplined reach and opportunistic disarms. Advises maintaining steady form and avoiding reckless gambits.\n- **Dread Intellect**: Warns of psionic mind-shocks that bypass physical Armor to damage Morale directly. Advises erecting Arcane Wards.\n- **Sensory Acuity**: Warns of phantasmal jitter and mirror illusions that spike Confusion. Advises steady breathing.\n- **Dialectical Acumen**: Warns of interrogative pressure and wardcraft destabilizing combat tempo and spiking Frustration.\n\n## Weakness Exposure and Strategic Advice\n\nWhen reaching Keen or Penetrating insight, the assessment identifies the target's `WeakestDefense` on their dominant plane:\n- Lower **Fortitude** $\\to$ Exploit with Force strikes (Cleave / Wild Blow).\n- Lower **Reflex** $\\to$ Exploit with Agility cadences (Finesse Probing / Blitz).\n- Lower **Poise** $\\to$ Exploit with Discipline pressure (Stance Pressure / Flaw Strike).\n- Lower **Resolve** $\\to$ Exploit with Power trauma (Elemental Blast / Mind Fracture).\n- Lower **Intuition** $\\to$ Exploit with Agility glamour (Neural Static).\n- Lower **Composure** $\\to$ Exploit with Acumen interrogation.\n\nThese assessments are rendered directly inside the Spectre.Console combat HUD, tower map inspection, and action prompt menus (`Display.fs`, `TowerDisplay.fs`).\n",
+      "size": 3884,
+      "links": [],
+      "backlinks": [
+        "combat/index",
+        "quickstart"
+      ]
+    },
+    {
+      "id": "combat/vector-matrix",
+      "title": "The 12-Stat Vector Matrix and Opposed Contests",
+      "type": "concept",
+      "description": "Systematic specification of Fornach's 12-stat vector matrix across Physical and Mental planes, dice pool scaling, and opposed contest resolution.",
+      "tags": [
+        "combat",
+        "stats",
+        "vector-matrix",
+        "dice-pool",
+        "contest"
+      ],
+      "body": "\n# The 12-Stat Vector Matrix and Opposed Contests\n\nFornach abandons generic RPG attributes (such as Strength, Dexterity, Intelligence) in favor of a mathematically symmetrical **12-Stat Vector Matrix** (`Attributes.fs`). The matrix structures all physical actions, mental/arcane disciplines, and social engagements into orthogonal planes, vectors, and orientations.\n\n## The Vector Matrix Grid\n\nThe matrix defines twelve attributes across two primary planes (`Physical` and `Mental`) and three dynamic vectors (`Power`, `Agility`, `Discipline`), partitioned into paired `Offense` and `Defense` orientations:\n\n| Plane | Vector | Orientation | Canonical Stat | Social Nomenclature | Counterpart |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n| **Physical** | `Power` | Offense | **Force** | Force | Intellect |\n| **Physical** | `Power` | Defense | **Fortitude** | Fortitude | Resolve |\n| **Physical** | `Agility` | Offense | **Finesse** | Finesse | Acuity |\n| **Physical** | `Agility` | Defense | **Reflex** | Reflex | Intuition |\n| **Physical** | `Discipline` | Offense | **Prowess** | Prowess | Acumen |\n| **Physical** | `Discipline` | Defense | **Poise** | Poise | Composure |\n| **Mental** | `Power` | Offense | **Intellect** | Presence / Command | Force |\n| **Mental** | `Power` | Defense | **Resolve** | Will / Defiance | Fortitude |\n| **Mental** | `Agility` | Offense | **Acuity** | Guile / Charm | Finesse |\n| **Mental** | `Agility` | Defense | **Intuition** | Insight / Scrutiny | Reflex |\n| **Mental** | `Discipline` | Offense | **Acumen** | Leverage / Wit | Prowess |\n| **Mental** | `Discipline` | Defense | **Composure** | Poise / Composure | Poise |\n\n```mermaid\nclassDiagram\n    class PhysicalPlane {\n        +Force (Power Offense)\n        +Fortitude (Power Defense)\n        +Finesse (Agility Offense)\n        +Reflex (Agility Defense)\n        +Prowess (Discipline Offense)\n        +Poise (Discipline Defense)\n    }\n    class MentalPlane {\n        +Intellect (Presence / Command)\n        +Resolve (Will / Defiance)\n        +Acuity (Guile / Charm)\n        +Intuition (Insight / Scrutiny)\n        +Acumen (Leverage / Wit)\n        +Composure (Poise / Composure)\n    }\n    PhysicalPlane .. MentalPlane : Counterparts\n```\n\n## Opposed Contest Resolution\n\nEvery strike, parry, counter, and spell is evaluated as an opposed dice pool contest (`DicePool.fs`).\n\n### 1. Pool Size Calculation\nRather than rolling fixed quantities, participants construct dynamic pools clamped between 4 and 20 six-sided dice (d6) based on relative stat competence:\n$$\\text{PoolSize} = \\text{clamp}\\left(4, 20, \\left\\lfloor 6.0 + 4.0 \\times \\frac{\\text{StatValue}}{\\max(1.0, \\text{OpponentStat})} \\right\\rceil\\right)$$\n\n### 2. Guaranteed Floor Hits\nTo reward high investment and eliminate total variance failure for masters, combatants receive deterministic floor hits:\n$$\\text{FloorHits} = \\left\\lfloor\\frac{\\text{StatValue}}{15}\\right\\rfloor$$\nA combatant with 45 Force begins with 3 guaranteed hits before a single die is rolled.\n\n### 3. Vector Hit Mechanics\nEach vector implements specialized success criteria on rolled d6 dice:\n- **Power Vector**: Explosive risk. Target Number 5+. A roll of 5 yields 1 hit; a roll of 6 yields **2 hits** (exploding kinetic damage).\n- **Agility Vector**: High consistency and volume. Target Number 4+. Rolls of 4, 5, and 6 each yield 1 hit.\n- **Discipline Vector**: Methodical precision. Target Number 4+. Rolls of 4, 5, and 6 yield 1 hit. Furthermore, if the combatant possesses **Study Stacks** ($> 0$), up to `StudyStacks` rolled 1s are rerolled.\n\n### 4. Contest Outcome\nTotal hits are summed ($\\text{TotalHits} = \\text{FloorHits} + \\text{RolledHits}$) for both attacker and defender:\n$$\\text{NetHits} = \\text{AttackerTotalHits} - \\text{DefenderTotalHits}$$\n\n- $\\text{NetHits} > 0$: **Hit Landed**. Damage is applied to Health or Morale.\n- $\\text{NetHits} \\ge 3$: **Critical Strike**. Explores vital openings, activates item crit procs, and increases bleed or confusion.\n- $\\text{NetHits} \\le 0$: **Deflection / Whiff**. Strike misses or glance harmlessly off armor.\n- **Glitch**: If more than half the rolled dice show 1s, the action triggers a combat mishap, spiking Recklessness or incurring weapon degradation.\n",
+      "size": 4234,
+      "links": [],
+      "backlinks": [
+        "combat/index",
+        "quickstart"
+      ]
+    },
+    {
+      "id": "index",
+      "title": "Home",
+      "type": "Section",
+      "description": "",
+      "tags": [],
+      "body": "\n# Files\n\n- [Quickstart and Task Routing](quickstart.md) - Central entrypoint and task-routing map for developers and AI agents working on Fornach's simulation engine, combat systems, and CLI.\n\n# Directories\n\n- [architecture](architecture/)\n- [combat](combat/)\n- [progression](progression/)\n- [tower](tower/)\n",
+      "size": 309,
+      "links": [
+        "quickstart"
+      ],
+      "backlinks": []
+    },
+    {
+      "id": "progression/classes-and-progression",
+      "title": "Classes, Progression, and Spell Armor",
+      "type": "concept",
+      "description": "Specification of Fornach's class archetypes, progression tiers (1-200), Level 49 physical stat caps for magic users, and Spell Armor scaling formulas.",
+      "tags": [
+        "progression",
+        "classes",
+        "spell-armor",
+        "stat-scaling",
+        "archetypes"
+      ],
+      "body": "\n# Classes, Progression, and Spell Armor\n\nProgression in Fornach balances martial mastery against arcane transcendence across a 200-level spectrum. The system establishes distinct archetypes, rigorous stat-growth curves, defensive caps, and a specialized Spell Armor mechanism to prevent late-game stat inflation.\n\n## Character Classes and Archetypes\n\nClasses (`Classes.fs`) are divided into **Specialized Player Archetypes** (equipped with progression profiles, preparatory cooldowns, and tactical abilities) and **Generic NPC Classes**:\n\n| Class | Plane | Dominant Vector | Primary Stat | Archetype Role |\n| :--- | :--- | :--- | :--- | :--- |\n| **Berserker** | Physical | Power | Force | Kinetic powerhouse; high risk gambits and frenzy momentum |\n| **Duelist** | Physical | Agility | Finesse | Technical fencer; rapid cadences, parry/riposte, vital strikes |\n| **Warden** / *Justicar* | Physical | Discipline | Prowess | Stalwart polearm defender; Bastion zone control, flaw exploitation |\n| **Inquisitor** | Mental | Power | Intellect | Dread psychic arcanist; cognitive mind-shocks, direct morale shock |\n| **Mesmer** | Mental | Agility | Acuity | Phantasmist; sensory static, mirror clones, perceptual disruption |\n| **Abjurer** / *Strategist*| Mental | Discipline | Acumen | Warded dialectician; abjuration lattices, interrogative pressure |\n| **Warrior** (NPC) | Physical | Power | Force | Generic shock troop and frontline brute |\n| **Rogue** (NPC) | Physical | Agility | Finesse | Generic agile skirmisher and backstab stalker |\n| **Soldier** (NPC) | Physical | Discipline | Prowess | Generic line infantry with coordinated defenses |\n| **Mage** (NPC) | Mental | Power | Intellect | Generic arcane caster across elemental disciplines |\n\n## Progression Tiers (Levels 1 – 200)\n\nProgression is organized into four distinct mastery tiers (`ProgressionScale.tierForLevel`):\n- **Novice** (Levels `1 – 39`): Grounded baseline stats, learning vector counters and fluid stance transitions.\n- **Veteran** (Levels `40 – 79`): Enhanced dice pools; unlock of Level 50 Spell Armor for magic classes.\n- **Master** (Levels `80 – 159`): Multi-die floor hits; specialized tactical preparation enhancements.\n- **Grandmaster** (Levels `160 – 200`): Apex tier; maximum dice pool ceilings and up to 80% spell armor mitigation.\n\n```mermaid\ngraph LR\n    N[Novice: Lv 1-39] --> V[Veteran: Lv 40-79]\n    V --> M[Master: Lv 80-159]\n    M --> GM[Grandmaster: Lv 160-200]\n```\n\n## Level 49 Physical Growth Cap for Magic Classes\n\nTo counter over-inflation of physical defense among high-level arcane practitioners, magic classes (`Inquisitor`, `Mesmer`, `Abjurer`, `Mage`) experience a hard cap on natural physical attribute development:\n$$\\text{physDelta} = \\text{clamp}(1, 49, \\text{Level}) - 1$$\n\nAfter Level 49, a caster's base physical stats (`Force`, `Fortitude`, `Finesse`, `Reflex`, `Prowess`, `Poise`) cease growing naturally (`TierFactory.fs`).\n\n## Spell Armor Scaling\n\nTo compensate for the Level 49 physical stat freeze and simulate protective arcane barriers, mental defense stats are projected into physical defenses via **Spell Armor**:\n- **Resolve** transfers to **Fortitude** (Power defense).\n- **Intuition** transfers to **Reflex** (Agility defense).\n- **Composure** transfers to **Poise** (Discipline defense).\n\n$$\\text{FinalFortitude} = \\text{BaseFortitude} + \\left\\lfloor\\text{Resolve} \\times \\text{SpellArmorBonus}\\right\\rceil$$\n\n### Spell Armor Progression Table\n\nSpell Armor activates at Level 50 with a 5% transfer bonus, increasing by +5% every 10 levels, capping at 80% at Level 200 (`ProgressionScale.spellArmorBonus`):\n\n| Level | Spell Armor Bonus |\n| :--- | :--- |\n| **1 – 49** | 0% (Physical stats develop normally) |\n| **50** | 5% |\n| **60** | 10% |\n| **70** | 15% |\n| **80** | 20% |\n| **90** | 25% |\n| **100** | 30% |\n| **110** | 35% |\n| **120** | 40% |\n| **130** | 45% |\n| **140** | 50% |\n| **150** | 55% |\n| **160** | 60% |\n| **170** | 65% |\n| **180** | 70% |\n| **190** | 75% |\n| **200** | 80% (Cap) |\n\nThis creates a balanced endgame dynamic: physical characters dominate raw kinetic endurance, while high-level mages weave mental poise into impervious spell wards.\n",
+      "size": 4181,
+      "links": [],
+      "backlinks": [
+        "progression/index",
+        "quickstart"
+      ]
+    },
+    {
+      "id": "progression/index",
+      "title": "Progression",
+      "type": "Section",
+      "description": "",
+      "tags": [],
+      "body": "# Files\n\n- [Classes, Progression, and Spell Armor](classes-and-progression.md) - Specification of Fornach's class archetypes, progression tiers (1-200), Level 49 physical stat caps for magic users, and Spell Armor scaling formulas.\n",
+      "size": 232,
+      "links": [
+        "progression/classes-and-progression"
+      ],
+      "backlinks": []
+    },
+    {
+      "id": "quickstart",
+      "title": "Quickstart and Task Routing",
+      "type": "concept",
+      "description": "Central entrypoint and task-routing map for developers and AI agents working on Fornach's simulation engine, combat systems, and CLI.",
+      "tags": [
+        "quickstart",
+        "task-routing",
+        "architecture",
+        "guide"
+      ],
+      "body": "\n# Quickstart and Task Routing\n\nWelcome to the **Fornach** repository documentation. Fornach is an extensible, functional combat simulation engine, roguelike dungeon crawler, and balance workbench written in F# for .NET 10.\n\nThis guide provides immediate orientation for human engineers and autonomous AI agents, routing common development tasks directly to their authoritative system documentation.\n\n## System Map and Documentation Directory\n\nThe knowledge wiki is organized around core domain, combat, progression, and spatial systems:\n\n| Category | Wiki Page | Description |\n| :--- | :--- | :--- |\n| **Architecture** | [Solution Architecture](architecture/overview.md) | 8-project hierarchy, dependency layering, build policies, and project seams. |\n| **Combat** | [12-Stat Vector Matrix](combat/vector-matrix.md) | Symmetrical 12-stat grid, Power/Agility/Discipline axes, dice pools, and floor hits. |\n| **Combat** | [Fluid Stances & Complex Forms](combat/fluid-stances.md) | Automatic stance shifting on attack, stat multipliers, off-vector penalties, and forms. |\n| **Combat** | [Status Meters & Collapse](combat/status-meters.md) | The 7 dynamic entropy gauges, 100% collapse thresholds, execute states, and breathing. |\n| **Combat** | [Tactical Assessment & Threats](combat/tactical-assessment.md) | Acumen vs. Composure scrutiny tiers, weakness revelation openings, and apex threat HUD. |\n| **Progression**| [Classes, Progression & Spell Armor](progression/classes-and-progression.md) | Player archetypes, Level 1–200 scaling, Level 49 physical caps, and Spell Armor. |\n| **Tower** | [Tower Crawl & Spatial Grid](tower/crawl-and-spatial.md) | 2D Point math, recursive shadowcasting FOV, Fog of War memory, and encounter triggers. |\n| **Tower / Story**| [Grief Aspect Bosses](tower/bosses-and-story.md) | Psychological trauma themes, the 5 Grief Aspect bosses, Ink narrative engine, and duels. |\n\n```mermaid\ngraph TD\n    QS[Quickstart & Task Routing] --> Arch[Solution Architecture]\n    QS --> Combat[Combat Mechanics]\n    QS --> Prog[Progression & Classes]\n    QS --> Tower[Tower & Story]\n    \n    Combat --> VM[12-Stat Vector Matrix]\n    Combat --> Stances[Fluid Stances]\n    Combat --> Meters[Status Meters & Collapse]\n    Combat --> Assess[Tactical Assessment]\n    \n    Prog --> ClassProg[Classes & Spell Armor]\n    \n    Tower --> Spatial[Crawl & Spatial Grid]\n    Tower --> Bosses[Grief Aspect Bosses]\n```\n\n## Task-Routing Guide: Where to Start\n\nWhen approaching a specific modification or feature, consult the following routes:\n\n### 1. Working on Combat Mechanics or Damage Calculation\n- **If adjusting opposed rolls, dice pool sizing, or TN mechanics**: See [The 12-Stat Vector Matrix](combat/vector-matrix.md) and inspect `src/Fornach.Engine/DicePool.fs`.\n- **If tuning stance shifts or action effects**: See [Fluid Stances and Complex Forms](combat/fluid-stances.md) and inspect `src/Fornach.Engine/ActionResolver.fs`.\n- **If modifying status strain, exhaustion, or collapse states**: See [Status Meters and Collapse Mechanics](combat/status-meters.md) and inspect `src/Fornach.Domain/Meters.fs` and `src/Fornach.Domain/Collapse.fs`.\n- **If adjusting enemy stat perception or threat warnings**: See [Tactical Assessment and Threat Warnings](combat/tactical-assessment.md) and inspect `src/Fornach.Domain/TacticalAssessment.fs`.\n\n### 2. Working on Classes, Equipment, or Balancing\n- **If adding or tuning player classes, stat growth curves, or Spell Armor**: See [Classes, Progression, and Spell Armor](progression/classes-and-progression.md) and inspect `src/Fornach.Domain/Classes.fs` and `src/Fornach.Domain/TierFactory.fs`.\n- **If balancing archetypes or running Monte-Carlo simulations**: Inspect `src/Fornach.Cli/Simulation.fs` and tests in `tests/Fornach.Tests/ClassBalanceTests.fs`.\n\n### 3. Working on the Roguelike Dungeon or Narrative Story\n- **If editing spatial geometry, field-of-view, or grid distance**: See [Infinite Tower Crawl and Spatial Navigation](tower/crawl-and-spatial.md) and inspect `src/Fornach.Spatial/`.\n- **If working on tower floor generation, hazards, or session loops**: Inspect `src/Fornach.Engine/TowerGenerator.fs` and `src/Fornach.Engine/TowerSession.fs`.\n- **If editing story encounters, Ink scripts, or Grief Aspect bosses**: See [Grief Aspect Bosses and Story Duel Engine](tower/bosses-and-story.md) and inspect `src/Fornach.Story/` and `src/Fornach.Domain/Bosses.fs`.\n\n## Common CLI Workflows\n\nAll development workflows run via the standard .NET CLI from the repository root:\n\n```bash\n# Build the entire solution (enforces TreatWarningsAsErrors)\ndotnet build\n\n# Execute all 3 test projects\ndotnet test\n\n# Launch the interactive Spectre.Console terminal UI\ndotnet run --project src/Fornach.Cli\n```\n",
+      "size": 4754,
+      "links": [
+        "architecture/overview",
+        "combat/vector-matrix",
+        "combat/fluid-stances",
+        "combat/status-meters",
+        "combat/tactical-assessment",
+        "progression/classes-and-progression",
+        "tower/crawl-and-spatial",
+        "tower/bosses-and-story"
+      ],
+      "backlinks": [
+        "index"
+      ]
+    },
+    {
+      "id": "tower/bosses-and-story",
+      "title": "Grief Aspect Bosses and Story Duel Engine",
+      "type": "concept",
+      "description": "Narrative progression, psychological trauma themes, and combat mechanics of the five Grief Aspect bosses in Fornach.",
+      "tags": [
+        "story",
+        "bosses",
+        "grief-aspects",
+        "encounters",
+        "narrative-engine"
+      ],
+      "body": "\n# Grief Aspect Bosses and Story Duel Engine\n\nFornach frames its procedural tower and story campaign around psychological reckoning. Adversaries encountered in the story mode (`Fornach.Story` and `Bosses.fs`) represent fractured aspects of memory, trauma, and the Kübler-Ross grief cycle, each mapped to specific vector archetypes and status dynamics.\n\n## The Five Grief Aspects\n\n```mermaid\nflowchart TD\n    G[Tutorial: Aspect of Guilt] --> D[Act I: Aspect of Denial]\n    D --> AN[Act II: Aspect of Anger]\n    AN --> B[Act III: Aspect of Bargaining]\n    B --> DE[Act IV: Aspect of Depression]\n    DE --> AC[Climax: Aspect of Acceptance]\n```\n\n### 1. Aspect of Denial (`Shrouded Grove`)\n- **Dominant Vector**: `Agility` (Finesse 235, Reflex 240, Acuity 210, Intuition 210)\n- **Equipment**: *Twin Mirage Daggers*, *Veil of Distortions*, *Specter of Avoidance*\n- **Tactical Mechanics**: Fights from `AgilityStance` with pre-spawned mirror decoy clones. Evades direct engagement and triggers Confusion debuffs on both dealt strikes and received hits.\n\n### 2. Aspect of Anger (`Basalt Caldera`)\n- **Dominant Vector**: `Power` (Force 270, Prowess 240, Fortitude 210)\n- **Flaw**: **Composure 0** (consumed by unrestrained blind fury)\n- **Equipment**: *Slag-Forged Greatsword*, *Molten Carapace*\n- **Tactical Mechanics**: Starts in `PowerStance` with 45 Recklessness and 40 Frustration. Lands devastating cleaves that shred armor and inflict bleed trauma, but its zero Composure renders it acutely vulnerable to Acumen interrogation and tactical scrutiny.\n\n### 3. Aspect of Bargaining (`Shattered Promontory`)\n- **Dominant Vector**: `Discipline` / Mental (Intellect 260, Acumen 280, Acuity 250)\n- **Equipment**: *Gale-Wind Rapier*, *Scales of Unequal Trade*\n- **Tactical Mechanics**: Operates from `DisciplineStance`. Relies on transactional exchanges—every hit landed or sustained triggers morale restoration. Forces the player into attritional engagements that tax physical Exhaustion.\n\n### 4. Aspect of Depression (`Sunken Metropolis`)\n- **Dominant Vector**: Heavy Durability (Fortitude 310, Poise 290, Resolve 320, Composure 280)\n- **Equipment**: *Anchor of Apathy*, *Shroud of Still Waters*\n- **Tactical Mechanics**: Immense physical and mental resilience (3800 HP / 3800 Morale). Shrouded in waterlogged inertia, its attacks inflict massive Exhaustion (30%) and Cognitive Fatigue (40%), threatening Somatic Anoxia or Catatonic Stupor unless countered with Steady Breathing.\n\n### 5. Aspect of Acceptance (`White Meadow`)\n- **Dominant Vector**: Harmonious Balance across all 12 stats (Resolve 310, Intuition 300, Composure 300, all physical stats 200–240)\n- **Equipment**: *Unfinished Crossing Staff*, *Linen of White Lilies*, *Keepsake Pendant*\n- **Tactical Mechanics**: Unblemished poise with zero initial meter entropy. Restores both Health and Morale continuously upon landing hits and absorbing blows. Requires masterful tactical stance weaving and flaw exploitation to subdue.\n\n## The Tutorial: Aspect of Guilt (`Quarry Pit`)\n\nBefore ascending the Tower, players face the **Aspect of Guilt** in the quarry pit tutorial. Wielding the *Quarry Sledgehammer* and *Rusted Heavy Plate*, Guilt teaches kinetic defense: high structural Fortitude (195) and Poise (185), demonstrating how heavy armor absorbs raw damage and introducing the necessity of armor shredding and poise disruption.\n\n## Story Duel Integration\n\nStory encounters are initiated from `Program.fs` via `StoryRunner` (`Fornach.Story`):\n1. **Interactive Ink Dialogue**: Branches scripted in Ink present choices, emotional responses, and character backstory.\n2. **Seamless Duel Transition**: When confrontation occurs, `runStoryDuel` takes over, binding the custom boss combatant record into the tactical duel loop.\n3. **Resolution**: Defeating an Aspect progresses the story script, awards relic items, and updates the narrative chronicle.\n",
+      "size": 3899,
+      "links": [],
+      "backlinks": [
+        "quickstart",
+        "tower/index"
+      ]
+    },
+    {
+      "id": "tower/crawl-and-spatial",
+      "title": "Infinite Tower Crawl and Spatial Navigation",
+      "type": "concept",
+      "description": "2D spatial grid coordinate mechanics, recursive shadowcasting FOV, Fog of War, and procedural dungeon crawl loop in Fornach.",
+      "tags": [
+        "tower",
+        "spatial",
+        "grid",
+        "fov",
+        "dungeon-crawl",
+        "spectre-console"
+      ],
+      "body": "\n# Infinite Tower Crawl and Spatial Navigation\n\nAscending the Infinite Tower combines roguelike spatial navigation with tactical combat initiation. The spatial engine (`Fornach.Spatial`) manages tile coordinate math, raycasting, and field-of-view, while `TowerSession.fs` drives the procedural crawl loop, enemy patrols, and terminal rendering.\n\n## 2D Spatial Grid Coordinates (`Fornach.Spatial`)\n\nGrid positions are encapsulated by the immutable struct `Point` (`Point.fs`):\n- **Vector Arithmetic**: Overloads `+`, `-`, and `*` for delta translations and directional offsets.\n- **Cardinal Neighbors**: Generates the 4 orthogonal points (North, East, South, West) for movement costs.\n- **All Neighbors**: Generates all 8 surrounding Chebyshev tiles (including diagonals) used for area of effect calculations and flanking encirclement.\n\n```mermaid\ngraph TD\n    P[Point: X, Y] --> CN[Cardinal Neighbors: 4 Directions]\n    P --> AN[All Neighbors: 8 Directions]\n    P --> FOV[Recursive Shadowcasting FOV]\n    P --> LOS[Bresenham Line of Sight]\n```\n\n## Field of View and Fog of War\n\nVision and perceptual awareness are modeled through continuous shadowcasting:\n- **8-Octant Shadowcasting** (`Fov.fs`): Projects outward from the combatant's position using octant matrix transforms. It casts shadows past opaque walls, calculating slope bounds row by row.\n- **Directional Vision Cones** (`VisionCone.fs`): Restricts visibility arcs according to combatant facing and locomotion (e.g., walking vs. sprinting vs. crouching).\n- **Fog of War Memory** (`TowerSession.updateFov`): In each turn of the crawl loop, tiles currently inside the vision cone are added to `Visible`. These are unioned into `Explored` memory, ensuring mapped terrain remains visible as grayed-out memory even when line of sight is broken.\n\n## Tower Session Loop and Aggro Dynamics\n\nThe crawl session (`TowerRunState` in `TowerSession.fs`) manages player movement, procedural floor generation, and entity interactions:\n\n### 1. Enemy Proximity and Aggro\n- **Aggro Radius**: Living enemies within a Chebyshev distance of `8` tiles that maintain an unobstructed line of sight (`Los.check`) take notice and pursue the player.\n- **Combat Initiation**: When an enemy closes to adjacent range (Chebyshev distance `1`), `CombatTriggered` halts movement and initiates the turn-based duel or group encounter.\n- **Encirclement & Escape**: If adjacent enemies occupy all surrounding walkable tiles, `canEscape` returns false, inflicting encirclement penalties on defense rolls.\n\n### 2. Interactive Floor Elements\nFloors generated by `TowerGenerator.fs` feature rich procedural elements:\n- **Locked Doors & Stairways**: Require specific keys discovered on the floor or dropped by elite sentinels.\n- **Chests & Vaults**: Contain weapon upgrades, armor pieces, and alchemical trophies.\n- **Shrines & Altars**: Offer blessings, morale restoration, or high-risk risk/reward gambits.\n- **Memory Echoes**: Narrative fragments that uncover the lore of previous climbers and the Tower's origin.\n\n## Terminal Rendering with Spectre.Console\n\nThe dungeon viewport (`TowerDisplay.fs`) renders the grid using `Spectre.Console`:\n- Supports Vim-standard movement keys (`h/j/k/l`, `y/u/b/n` for diagonals) and fast travel.\n- Real-time sidebars display player Health, Morale, 7 status meters, floor depth, active preparations, and inventory loadout.\n- Inspect mode (`x`) allows players to scrutinize visible tiles, view enemy stat overviews, and assess apex threats prior to engaging.\n",
+      "size": 3515,
+      "links": [],
+      "backlinks": [
+        "quickstart",
+        "tower/index"
+      ]
+    },
+    {
+      "id": "tower/index",
+      "title": "Tower",
+      "type": "Section",
+      "description": "",
+      "tags": [],
+      "body": "# Files\n\n- [Grief Aspect Bosses and Story Duel Engine](bosses-and-story.md) - Narrative progression, psychological trauma themes, and combat mechanics of the five Grief Aspect bosses in Fornach.\n- [Infinite Tower Crawl and Spatial Navigation](crawl-and-spatial.md) - 2D spatial grid coordinate mechanics, recursive shadowcasting FOV, Fog of War, and procedural dungeon crawl loop in Fornach.\n",
+      "size": 392,
+      "links": [
+        "tower/bosses-and-story",
+        "tower/crawl-and-spatial"
+      ],
+      "backlinks": []
+    }
+  ],
+  "edges": [
+    {
+      "source": "architecture/index",
+      "target": "architecture/overview"
+    },
+    {
+      "source": "combat/index",
+      "target": "combat/fluid-stances"
+    },
+    {
+      "source": "combat/index",
+      "target": "combat/status-meters"
+    },
+    {
+      "source": "combat/index",
+      "target": "combat/tactical-assessment"
+    },
+    {
+      "source": "combat/index",
+      "target": "combat/vector-matrix"
+    },
+    {
+      "source": "index",
+      "target": "quickstart"
+    },
+    {
+      "source": "progression/index",
+      "target": "progression/classes-and-progression"
+    },
+    {
+      "source": "quickstart",
+      "target": "architecture/overview"
+    },
+    {
+      "source": "quickstart",
+      "target": "combat/vector-matrix"
+    },
+    {
+      "source": "quickstart",
+      "target": "combat/fluid-stances"
+    },
+    {
+      "source": "quickstart",
+      "target": "combat/status-meters"
+    },
+    {
+      "source": "quickstart",
+      "target": "combat/tactical-assessment"
+    },
+    {
+      "source": "quickstart",
+      "target": "progression/classes-and-progression"
+    },
+    {
+      "source": "quickstart",
+      "target": "tower/crawl-and-spatial"
+    },
+    {
+      "source": "quickstart",
+      "target": "tower/bosses-and-story"
+    },
+    {
+      "source": "tower/index",
+      "target": "tower/bosses-and-story"
+    },
+    {
+      "source": "tower/index",
+      "target": "tower/crawl-and-spatial"
+    }
+  ]
+}

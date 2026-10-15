@@ -13,6 +13,8 @@ open Fornach.Cli
 module StoryTutorialTests =
 
   [<Theory>]
+  [<InlineData("fighter")>]
+  [<InlineData("mage")>]
   [<InlineData("berserker")>]
   [<InlineData("duelist")>]
   [<InlineData("warden")>]
@@ -23,6 +25,8 @@ module StoryTutorialTests =
     let player = StoryBosses.createProloguePlayer className
     let expectedClass =
       match className with
+      | "fighter" -> CharacterClass.Fighter
+      | "mage" -> CharacterClass.Mage
       | "berserker" -> CharacterClass.Berserker
       | "duelist" -> CharacterClass.Duelist
       | "warden" -> CharacterClass.Warden
@@ -151,6 +155,35 @@ module StoryTutorialTests =
       sprintf "Clearing the tutorial floor should land the protagonist in levels 30-40, got %d" cleared.Player.Level)
 
     Assert.Contains("keystone_stage_1", cleared.CollectedKeys)
+
+  [<Fact>]
+  let ``Each story stage gate levels the protagonist for the next biome's monsters`` () =
+    // Per-kill experience (~0.3 levels per floor after the tutorial) cannot keep pace with the biome
+    // tiers, so each stage's keystone guardian grants the level the next biome's monsters assume.
+    // Without it the protagonist entered the Basalt Calderas at level 33 against a level-95 Master
+    // golem.
+    let player = StoryBosses.createProloguePlayer "berserker"
+    let mutable state = TowerSession.initSessionWithMode player 4242 1 true
+
+    let gateLevels = [ 1, 32; 2, 45; 3, 95; 4, 105; 5, 110; 6, 185 ]
+
+    for floorNumber, expectedLevel in gateLevels do
+      Assert.Equal(floorNumber, state.CurrentFloor.FloorNumber)
+
+      let guardian =
+        state.CurrentFloor.Entities
+        |> Map.toList
+        |> List.tryPick (function
+          | _, EntityEnemy e when e.DropsKeyId.IsSome -> Some e
+          | _ -> None)
+
+      Assert.True(guardian.IsSome, sprintf "floor %d must guard its keystone with an enemy" floorNumber)
+      state <- TowerSession.resolveEnemyDefeat guardian.Value.Id state
+      Assert.Equal(expectedLevel, state.Player.Level)
+      Assert.Contains(sprintf "keystone_stage_%d" floorNumber, state.CollectedKeys)
+
+      if floorNumber < 7 then
+        state <- TowerSession.ascendFloor state
 
   [<Fact>]
   let ``Tutorial enemies cannot one-shot the level-1 protagonist`` () =

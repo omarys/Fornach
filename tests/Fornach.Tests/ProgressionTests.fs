@@ -101,3 +101,100 @@ module ProgressionTests =
       Assert.True(after.Souls > 0)
       Assert.True(after.Player.Progression.CurrentXP > 0 || after.Player.Level > 1)
     | None -> failwith "Floor 1 generated no enemies to defeat"
+
+  [<Fact>]
+  let ``Spell armor bonus progression matches the 5% per 10 levels table from level 50 to 200`` () =
+    // Sub-50 levels have zero spell armor
+    Assert.Equal(0.0, ProgressionScale.spellArmorBonus 1)
+    Assert.Equal(0.0, ProgressionScale.spellArmorBonus 20)
+    Assert.Equal(0.0, ProgressionScale.spellArmorBonus 40)
+    Assert.Equal(0.0, ProgressionScale.spellArmorBonus 49)
+
+    // Explicit 16-tier table from level 50 to level 200
+    let expectedTiers = [
+      (50, 0.05)
+      (60, 0.10)
+      (70, 0.15)
+      (80, 0.20)
+      (90, 0.25)
+      (100, 0.30)
+      (110, 0.35)
+      (120, 0.40)
+      (130, 0.45)
+      (140, 0.50)
+      (150, 0.55)
+      (160, 0.60)
+      (170, 0.65)
+      (180, 0.70)
+      (190, 0.75)
+      (200, 0.80)
+    ]
+
+    for (lvl, expectedBonus) in expectedTiers do
+      let actual = ProgressionScale.spellArmorBonus lvl
+      Assert.Equal(expectedBonus, actual, 3)
+
+    // Capping at 80% for levels beyond 200
+    Assert.Equal(0.80, ProgressionScale.spellArmorBonus 250, 3)
+    Assert.Equal(0.80, ProgressionScale.spellArmorBonus 500, 3)
+
+  [<Fact>]
+  let ``Magic classes physical stat growth stops developing after level 49`` () =
+    let inq49 = TierFactory.createClassLevel CharacterClass.Inquisitor 49
+    let inq50 = TierFactory.createClassLevel CharacterClass.Inquisitor 50
+    let inq100 = TierFactory.createClassLevel CharacterClass.Inquisitor 100
+    let inq200 = TierFactory.createClassLevel CharacterClass.Inquisitor 200
+
+    // Physical offensive stats must stop developing after level 49
+    Assert.Equal(63, inq49.GetStat Force)
+    Assert.Equal(63, inq50.GetStat Force)
+    Assert.Equal(63, inq100.GetStat Force)
+    Assert.Equal(63, inq200.GetStat Force)
+
+    Assert.Equal(63, inq49.GetStat Finesse)
+    Assert.Equal(63, inq50.GetStat Finesse)
+    Assert.Equal(63, inq100.GetStat Finesse)
+    Assert.Equal(63, inq200.GetStat Finesse)
+
+    Assert.Equal(63, inq49.GetStat Prowess)
+    Assert.Equal(63, inq50.GetStat Prowess)
+    Assert.Equal(63, inq100.GetStat Prowess)
+    Assert.Equal(63, inq200.GetStat Prowess)
+
+    // Meanwhile, physical class (Berserker) continues physical growth unimpeded
+    let ber49 = TierFactory.createClassLevel CharacterClass.Berserker 49
+    let ber50 = TierFactory.createClassLevel CharacterClass.Berserker 50
+    let ber100 = TierFactory.createClassLevel CharacterClass.Berserker 100
+    Assert.True(ber50.GetStat Force > ber49.GetStat Force)
+    Assert.True(ber100.GetStat Force > ber50.GetStat Force)
+
+  [<Fact>]
+  let ``Spell armor applies percentage of mental stats to physical defense for magic classes`` () =
+    let inq49 = TierFactory.createClassLevel CharacterClass.Inquisitor 49
+    let inq50 = TierFactory.createClassLevel CharacterClass.Inquisitor 50
+    let inq100 = TierFactory.createClassLevel CharacterClass.Inquisitor 100
+    let inq200 = TierFactory.createClassLevel CharacterClass.Inquisitor 200
+
+    // Level 49: 0% spell armor, base Fortitude = 106, Reflex = 63, Poise = 135
+    Assert.Equal(0.0, inq49.SpellArmorBonus, 3)
+    Assert.Equal(106, inq49.GetStat Fortitude)
+    Assert.Equal(63, inq49.GetStat Reflex)
+    Assert.Equal(135, inq49.GetStat Poise)
+
+    // Level 50: 5% spell armor (Resolve = 216 -> +11 Fortitude; Intuition = 162 -> +8 Reflex; Composure = 162 -> +8 Poise)
+    Assert.Equal(0.05, inq50.SpellArmorBonus, 3)
+    Assert.Equal(106 + 11, inq50.GetStat Fortitude)
+    Assert.Equal(63 + 8, inq50.GetStat Reflex)
+    Assert.Equal(135 + 8, inq50.GetStat Poise)
+
+    // Level 100: 30% spell armor (Resolve = 396 -> +119 Fortitude; Intuition/Composure = 297 -> +89)
+    Assert.Equal(0.30, inq100.SpellArmorBonus, 3)
+    Assert.Equal(106 + 119, inq100.GetStat Fortitude)
+    Assert.Equal(63 + 89, inq100.GetStat Reflex)
+    Assert.Equal(135 + 89, inq100.GetStat Poise)
+
+    // Level 200: 80% spell armor (Resolve = 756 -> +605 Fortitude; Intuition/Composure = 567 -> +454)
+    Assert.Equal(0.80, inq200.SpellArmorBonus, 3)
+    Assert.Equal(106 + 605, inq200.GetStat Fortitude)
+    Assert.Equal(63 + 454, inq200.GetStat Reflex)
+    Assert.Equal(135 + 454, inq200.GetStat Poise)

@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:b31a3c6457173f1f574319541de04b2bba8a9b9cb23bafbe2681ef0b7d734995",
+  "claims": [
+    {
+      "id": "claim_9d54a411aff64391a0f5d951e8cde173",
+      "statement": "Fornach is a multi-plane functional combat simulation engine and balance workbench implemented in F# on .NET 10.",
+      "evidence": [
+        {
+          "resource": "repo://README.md#L1-L6",
+          "version": "repo-lines-v1:sha256:21ceb5957f0d276a46d51085aa983bc455ad6eec79c178998242caeb74dd6971:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjgwNjk2OTg4MTkyY2RhMjYyNmIwNmE0NjQ0NGJkZGUyNzMzNTkyZWIwNjM1NDM4NDQ3YzljZTZhMmE3OWJlNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTA1YWQ3Y2E5YjM5NzNlNmUwZGE2NWIxNDMwZWU2ZGM2ODdmZDljNGRiNzRlOGRiMzgxZjBkZjE5YzQ5YzNkNyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_eb6326d4f9ea41cd9c3fb44acc3eb0af",
+      "statement": "The engine features dual-plane tactical combat across Physical and Mental planes driven by a bounded-ratio dice pool (4 to 20 dice) and deterministic floor hits.",
+      "evidence": [
+        {
+          "resource": "repo://README.md#L9-L21",
+          "version": "repo-lines-v1:sha256:e580ef4836640ca2669c4635a7f1e575063aa6ce907a31fd2777ea1362d50397:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImViMDQ5YjcwZDliYmZlMGU0MDViODE4ZTU4NTQwNDg1ZjBlMjViY2UwODc2MjZjM2JkMGYyYjNkNzkyNWQ4MjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNjOTBlNTczZjMxYWM3YmVkOGQyOGZiMWJjNDI3ZWE2MTNhZDkxOGUxODkxMjI0NGFhODFiZmY5MTk1NTgxMTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAwMWYyZWMxNzU5M2MxMDU0ZWI0NjM2N2Q4NDUzZWYyNGExNzNjZTk2YjcxMTdkOTFmOWE2OGQ0NGZlZjhiMDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY1NTRlOGI1MTkyOGM5OGM1YzFhNTg4OWRmMTQyNTU2MjViZmFkNTAwOWUyNzgyMGRjZDk5YWZjZjM4OGU4ZjAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_6801f831bd194517b62c0d8a34935af7",
+      "statement": "Fornach.Cli provides an interactive Spectre.Console terminal application featuring story mode, infinite tower crawl, and Monte-Carlo balance simulation.",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Cli/Program.fs#L1200-L1245",
+          "version": "repo-lines-v1:sha256:d292725d4b770a6ec082d42ab7be24f72d1e5ba1a1bdae154362c7586b9fd5de:eyJzZWxlY3RlZExpbmVDb3VudCI6NDYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhiZTA4YzQ2NTcyYjBhYTIzMjNhMjM2YjZhNjg4YzRlYzk0NmYzMWEwY2I3MmZlOTUwMGQ0NzZlZDRkYWRlYzIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI1ZGU2YmEzYTVlMDQyN2M2ZjUyY2M4Njk5ZWJiOTE5ZjA0OTUyZDJiODE1YTU3NDk5N2QxNWJmODViMmEwYjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoyLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIwY2I0NDJiN2QzMDE2MGIwY2FiNWNiZGEwZTc2N2Q1NzZmMTIzMzg3YTYxMjBmNTBhY2ZkMGZlMzAyODhjODEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_40eff59bd0194448b56a95d696bc4a3c",
+      "statement": "The solution enforces a zero-warning build policy across all solution projects and maintains automated tests covering domain, spatial, and integration behavior.",
+      "evidence": [
+        {
+          "resource": "repo://docs/HANDOFF.md#L1-L6",
+          "version": "repo-lines-v1:sha256:dacf4d39e90eb63e90f97d3064bbe289fcc83d4f1b3b41a8a532da6234848927:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiM2FkYzhjM2U1NjgyOWQyMmU0N2EwYTJjM2QyOTA0NTdjYTQwMzRiM2QwZjZjOTM2MWNmNjNhNWZiNmEyNzRmYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzA4ZGUyODdiNWZmNTQ2YmY5Nzg1MjBjNjY3N2QwNzY3NDIxYTFmYzY2ZWJkODAwMGY1YjViYzA1NTc0ZDE2ZCJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-15T19:23:52.290Z"
+  }
+}

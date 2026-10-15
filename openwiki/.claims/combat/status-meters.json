@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:95812ad57a73ad3c02274061c602ec79b6f8b9893b054bf3941401c885f51c9e",
+  "claims": [
+    {
+      "id": "claim_e801584a6f1746819de4b22d3a97fe59",
+      "statement": "Fornach tracks 7 dynamic combat status meters bounded between 0 and 100: shared Recklessness, 3 physical meters (Exhaustion, Overwhelm, Frustration), and 3 mental meters (Cognitive Fatigue, Confusion, Provoke).",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Domain/Meters.fs#L5-L46",
+          "version": "repo-lines-v1:sha256:a7a4a569cf45d964293be760a6a1aff6a5c430a442d9ad9f1d61a3aac182167c:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzYjM2OTU0MjExZGY1N2VmMTIxZjM5NjNiNjhjNjE5MTI4ODRmNWFhMmRiYmQ2ZTBmMDQwZjg0YzU4M2IyOTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEwMWMzMzc1YTcxOGFlMTE1YzRkOWZlNDk4MjMxZjE2NWM4YjFkNDBmNDdjMWE1OGFjZjg2NDNhOGVhOTlmNmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjEyMDZjNGUyNjlkMDA2NDhkNTY0MjJmNGEyMGM4ZGJkNzJhZGRjODc3MTVlNWFhMjM1OGY4YmY5MzRhMjAzMTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRkOGFiODQ3OTQxYjEwNzFlMzk2NGNjMjIwZjBkMmIzNzMzMjI4ODJmYWYxN2NjZjUxNjE2OWVlMmU3NmU4MTgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1445337c3d2d49579c230a030d1819c6",
+      "statement": "Reaching 100% on any status meter triggers an immediate CollapseState with a specific CollapseReason (such as SomaticAnoxia, StanceFailure, or ContradictionLock).",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Domain/Collapse.fs#L3-L21",
+          "version": "repo-lines-v1:sha256:adf61d308cab3191ec9a4e995b76c53707a97b1b94ba37578ee4cce0b41f7722:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM3YmY3ZDlhYjhlNGMyZjQ4Y2E2YTJlZjRjNzYwMTdmMjExZGQ4YjkwZTNiZGQyNzNjNjcyYzBmNDAyM2VlZmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJkZjhmN2Y3ZTA0ZWRkM2M4NDU0MTAzNTc1YzJmODEyZGY0OTcxYThkNTRiY2JkMDIwYzQ0OGQ0YzNlN2E5NzgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjoyLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkzYTEzMTE5NmVmZDAwNGY0OWFjNmJkNGE0Zjc5OTA2YTZjMjc5NTkxNmNkZDk3M2QwYTFiZmQ1MzdiZTIxYWIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_27658225753b4ad599bbf5b9247bfd1e",
+      "statement": "Combatants in a collapsed state suffer a 75% penalty to effective defenses (0.25 multiplier) and become immediately vulnerable to lethal Execute strikes.",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Domain/Combatant.fs#L105-L110",
+          "version": "repo-lines-v1:sha256:f682133ec3ec7a091e9e74c24e346ea83c1e0343826f575fbbbc494c2a929177:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTU2MmFkN2ZjN2M0NjMyMTFmMTdhMWM5YTlhMzFjMGFkZDdhYmI0YjEzZWRiZjY0NjUyNGUyNzFlZGVlMjJlZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiM2QxYTIxNjNiMzAzMmVmMjk0NDMwZDBlODhlYTMxNzczZTIxMzg0MmMwMmY5YzhiN2M2ZGMxNDUyZjE5ZmExNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODdmOWZjYWI0MDBiODQyN2IxYWVkNTU4ZmYyODE2MjA1YzkyNGMyNmM1ODcwMTYzNDNlNzQ5NzgwZDY1ZDlkZSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_4416c50de4df4d8c809efa35d205372a",
+      "statement": "The Steady Breathing combat action vents all seven meters based on Poise and Composure attributes, restoring combatants to Stable once all meters drop below 100%.",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Engine/ActionResolver.fs#L500-L536",
+          "version": "repo-lines-v1:sha256:b78f434ab333e809d64aa00baa60dfc6863d877719fc8d67613a6fe8e73a7c0f:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc0NzlhYjAwOTQ5NDM5NDM5NWU2YzJhYTVhODNlYTc2N2Q0N2E2ZDg3MGIzZTM5OTY2MzQwMWQyMThmOWMwMDkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQwNzY4ZDhlODg3YTgxMTIwYTA4OGQwYTJlYmYyMGQ5ZjkyMDY0YmY0MDM2YzYzNDI2Njg0ZmY0NGFmZDMwZTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZhYWY0MmZmNTY0ZjE4N2JlNjBmZmI2NmE5YmUyODdkZmUyNzk0MDYxYTliMWI2MzlmMzhiY2MyZDM1ODViODMifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-15T19:23:52.290Z"
+  }
+}

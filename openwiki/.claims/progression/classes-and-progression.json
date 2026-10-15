@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:11c244a100c8af93d46acdea2f8588143d0cb9b03b8814bed3eb4de926f17ecc",
+  "claims": [
+    {
+      "id": "claim_02d145beaaa944ffb27b99db5f6f389a",
+      "statement": "Fornach provides 6 specialized player classes (Berserker, Duelist, Warden, Inquisitor, Mesmer, Abjurer) with tactical preparations, alongside 4 generic NPC classes (Warrior, Rogue, Soldier, Mage).",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Domain/Classes.fs#L5-L46",
+          "version": "repo-lines-v1:sha256:3fa5d50d0965e7400aace02427e669cbe3a60e471a0b6df32f5003c90dd53026:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYwOGU0MjZhYWI3MGY3Y2E5YmE0NzFmZmY4NDU5MzBjNmQ1YzM1MjEyMjdhNDJiOGVkNDAxMDVjZjY4MmIwYjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdmYTg5ODcyZTViNTJlNmZlNjZkZWEwNDdkYWU0MjFkNWIwYmU0MjBjNjRkNDVjYWNlZGJiNzQ3M2Q4MzYwZmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkyMDk3Yzg4NjgwOTE2Yjg4NThlZGM1ZjU0MmE5ZDUyZDliNzA1N2U5MzhiMGY3YzNiMDI0ZThjMzVkZGMyNGEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVlYTIzMTA2NDczODY3ZjVlMGQxOTE4NGMzNzFiMjhhNjBmMzJhNzUzYmQzMmY2MTg3OTExNTE4ZGVlYmMzMTcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_75496210ee7e498a93b4d7f5521bf834",
+      "statement": "Character progression scales across 200 levels partitioned into four mastery tiers: Novice (1-39), Veteran (40-79), Master (80-159), and Grandmaster (160-200).",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Domain/TierFactory.fs#L24-L32",
+          "version": "repo-lines-v1:sha256:6ed222e2133958c17ca775e54fb9a340e40bd049a5df9b2ecbcfd239e9f94b9e:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTg0MWFjZTJiZDY2NGM1NGM0MWI4NWVkM2I5MTg0Y2QwZWYxZTI0NTg1ZmM0ZTUxNmI3NzEyNGFjMzEzZGY4MiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzBkMGI1MDlkNjE3ZWJhZDdmMmQwOTkzMGE0N2VhZDk2NTA0ZDhjZjBjOThkZjljODJkM2QyNDc1OTEwZjhiZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjJmNTZjYzIxMTk1M2ZiY2U4MjljMDVjYTM4ZTJiNzYwYzBiMTVhZWFiNGFkYWVmZTFmOWYwNDcwMDM0ZWZlNiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_b736cf49f7b347409a6a7ad8474f730e",
+      "statement": "Physical stat growth stops developing after Level 49 for magic/mental classes (clamped between 1 and 49) to counter defense inflation.",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Domain/TierFactory.fs#L55-L70",
+          "version": "repo-lines-v1:sha256:82b94330dbb49d56e68f210849483f8c13c6558a6660a75c431983d2cdf0fd37:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgwMTJjZTYxNTFlNTFjNWYwMWYxYWFkOTE5MTE5NTU3OGZjNGI2MDc2MzA5NGNjZDJmNjFkZWZmY2U4ZTIxYmEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVhMzIyYWFjNzFhNTdlZmM4OWIxMDVlMWEyMDg5NTljMGE0ZDQ0OTkyOGZiMzk0OTI1MmY2OGE3ZTMzODkwNzMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg4ZmIyYmE3NWJjMzY3Zjk3MGY3ZmUxOWIxMGNiNjQ1MjNkYjMzMjc4YmJiYjUwNGU4YzYwYzQ2ODhlNjliNjkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f50fd6d141b04282a3cde6fd6f7484e0",
+      "statement": "Spell Armor scales from Level 50 at 5% by +5% every 10 levels up to 80% at Level 200, transferring mental defenses (Resolve, Intuition, Composure) to physical defenses (Fortitude, Reflex, Poise).",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Domain/TierFactory.fs#L47-L54",
+          "version": "repo-lines-v1:sha256:3af45471689ffb4afafcc4c6e2a11722b41cdd9b56ee462e1bdd6a1a5ecc2a08:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNGY2NDMwNjVhMjdkZGExMDUzOWQ3Yzk4ZjE3Zjg5YWQ2ZTMwMjY4NTg1MzcwMzllZTM2NGZiMmViODUxNWNlOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiM2MwZTZiMzVkZTJhMmNiMDQwZWVhZWE3ODQ1ZWIxZWNhOGU3ZTgxODMyYWQwNGM4MjQxMWIwZWZlZDFhZGU3MyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOGE5NDVhMjZkZjJlZDA0YzU3MTFkYjg0ODdlZTkzZTUzMjUxYTQwYWY0ZDhiNzY3NjFlYzFmZmE0NzI3MDc1YSJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-15T19:23:52.290Z"
+  }
+}

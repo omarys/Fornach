@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:a62c82229d0678363cf6ab679a4556f77cc2c374800b92a110014271e55bf808",
+  "claims": [
+    {
+      "id": "claim_afd1aea09a7349669281e0d227927af3",
+      "statement": "Physical attacks automatically shift combatant stance to match the strike's vector: ForceStrike triggers PowerStance, FinesseCadence triggers AgilityStance, and Prowess/Flaw strikes trigger DisciplineStance.",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Engine/ActionResolver.fs#L848-L863",
+          "version": "repo-lines-v1:sha256:b75d811f17224408d56ee678570040755feda6986c5886144dba2dd71af34d76:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk3NmM3YjJlZTIwNWYwZjA1NmM5OGNjYjU4MGM4ZTIxMzg1MjUzY2FlZjEzYjA2MTRjZTcxYWE2NjljMzc2OGMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYzOTdhYWQ5YzNhNzkwNzQ1YzA0YTI4NzlhY2VhY2I0MDc5YTI2ZmQ3ZmI3MjJiNjY2Y2QwZDVmYWUwMjYwNzciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQzN2Q3NGRkZmYxNDVhNWIxZDFmN2FhOTNjNjMyOTA2M2NlMmU5NjE4MGFkZjczODExMDhhMDMzZjQwMDQ4ZGIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_99f12a6b3fec40d9af909193617c5df4",
+      "statement": "Mental spells dynamically transition arcane combatants between Complex Forms: ArcaneCataclysm triggers ResonanceSpike, SynapticGlamour triggers PhantasmalDiffusion, and RunicWardTrap triggers AegisLattice.",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Engine/ActionResolver.fs#L864-L879",
+          "version": "repo-lines-v1:sha256:60bf7c90689b7b39bd9e91b3a75d249879fffabbde229b699d758228e5919a77:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVkYjI2MDkzM2QyMGFlNWRjMzE3ODMyZGYwMDU3NTAxMjI0ZTBjNmQwODQ4M2JjZDRiYTRhZTYwNDM2Mzc5ZTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVkNGUyOWE0ZjY3NDVjYWI4MzQ4YTczMzhjMzRlNjE2NTkyMjVlMWYwYTY0MTRlYWY5N2ZmMDVlYWNjZDgxMmYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNjZTc2ZDhkMGU0ZGMxNTlkOTFlODllYjkzZDYwYmU5YjFiZDljNTgyM2NiMmJkYjk2MTAyZDQ3MWYxY2UwNjgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_07c58a4e25b449f9bd92a84172e57f80",
+      "statement": "Combatant.GetCombatStat grants a 10% stat boost to attributes aligned with the current stance's vector, while applying a 10% penalty to the plane's off-vector offensive stats.",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Domain/Combatant.fs#L136-L159",
+          "version": "repo-lines-v1:sha256:dc6c245c43a7e94b08c0a94f5af0a2ef32954a5a5892a45084830c20409364b0:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRhOWY4NWNlODQ2NWIxNGRmY2Y4NGEwNzU4MGE1YmRkNGUyNTZmMGRjOGE2YTE2NTEwOTBmZjkxMmUyM2VmYTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY4MDE5YjA5YmU2YjJmOGE0MGZhZDgyZDc3MDU5NDgxYzUxNWVjNTYxZGQyNjVlYTJjOGExOWJmZmNmMzc4YzQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFjYzcxMDI1MTA4NTEwMzFhNGI5YmRhM2I5YzkxMzVlYTc4ZTkyODdmMGExNTFmMzFkMDEwYThiNWE3MzQwODAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_28e1e5aafb504571915a0840986dba33",
+      "statement": "Aegis Lattice complex form automatically prevents Overchanneling on ArcaneCataclysm, stabilizing the spell into a standard cast.",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Engine/ActionResolver.fs#L840-L845",
+          "version": "repo-lines-v1:sha256:df0207067dfbae2d1ffda267cbb5441af460e49d7f6fcbda2835747c2b95375c:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDc5N2Q2NjVhMDM0MDIyNjBmZGU1MWJlOWRkYzE1MmM1MzhjMmI2ODVhYTNkZjAxZjBjYjJmZTMwZjRkNjY3NCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzJjYzE1N2Y4MzFjZTA4ODk1Mjg1MTVkNGNjNTA3OWVjNmE2NmIxNzc3NDBiYWJkM2IyYWNmOWEzZWFjMzdhYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYmVmZGVjOWJjMjQ3OGY4NWFkMjIwMTk2NWQ4N2EwNDM5YWViZjI1NDYyY2Y3MzhkMmU4NzRjOWEzYjUyODRmZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDEyMjA3NDg4N2RjZGJkMjUyNzA5NWI4NTUxOThmNGJhMzhlMDg1MTk2NDY5NTljZjY3MGIzMzI0YzFlNzExMCJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-15T19:23:52.290Z"
+  }
+}

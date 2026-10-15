@@ -296,17 +296,78 @@ let ``TowerDisplay rendering components smoke test`` () =
 
 [<Fact>]
 let ``layoutWidths keeps the HUD from squeezing the map viewport`` () =
-  // On a wide terminal the map gets its full width and the HUD exactly the remainder.
+  // On a wide terminal the map gets its natural width and the HUD exactly the remainder.
   let viewW, hudW = TowerDisplay.layoutWidths 190 64
   Assert.Equal(64, viewW)
-  Assert.Equal(190 - 64 - 4, hudW)
-  Assert.True(viewW + hudW + 4 <= 190, "the pinned columns plus the gutter must fit the terminal")
+  Assert.Equal(190 - 64 - 7, hudW)
 
-  // The map is never wider than the floor, and the HUD always keeps at least its budget.
+  // The pinned columns, the map's border/padding and the grid gutter must land exactly on the
+  // terminal width: a frame one cell wider wraps every line and scrambles the whole crawl view.
   for termW in [ 80; 120; 160; 190; 240; 320 ] do
     let v, h = TowerDisplay.layoutWidths termW 64
     Assert.True(v <= 64, sprintf "termW=%d viewW=%d" termW v)
-    Assert.True(h >= 58, sprintf "termW=%d hudW=%d" termW h)
+    let frame = TowerDisplay.mapColumnWidth v + h + 3
+    Assert.True(frame <= termW, sprintf "termW=%d frame=%d" termW frame)
+
+  // The HUD keeps its readable width wherever the terminal can afford it.
+  Assert.True((TowerDisplay.layoutWidths 120 64 |> snd) >= 58)
+  Assert.True((TowerDisplay.layoutWidths 190 64 |> snd) >= 58)
+
+[<Fact>]
+let ``crawl panels never render a line wider than their column`` () =
+  // Spectre measures a nerd-font icon as one cell while it occupies two UTF-16 units and pads the
+  // line one cell too wide, which makes a panel's right border jitter and pushes the frame past the
+  // terminal. Panels therefore strip those glyphs from their text (Display.stripNerdGlyphs).
+  let player = createTestPlayer ()
+  let state = TowerSession.initSessionWithMode player 88888 1 true
+
+  let widestLine (width: int) (write: Spectre.Console.IAnsiConsole -> unit) =
+    use writer = new System.IO.StringWriter()
+    let console =
+      Spectre.Console.AnsiConsole.Create(
+        Spectre.Console.AnsiConsoleSettings(Out = Spectre.Console.AnsiConsoleOutput(writer)))
+    console.Profile.Width <- width
+    console.Profile.Height <- 60
+    write console
+    let withoutAnsi = System.Text.RegularExpressions.Regex.Replace(writer.ToString(), "\u001b\\[[0-9;]*m", "")
+    withoutAnsi.Split('\n') |> Array.map (fun l -> l.TrimEnd('\r').Length) |> Array.max
+
+  for width in [ 60; 80; 107; 130; 190 ] do
+    let hud = widestLine width (fun c -> c.Write(TowerDisplay.renderHud state))
+    Assert.True(hud <= width, sprintf "HUD rendered a %d-cell line in a %d-cell column" hud width)
+    let log = widestLine width (fun c -> c.Write(TowerDisplay.renderMessageLog state 4))
+    Assert.True(log <= width, sprintf "Log rendered a %d-cell line in a %d-cell column" log width)
+    let map = widestLine (TowerDisplay.mapColumnWidth 64) (fun c -> c.Write(TowerDisplay.renderViewport state 64 6))
+    Assert.True(map <= TowerDisplay.mapColumnWidth 64, sprintf "Map rendered a %d-cell line" map)
+
+[<Fact>]
+let ``map viewport is not wrapped by the column the crawl loop pins it to`` () =
+  // A map panel is 2 borders plus 1 cell of padding wider than its content. Pinning the crawl
+  // grid column to a width narrower than mapColumnWidth leaves the content area short, and
+  // Spectre then wraps every map row into the next one — which slid the player marker onto the
+  // following row and out to the panel's right edge. The pinned width and an unconstrained
+  // render must place the marker in the same cell.
+  let player = createTestPlayer ()
+  let state = TowerSession.initSessionWithMode player 88888 1 true
+  let viewW, viewH = 64, 6
+
+  let playerCell (width: int) =
+    use writer = new System.IO.StringWriter()
+    let console =
+      Spectre.Console.AnsiConsole.Create(
+        Spectre.Console.AnsiConsoleSettings(Out = Spectre.Console.AnsiConsoleOutput(writer)))
+    console.Profile.Width <- width
+    console.Profile.Height <- 80
+    console.Write(TowerDisplay.renderViewport state viewW viewH)
+    writer.ToString().Split('\n')
+    |> Array.mapi (fun i line -> (i, line.IndexOf('@')))
+    |> Array.tryFind (fun (_, column) -> column >= 0)
+
+  let pinnedCell = playerCell (TowerDisplay.mapColumnWidth viewW)
+  let freeCell = playerCell (TowerDisplay.mapColumnWidth viewW + 8)
+
+  Assert.True(freeCell.IsSome, "the reference viewport render must contain the player marker")
+  Assert.Equal(freeCell, pinnedCell)
 
 [<Fact>]
 let ``traumaReset restores mobs to their spawn tiles and clears player debuffs`` () =

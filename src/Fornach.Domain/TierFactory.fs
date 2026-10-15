@@ -44,7 +44,16 @@ module ProgressionScale =
     let offOff = min + int (Math.Round(float (tert - min) * 0.50))
     (prim, sec, tert, min, offDef, offOff)
 
-  /// Computes (primary, secondary, tertiary, minor, offPoise) for mental/magic classes based on 1.0 : 0.75 : 0.75 utility ratio
+  /// Resolves the spell armor percentage for magic users based on level.
+  /// Starts at level 50 (5%), increasing by 5% every 10 levels, capping at 80% at level 200.
+  let spellArmorBonus (level: int) : float =
+    if level < 50 then 0.0
+    else
+      let steps = (level - 40) / 10
+      Math.Clamp(Math.Round(float steps * 0.05, 2), 0.05, 0.80)
+
+  /// Computes (primary, secondary, tertiary, minor, offPoise) for mental/magic classes based on 1.0 : 0.75 : 0.75 utility ratio.
+  /// Physical stat growth stops developing after level 49 to counter defense over-inflation.
   let magicStatsForLevel (level: int) : int * int * int * int * int =
     let l = Math.Max(1, level)
     let delta = l - 1
@@ -52,9 +61,11 @@ module ProgressionScale =
     let prim = 40 + int (Math.Round(float delta * 3.6))
     let sec = int (Math.Round(float prim * 0.75))
     let tert = int (Math.Round(float prim * 0.50))
-    let min = 15 + int (Math.Round(float delta * 1.0))
+    // Physical stat growth stops developing after level 49
+    let physDelta = Math.Clamp(level, 1, 49) - 1
+    let min = 15 + int (Math.Round(float physDelta * 1.0))
     // Poise boost (physical defensive discipline) to maintain stance/casting concentration
-    let offPoise = min + int (Math.Round(float delta * 1.5))
+    let offPoise = min + int (Math.Round(float physDelta * 1.5))
     (prim, sec, tert, min, offPoise)
 
   /// Legacy helper for general stat lookups
@@ -96,6 +107,15 @@ module TierFactory =
       if cls.Plane = Physical then
         let prim, sec, tert, min, offDef, offOff = ProgressionScale.physicalStatsForLevel level
         match cls with
+        | CharacterClass.Fighter ->
+          // Normalized physical stats: all 6 physical attributes set to prim
+          // Off-plane mental attributes: Resolve, Intuition, Composure get offDef; mental offenses get min
+          [ Force, prim; Fortitude, prim
+            Finesse, prim; Reflex, prim
+            Prowess, prim; Poise, prim
+            Intellect, min; Resolve, offDef
+            Acuity, min; Intuition, offDef
+            Acumen, min; Composure, offDef ]
         | CharacterClass.Berserker ->
           // Power Primary (1.0 : 0.75 : 0.75): Power 1.0, Agility 0.75, Discipline 0.75
           // Power Archetype: Composure (defensive discipline), Acumen (tactical reading), and Resolve (mental grit) boosted
@@ -156,51 +176,80 @@ module TierFactory =
             Acuity, min; Intuition, min
             Acumen, min; Composure, min ]
       else
-        // Magic / Mental Plane: 1.0 : 0.75 : 0.75 across Mental Vectors with Poise grounding and tertiary physical defense
-        let prim, sec, tert, min, offPoise = ProgressionScale.magicStatsForLevel level
-        let offPhys = tert
-        match cls with
-        | CharacterClass.Inquisitor
-        | CharacterClass.Mage ->
-          // Mental Power Primary (Intellect/Resolve), Agility & Discipline Secondary
-          // Physical: Fortitude boosted to tert for physical armor soak
-          [ Intellect, prim; Resolve, prim
-            Acuity, sec; Intuition, sec
-            Acumen, sec; Composure, sec
-            Force, min; Fortitude, offPhys
-            Finesse, min; Reflex, min
-            Prowess, min; Poise, offPoise ]
-        | CharacterClass.Mesmer ->
-          // Mental Agility Primary (Acuity/Intuition), Power & Discipline Secondary
-          // Physical: Reflex boosted to tert for evasive agility
-          [ Acuity, prim; Intuition, prim
-            Intellect, sec; Resolve, sec
-            Acumen, sec; Composure, sec
-            Force, min; Fortitude, min
-            Finesse, min; Reflex, offPhys
-            Prowess, min; Poise, offPoise ]
-        | CharacterClass.Abjurer
-        | CharacterClass.Strategist ->
-          // Mental Discipline Primary (Acumen/Composure), Power & Agility Secondary
-          // Physical: Fortitude & Reflex boosted to tert for fortified arcane tanking
-          [ Acumen, prim; Composure, prim
-            Intellect, sec; Resolve, sec
-            Acuity, sec; Intuition, sec
-            Force, min; Fortitude, offPhys
-            Finesse, min; Reflex, offPhys
-            Prowess, min; Poise, offPoise ]
-        | _ ->
-          [ Intellect, prim; Resolve, prim
-            Acuity, sec; Intuition, sec
-            Acumen, sec; Composure, sec
-            Force, min; Fortitude, offPhys
-            Finesse, min; Reflex, min
-            Prowess, min; Poise, offPoise ]
+        // Magic / Mental Plane: 1.0 : 0.75 : 0.75 across Mental Vectors (normalized 1.0 for Mage)
+        // Physical stat growth stops developing after level 49 to counter over-inflation.
+        let physLevel = Math.Clamp(level, 1, 49)
+        let prim, sec, _, _, _ = ProgressionScale.magicStatsForLevel level
+        let physPrim = 40 + int (Math.Round(float (physLevel - 1) * 3.6))
+        let physTert = int (Math.Round(float physPrim * 0.50))
+        let min = 15 + int (Math.Round(float (physLevel - 1) * 1.0))
+        let offPoise = min + int (Math.Round(float (physLevel - 1) * 1.5))
+        let offPhys = physTert
+
+        let spellArmorPct = ProgressionScale.spellArmorBonus level
+
+        let baseFortitude, baseReflex, basePoise, resolveVal, intuitionVal, composureVal =
+          match cls with
+          | CharacterClass.Mage ->
+            // Normalized mental stats: all mental defenses are prim, so spell armor scales from prim across all 3 defenses
+            offPhys, min, offPoise, prim, prim, prim
+          | CharacterClass.Inquisitor ->
+            // Mental Power Primary (Intellect/Resolve), Agility & Discipline Secondary
+            // Physical: Fortitude gets spell armor from Resolve, Reflex from Intuition, Poise from Composure
+            offPhys, min, offPoise, prim, sec, sec
+          | CharacterClass.Mesmer ->
+            // Mental Agility Primary (Acuity/Intuition), Power & Discipline Secondary
+            // Physical: Fortitude gets spell armor from Resolve, Reflex from Intuition, Poise from Composure
+            min, offPhys, offPoise, sec, prim, sec
+          | CharacterClass.Abjurer
+          | CharacterClass.Strategist ->
+            // Mental Discipline Primary (Acumen/Composure), Power & Agility Secondary
+            // Physical: Fortitude gets spell armor from Resolve, Reflex from Intuition, Poise from Composure
+            offPhys, offPhys, offPoise, sec, sec, prim
+          | _ ->
+            offPhys, min, offPoise, prim, sec, sec
+
+        let finalFortitude = baseFortitude + int (Math.Round(float resolveVal * spellArmorPct))
+        let finalReflex = baseReflex + int (Math.Round(float intuitionVal * spellArmorPct))
+        let finalPoise = basePoise + int (Math.Round(float composureVal * spellArmorPct))
+
+        let mentalStats =
+          match cls with
+          | CharacterClass.Mage ->
+            // Normalized mental stats: all 6 mental attributes set to prim
+            [ Intellect, prim; Resolve, prim
+              Acuity, prim; Intuition, prim
+              Acumen, prim; Composure, prim ]
+          | CharacterClass.Inquisitor ->
+            [ Intellect, prim; Resolve, prim
+              Acuity, sec; Intuition, sec
+              Acumen, sec; Composure, sec ]
+          | CharacterClass.Mesmer ->
+            [ Acuity, prim; Intuition, prim
+              Intellect, sec; Resolve, sec
+              Acumen, sec; Composure, sec ]
+          | CharacterClass.Abjurer
+          | CharacterClass.Strategist ->
+            [ Acumen, prim; Composure, prim
+              Intellect, sec; Resolve, sec
+              Acuity, sec; Intuition, sec ]
+          | _ ->
+            [ Intellect, prim; Resolve, prim
+              Acuity, sec; Intuition, sec
+              Acumen, sec; Composure, sec ]
+
+        let physicalStats =
+          [ Force, min; Fortitude, finalFortitude
+            Finesse, min; Reflex, finalReflex
+            Prowess, min; Poise, finalPoise ]
+
+        mentalStats @ physicalStats
 
     let stats = StatBlock.Create statMap
     let name = sprintf "Lv.%d %s" level cls.Name
     let stance =
       match cls with
+      | CharacterClass.Fighter
       | CharacterClass.Berserker
       | CharacterClass.Warrior
       | CharacterClass.Inquisitor

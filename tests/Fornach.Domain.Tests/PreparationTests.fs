@@ -91,8 +91,8 @@ module PreparationTests =
   // =========================================================================
 
   [<Fact>]
-  let ``All 7 player character classes correctly map Vector, Plane, and 2 unique preparations (1 Crowd, 1 Duel)`` () =
-    let playerClasses = CharacterClass.PlayerClasses
+  let ``All 7 specialized player character classes correctly map Vector, Plane, and 2 unique preparations (1 Crowd, 1 Duel)`` () =
+    let playerClasses = CharacterClass.SpecializedClasses
     Assert.Equal(7, playerClasses.Length)
 
     for cls in playerClasses do
@@ -112,10 +112,10 @@ module PreparationTests =
         Assert.False(String.IsNullOrWhiteSpace(p.Description))
 
   [<Fact>]
-  let ``All 4 generic NPC classes (Warrior, Rogue, Soldier, Mage) map correctly and possess zero preparations`` () =
+  let ``All 3 generic NPC classes (Warrior, Rogue, Soldier) map correctly and possess zero preparations`` () =
     let genericClasses = CharacterClass.GenericClasses
-    Assert.Equal(4, genericClasses.Length)
-    Assert.Equal(11, CharacterClass.All.Length)
+    Assert.Equal(3, genericClasses.Length)
+    Assert.Equal(12, CharacterClass.All.Length)
 
     for cls in genericClasses do
       Assert.True(cls.IsGeneric)
@@ -135,8 +135,22 @@ module PreparationTests =
     Assert.Equal(Vector.Discipline, CharacterClass.Soldier.Vector)
     Assert.Equal(Plane.Physical, CharacterClass.Soldier.Plane)
 
+  [<Fact>]
+  let ``The core player classes are Fighter and Mage, and the Mage's kit is its Complex Forms`` () =
+    // The Mage is playable like the Fighter, so it must not be classed as a generic NPC; its kit is
+    // the Complex Forms threaded by the attacks it declares rather than a preparation pair.
+    Assert.Equal<CharacterClass list>([ Fighter; Mage ], CharacterClass.PlayerClasses)
+
+    for cls in CharacterClass.PlayerClasses do
+      Assert.False(cls.IsGeneric)
+      Assert.True(cls.IsPlayerClass)
+
+    Assert.Equal(2, (PreparationType.ForClass CharacterClass.Fighter).Length)
+    Assert.Empty(PreparationType.ForClass CharacterClass.Mage)
+
     Assert.Equal(Vector.Power, CharacterClass.Mage.Vector)
     Assert.Equal(Plane.Mental, CharacterClass.Mage.Plane)
+    Assert.Equal(StatId.Intellect, CharacterClass.Mage.PrimaryStat)
 
   // =========================================================================
   // 3. Multi-Opponent Crowd Control Tests: BastionZoneControl
@@ -331,11 +345,11 @@ module PreparationTests =
 
 
   [<Fact>]
-  let ``TierFactory initializes all 44 archetypes across 11 classes and 4 tiers correctly`` () =
+  let ``TierFactory initializes all 48 archetypes across 12 classes and 4 tiers correctly`` () =
     let tiers = [ Novice; Veteran; Master; GrandMaster ]
     let classes = CharacterClass.All
 
-    Assert.Equal(11, classes.Length)
+    Assert.Equal(12, classes.Length)
 
     for cls in classes do
       for tier in tiers do
@@ -351,7 +365,11 @@ module PreparationTests =
 
         Assert.Equal(expectedLevel, fighter.Progression.Level)
 
-        if cls.IsGeneric then
+        if cls = CharacterClass.Mage then
+          // The Mage is a player class whose kit is its Complex Forms, so it carries no preparations.
+          Assert.Empty(fighter.Preparations)
+          Assert.Equal(0, fighter.Progression.TotalRemainingPrepUses)
+        elif cls.IsGeneric then
           // Generic NPC classes do NOT receive specialized preparations or slots
           Assert.Empty(fighter.Preparations)
           Assert.Equal(0, fighter.Progression.TotalRemainingPrepUses)

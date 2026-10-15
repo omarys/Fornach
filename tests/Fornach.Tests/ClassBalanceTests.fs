@@ -198,9 +198,10 @@ let ``Physical archetypes receive thematic mental boosts and mages receive poise
   Assert.Equal(420, gmWarden.GetStat Resolve)
   Assert.Equal(214, gmWarden.GetStat Acuity)
 
-  // Magic user: boosted physical Poise (offPoise = 512) for casting stance stability and tertiary Reflex (378) for evasive defense
-  Assert.Equal(512, gmMesmer.GetStat Poise)
-  Assert.Equal(378, gmMesmer.GetStat Reflex)
+  // Magic user: physical stat growth stopped developing after level 49; physical defense boosted by spell armor (80% at GM tier)
+  Assert.Equal(63, gmMesmer.GetStat Force) // Physical offense stopped developing after level 49
+  Assert.Equal(589, gmMesmer.GetStat Poise) // 135 base + 80% of Composure (454)
+  Assert.Equal(711, gmMesmer.GetStat Reflex) // 106 base + 80% of Intuition (605)
 
 [<Fact>]
 let ``Mesmer mirror decoy shatters upon being attacked, inflicting retaliatory Morale blast damage`` () =

@@ -778,6 +778,21 @@ module TowerSession =
           profile.Level previousLevel rankLine ]
 
   /// Marks a defeated enemy on the floor and awards its dropped key, souls, and alchemical trophies
+  /// Level a story stage's guardian hands the protagonist, chosen to match what the *next* stage's
+  /// biome monsters assume: per-kill experience alone (~0.3 levels per floor after the tutorial)
+  /// would leave the protagonist at level 33 walking into the Basalt Calderas' level-95 Master golem
+  /// and the Elysian Sanctuaries' level-185 GrandMasters. Floor 1 is the tutorial's authored
+  /// landing (level 32) and the last stage hands over nothing further.
+  let storyGuardianLevel (floorNumber: int) : int =
+    match floorNumber with
+    | 1 -> 32
+    | 2 -> 45
+    | 3 -> 95
+    | 4 -> 105
+    | 5 -> 110
+    | 6 -> 185
+    | _ -> 185
+
   let resolveEnemyDefeat (enemyId: string) (state: TowerRunState) : TowerRunState =
     let mutable droppedKeyOpt = None
     let mutable defeatedEnemyOpt = None
@@ -800,20 +815,25 @@ module TowerSession =
     match defeatedEnemyOpt with
     | Some e ->
       let baseXp = e.Combatant.Level * 10 + 25
-      // Story floor 1 is the rain-soaked forest tutorial: accelerate leveling so the
-      // level-1 protagonist reaches roughly level 30-35 by the time the Bandit Leader
-      // falls. Later floors and non-story runs use the normal per-kill value.
-      if state.IsStoryMode && state.CurrentFloor.FloorNumber = 1 then
-        if e.Name = "Bandit Leader" then
-          let targetLevel = 32
-          let profile = state.Player.Progression
-          let mutable needed = -profile.CurrentXP
-          for lvl in profile.Level .. targetLevel - 1 do
-            needed <- needed + ProgressionProfile.ExperienceForNextLevel lvl
-          newXp <- baseXp + max 0 needed
+      // The stage guardian carries the keystone; beating it opens the gate and hands the protagonist
+      // the strength the next biome assumes. Ordinary kills keep the normal per-kill value, except
+      // on the tutorial floor, where every kill accelerates leveling.
+      let storyGateLevel =
+        if state.IsStoryMode && state.CurrentFloor.FloorNumber <= 7 && e.DropsKeyId.IsSome then
+          Some (storyGuardianLevel state.CurrentFloor.FloorNumber)
         else
-          newXp <- baseXp + 2500
-      else
+          None
+
+      match storyGateLevel with
+      | Some targetLevel ->
+        let profile = state.Player.Progression
+        let mutable needed = -profile.CurrentXP
+        for lvl in profile.Level .. targetLevel - 1 do
+          needed <- needed + ProgressionProfile.ExperienceForNextLevel lvl
+        newXp <- baseXp + max 0 needed
+      | None when state.IsStoryMode && state.CurrentFloor.FloorNumber = 1 ->
+        newXp <- baseXp + 2500
+      | None ->
         newXp <- baseXp
       // Look up monster loot in Bestiary
       let monsterTemplateOpt =

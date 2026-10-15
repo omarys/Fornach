@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:f3312c246d4ac457cf4006720cad60e97eef6b962e9df357cf17b3d1d492f082",
+  "claims": [
+    {
+      "id": "claim_a2f6f9555a1944a08b04096800a50620",
+      "statement": "Tactical scrutiny is calculated as Acumen + (Intuition / 4) + (Study Stacks * 15) and compared against target Composure to determine insight tiers.",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Domain/TacticalAssessment.fs#L47-L56",
+          "version": "repo-lines-v1:sha256:a981b1e0aefac7d6af2d334ef67451d989b20d7bf3ac6d958cc95e7644ad0d8b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVlMWU2YTgyYjgzNjFkMGM1YTQ5ZDEyZDA1NjExNWU2ZTEyYzhjMmYwMjA2ZGZkY2M1NWJhYzdjYzRhMTc4ZGIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVmN2I5NzZhOWMxYmRlM2JjNmZjMTc5MWE1ODMyZmZjYjA0NmQzM2FjNWFlNDQ3ZTYwZjA5ODVmMTVjMDBjZTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFiNzkyYmJkNzVhMThjNjlmNzcxODYyOGNmZjNhYjAzMmJlNjllYmJjZDZkOWE5MDIwNzBiYTIyYTU0OTFiYTcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a164565f21a648bbbd8e06f7f7540533",
+      "statement": "The scrutiny ratio determines four tiered insight levels: Obscured (<0.40), Discerning (0.40-0.75), Keen (0.75-1.15), and Penetrating (>=1.15).",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Domain/TacticalAssessment.fs#L6-L15",
+          "version": "repo-lines-v1:sha256:4eb894637a6e3a304a694eebde151e6fe8ba8097bc7b60b7a3a096ab2217588d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg4M2Y5MTVlODMyODZiYTUzMDMwODY3MDhmOTQxZDMzZWJmYjU1NTI3Y2VlOTJhMWI1MTNlZGZmNWI0NzE2MDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjEwOTJhYmZmODYwOGQ1YTljZTE2NDA4NDY2NjczZTcxOGE1M2M2ODFmNTgyOTZjZTdhNDgzNWMxMjhiOWIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE1ODg4OTZkZWE3ZjJlZjg0MTdhMDRiNGMxNjc3MDE4ZWVjZjlmZDE4MjEyMWQyZDFhMTMxMzliMDdmYWRhZmUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b3b2c247e9de4d2c8fc15a834aeb2280",
+      "statement": "Discerning insight reveals enemy primary stat identities with approximate values, while Keen and Penetrating insight expose exact stat numbers and weakest defensive attributes.",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Domain/TacticalAssessment.fs#L124-L160",
+          "version": "repo-lines-v1:sha256:8d12f2bf4227d742e38782efd0a419b9b847e0495d652dac112e3c91981d54ac:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRiM2JjYzUxNWMxOWE5ZDNlMzI4ZTU3ZWFiMGI4ZDhhYmY3N2Q5MGQ3MjhhMWY2OGQ5MWIxM2RlYTJkZjQ3NTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk1NmQyMWEyZGIxZDczZmY5MjFlNTk1MGQ5YTA1NmI1MzAyMmNiZWQ2Mjg3OWU4ZmFhMzM4MTEyYjZiNGU0OWIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ3NjBkODk3Yzc1MWYzZTU2NzljOWRiYzNmN2M0NmMyNGU3MTJhYmQzOThjZTU1NmRkN2ZkNjgyNmNjNTI5OTQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_41048ba8f4a1432ba74db76f754758c6",
+      "statement": "TacticalAssessment generates tiered apex threat warnings detailing the enemy's greatest offensive danger, displayed in the combat HUD and action prompt menus.",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Domain/TacticalAssessment.fs#L141-L160",
+          "version": "repo-lines-v1:sha256:349fb4d96e20ffd52334b1a287f4d18c0e735f94d2ae3787bc2db1699ff3a0f0:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNkYzZmOWY0NjgzMDVhNTM5ODU4OGVjM2Q0ZDdhZGE1MjA2NGRhNDk3ZjNlMTYxZDRiMjEwNjNmYTFiNWQwYzYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYzYWM3OWI3YzQyMTAzZjQ5YjZhMjU0ZDVhMzczYjMwZGQ0NGYyNDNmZWFjZjUyYzk3YTVkMzE0MGNhYzY4NDMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ3NjBkODk3Yzc1MWYzZTU2NzljOWRiYzNmN2M0NmMyNGU3MTJhYmQzOThjZTU1NmRkN2ZkNjgyNmNjNTI5OTQifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-15T19:23:52.290Z"
+  }
+}

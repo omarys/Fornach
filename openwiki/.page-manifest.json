@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "pages": {
+    "/openwiki/architecture/overview.md": {
+      "pageVersion": "sha256:f2f4be6d0e65099c3ee2fda92de5ef494b07e7e2a9dabf9ca6eb6ab99fa1c40a",
+      "completedBy": "antigravity",
+      "completedRunId": "b5f7ca45-be2f-4242-95e4-50369fe33b01",
+      "gitHead": "445754965c5690cd25998b097c2bb831b11575e2",
+      "sourceFingerprint": "sha256:1e2c7439b3edbd59afa7a765ca5a9b220793df996d45934f058e23dc4d8c1284"
+    },
+    "/openwiki/combat/fluid-stances.md": {
+      "pageVersion": "sha256:a62c82229d0678363cf6ab679a4556f77cc2c374800b92a110014271e55bf808",
+      "completedBy": "antigravity",
+      "completedRunId": "b5f7ca45-be2f-4242-95e4-50369fe33b01",
+      "gitHead": "445754965c5690cd25998b097c2bb831b11575e2",
+      "sourceFingerprint": "sha256:1e2c7439b3edbd59afa7a765ca5a9b220793df996d45934f058e23dc4d8c1284"
+    },
+    "/openwiki/combat/status-meters.md": {
+      "pageVersion": "sha256:95812ad57a73ad3c02274061c602ec79b6f8b9893b054bf3941401c885f51c9e",
+      "completedBy": "antigravity",
+      "completedRunId": "b5f7ca45-be2f-4242-95e4-50369fe33b01",
+      "gitHead": "445754965c5690cd25998b097c2bb831b11575e2",
+      "sourceFingerprint": "sha256:1e2c7439b3edbd59afa7a765ca5a9b220793df996d45934f058e23dc4d8c1284"
+    },
+    "/openwiki/combat/tactical-assessment.md": {
+      "pageVersion": "sha256:f3312c246d4ac457cf4006720cad60e97eef6b962e9df357cf17b3d1d492f082",
+      "completedBy": "antigravity",
+      "completedRunId": "b5f7ca45-be2f-4242-95e4-50369fe33b01",
+      "gitHead": "445754965c5690cd25998b097c2bb831b11575e2",
+      "sourceFingerprint": "sha256:1e2c7439b3edbd59afa7a765ca5a9b220793df996d45934f058e23dc4d8c1284"
+    },
+    "/openwiki/combat/vector-matrix.md": {
+      "pageVersion": "sha256:f4d1aca1e2da6bdcca4d2a3f3daa070eaf3e909e44e438299e181925b4306a0d",
+      "completedBy": "antigravity",
+      "completedRunId": "b5f7ca45-be2f-4242-95e4-50369fe33b01",
+      "gitHead": "445754965c5690cd25998b097c2bb831b11575e2",
+      "sourceFingerprint": "sha256:1e2c7439b3edbd59afa7a765ca5a9b220793df996d45934f058e23dc4d8c1284"
+    },
+    "/openwiki/progression/classes-and-progression.md": {
+      "pageVersion": "sha256:11c244a100c8af93d46acdea2f8588143d0cb9b03b8814bed3eb4de926f17ecc",
+      "completedBy": "antigravity",
+      "completedRunId": "b5f7ca45-be2f-4242-95e4-50369fe33b01",
+      "gitHead": "445754965c5690cd25998b097c2bb831b11575e2",
+      "sourceFingerprint": "sha256:1e2c7439b3edbd59afa7a765ca5a9b220793df996d45934f058e23dc4d8c1284"
+    },
+    "/openwiki/quickstart.md": {
+      "pageVersion": "sha256:b31a3c6457173f1f574319541de04b2bba8a9b9cb23bafbe2681ef0b7d734995",
+      "completedBy": "antigravity",
+      "completedRunId": "b5f7ca45-be2f-4242-95e4-50369fe33b01",
+      "gitHead": "445754965c5690cd25998b097c2bb831b11575e2",
+      "sourceFingerprint": "sha256:1e2c7439b3edbd59afa7a765ca5a9b220793df996d45934f058e23dc4d8c1284"
+    },
+    "/openwiki/tower/bosses-and-story.md": {
+      "pageVersion": "sha256:558b93ea79ae4dac12b1a956e9fcb37be756a65bce825e7eee2859469810c804",
+      "completedBy": "antigravity",
+      "completedRunId": "b5f7ca45-be2f-4242-95e4-50369fe33b01",
+      "gitHead": "445754965c5690cd25998b097c2bb831b11575e2",
+      "sourceFingerprint": "sha256:1e2c7439b3edbd59afa7a765ca5a9b220793df996d45934f058e23dc4d8c1284"
+    },
+    "/openwiki/tower/crawl-and-spatial.md": {
+      "pageVersion": "sha256:c78796a71e4585735f1f287f936cf401cd2493210a920813bf7f96f318648922",
+      "completedBy": "antigravity",
+      "completedRunId": "b5f7ca45-be2f-4242-95e4-50369fe33b01",
+      "gitHead": "445754965c5690cd25998b097c2bb831b11575e2",
+      "sourceFingerprint": "sha256:1e2c7439b3edbd59afa7a765ca5a9b220793df996d45934f058e23dc4d8c1284"
+    }
+  }
+}

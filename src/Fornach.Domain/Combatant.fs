@@ -77,6 +77,21 @@ type Combatant =
   /// Combatant level derived from progression profile
   member this.Level = this.Progression.Level
 
+  /// Attacks of opportunity the combatant may answer per round: one per flanker, +1 per ten levels
+  /// after level 20, capped at 8 (the eight tiles surrounding a fully encircled combatant).
+  member this.AttackOfOpportunityCapacity = Math.Clamp((this.Level - 20) / 10, 0, 8)
+
+  /// Spell armor bonus percentage (0.0 to 0.80) for magic classes based on progression level.
+  /// Starts at level 50 (5%), increasing by 5% every 10 levels, capping at 80% at level 200.
+  member this.SpellArmorBonus : float =
+    if this.Plane = Mental then
+      if this.Level < 50 then 0.0
+      else
+        let steps = (this.Level - 40) / 10
+        Math.Clamp(Math.Round(float steps * 0.05, 2), 0.05, 0.80)
+    else
+      0.0
+
   /// Operative combat plane (Physical or Mental).
   /// Respects character class plane, or detects dominance for untyped combatants.
   member this.Plane : Plane =
@@ -119,26 +134,35 @@ type Combatant =
     int (Math.Round(float penalized * this.EffectiveDefenseMultiplier))
 
   /// Retrieves a stance-adjusted stat for opposed combat resolution: adopting a stance boosts
-  /// the stats of its vector and penalizes the plane's other vectors. Canonical `GetStat` and
-  /// `Stats` remain stance-neutral; this is the combat-only view used by ActionResolver.
+  /// the stats of its vector (+25%) and penalizes off-vector offensive stats (-25%) while preserving guard.
+  /// Canonical `GetStat` and `Stats` remain stance-neutral; this is the combat-only view used by ActionResolver.
   member this.GetCombatStat(stat: StatId) =
     let baseValue = this.GetStat stat
 
     let stanceVector =
-      match this.Stance with
-      | CombatStance.PowerStance -> Vector.Power
-      | CombatStance.AgilityStance -> Vector.Agility
-      | CombatStance.DisciplineStance -> Vector.Discipline
+      if this.Plane = Mental then
+        match this.ComplexForm with
+        | Some form -> form.Vector
+        | None ->
+          match this.Stance with
+          | CombatStance.PowerStance -> Vector.Power
+          | CombatStance.AgilityStance -> Vector.Agility
+          | CombatStance.DisciplineStance -> Vector.Discipline
+      else
+        match this.Stance with
+        | CombatStance.PowerStance -> Vector.Power
+        | CombatStance.AgilityStance -> Vector.Agility
+        | CombatStance.DisciplineStance -> Vector.Discipline
 
     let descriptor = Attributes.descriptorOf stat
 
     if descriptor.Plane <> this.Plane then
       baseValue
     elif descriptor.Vector = stanceVector then
-      Math.Max(1, int (Math.Round(float baseValue * 1.10)))
+      Math.Max(1, int (Math.Round(float baseValue * 1.25)))
     elif descriptor.Orientation = Offense then
       // Trade-off: the plane's other vectors lose offensive sharpness, but keep their guard.
-      Math.Max(1, int (Math.Round(float baseValue * 0.90)))
+      Math.Max(1, int (Math.Round(float baseValue * 0.75)))
     else
       baseValue
 

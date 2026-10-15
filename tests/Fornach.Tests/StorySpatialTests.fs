@@ -117,6 +117,21 @@ module StorySpatialTests =
 
   [<Fact>]
   let ``Scavenging battered chest awakens distinct combat archetypes with starting weapons and caltrops`` () =
+    let fighter = StoryBosses.createProloguePlayer "fighter"
+    Assert.Equal(CharacterClass.Fighter, fighter.Class)
+    Assert.Equal(CombatStance.PowerStance, fighter.Stance)
+    Assert.Contains("Sword", fighter.EquippedItems.Head.Name)
+    Assert.True(fighter.EquippedItems |> List.exists (fun it -> it.Name = "Reinforced Shield"))
+    Assert.True(fighter.EquippedItems |> List.exists (fun it -> it.Name = "Sharpened Caltrops"))
+
+    let mage = StoryBosses.createProloguePlayer "mage"
+    Assert.Equal(CharacterClass.Mage, mage.Class)
+    Assert.Equal(CombatStance.PowerStance, mage.Stance)
+    Assert.Equal(Some ComplexForm.ResonanceSpike, mage.ComplexForm)
+    Assert.Contains("Staff", mage.EquippedItems.Head.Name)
+    Assert.True(mage.EquippedItems |> List.exists (fun it -> it.Name = "Weaver's Runic Robes"))
+    Assert.True(mage.EquippedItems |> List.exists (fun it -> it.Name = "Sharpened Caltrops"))
+
     let berserker = StoryBosses.createProloguePlayer "berserker"
     Assert.Equal(CharacterClass.Berserker, berserker.Class)
     Assert.Equal(CombatStance.PowerStance, berserker.Stance)

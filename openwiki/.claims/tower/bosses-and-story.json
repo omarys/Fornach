@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:558b93ea79ae4dac12b1a956e9fcb37be756a65bce825e7eee2859469810c804",
+  "claims": [
+    {
+      "id": "claim_e94237005a0a42af803f403eaa131a67",
+      "statement": "The narrative arc pits the player against five manifestations of psychological grief: Denial (Shrouded Grove), Anger (Basalt Caldera), Bargaining (Shattered Promontory), Depression (Sunken Metropolis), and Acceptance (White Meadow).",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Domain/Bosses.fs#L54-L316",
+          "version": "repo-lines-v1:sha256:ab762e20919a2391c9068222de78ef35c9cecc264c431a3a748bc355e16eeadb:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYzLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIyMjUxNDQwN2RhMzZmMDM4MTBlMGRmNTA0Nzk3NzlhZDA3ZTRmY2Q1YjJlM2U3NDNlM2E3ZjUzOWU4N2QzNDFiIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJiZmYxNTlmYWVjZGExOWQzMzZhMDk0NjM1ZWE1ZWFhMzMyODIyYjkyZGNmNzA0YjYwYTk0MDYxYTBiNDk4MzYzIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIzMjdkNjMyYjg2OWU5MTk1ZGQyMDUzY2RiMzhiNDliYzYyYzNiNzFjNGY5Mjc5NDQ2ZGM3ZmZiNjFkZjcxNDJmIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIxYzgwYWE2MGE2YzMzNzgzZWJhNGEzMzM5ODRjYzA2Zjg0ZTA4MmQyOTE2ZDU1N2IzN2I5Y2UyMDk5MTJhOGI2In0"
+        }
+      ]
+    },
+    {
+      "id": "claim_63ebc7620d7a45708d87d4925658a51f",
+      "statement": "Aspect of Denial uses Agility and Acuity with mirror clone decoys and illusion veils that inflict Confusion.",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Domain/Bosses.fs#L54-L112",
+          "version": "repo-lines-v1:sha256:d51c40b843ad9f34c676e61c8d6a8a8dfc417ee59df063e970f8cb0a001439d6:eyJzZWxlY3RlZExpbmVDb3VudCI6NTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIyNTE0NDA3ZGEzNmYwMzgxMGUwZGY1MDQ3OTc3OWFkMDdlNGZjZDViMmUzZTc0M2UzYTdmNTM5ZTg3ZDM0MWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMyN2Q2MzJiODY5ZTkxOTVkZDIwNTNjZGIzOGI0OWJjNjJjM2I3MWM0ZjkyNzk0NDZkYzdmZmI2MWRmNzE0MmYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdlZWM3MmQxNWMzOGRiNjJhM2E1YTAzNDY4NWI4ODA1YmIyZTg4NjMwZDkyNjU4YzcxZTc4ZmFkZjBkZTBjM2QifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4630898cc0c14f4d82d2b7ff780a9242",
+      "statement": "Aspect of Anger wields massive kinetic Force (270) with zero Composure, trading defense for violent Recklessness and bleed procs.",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Domain/Bosses.fs#L114-L161",
+          "version": "repo-lines-v1:sha256:c5fe34999995dea434982d7ea596cd14503b464a402d7558275561168aa1e3ae:eyJzZWxlY3RlZExpbmVDb3VudCI6NDgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJmNGM3ZjFmNTk3OTk1ZDkzNGIxMzg4MzY3ZmRjZTk3OGEwZmIyMzJmMDAyMzJmNWU2NGEwNmI1OGQ4MzMwMDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVhMGQ0YmY1MWY4NjIyYzM0NzgxN2VkZTBlNzYwZjRiNmJlMmM3OTcyZGJmNzk0NGZkYWMyNmU5ZDIyNTExOTciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE0ZWUwZTQ3N2UwOWE2Y2JkMDE1MDdhZmE0YmMzYjZlNzE2YjE5MTk5YzhjMjNhMmJjZWM4YzRmOTdmODM5ODgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b67fad468b424bd987010685ab16b7fc",
+      "statement": "Aspect of Depression features colossal defensive fortitude and resolve (320) with the Anchor of Apathy, actively draining player stamina through Exhaustion.",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Domain/Bosses.fs#L211-L258",
+          "version": "repo-lines-v1:sha256:ae912e71356ace5536e680183d5f1b142d40d062d01b56993bc57f239273b4f0:eyJzZWxlY3RlZExpbmVDb3VudCI6NDgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI1NTVkYTdjOTVhYTRhZmY4NWIzMTYyMTE1M2I5OWFlYzY4YzAxZjM5NDc4ZmEzZmMxN2VlMGJiNWM3NjlmYWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI0YzM2NTViYzgzYzg3MGNhZThhYTc5NDk0YTQ1NDI4ZDU0ZjM0OTgyODI5YjQ0MjJlMTJhZWQzZTg4ZDJlZDIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM0NzZlN2Q2OWFlOTc0NWFhMzhiMTRmYWU3OTUxZjdkYjYyOTE4OWMxOWE2MDM2MzVmMDcwNzUzYzAxMDg0ZDQifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-15T19:23:52.290Z"
+  }
+}

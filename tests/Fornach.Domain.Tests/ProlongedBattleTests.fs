@@ -10,18 +10,24 @@ module ProlongedBattleTests =
   let fixedRoller (rollVal: int) : DiceRoller =
     fun _ _ -> rollVal
 
+  let private fighterStats force fort finesse reflex prowess poise =
+    StatBlock.Create [
+      Force, force; Fortitude, fort
+      Finesse, finesse; Reflex, reflex
+      Prowess, prowess; Poise, poise
+      Intellect, force; Resolve, fort
+      Acuity, finesse; Intuition, reflex
+      Acumen, prowess; Composure, poise
+    ]
+
   let createFighter force fort finesse reflex prowess poise =
-    let id = CombatantId.New()
-    let stats =
-      StatBlock.Create [
-        Force, force; Fortitude, fort
-        Finesse, finesse; Reflex, reflex
-        Prowess, prowess; Poise, poise
-        Intellect, force; Resolve, fort
-        Acuity, finesse; Intuition, reflex
-        Acumen, prowess; Composure, poise
-      ]
-    Combatant.create id "TestFighter" 2000 2000 stats
+    Combatant.create (CombatantId.New()) "TestFighter" 2000 2000 (fighterStats force fort finesse reflex prowess poise)
+
+  /// Same stat spread at an explicit progression level — the Attack of Opportunity budget scales
+  /// with level, so AoO tests need a leveled defender.
+  let createFighterAtLevel level force fort finesse reflex prowess poise =
+    Combatant.createWithClass (CombatantId.New()) "TestFighter" 2000 2000
+      (fighterStats force fort finesse reflex prowess poise) CharacterClass.Warrior level
 
   [<Fact>]
   let ``Force strike with high disparity inflicts greater Exhaustion than even match`` () =
@@ -253,7 +259,7 @@ module ProlongedBattleTests =
   let ``Agile or Disciplined defender triggers Attack of Opportunity on flank attempt and defuses strike`` () =
     let roller = fixedRoller 1 // triggers AoO and passives
     let noviceFlanker = createFighter 40 40 30 30 30 30
-    let fencerDefender = createFighter 50 50 140 130 90 85
+    let fencerDefender = createFighterAtLevel 100 50 50 140 130 90 85
 
     let res = ActionResolver.resolveEx roller (StandardAttack (ForceStrike false)) noviceFlanker fencerDefender 2
 
@@ -275,7 +281,7 @@ module ProlongedBattleTests =
     let roller = fixedRoller 1
     let attacker = createFighter 40 40 50 50 50 50
     // High Force & Fortitude, but lower Finesse and Prowess than attacker
-    let brute = createFighter 200 200 40 40 40 40
+    let brute = createFighterAtLevel 100 200 200 40 40 40 40
 
     let res = ActionResolver.resolveEx roller (StandardAttack (ForceStrike false)) attacker brute 2
 
@@ -332,7 +338,7 @@ module ProlongedBattleTests =
   let ``Defensive penalties from encirclement and fatigue degrade Attack of Opportunity trigger chance`` () =
     let roller = fixedRoller 60 // mid-high roll (60 on d100)
     let flanker = createFighter 45 40 30 30 30 30
-    let fencer = createFighter 50 50 140 130 90 85
+    let fencer = createFighterAtLevel 100 50 50 140 130 90 85
 
     // Case 1: Fresh defender on initial flank (priorDefenses = 1, 0 exhaustion)
     // Base chance is ~77%, penalty is ~5%, effective chance ~72% >= 60 -> Triggers!
@@ -355,28 +361,74 @@ module ProlongedBattleTests =
     Assert.False(burdenedAoO, "Burdened defender with encirclement and fatigue penalties should NOT trigger AoO on roll of 60")
 
   [<Fact>]
-  let ``Finesse stance receives penalty to Attack of Opportunity compared to Prowess stance`` () =
+  let ``Attack of opportunity reads its vector from stat disparity rather than the shifting stance`` () =
     // Mid-high roll of 60 on d100
     let roller = fixedRoller 60
     let flanker = createFighter 45 40 30 30 30 30
+    let aooVector (res: ActionResult) =
+      res.Events
+      |> List.tryPick (function CombatEvent.AttackOfOpportunityTriggered (_, _, vec, _, _) -> Some vec | _ -> None)
 
-    // Equal disparity stats for Finesse and Prowess (140 vs 30)
-    let prowessMaster = { createFighter 50 50 90 85 140 130 with Stance = CombatStance.DisciplineStance }
-    let finesseDuelist = { createFighter 50 50 140 130 90 85 with Stance = CombatStance.AgilityStance }
+    // Disparity is 140 vs 30 either way; the stance is deliberately mismatched with it, because
+    // stances now shift automatically with whatever was last attacked with.
+    let disciplineDominant = { createFighterAtLevel 100 50 50 90 85 140 130 with Stance = CombatStance.AgilityStance }
+    let agilityDominant = { createFighterAtLevel 100 50 50 140 130 90 85 with Stance = CombatStance.DisciplineStance }
 
-    // Case 1: Prowess master on initial flank has ~73% effective chance >= 60 -> Triggers!
-    let resProwess = ActionResolver.resolveEx roller (StandardAttack (ForceStrike false)) flanker prowessMaster 1
-    let prowessAoO =
-      resProwess.Events
-      |> List.exists (function CombatEvent.AttackOfOpportunityTriggered _ -> true | _ -> false)
-    Assert.True(prowessAoO, "Prowess master without stance penalty should trigger AoO on roll of 60")
+    // A Prowess-dominant defender in an Agility stance still ripostes with Discipline, and is not
+    // taxed for the mismatch (the old Agility-stance tunnel-vision penalty is gone).
+    let resDiscipline = ActionResolver.resolveEx roller (StandardAttack (ForceStrike false)) flanker disciplineDominant 1
+    Assert.Equal(Some "Discipline", aooVector resDiscipline)
 
-    // Case 2: Finesse duelist on identical flank suffers -20% tunnel-vision stance penalty (~53% effective chance < 60) -> Fails to trigger!
-    let resFinesse = ActionResolver.resolveEx roller (StandardAttack (ForceStrike false)) flanker finesseDuelist 1
-    let finesseAoO =
-      resFinesse.Events
-      |> List.exists (function CombatEvent.AttackOfOpportunityTriggered _ -> true | _ -> false)
-    Assert.False(finesseAoO, "Finesse duelist with -20% stance penalty should NOT trigger AoO on roll of 60")
+    // The mirror case: Finesse-dominant in a Discipline stance ripostes with Agility.
+    let resAgility = ActionResolver.resolveEx roller (StandardAttack (ForceStrike false)) flanker agilityDominant 1
+    Assert.Equal(Some "Agility", aooVector resAgility)
+
+  [<Fact>]
+  let ``Attack of opportunity capacity is one per ten levels after 20 and caps at eight`` () =
+    let capacity level = (createFighterAtLevel level 50 50 50 50 50 50).AttackOfOpportunityCapacity
+
+    Assert.Equal(0, capacity 1)
+    Assert.Equal(0, capacity 20)
+    Assert.Equal(1, capacity 30)
+    Assert.Equal(4, capacity 60)
+    Assert.Equal(7, capacity 90)
+    Assert.Equal(8, capacity 100)
+    Assert.Equal(8, capacity 200)
+
+  [<Fact>]
+  let ``Attack of opportunity budget is spent one flanker at a time and stops at capacity`` () =
+    let roller = fixedRoller 1 // always triggers while the budget allows
+    let flanker = createFighter 40 40 30 30 30 30
+    // Level 40 -> capacity 2
+    let defender = createFighterAtLevel 40 50 320 140 130 90 85
+
+    let aoo (priorDefenses: int) =
+      ActionResolver.resolveEx roller (StandardAttack (ForceStrike false)) flanker defender priorDefenses
+      |> fun res ->
+        res.Events
+        |> List.filter (function CombatEvent.AttackOfOpportunityTriggered _ -> true | _ -> false)
+        |> List.length
+
+    Assert.Equal(1, aoo 1)
+    Assert.Equal(1, aoo 2)
+    Assert.Equal(0, aoo 3) // capacity reached, remaining flankers strike unanswered
+
+  [<Fact>]
+  let ``Fully surrounded level 100 defender answers eight flankers and no more`` () =
+    let roller = fixedRoller 1
+    let flanker = createFighter 40 40 30 30 30 30
+    let grandmaster = createFighterAtLevel 100 50 320 140 130 90 85
+
+    let aoo (priorDefenses: int) =
+      ActionResolver.resolveEx roller (StandardAttack (ForceStrike false)) flanker grandmaster priorDefenses
+      |> fun res ->
+        res.Events
+        |> List.filter (function CombatEvent.AttackOfOpportunityTriggered _ -> true | _ -> false)
+        |> List.length
+
+    Assert.Equal(1, aoo 1)
+    Assert.Equal(1, aoo 8) // the eighth adjoining tile is still answered
+    Assert.Equal(0, aoo 9) // a ninth attacker is beyond the eight tiles
 
   [<Fact>]
   let ``Power Stance Cleave damages adjacent targets and scales Recklessness by stat disparity`` () =
@@ -782,3 +834,55 @@ module ProlongedBattleTests =
     Assert.True(m.CognitiveFatigue.Value < 50, "CenterMind should drain CognitiveFatigue")
     Assert.True(m.Provoke.Value < 50, "CenterMind should drain Provoke")
     Assert.True(m.Frustration.Value < 50, "CenterMind should drain Frustration")
+
+  [<Fact>]
+  let ``Fluid Stances automatically transition based on the last physical attack issued`` () =
+    let roller = fixedRoller 6
+    let initialFighter = { createFighter 100 100 100 100 100 100 with Stance = CombatStance.PowerStance }
+    let target = createFighter 100 100 100 100 100 100
+
+    // 1. Issuing FinesseCadence shifts actor from PowerStance to AgilityStance
+    let resAgility = ActionResolver.resolve roller (StandardAttack (FinesseCadence false)) initialFighter target
+    Assert.Equal(CombatStance.AgilityStance, resAgility.Actor.Stance)
+    let shiftedToAgility =
+      resAgility.Events
+      |> List.exists (function CombatEvent.StanceShifted(_, CombatStance.PowerStance, CombatStance.AgilityStance) -> true | _ -> false)
+    Assert.True(shiftedToAgility, "Should emit StanceShifted to AgilityStance")
+
+    // 2. Issuing ProwessStrike shifts actor from AgilityStance to DisciplineStance
+    let resDiscipline = ActionResolver.resolve roller (StandardAttack (ProwessStrike false)) resAgility.Actor target
+    Assert.Equal(CombatStance.DisciplineStance, resDiscipline.Actor.Stance)
+    let shiftedToDiscipline =
+      resDiscipline.Events
+      |> List.exists (function CombatEvent.StanceShifted(_, CombatStance.AgilityStance, CombatStance.DisciplineStance) -> true | _ -> false)
+    Assert.True(shiftedToDiscipline, "Should emit StanceShifted to DisciplineStance")
+
+    // 3. Issuing ForceStrike shifts actor from DisciplineStance to PowerStance
+    let resPower = ActionResolver.resolve roller (StandardAttack (ForceStrike false)) resDiscipline.Actor target
+    Assert.Equal(CombatStance.PowerStance, resPower.Actor.Stance)
+    let shiftedToPower =
+      resPower.Events
+      |> List.exists (function CombatEvent.StanceShifted(_, CombatStance.DisciplineStance, CombatStance.PowerStance) -> true | _ -> false)
+    Assert.True(shiftedToPower, "Should emit StanceShifted to PowerStance")
+
+  [<Fact>]
+  let ``Fluid Complex Forms automatically thread based on the last arcane spell issued`` () =
+    let roller = fixedRoller 6
+    let initialMage = { createMage 100 100 100 100 100 100 with ComplexForm = None }
+    let target = createMage 100 100 100 100 100 100
+
+    // 1. Issuing ArcaneCataclysm threads ResonanceSpike
+    let resResonance = ActionResolver.resolve roller (StandardAttack (ArcaneCataclysm false)) initialMage target
+    Assert.Equal(Some ComplexForm.ResonanceSpike, resResonance.Actor.ComplexForm)
+    let threadedResonance =
+      resResonance.Events
+      |> List.exists (function CombatEvent.ComplexFormThreaded(_, None, ComplexForm.ResonanceSpike) -> true | _ -> false)
+    Assert.True(threadedResonance, "Should emit ComplexFormThreaded to ResonanceSpike")
+
+    // 2. Issuing SynapticGlamour threads PhantasmalDiffusion
+    let resDiffusion = ActionResolver.resolve roller (StandardAttack (SynapticGlamour false)) resResonance.Actor target
+    Assert.Equal(Some ComplexForm.PhantasmalDiffusion, resDiffusion.Actor.ComplexForm)
+
+    // 3. Issuing RunicWardTrap threads AegisLattice
+    let resAegis = ActionResolver.resolve roller (StandardAttack (RunicWardTrap false)) resDiffusion.Actor target
+    Assert.Equal(Some ComplexForm.AegisLattice, resAegis.Actor.ComplexForm)

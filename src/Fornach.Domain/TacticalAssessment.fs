@@ -29,6 +29,7 @@ type TacticalAssessment =
     WeakestDefense: StatId * int
     Headline: string
     PrimarySummary: string
+    ThreatWarning: string option
     VulnerabilitySummary: string option
     StrategicAdvice: string }
 
@@ -119,6 +120,44 @@ module TacticalAssessment =
         | _ -> "Target their defensive opening."
       sprintf "Primary threat: %A (%d). %s" bestS bestVal counterAdvice
 
+  /// Generates a tactical threat warning describing the enemy's apex offensive strength
+  let generateThreatWarning (bestOffense: StatId * int) (insight: TacticalInsightLevel) : string option =
+    let (stat, value) = bestOffense
+    match insight with
+    | Obscured -> None
+    | Discerning ->
+      let approxLow = Math.Max(1, value - 20)
+      let approxHigh = value + 20
+      let hint =
+        match stat with
+        | StatId.Force -> "Heavy kinetic cleaves risk shredding armor & inflicting severe overwhelm."
+        | StatId.Finesse -> "Rapid probing cadences threaten critical hit strikes."
+        | StatId.Prowess -> "Disciplined martial reach threatens reactive counter-strikes."
+        | StatId.Intellect -> "Arcane mind-shocks bypass armor to strike morale directly."
+        | StatId.Acuity -> "Sensory glamour and deceptive static threaten confusion."
+        | StatId.Acumen -> "Tactical interrogation threatens posture and frustration."
+        | _ -> "Formidable offensive striking capability."
+      Some (sprintf "⚠ THREAT DETECTED: Favors %A (~%d-%d) — %s" stat approxLow approxHigh hint)
+    | Keen | Penetrating ->
+      let prefix = if insight = Penetrating then "⚠ APEX THREAT (CRITICAL)" else "⚠ APEX THREAT"
+      let warning =
+        match stat with
+        | StatId.Force ->
+          sprintf "Colossal Force (%d) — Massive kinetic cleaves will shred Armor and inflict crushing Overwhelm. Evade with Agility Stance or mitigate with Bastion control!" value
+        | StatId.Finesse ->
+          sprintf "Deadly Finesse (%d) — Swift multi-strike cadences exploit vital openings for high critical damage. Close openings with high Poise or Discipline guard!" value
+        | StatId.Prowess ->
+          sprintf "Martial Prowess (%d) — Masterful tactical timing enables reactive opportunity attacks and disarms. Maintain steady form and avoid reckless gambits!" value
+        | StatId.Intellect ->
+          sprintf "Dread Intellect (%d) — Psionic mind-shocks completely bypass physical Armor to damage Morale directly! Raise Arcane Wards or eliminate swiftly!" value
+        | StatId.Acuity ->
+          sprintf "Sensory Acuity (%d) — Blinding phantasms and neural static provoke acute Confusion and mirror illusions. Maintain steady breathing!" value
+        | StatId.Acumen ->
+          sprintf "Dialectical Acumen (%d) — Interrogative pressure and runic wardcraft destabilize combat tempo and spike Frustration. Break their guard decisively!" value
+        | _ ->
+          sprintf "Formidable %A (%d) — Prepare for heavy offensive pressure." stat value
+      Some (sprintf "%s: %s" prefix warning)
+
   /// Evaluates an observer's tactical assessment of a target combatant
   let assess (observer: Combatant) (target: Combatant) : TacticalAssessment =
     let effAcumen = calculateEffectiveScrutiny observer
@@ -159,6 +198,7 @@ module TacticalAssessment =
         sprintf "Favors %A-leaning posture (Exact stat masked by Composure)" desc.Vector,
         None
 
+    let threatWarn = generateThreatWarning bestOff insightLevel
     let advice = generateAdvice (bestStat, bestVal) weakestDef insightLevel
 
     { ObserverId = observer.Id
@@ -175,6 +215,7 @@ module TacticalAssessment =
       WeakestDefense = weakestDef
       Headline = headline
       PrimarySummary = primarySummary
+      ThreatWarning = threatWarn
       VulnerabilitySummary = vulnSummary
       StrategicAdvice = advice }
 

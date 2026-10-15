@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:f4d1aca1e2da6bdcca4d2a3f3daa070eaf3e909e44e438299e181925b4306a0d",
+  "claims": [
+    {
+      "id": "claim_0e8c7365119242e794c4085cc324fed7",
+      "statement": "The 12-stat vector matrix is organized into two planes (Physical and Mental) across three vectors (Power, Agility, Discipline) with paired Offense and Defense attributes.",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Domain/Attributes.fs#L7-L22",
+          "version": "repo-lines-v1:sha256:8796583c6fa61b21fec53b42ca2727b4a3b39b39257fd94cc1fb68c954e8e4d3:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZjMwY2ZlZjZkNmYzYzNhNGMxODAwZmRkOGI2YzA4NzRmN2ZhZmM2YTVjMWVmM2ZjYjIyZTMzZGFiMDVlN2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI5NDNlZDM4NzZkZDhhNGUyODA2ZDNmNWM3NjViZjUxYWVkNTNmNzQ3OTAzMTU5NTIyYzkzOTE5MDJkNzkyZDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjUyNWU0MGQxNGFjMDcwOTQyNjNiNDgwY2E3ODE1OWUxZTA5YjdkYmFiNjU3MWU2MGI2MmJlZmE3NzU4MTk4NGEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b0a5e8b33cba401ab218c926ad3c5abe",
+      "statement": "Mental stats double as social combat attributes with mapped social nomenclature: Intellect (Presence), Resolve (Will), Acuity (Guile), Intuition (Insight), Acumen (Leverage), Composure (Poise).",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Domain/Attributes.fs#L84-L133",
+          "version": "repo-lines-v1:sha256:6a800a7baa2e484a87dc024cd9ee9a83d4b0fc223c9f665fbf29c2381ecb800f:eyJzZWxlY3RlZExpbmVDb3VudCI6NTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY3ODk2MDdhOWE0NDYzYzY1NzFjZmMwMmYwNmJiMTJhMmJkMzA3NDIzYjJlMmVkNGNiNGQ3MGQwNWE5YjUzNTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAyYWY3ZGMzOWVhYWM0NGE2ZTNjZjM3NzJjMjE0NjZiMDZmMDU2OWRkZWZjYTkwNGEyYjdmOTIwOWM5YTRkODgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM3OGYwNjFmYzI5ZmQzNWU5ZGU4ZDE4OTJiMzliMjE2ZThiMzgzYmQ0MThmZmE3ZjY5ZGM3Y2Q3OGE0MWE2YTQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c92492d9ef464baaa917d30664d629b9",
+      "statement": "Opposed contests determine pool sizes between 4 and 20 d6 dice scaled by relative stat ratios, supplemented by deterministic floor hits granted at 1 per 15 stat points.",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Engine/DicePool.fs#L29-L39",
+          "version": "repo-lines-v1:sha256:a13f0db5167da4b3eab9bb3d879247f81f56db63982a0aa15dc92703160f17ea:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI0NTdhYzllNzA3OTNjOGQ2NzUzNzViZDQ5MmZiNTljMGVmNGY2MDk4YTJhMzU5NjM4M2UzMmU4MjFhN2UxMmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJiZGFkMjkxN2YyODEwZTNjN2JjMjI5Y2RlYjMwOWY3MmM4MzJmY2JkZmFkODg0NjYzZjhjMjFlMWVjNjZhNTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc4MjExY2QzMzExYTM3MjU4MDkxZDA2NjU5M2E1NDI1MzQ1ZTU4ZmU2MDkxZmJlZmUzM2FmZTFjZjY4Y2VmZGYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8b60c3967fcd4a2893b18ad3ef64d249",
+      "statement": "Dice pool vectors evaluate distinct hit mechanics: Power counts 5 as 1 hit and 6 as 2 hits; Agility scores hits on 4+; Discipline scores hits on 4+ and rerolls 1s using Study Stacks.",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Engine/DicePool.fs#L40-L77",
+          "version": "repo-lines-v1:sha256:36f839f004745659863c1cad6bc2668fffc77019556551f5ae82e098353302ed:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRlYjhiZTZiZWQ0NWFmNTk2ZmFkMWYzMDhhZTljZjFiOTBiNjc3MDIyODY3NTc3ZGIwNmUxMWNlOTAyMjdkMDgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRiNzhmNTY3ZmRjNDJjMGQzYWU2NmU4ZTUxNmIxMjY3MGJhMmU4ZTE2ZGExYTRlZWE5MmMwMDZjZjQ1YWViNGYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYwZmU3YzgzMjU0Zjk5NTE5NjZkMTI1NDlhNDk1YjVlZDYwNzcxMGI4OWNiNjMzNThmZWIyNDYzNTE5YTQyZWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc5NTE4NzNiMjY3NTY3NWRjNjA4MjRhZTVmN2VhMzE4N2U1N2UwNjUxZmYxMzE3NmQ1OGE4ZjE5Yjc3YzVmNzUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-15T19:23:52.290Z"
+  }
+}

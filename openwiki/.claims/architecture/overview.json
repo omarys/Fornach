@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:f2f4be6d0e65099c3ee2fda92de5ef494b07e7e2a9dabf9ca6eb6ab99fa1c40a",
+  "claims": [
+    {
+      "id": "claim_404315b275884703baf640e6cc4ae66a",
+      "statement": "Fornach is structured as a .NET 10 F# solution consisting of 5 source projects (Spatial, Domain, Engine, Story, Cli) and 3 test suites with clear directional dependencies.",
+      "evidence": [
+        {
+          "resource": "repo://Fornach.slnx#L1-L14",
+          "version": "repo-lines-v1:sha256:6ce4fa7cdb3ade25d50b124db81dcc142dddd9132710a7d4f1ad1834386d356f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlhNTliZmRiNDcwNjA1ZWY5NTI3MmE3ZjE4MmNlNTVmZjNlMjRhZjhmYjhkZGJkNzE5NTMxOGFhYzc4NDJiNzYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU2YjAzNmJmMjE4ZWQ1YzZiNTk3M2UzZWVlMGMxNWU0YTlkN2MzYzczYWM3Zjc1OWYyMzExNzA5MmU1MGNlYzIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e6fdc3e09a034500a6e3e61e3107025b",
+      "statement": "Fornach.Domain models the 12-stat matrix, status meters, combatants, tactical assessments, and bestiary, depending strictly on Fornach.Spatial for coordinates.",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Domain/Fornach.Domain.fsproj#L7-L59",
+          "version": "repo-lines-v1:sha256:4701eca521b4e657a1686648c10033208b2f649e2873cec1096e53c08261edc6:eyJzZWxlY3RlZExpbmVDb3VudCI6NTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNjYmViZmI0NmYxMjk5MWFlNDg4ZWVkYjM0MTQwMjlhYjFmOTgwN2NkYzA5ZWYwNmYzZDEwYWM5NmIyODZiZTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdkZGMxNTliYjU5NzQ5OGY1MjJlNzkzNWM4MTIxN2JlZTI3OTcyODZlMDNkNmRlYWQ2YWUxZDUyNjI1ZTdlNjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNlNjdkNDBlMzc5ZDE5NTk0ZGI3MjMwMTI1YjZhMWUzNjk4NGUyMTExYTY3NDk0NjM3OTI5NDIzMTc1YzU1MjEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjljYWVkMTZhZDM5ZjAxMDM2YTFmOTUyNjU2YjhiZjJlMjQ3YTIyNjZmNTVjNjhlZjUwMjkwNTk0YmU1NzgxMzkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_baa8eb5000c94486ba710af451ed97c8",
+      "statement": "Fornach.Engine implements combat actions, dice pools, contest mechanics, and procedural tower generation, depending upon Fornach.Domain.",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Engine/Fornach.Engine.fsproj#L8-L23",
+          "version": "repo-lines-v1:sha256:66bd84aedf55bbf2f94109c382cf31a36c7d6eddb682ed73e681c1c2a060d7e2:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNjYmViZmI0NmYxMjk5MWFlNDg4ZWVkYjM0MTQwMjlhYjFmOTgwN2NkYzA5ZWYwNmYzZDEwYWM5NmIyODZiZTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNlNjdkNDBlMzc5ZDE5NTk0ZGI3MjMwMTI1YjZhMWUzNjk4NGUyMTExYTY3NDk0NjM3OTI5NDIzMTc1YzU1MjEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjljYWVkMTZhZDM5ZjAxMDM2YTFmOTUyNjU2YjhiZjJlMjQ3YTIyNjZmNTVjNjhlZjUwMjkwNTk0YmU1NzgxMzkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a5fc4ff1efa440ed95ff039c1bba3160",
+      "statement": "Fornach.Cli serves as the console entrypoint with Spectre.Console UI rendering, dependent upon Domain, Engine, and Story layers.",
+      "evidence": [
+        {
+          "resource": "repo://src/Fornach.Cli/Fornach.Cli.fsproj#L21-L30",
+          "version": "repo-lines-v1:sha256:e22fb90a3bf902842a554edfda614243f089d8a10cf13211489cdf98dce29d41:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNjYmViZmI0NmYxMjk5MWFlNDg4ZWVkYjM0MTQwMjlhYjFmOTgwN2NkYzA5ZWYwNmYzZDEwYWM5NmIyODZiZTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ4YjlmOTFhNWFlMjJhMWI5NGMzY2FjNmM3ZTM1MmU0NTAyMjA2YmM5YjhiZDRiYzgzNTU3MGQ2ZmM3M2EyOGMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjljYWVkMTZhZDM5ZjAxMDM2YTFmOTUyNjU2YjhiZjJlMjQ3YTIyNjZmNTVjNjhlZjUwMjkwNTk0YmU1NzgxMzkifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-15T19:23:52.290Z"
+  }
+}

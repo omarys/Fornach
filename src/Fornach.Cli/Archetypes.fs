@@ -12,6 +12,8 @@ module Archetypes =
   let createClassTier (cls: CharacterClass) (tier: CombatTier) () =
     TierFactory.createClassTier cls tier
 
+  let createVeteranFighter () = TierFactory.createClassTier CharacterClass.Fighter CombatTier.Veteran
+  let createVeteranMage () = TierFactory.createClassTier CharacterClass.Mage CombatTier.Veteran
   let createVeteranBerserker () = TierFactory.createClassTier CharacterClass.Berserker CombatTier.Veteran
   let createVeteranDuelist () = TierFactory.createClassTier CharacterClass.Duelist CombatTier.Veteran
   let createVeteranWarden () = TierFactory.createClassTier CharacterClass.Warden CombatTier.Veteran
@@ -19,6 +21,8 @@ module Archetypes =
   let createVeteranMesmer () = TierFactory.createClassTier CharacterClass.Mesmer CombatTier.Veteran
   let createVeteranAbjurer () = TierFactory.createClassTier CharacterClass.Abjurer CombatTier.Veteran
 
+  let createMasterFighter () = TierFactory.createClassTier CharacterClass.Fighter CombatTier.Master
+  let createMasterMage () = TierFactory.createClassTier CharacterClass.Mage CombatTier.Master
   let createMasterBerserker () = TierFactory.createClassTier CharacterClass.Berserker CombatTier.Master
   let createMasterDuelist () = TierFactory.createClassTier CharacterClass.Duelist CombatTier.Master
   let createMasterWarden () = TierFactory.createClassTier CharacterClass.Warden CombatTier.Master
@@ -26,6 +30,8 @@ module Archetypes =
   let createMasterMesmer () = TierFactory.createClassTier CharacterClass.Mesmer CombatTier.Master
   let createMasterAbjurer () = TierFactory.createClassTier CharacterClass.Abjurer CombatTier.Master
 
+  let createGrandMasterFighter () = TierFactory.createClassTier CharacterClass.Fighter CombatTier.GrandMaster
+  let createGrandMasterMage () = TierFactory.createClassTier CharacterClass.Mage CombatTier.GrandMaster
   let createGrandMasterBerserker () = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
   let createGrandMasterInquisitor () = TierFactory.createClassTier CharacterClass.Inquisitor CombatTier.GrandMaster
   let createGrandMasterDuelist () = TierFactory.createClassTier CharacterClass.Duelist CombatTier.GrandMaster
@@ -35,6 +41,8 @@ module Archetypes =
   let createGrandMasterAbjurer () = TierFactory.createClassTier CharacterClass.Abjurer CombatTier.GrandMaster
   let createGrandMasterStrategist = createGrandMasterAbjurer
 
+  let createGrandmasterFighter = createGrandMasterFighter
+  let createGrandmasterMage = createGrandMasterMage
   let createGrandmasterBerserker = createGrandMasterBerserker
   let createGrandmasterTitan = createGrandMasterBerserker
   let createGrandmasterInquisitor = createGrandMasterInquisitor
@@ -46,8 +54,12 @@ module Archetypes =
   let createGrandmasterStrategist = createGrandMasterAbjurer
 
   // =========================================================================
-  // Generic NPC Archetypes (Novice Tier, Level 1, Zero Preparations)
+  // Novice Archetypes (Level 1)
   // =========================================================================
+
+  let createNoviceFighter () =
+    let c = TierFactory.createClassLevel CharacterClass.Fighter 1
+    { c with Name = "Fighter" }
 
   let createNoviceWarrior () =
     let c = TierFactory.createClassLevel CharacterClass.Warrior 1
@@ -70,6 +82,18 @@ module Archetypes =
   // =========================================================================
 
   let allArchetypes : ArchetypeInfo list = [
+    { Name = "Veteran Fighter"
+      Tier = Veteran
+      Discipline = CombatMode.Physical
+      Description = "Normalized Physical Master (sword & shield): fluidly transitions between Force cleaves, Finesse cadences, and Bastion defense."
+      Factory = createVeteranFighter }
+
+    { Name = "Veteran Mage"
+      Tier = Veteran
+      Discipline = CombatMode.Arcane
+      Description = "Normalized Mental Master (staff): fluidly threads Resonance Spikes, Phantasmal static, and Aegis Lattices."
+      Factory = createVeteranMage }
+
     { Name = "Veteran Berserker"
       Tier = Veteran
       Discipline = CombatMode.Physical
@@ -105,6 +129,18 @@ module Archetypes =
       Discipline = CombatMode.Arcane
       Description = "Discipline Primary (1.0 : 0.75 : 0.75): discipline abjurer commanding defensive wards and posture shockwaves."
       Factory = createVeteranAbjurer }
+
+    { Name = "Master Fighter"
+      Tier = Master
+      Discipline = CombatMode.Physical
+      Description = "Master martial combatant flowing effortlessly across all three stances."
+      Factory = createMasterFighter }
+
+    { Name = "Master Mage"
+      Tier = Master
+      Discipline = CombatMode.Arcane
+      Description = "Master arcane practitioner threading complex forms with absolute precision."
+      Factory = createMasterMage }
 
     { Name = "Master Berserker"
       Tier = Master
@@ -145,6 +181,18 @@ module Archetypes =
     // =========================================================================
     // GrandMaster Tier (Level 200, 6 Preparations, Max Stats 840+)
     // =========================================================================
+
+    { Name = "Grandmaster Fighter"
+      Tier = GrandMaster
+      Discipline = CombatMode.Physical
+      Description = "Grandmaster martial champion: normalized physical stats with +25% stance specialization."
+      Factory = createGrandMasterFighter }
+
+    { Name = "Grandmaster Mage"
+      Tier = GrandMaster
+      Discipline = CombatMode.Arcane
+      Description = "Grandmaster arcane channeler: normalized mental stats with +25% complex form specialization and spell armor."
+      Factory = createGrandMasterMage }
 
     { Name = "Grandmaster Berserker"
       Tier = GrandMaster
@@ -195,8 +243,14 @@ module Archetypes =
       Factory = createGrandMasterStrategist }
 
     // =========================================================================
-    // Generic NPC Archetypes (Novice Tier, Level 1, Zero Preparations)
+    // Novice Archetypes (Level 1)
     // =========================================================================
+
+    { Name = "Fighter"
+      Tier = Novice
+      Discipline = CombatMode.Physical
+      Description = "Novice martial combatant equipped with sword and shield."
+      Factory = createNoviceFighter }
 
     { Name = "Warrior"
       Tier = Novice

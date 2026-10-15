@@ -118,3 +118,40 @@ module TacticalAssessmentTests =
     // Mental boss Plane = Mental; stats: Intellect, Resolve, Acuity, Intuition, Acumen, Composure
     let desc = Attributes.descriptorOf assess.PrimaryStat
     Assert.Equal(Plane.Mental, desc.Plane)
+
+  [<Fact>]
+  let ``Tactical assessment threat warning surfaces correctly across insight levels`` () =
+    let observer = StoryBosses.createProloguePlayer "berserker" // Base Acumen 19 + Intuition 15/4 (3) = 22
+    let hound = Bestiary.slagHound.ToCombatant (CombatantId.New()) // Force 105, Composure 50
+
+    // 1. Obscured insight (high Composure target) -> ThreatWarning is None
+    let overseer = Bestiary.quarryOverseer.ToCombatant (CombatantId.New()) // Composure 390
+    let obscuredAssess = TacticalAssessment.assess observer overseer
+    Assert.Equal(TacticalInsightLevel.Obscured, obscuredAssess.InsightLevel)
+    Assert.True(obscuredAssess.ThreatWarning.IsNone, "Obscured insight should not reveal apex threat details")
+
+    // 2. Discerning insight (ratio 22/50 = 0.44 -> Discerning) -> ThreatWarning has approximation
+    let discerningAssess = TacticalAssessment.assess observer hound
+    Assert.Equal(TacticalInsightLevel.Discerning, discerningAssess.InsightLevel)
+    Assert.True(discerningAssess.ThreatWarning.IsSome, "Discerning insight should generate threat warning")
+    let warnDiscerning = discerningAssess.ThreatWarning.Value
+    Assert.True(warnDiscerning.StartsWith("⚠ THREAT DETECTED"), sprintf "Expected threat detected prefix, got: %s" warnDiscerning)
+    Assert.True(warnDiscerning.Contains("Force"), "Should detect Force as the threat stat")
+
+    // 3. Keen insight (elevated Acumen to reach ratio in [0.75, 1.15))
+    // Hound Composure 50 -> Need effective Acumen ~45 (ratio = 0.90 -> Keen)
+    let keenObserver = { observer with StudyStacks = 2 } // 22 + 30 = 52 / 50 = 1.04 -> Keen
+    let keenAssess = TacticalAssessment.assess keenObserver hound
+    Assert.Equal(TacticalInsightLevel.Keen, keenAssess.InsightLevel)
+    Assert.True(keenAssess.ThreatWarning.IsSome)
+    let warnKeen = keenAssess.ThreatWarning.Value
+    Assert.True(warnKeen.StartsWith("⚠ APEX THREAT:"), sprintf "Expected apex threat prefix, got: %s" warnKeen)
+    Assert.True(warnKeen.Contains("Colossal Force (105)"), "Should specify exact apex Force value")
+
+    // 4. Penetrating insight (ratio >= 1.15, e.g. Anger Aspect with Composure 0)
+    let anger = StoryBosses.createAngerAspect ()
+    let penAssess = TacticalAssessment.assess observer anger
+    Assert.Equal(TacticalInsightLevel.Penetrating, penAssess.InsightLevel)
+    Assert.True(penAssess.ThreatWarning.IsSome)
+    let warnPen = penAssess.ThreatWarning.Value
+    Assert.True(warnPen.StartsWith("⚠ APEX THREAT (CRITICAL):"), sprintf "Expected critical apex threat prefix, got: %s" warnPen)

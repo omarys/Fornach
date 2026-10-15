@@ -213,9 +213,10 @@ module TowerDisplay =
                 let traitNames = c.MonsterTraits |> List.map (fun t -> t.Name) |> String.concat ", "
                 sprintf " | Traits: [%s]%s[/]" Theme.Yellow traitNames
             let assess = TacticalAssessment.assess state.Player c
+            let threatSnippet = match assess.ThreatWarning with Some t -> sprintf "\n  ⚠ [bold red]%s[/]" (Markup.Escape t) | None -> ""
             let vulnSnippet = match assess.VulnerabilitySummary with Some v -> sprintf " | Opening: %s" (Markup.Escape v) | None -> ""
-            let readSnippet = sprintf "\n  󰓥 [bold %s]Tactical Read (%s):[/] %s%s\n  [italic %s]💡 %s[/]"
-                                Theme.Yellow (Markup.Escape assess.Headline) (Markup.Escape assess.PrimarySummary) vulnSnippet Theme.Comment (Markup.Escape assess.StrategicAdvice)
+            let readSnippet = sprintf "\n  󰓥 [bold %s]Tactical Read (%s):[/] %s%s%s\n  [italic %s]💡 %s[/]"
+                                Theme.Yellow (Markup.Escape assess.Headline) (Markup.Escape assess.PrimarySummary) threatSnippet vulnSnippet Theme.Comment (Markup.Escape assess.StrategicAdvice)
             Some (sprintf "[bold %s]! HOSTILE GUARDIAN: %s%s[/] [grey]| Lv.%d %s | HP: %d/%d | Morale: %d/%d | %s: %s%s[/]%s"
               Theme.Red familyPrefix e.Name c.Level c.Class.Name c.Health.Current c.Health.Maximum c.Morale.Current c.Morale.Maximum (if c.Plane = Mental then "Form" else "Stance") stanceOrForm traitsSuffix readSnippet)
         | Some (EntityNpc n) ->
@@ -316,19 +317,28 @@ module TowerDisplay =
     grid.AddRow(Markup(sprintf "[italic %s]󰌌 Pan Reticle: Arrows / Vim (h/j/k/l/y/u/b/n)  •  Exit Inspect: Esc / x / Enter  •  ? / F1: Legend & Manual[/]" Theme.Comment)) |> ignore
 
     Panel(grid)
-      .Header(sprintf "[bold %s]󰍹 TILE & HAZARD INSPECTOR[/]" Theme.Yellow)
+      .Header(Display.stripNerdGlyphs (sprintf "[bold %s]󰍹 TILE & HAZARD INSPECTOR[/]" Theme.Yellow))
       .Border(BoxBorder.Square)
       .BorderStyle(Theme.StyleYellow)
       .Expand()
 
-  /// Horizontal split for the crawl view: the map viewport takes its natural width (capped by
-  /// the floor) and the HUD takes the remainder. Both are returned so the caller can pin the
-  /// grid columns — otherwise the HUD's longest row sizes its column and squeezes the map.
+  /// Horizontal split for the crawl view: the map viewport takes its natural width (capped by the
+  /// floor) and the HUD takes the remainder. Both are returned so the caller can pin the grid
+  /// columns — otherwise the HUD's longest row sizes its column and squeezes the map down to a
+  /// sliver. The two pinned columns plus the grid's 3-cell gutter must land exactly on the terminal
+  /// width: a frame even one cell wider wraps every line into the next row and scrambles the view.
+  /// The map keeps its width while the HUD holds its readable 58 columns; below that the map yields
+  /// first, then the HUD.
   let layoutWidths (termW: int) (mapWidth: int) : int * int =
     let maxView = Math.Max(45, mapWidth)
-    let viewW = Math.Clamp(termW - 62, 45, maxView)
-    let hudW = Math.Max(58, termW - viewW - 4)
-    viewW, hudW
+    // 65 = HUD minimum (58) + map border/padding (4) + gutter (3); 7 = map border/padding + gutter.
+    let viewW = Math.Min(Math.Clamp(termW - 62, 45, maxView), Math.Max(20, termW - 65))
+    viewW, Math.Max(20, termW - viewW - 7)
+
+  /// Grid column width the map viewport panel needs for a `viewW`-wide map: the panel adds a
+  /// 2-cell border plus one cell of padding on each side. Pinning the column narrower than this
+  /// leaves the content area short, and Spectre wraps every map row into the next one.
+  let mapColumnWidth (viewW: int) : int = viewW + 4
 
   /// Renders the ASCII map viewport centered on the player position (or inspection cursor if active)
   let renderViewportWithCursor (state: TowerRunState) (cursor: Point option) (viewW: int) (viewH: int) : Panel =
@@ -486,7 +496,7 @@ module TowerDisplay =
           state.PlayerPosition.Y
 
     Panel(Markup(sb.ToString()))
-      .Header(headerText)
+      .Header(Display.stripNerdGlyphs headerText)
       .Border(BoxBorder.Heavy)
       .BorderStyle(Style(foreground = Nullable (if cursor.IsSome then Theme.ColorYellow else themeColor theme)))
       .Expand()
@@ -503,27 +513,31 @@ module TowerDisplay =
 
     let p = state.Player
 
+    // A nerd-font icon makes Spectre pad its line one cell wider than the panel, so the right
+    // border jitters per line and the frame can push past the terminal. Strip them from every row.
+    let row (markupText: string) = grid.AddRow(Markup(Display.stripNerdGlyphs markupText)) |> ignore
+
     // 0. Run identity (debug only): the seed is reproducible via --seed N,
     // so the debug HUD surfaces it alongside the [DEBUG] marker.
     if debug then
-      grid.AddRow(Markup(sprintf "[bold %s]Seed:[/] [bold white]%d[/]  [bold red]󰒲 [[DEBUG]][/]" Theme.Comment state.Seed)) |> ignore
+      row (sprintf "[bold %s]Seed:[/] [bold white]%d[/]  [bold red]󰒲 [[DEBUG]][/]" Theme.Comment state.Seed) |> ignore
 
     // 1. Vitals
-    grid.AddRow(Markup(sprintf "[bold %s]─── 󰓥 TACTICAL VITALS ───[/]" Theme.Yellow)) |> ignore
-    grid.AddRow(Markup(Display.renderBar "󰋑 Health" p.Health.Current p.Health.Maximum Theme.Red)) |> ignore
-    grid.AddRow(Markup(Display.renderBar "󰧑 Morale" p.Morale.Current p.Morale.Maximum Theme.Cyan)) |> ignore
+    row (sprintf "[bold %s]─── 󰓥 TACTICAL VITALS ───[/]" Theme.Yellow) |> ignore
+    row (Display.renderBar "󰋑 Health" p.Health.Current p.Health.Maximum Theme.Red) |> ignore
+    row (Display.renderBar "󰧑 Morale" p.Morale.Current p.Morale.Maximum Theme.Cyan) |> ignore
     let armorText =
       if p.Armor.IsShredded then
         sprintf "%-22s [bold blink %s]SHREDDED (0%% soak) ⚠[/]" " Armor Integrity" Theme.Red
       else
         sprintf "%-22s [%s]%d / %d[/] [%s](%d%% soak)[/]" " Armor Integrity" Theme.Comment p.Armor.Current p.Armor.Max Theme.Yellow (int (p.Armor.AbsorptionRatio * 100.0))
-    grid.AddRow(Markup(armorText)) |> ignore
+    row (armorText) |> ignore
 
     // Prominent low health warning banner
     if p.Health.Current <= p.Health.Maximum / 4 then
-      grid.AddRow(Markup("[bold blink red]⚠ CRITICAL HEALTH: Rest or visit Shrine before combat![/]")) |> ignore
+      row ("[bold blink red]⚠ CRITICAL HEALTH: Rest or visit Shrine before combat![/]") |> ignore
     elif p.Health.Current <= p.Health.Maximum / 2 then
-      grid.AddRow(Markup("[bold yellow]⚠ WOUNDED: Health below 50%. Triage or rest recommended.[/]")) |> ignore
+      row ("[bold yellow]⚠ WOUNDED: Health below 50%. Triage or rest recommended.[/]") |> ignore
 
     // Stance, Complex Form, and Weapon Integrity
     if p.Plane = Mental then
@@ -533,14 +547,14 @@ module TowerDisplay =
         | Some ComplexForm.PhantasmalDiffusion -> Theme.Green, "Phantasmal Diffusion (Agility)"
         | Some ComplexForm.AegisLattice -> Theme.Cyan, "Aegis Lattice (Discipline)"
         | None -> Theme.Comment, "Unthreaded"
-      grid.AddRow(Markup(sprintf "%-22s [bold %s]%s[/]" "🧵 Complex Form" formColor formName)) |> ignore
+      row (sprintf "%-22s [bold %s]%s[/]" "🧵 Complex Form" formColor formName) |> ignore
     else
       let stanceColor =
         match p.Stance with
         | CombatStance.PowerStance -> Theme.Red
         | CombatStance.AgilityStance -> Theme.Green
         | CombatStance.DisciplineStance -> Theme.Purple
-      grid.AddRow(Markup(sprintf "%-22s [bold %s]%A[/]" "󰓥 Combat Stance" stanceColor p.Stance)) |> ignore
+      row (sprintf "%-22s [bold %s]%A[/]" "󰓥 Combat Stance" stanceColor p.Stance) |> ignore
 
       let weaponCondColor, weaponCondDesc =
         match p.WeaponCondition with
@@ -548,14 +562,14 @@ module TowerDisplay =
         | WeaponCondition.Notched -> Theme.Yellow, "Notched (-10% dmg)"
         | WeaponCondition.Damaged -> Theme.Orange, "Damaged (-25% dmg) ⚠"
         | WeaponCondition.Broken -> Theme.Red, "Broken (-50% dmg) ☠"
-      grid.AddRow(Markup(sprintf "%-22s [bold %s]%s[/]" "󰚌 Weapon Integrity" weaponCondColor weaponCondDesc)) |> ignore
+      row (sprintf "%-22s [bold %s]%s[/]" "󰚌 Weapon Integrity" weaponCondColor weaponCondDesc) |> ignore
 
     // Emotional Meters
-    grid.AddRow(Markup(Display.renderMeter "󰈸 Recklessness" p.Meters.Recklessness Theme.Red)) |> ignore
-    grid.AddRow(Markup(Display.renderMeter "󰓎 Overwhelm" p.Meters.Overwhelm Theme.Yellow)) |> ignore
-    grid.AddRow(Markup(Display.renderMeter "󰒓 Exhaustion" p.Meters.Exhaustion Theme.Purple)) |> ignore
+    row (Display.renderMeter "󰈸 Recklessness" p.Meters.Recklessness Theme.Red) |> ignore
+    row (Display.renderMeter "󰓎 Overwhelm" p.Meters.Overwhelm Theme.Yellow) |> ignore
+    row (Display.renderMeter "󰒓 Exhaustion" p.Meters.Exhaustion Theme.Purple) |> ignore
 
-    grid.AddRow(Markup(sprintf "[bold %s]─── 󰒋 ASCENSION STATUS ───[/]" Theme.Cyan)) |> ignore
+    row (sprintf "[bold %s]─── 󰒋 ASCENSION STATUS ───[/]" Theme.Cyan) |> ignore
     let doorState =
       match Map.tryFind state.CurrentFloor.StairwayLocation state.CurrentFloor.Tiles with
       | Some (StairwayPortal ds) -> ds
@@ -563,13 +577,13 @@ module TowerDisplay =
 
     match doorState with
     | DoorState.Open ->
-      grid.AddRow(Markup(sprintf "󰁝 Portal: [bold %s]UNLOCKED (Floor %d Stairs Ready)[/]" Theme.Green (state.CurrentFloor.FloorNumber + 1))) |> ignore
+      row (sprintf "󰁝 Portal: [bold %s]UNLOCKED (Floor %d Stairs Ready)[/]" Theme.Green (state.CurrentFloor.FloorNumber + 1)) |> ignore
     | DoorState.LockedByKey(_, keyName, hint) ->
-      grid.AddRow(Markup(sprintf "󰌆 Portal: [bold %s]SEALED (Requires: %s)[/]" Theme.Orange keyName)) |> ignore
-      grid.AddRow(Markup(sprintf "          [italic %s]%s[/]" Theme.Comment hint)) |> ignore
+      row (sprintf "󰌆 Portal: [bold %s]SEALED (Requires: %s)[/]" Theme.Orange keyName) |> ignore
+      row (sprintf "          [italic %s]%s[/]" Theme.Comment hint) |> ignore
     | DoorState.LockedByQuest(_, questTitle, req) ->
-      grid.AddRow(Markup(sprintf "󱁕 Portal: [bold %s]BARRED (Trial: %s)[/]" Theme.Purple questTitle)) |> ignore
-      grid.AddRow(Markup(sprintf "          [italic %s]%s[/]" Theme.Comment req)) |> ignore
+      row (sprintf "󱁕 Portal: [bold %s]BARRED (Trial: %s)[/]" Theme.Purple questTitle) |> ignore
+      row (sprintf "          [italic %s]%s[/]" Theme.Comment req) |> ignore
 
     // Keys & Relics
     let keysDisplay =
@@ -579,7 +593,7 @@ module TowerDisplay =
         state.CollectedKeys
         |> Seq.map (sprintf "[bold %s]󰌆 %s[/]" Theme.Yellow)
         |> String.concat ", "
-    grid.AddRow(Markup(sprintf "Vault Keys: %s" keysDisplay)) |> ignore
+    row (sprintf "Vault Keys: %s" keysDisplay) |> ignore
 
     let relicsDisplay =
       if state.InventoryItems.IsEmpty then
@@ -588,7 +602,7 @@ module TowerDisplay =
         state.InventoryItems
         |> List.map (fun it -> sprintf "[bold %s]󰆧 %s[/]" Theme.Pink it.Name)
         |> String.concat ", "
-    grid.AddRow(Markup(sprintf "Relics: %s" relicsDisplay)) |> ignore
+    row (sprintf "Relics: %s" relicsDisplay) |> ignore
 
     // Souls & Alchemical Trophies
     let trophiesDisplay =
@@ -598,25 +612,25 @@ module TowerDisplay =
         state.Trophies
         |> List.map (fun (t, cnt) -> sprintf "[bold %s]%s (x%d)[/]" Theme.Cyan t.Name cnt)
         |> String.concat ", "
-    grid.AddRow(Markup(sprintf "󰮯 Souls: [bold gold1]%d[/]  |  💎 Trophies: %s" state.Souls trophiesDisplay)) |> ignore
+    row (sprintf "󰮯 Souls: [bold gold1]%d[/]  |  💎 Trophies: %s" state.Souls trophiesDisplay) |> ignore
 
     // Active Quests
     if not state.CurrentFloor.ActiveQuests.IsEmpty then
-      grid.AddRow(Markup(sprintf "[bold %s]─── 󱁕 ACTIVE TRIALS ───[/]" Theme.Purple)) |> ignore
+      row (sprintf "[bold %s]─── 󱁕 ACTIVE TRIALS ───[/]" Theme.Purple) |> ignore
       for q in state.CurrentFloor.ActiveQuests do
         let status =
           if q.IsCompleted then sprintf "[bold %s][[COMPLETED]][/]" Theme.Green
           else sprintf "[bold %s][[IN PROGRESS]][/]" Theme.Yellow
-        grid.AddRow(Markup(sprintf "• %s: %s" q.Title status)) |> ignore
+        row (sprintf "• %s: %s" q.Title status) |> ignore
 
     // Legend
-    grid.AddRow(Markup(sprintf "[bold %s]─── 󰋜 ARCHITECTURAL LEGEND ───[/]" Theme.Comment)) |> ignore
+    row (sprintf "[bold %s]─── 󰋜 ARCHITECTURAL LEGEND ───[/]" Theme.Comment) |> ignore
     grid.AddRow(Markup(sprintf "[bold %s]@[/] You  [bold %s]![/] Enemy  [bold %s]?[/] NPC  [bold %s]⌹[/] Chest/Vault  [bold %s]†[/] Shrine  [bold #bd93f9]♨[/] Altar  [bold #8be9fd]$[/] Trader  [bold #50fa7b]✦[/] Echo  [bold #ff5555]✕[/] Trap"
       Theme.Yellow Theme.Red Theme.Cyan Theme.Yellow Theme.Green)) |> ignore
-    grid.AddRow(Markup(sprintf "[%s]󰌌 Keys: Arrows/Vim: Move | x/; : Inspect | C: Character | Space: Wait | ? / F1: Symbol & Glyph Legend | Q: Quit%s[/]" Theme.Comment (if debug then " | F12: Debug Menu" else ""))) |> ignore
+    row (sprintf "[%s]󰌌 Keys: Arrows/Vim: Move | x/; : Inspect | C: Character | Space: Wait | ? / F1: Symbol & Glyph Legend | Q: Quit%s[/]" Theme.Comment (if debug then " | F12: Debug Menu" else "")) |> ignore
 
     Panel(grid)
-      .Header(sprintf "[bold %s]󰍹 CHAMBER OBSERVATIONS[/]" Theme.Yellow)
+      .Header(Display.stripNerdGlyphs (sprintf "[bold %s]󰍹 CHAMBER OBSERVATIONS[/]" Theme.Yellow))
       .Border(BoxBorder.Rounded)
       .BorderStyle(Theme.StyleCurrentLine)
       .Expand()
@@ -687,8 +701,8 @@ module TowerDisplay =
       |> List.map (fun msg -> sprintf "[%s]󰁔[/] [bold %s]%s[/]" Theme.Pink Theme.Foreground (Markup.Escape msg))
       |> String.concat "\n"
 
-    Panel(Markup(logText))
-      .Header(sprintf "[bold %s]󰈙 Chronicle Log[/]" Theme.Foreground)
+    Panel(Markup(Display.stripNerdGlyphs logText))
+      .Header(Display.stripNerdGlyphs (sprintf "[bold %s]󰈙 Chronicle Log[/]" Theme.Foreground))
       .Border(BoxBorder.Square)
       .BorderStyle(Theme.StyleComment)
       .Expand()
@@ -765,7 +779,7 @@ module TowerDisplay =
     grid.AddRow(Markup(sprintf "[bold %s]%s[/]  [grey](%s • Level %d)[/]" Theme.Yellow p.Name p.Class.Name p.Level)) |> ignore
     grid.AddRow(Markup(sprintf "Mastery Tier: [bold %s]%s[/]    Plane: [bold %s]%s[/]" Theme.Cyan (tier.ToString()) Theme.Purple (p.Plane.ToString()))) |> ignore
     grid.AddRow(Markup(sprintf "Experience: [bold %s]%d / %d[/] toward Level %d" Theme.Green p.Progression.CurrentXP p.Progression.ExperienceToNext (p.Level + 1))) |> ignore
-    grid.AddRow(Markup(sprintf "[grey]Attributes are stance-adjusted: +10%% matching vector, -10%% the plane's other vectors.[/]")) |> ignore
+    grid.AddRow(Markup(sprintf "[grey]Attributes are stance-adjusted: +25%% matching vector, -25%% off-vector offense.[/]")) |> ignore
     grid.AddRow(Rule().RuleStyle(Theme.StyleComment)) |> ignore
 
     grid.AddRow(Markup(sprintf "[bold %s]─── 󰓥 VITALS ───[/]" Theme.Yellow)) |> ignore
@@ -808,7 +822,7 @@ module TowerDisplay =
         grid.AddRow(Markup(sprintf "• [bold white]%A[/]  [grey]%d / %d uses[/]" slot.Type slot.RemainingUses slot.MaxUses)) |> ignore
 
     Panel(grid)
-      .Header(sprintf "[bold %s]󰒋 CHARACTER SHEET[/]" Theme.Cyan)
+      .Header(Display.stripNerdGlyphs (sprintf "[bold %s]󰒋 CHARACTER SHEET[/]" Theme.Cyan))
       .Border(BoxBorder.Rounded)
       .BorderStyle(Theme.StyleCurrentLine)
       .Expand()
@@ -838,7 +852,7 @@ module TowerDisplay =
       let panel =
         Panel(Markup(sprintf "[bold green]⬆ LEVEL UP![/]  [bold white]Level %d → %d[/]%s\n[italic grey]All attributes, Health, Morale, and Armor scale to your new mastery.[/]"
           previousLevel p.Level rankLine))
-          .Header(sprintf "[bold %s]󰒋 ASCENSION[/]" Theme.Green)
+          .Header(Display.stripNerdGlyphs (sprintf "[bold %s]󰒋 ASCENSION[/]" Theme.Green))
           .Border(BoxBorder.Double)
           .BorderStyle(Style(foreground = Nullable Color.Green))
 
@@ -1102,10 +1116,10 @@ module TowerDisplay =
       let floorRule =
         match inspectCursor with
         | Some _ ->
-          Rule(sprintf "[bold %s]󰍹 FORNACH: TILE & HAZARD INSPECTION MODE ── FLOOR %d: %s[/]"
+          Rule(Display.stripNerdGlyphs (sprintf "[bold %s]󰍹 FORNACH: TILE & HAZARD INSPECTION MODE ── FLOOR %d: %s[/]"
             Theme.Yellow
             state.CurrentFloor.FloorNumber
-            state.CurrentFloor.Theme.Name)
+            state.CurrentFloor.Theme.Name))
             .Centered()
             .RuleStyle(Theme.StyleYellow)
         | None ->
@@ -1119,17 +1133,17 @@ module TowerDisplay =
               | 5 -> "STAGE 4: BARGAINING"
               | 6 -> "STAGE 5: DEPRESSION"
               | _ -> "STAGE 6: ACCEPTANCE"
-            Rule(sprintf "[bold %s]󰈙 FORNACH: %s ── %s[/]"
+            Rule(Display.stripNerdGlyphs (sprintf "[bold %s]󰈙 FORNACH: %s ── %s[/]"
               state.CurrentFloor.Theme.ColorHex
               stageName
-              state.CurrentFloor.Theme.Name)
+              state.CurrentFloor.Theme.Name))
               .Centered()
               .RuleStyle(Style(foreground = Nullable (themeColor state.CurrentFloor.Theme)))
           else
-            Rule(sprintf "[bold %s]󰒋 FORNACH: THE INFINITE TOWER ── FLOOR %d: %s[/]"
+            Rule(Display.stripNerdGlyphs (sprintf "[bold %s]󰒋 FORNACH: THE INFINITE TOWER ── FLOOR %d: %s[/]"
               state.CurrentFloor.Theme.ColorHex
               state.CurrentFloor.FloorNumber
-              state.CurrentFloor.Theme.Name)
+              state.CurrentFloor.Theme.Name))
               .Centered()
               .RuleStyle(Style(foreground = Nullable (themeColor state.CurrentFloor.Theme)))
 
@@ -1146,7 +1160,9 @@ module TowerDisplay =
       // Vertical space: header (~4 rows) + log/inspector (4-8 rows) + borders/margins (~6 rows)
       let logLines = if termH >= 45 then 8 elif termH >= 35 then 6 else 4
       let availableH = termH - 4 - logLines - 6
-      let viewH = Math.Clamp(availableH, 21, state.CurrentFloor.Height)
+      // Never demand more rows than the terminal has: the old 21-row floor overflowed short
+      // terminals, and Math.Clamp throws when a floor is shorter than the minimum.
+      let viewH = Math.Max(1, Math.Min(availableH, state.CurrentFloor.Height))
 
       // Layout: Left (Viewport), Right (HUD), Bottom (Log or Inspector)
       let viewportPanel = renderViewportWithCursor state inspectCursor viewW viewH
@@ -1159,7 +1175,7 @@ module TowerDisplay =
       // Pin both columns: otherwise the HUD's longest row (inventory, keys) sizes its
       // column and squeezes the map viewport down to a sliver.
       let grid = Grid()
-      grid.AddColumn(GridColumn().Width(viewW + 2)) |> ignore
+      grid.AddColumn(GridColumn().Width(mapColumnWidth viewW)) |> ignore
       grid.AddColumn(GridColumn().Width(hudW)) |> ignore
       grid.AddRow(viewportPanel, hudPanel) |> ignore
       grid.Expand <- true
