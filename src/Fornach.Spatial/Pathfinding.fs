@@ -13,6 +13,15 @@ module Pathfinding =
 
     loop current []
 
+  let private sqrt2 = System.Math.Sqrt 2.0
+
+  /// Octile distance: the true 8-way travel distance when cardinal steps cost 1 and
+  /// diagonal steps cost sqrt(2). Admissible and consistent, so A* stays optimal.
+  let private octile (a: Point) (b: Point) =
+    let dx = abs (b.X - a.X)
+    let dy = abs (b.Y - a.Y)
+    float (max dx dy) + (sqrt2 - 1.0) * float (min dx dy)
+
   /// Finds the shortest 8-directional path from `start` to `goal` using A*.
   /// `isPassable` returns true if a point can be walked through (not a wall or obstacle).
   /// Returns Some(points from start to goal) or None if unreachable.
@@ -29,8 +38,7 @@ module Pathfinding =
       let gScore = Dictionary<Point, float>()
 
       gScore.[start] <- 0.0
-      let initialH = float (Distance.chebyshev start goal)
-      openSet.Enqueue(start, initialH)
+      openSet.Enqueue(start, octile start goal)
 
       let inOpenSet = HashSet<Point>()
       inOpenSet.Add(start) |> ignore
@@ -51,8 +59,11 @@ module Pathfinding =
             for neighbor in neighbors do
               // Only consider neighbor if it's walkable or the goal itself
               if isPassable neighbor then
-                // In roguelike movement, orthogonal and diagonal steps both cost 1.0
-                let tentativeG = currentG + 1.0
+                // Diagonal steps cost sqrt(2) and cardinal steps 1.0, so a straight line
+                // is genuinely cheaper than a diagonal staircase: mobs close in straight
+                // when they can instead of sidestepping arbitrarily.
+                let diagonal = neighbor.X <> current.X && neighbor.Y <> current.Y
+                let tentativeG = currentG + (if diagonal then sqrt2 else 1.0)
 
                 let knownG =
                   match gScore.TryGetValue(neighbor) with
@@ -62,8 +73,7 @@ module Pathfinding =
                 if tentativeG < knownG then
                   cameFrom.[neighbor] <- current
                   gScore.[neighbor] <- tentativeG
-                  let h = float (Distance.chebyshev neighbor goal)
-                  let f = tentativeG + h
+                  let f = tentativeG + octile neighbor goal
 
                   if not (inOpenSet.Contains(neighbor)) then
                     openSet.Enqueue(neighbor, f)

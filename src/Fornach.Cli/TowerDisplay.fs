@@ -321,6 +321,15 @@ module TowerDisplay =
       .BorderStyle(Theme.StyleYellow)
       .Expand()
 
+  /// Horizontal split for the crawl view: the map viewport takes its natural width (capped by
+  /// the floor) and the HUD takes the remainder. Both are returned so the caller can pin the
+  /// grid columns — otherwise the HUD's longest row sizes its column and squeezes the map.
+  let layoutWidths (termW: int) (mapWidth: int) : int * int =
+    let maxView = Math.Max(45, mapWidth)
+    let viewW = Math.Clamp(termW - 62, 45, maxView)
+    let hudW = Math.Max(58, termW - viewW - 4)
+    viewW, hudW
+
   /// Renders the ASCII map viewport centered on the player position (or inspection cursor if active)
   let renderViewportWithCursor (state: TowerRunState) (cursor: Point option) (viewW: int) (viewH: int) : Panel =
     let theme = state.CurrentFloor.Theme
@@ -486,12 +495,18 @@ module TowerDisplay =
   let renderViewport (state: TowerRunState) (viewW: int) (viewH: int) : Panel =
     renderViewportWithCursor state None viewW viewH
 
-  /// Renders the side HUD panel detailing player vitals, ascension status, and inventory
-  let renderHud (state: TowerRunState) : Panel =
+  /// Renders the side HUD panel detailing player vitals, ascension status, and inventory.
+  /// `debug` adds the [DEBUG] marker used by the in-game F12 overlay.
+  let renderHudWithDebug (state: TowerRunState) (debug: bool) : Panel =
     let grid = Grid()
     grid.AddColumn(GridColumn().NoWrap()) |> ignore
 
     let p = state.Player
+
+    // 0. Run identity (debug only): the seed is reproducible via --seed N,
+    // so the debug HUD surfaces it alongside the [DEBUG] marker.
+    if debug then
+      grid.AddRow(Markup(sprintf "[bold %s]Seed:[/] [bold white]%d[/]  [bold red]󰒲 [[DEBUG]][/]" Theme.Comment state.Seed)) |> ignore
 
     // 1. Vitals
     grid.AddRow(Markup(sprintf "[bold %s]─── 󰓥 TACTICAL VITALS ───[/]" Theme.Yellow)) |> ignore
@@ -598,13 +613,66 @@ module TowerDisplay =
     grid.AddRow(Markup(sprintf "[bold %s]─── 󰋜 ARCHITECTURAL LEGEND ───[/]" Theme.Comment)) |> ignore
     grid.AddRow(Markup(sprintf "[bold %s]@[/] You  [bold %s]![/] Enemy  [bold %s]?[/] NPC  [bold %s]⌹[/] Chest/Vault  [bold %s]†[/] Shrine  [bold #bd93f9]♨[/] Altar  [bold #8be9fd]$[/] Trader  [bold #50fa7b]✦[/] Echo  [bold #ff5555]✕[/] Trap"
       Theme.Yellow Theme.Red Theme.Cyan Theme.Yellow Theme.Green)) |> ignore
-    grid.AddRow(Markup(sprintf "[%s]󰌌 Keys: Arrows/Vim: Move | x/; : Inspect | C: Character | Space: Wait | ? / F1: Symbol & Glyph Legend | Q: Quit[/]" Theme.Comment)) |> ignore
+    grid.AddRow(Markup(sprintf "[%s]󰌌 Keys: Arrows/Vim: Move | x/; : Inspect | C: Character | Space: Wait | ? / F1: Symbol & Glyph Legend | Q: Quit%s[/]" Theme.Comment (if debug then " | F12: Debug Menu" else ""))) |> ignore
 
     Panel(grid)
       .Header(sprintf "[bold %s]󰍹 CHAMBER OBSERVATIONS[/]" Theme.Yellow)
       .Border(BoxBorder.Rounded)
       .BorderStyle(Theme.StyleCurrentLine)
       .Expand()
+
+  /// Non-debug HUD used by callers that don't run the debug overlay (and by tests).
+  let renderHud (state: TowerRunState) : Panel = renderHudWithDebug state false
+
+  /// Restores the player's survival resources to full: Health/Morale to max, Armor to its
+  /// created maximum, weapon to Pristine. God mode re-applies this every play-loop iteration
+  /// so nothing can deplete or degrade the player.
+  let godModeRestore (player: Combatant) : Combatant =
+    { player with
+        Health = Pool.Create player.Health.Maximum
+        Morale = Pool.Create player.Morale.Maximum
+        Armor = ArmorIntegrity.Create player.Armor.Max
+        WeaponCondition = WeaponCondition.Pristine }
+
+  /// Trauma-loop rewind applied on player defeat. Restores the player fully and clears every
+  /// combat debuff (bleed, cripple, wards, clones, combo, collapse), then re-seats every
+  /// non-boss mob on its original spawn tile with pristine vitals. Regenerating the floor from
+  /// the run seed is deterministic, so the mob layout comes back exactly as it started.
+  let traumaReset (state: TowerRunState) : TowerRunState =
+    let player =
+      { state.Player with
+          Health = Pool.Create state.Player.Health.Maximum
+          Morale = Pool.Create state.Player.Morale.Maximum
+          Armor = ArmorIntegrity.Create state.Player.Armor.Max
+          WeaponCondition = WeaponCondition.Pristine
+          Meters = StatusMeters.Zero
+          BleedStacks = 0
+          LimbDebuff = 0
+          ArcaneWard = 0
+          MirrorClones = 0
+          ComboTracker = ConsecutiveComboTracker.Zero
+          Collapse = CollapseState.Stable }
+    let pristine = TowerGenerator.generateFloorWithMode state.Seed state.CurrentFloor.FloorNumber state.IsStoryMode
+    let pristineMobs =
+      pristine.Entities
+      |> Map.toList
+      |> List.filter (fun (_, ent) ->
+        match ent with
+        | EntityEnemy e -> not (e.Id.StartsWith("boss_"))
+        | _ -> false)
+    // Drop the current non-boss mobs (moved and wounded), keep bosses/chests/NPCs, then re-seat
+    // the pristine mobs so nothing stays aggroed or damaged across the rewind.
+    let withoutMobs =
+      state.CurrentFloor.Entities
+      |> Map.filter (fun _ ent ->
+        match ent with
+        | EntityEnemy e -> e.Id.StartsWith("boss_")
+        | _ -> true)
+    let entities = pristineMobs |> List.fold (fun acc (pt, ent) -> Map.add pt ent acc) withoutMobs
+    { state with
+        Player = player
+        PlayerPosition = state.CurrentFloor.SpawnLocation
+        CurrentFloor = { state.CurrentFloor with Entities = entities } }
 
   /// Renders recent messages in a chronicle panel
   let renderMessageLog (state: TowerRunState) (maxLines: int) : Panel =
@@ -787,14 +855,31 @@ module TowerDisplay =
     (onCombatDuel: int -> Combatant -> Combatant -> (CombatOutcome * Combatant))
     (onGroupCombat: int -> Combatant -> TowerEnemy list -> bool -> GroupDuelResult)
     (onDefeatAnimation: unit -> unit)
+    (debug: bool)
+    (forcedSeed: int option)
     (isStory: bool) : unit =
 
     let rng = Random()
-    let seed = rng.Next(10000, 99999)
+    let seed = defaultArg forcedSeed (rng.Next(10000, 99999))
     let mutable state = TowerSession.initSessionWithMode initialPlayer seed startFloor isStory
     let mutable sessionActive = true
     let mutable inspectCursor : Point option = None
     let mutable fleeGrace = 0
+    let mutable godMode = false
+
+    let livingEnemyCount () =
+      state.CurrentFloor.Entities
+      |> Map.toList
+      |> List.sumBy (fun (_, ent) ->
+        match ent with
+        | EntityEnemy e when not e.IsDefeated -> 1
+        | _ -> 0)
+
+    RuntimeLog.section (sprintf "FLOOR %d" startFloor)
+    RuntimeLog.write (
+      sprintf "floor load: seed=%d floor=%d size=%dx%d theme=%s enemies=%d story=%b"
+        seed state.CurrentFloor.FloorNumber state.CurrentFloor.Width state.CurrentFloor.Height
+        state.CurrentFloor.Theme.Name (livingEnemyCount ()) isStory)
 
     // Resolves a multi-enemy engagement and applies its outcome to the run state.
     let handleGroup (floorNum: int) (engaged: TowerEnemy list) =
@@ -828,27 +913,10 @@ module TowerDisplay =
 
         | GroupDuelOutcome.Defeated ->
           onDefeatAnimation()
-          // Player defeat: reset at floor spawn with 100% restored vitals
-          let restoredPlayer =
-            { state.Player with
-                Health = Pool.Create state.Player.Health.Maximum
-                Morale = Pool.Create state.Player.Morale.Maximum
-                Armor = ArmorIntegrity.Create state.Player.Armor.Max
-                WeaponCondition = WeaponCondition.Pristine
-                Meters = StatusMeters.Zero }
-          // Respawn non-boss grinding mobs so player can grind again
-          let respawnedEntities =
-            state.CurrentFloor.Entities
-            |> Map.map (fun _ ent ->
-              match ent with
-              | EntityEnemy e when not (e.Id.StartsWith("boss_")) -> EntityEnemy { e with IsDefeated = false }
-              | other -> other)
-          let updatedFloor = { state.CurrentFloor with Entities = respawnedEntities }
+          // Rewind: restore the player and put every non-boss mob back where it spawned, undamaged.
+          state <- traumaReset state
           state <-
             { state with
-                Player = restoredPlayer
-                PlayerPosition = state.CurrentFloor.SpawnLocation
-                CurrentFloor = updatedFloor
                 MessageLog = "Truck-kun strikes! Rewound through the trauma loop. You awaken at the entrance. All souls, trophies, and gear preserved!" :: state.MessageLog }
           state <- TowerSession.updateFov state
           AnsiConsole.MarkupLine(sprintf "\n[bold red]Trauma loop reset! Rewound to entrance. Health restored, progression preserved. Grind and prepare![/]")
@@ -887,16 +955,143 @@ module TowerDisplay =
     let runEnemyPhase () =
       if fleeGrace > 0 then
         fleeGrace <- fleeGrace - 1
+        RuntimeLog.write (sprintf "enemy phase skipped (flee grace remaining %d)" fleeGrace)
       else
+        RuntimeLog.write "enemy phase: begin"
         let s2, evs = TowerSession.stepEnemies state
         state <- s2
         for ev in evs do
           match ev with
-          | TowerEvent.GroupCombatTriggered enemies -> handleGroup state.CurrentFloor.FloorNumber enemies
+          | TowerEvent.GroupCombatTriggered enemies ->
+            RuntimeLog.write (sprintf "enemy phase: group combat triggered (%d foes)" enemies.Length)
+            handleGroup state.CurrentFloor.FloorNumber enemies
           | _ -> ()
+        RuntimeLog.write "enemy phase: end"
+
+    // ── Debug overlay (--debug) ────────────────────────────────────────────
+    // Every helper mutates the live run state; the F12 menu loops until Close.
+
+    let debugLogEvent (ev: TowerEvent) =
+      let s = sprintf "%A" ev
+      RuntimeLog.write (sprintf "event: %s" (if s.Length > 200 then s.Substring(0, 200) else s))
+
+    let debugTeleport () =
+      let floor = AnsiConsole.Prompt(TextPrompt<int>("[bold yellow]Teleport to floor:[/]"))
+      let regenerated = TowerGenerator.generateFloorWithMode seed floor isStory
+      state <- { state with CurrentFloor = regenerated; PlayerPosition = regenerated.SpawnLocation }
+      state <- TowerSession.updateFov state
+      RuntimeLog.write (sprintf "debug: teleport -> floor %d spawn %A" floor regenerated.SpawnLocation)
+      AnsiConsole.MarkupLine(sprintf "[bold green]Teleported to floor %d.[/]" floor)
+
+    let debugSetLevel () =
+      let level = AnsiConsole.Prompt(TextPrompt<int>("[bold yellow]Set level:[/]"))
+      let leveled = TierFactory.rescaleToLevel state.Player level
+      // rescaleToLevel rewrites Level/PrimaryStat; reattach the live profile
+      // (XP, class, preparations) exactly like TowerSession.applyExperience.
+      let player =
+        { leveled with
+            Progression =
+              { state.Player.Progression with
+                  Level = leveled.Progression.Level
+                  PrimaryStat = leveled.Progression.PrimaryStat } }
+      state <- { state with Player = player }
+      RuntimeLog.write (sprintf "debug: set level %d" level)
+      AnsiConsole.MarkupLine(sprintf "[bold green]Level set to %d.[/]" level)
+
+    let debugRevealMap () =
+      let allTiles = state.CurrentFloor.Tiles |> Map.toSeq |> Seq.map fst |> Set.ofSeq
+      state <- { state with CurrentFloor = { state.CurrentFloor with Explored = allTiles } }
+      RuntimeLog.write (sprintf "debug: revealed map (%d tiles)" allTiles.Count)
+      AnsiConsole.MarkupLine(sprintf "[bold green]Revealed all %d tiles.[/]" allTiles.Count)
+
+    let debugSpawnEnemy () =
+      let freeTile =
+        Point.allNeighbors state.PlayerPosition
+        |> List.filter (fun p ->
+          let walkable =
+            match Map.tryFind p state.CurrentFloor.Tiles with
+            | Some t -> t.IsWalkable
+            | None -> false
+          walkable && not (Map.containsKey p state.CurrentFloor.Entities))
+        |> List.tryHead
+      match freeTile with
+      | None -> AnsiConsole.MarkupLine(sprintf "[bold %s]No free tile adjacent to the player.[/]" Theme.Red)
+      | Some pt ->
+        let template =
+          match Bestiary.byBiome state.CurrentFloor.Theme with
+          | [] -> Bestiary.slagHound
+          | list -> list.Head
+        let combatant = TierFactory.rescaleToLevel (Bestiary.createMonster template) state.Player.Level
+        let enemy =
+          { Id = sprintf "debug_enemy_%d_%d" state.CurrentFloor.FloorNumber (state.CurrentFloor.Entities.Count)
+            Name = combatant.Name
+            Combatant = combatant
+            DropsKeyId = None
+            IsDefeated = false }
+        state <- { state with CurrentFloor = { state.CurrentFloor with Entities = Map.add pt (EntityEnemy enemy) state.CurrentFloor.Entities } }
+        RuntimeLog.write (sprintf "debug: spawned %s (level %d) at %A" enemy.Name enemy.Combatant.Level pt)
+        AnsiConsole.MarkupLine(sprintf "[bold green]Spawned %s at (%d, %d).[/]" enemy.Name pt.X pt.Y)
+
+    let debugClearEnemies () =
+      let before = livingEnemyCount ()
+      state <-
+        { state with
+            CurrentFloor =
+              { state.CurrentFloor with
+                  Entities =
+                    state.CurrentFloor.Entities
+                    |> Map.filter (fun _ ent -> match ent with EntityEnemy _ -> false | _ -> true) } }
+      RuntimeLog.write (sprintf "debug: cleared %d enemies" before)
+      AnsiConsole.MarkupLine(sprintf "[bold green]Removed %d enemies from the floor.[/]" before)
+
+    let debugForceEncounter () =
+      let foes =
+        (TowerSession.adjacentEnemies state) @ (TowerSession.enemiesAggroed state)
+        |> List.distinctBy (fun e -> e.Id)
+      if foes.IsEmpty then
+        RuntimeLog.write "debug: force encounter -> no adjacent or aggroed foes"
+        AnsiConsole.MarkupLine(sprintf "[bold %s]No adjacent or aggroed enemies to engage.[/]" Theme.Yellow)
+      else
+        RuntimeLog.write (sprintf "debug: force encounter with %d foes" foes.Length)
+        handleGroup state.CurrentFloor.FloorNumber foes
+
+    let rec debugMenu () =
+      AnsiConsole.Clear()
+      let choice =
+        Display.promptWithVim(
+          SelectionPrompt<string>()
+            .Title(sprintf "[bold red]󰒲 DEBUG MENU[/] [%s]seed: %d  floor: %d[/]" Theme.Comment seed state.CurrentFloor.FloorNumber)
+            .PageSize(10)
+            .AddChoices([
+              sprintf "God mode: %s" (if godMode then "[bold green]ON[/]" else "[bold red]OFF[/]")
+              "Teleport to floor..."
+              "Set level..."
+              "Reveal whole map"
+              "Spawn enemy adjacent"
+              "Clear all enemies"
+              "Force encounter with aggroed foes"
+              "Close"
+            ])
+        )
+      if choice.Contains("God mode") then
+        godMode <- not godMode
+        AnsiConsole.MarkupLine(sprintf "[bold yellow]God mode %s.[/]" (if godMode then "enabled" else "disabled"))
+        debugMenu ()
+      elif choice.Contains("Teleport") then debugTeleport (); debugMenu ()
+      elif choice.Contains("Set level") then debugSetLevel (); debugMenu ()
+      elif choice.Contains("Reveal") then debugRevealMap (); debugMenu ()
+      elif choice.Contains("Spawn enemy") then debugSpawnEnemy (); debugMenu ()
+      elif choice.Contains("Clear all enemies") then debugClearEnemies (); debugMenu ()
+      elif choice.Contains("Force encounter") then debugForceEncounter (); debugMenu ()
+      else ()
 
     while sessionActive do
       AnsiConsole.Clear()
+
+      // God mode re-applies before each rendered frame so the player can never
+      // be depleted or degraded by the previous turn's combat/pursuit.
+      if debug && godMode then
+        state <- { state with Player = godModeRestore state.Player }
 
       let termW = Math.Max(80, AnsiConsole.Profile.Width)
       let termH =
@@ -946,9 +1141,7 @@ module TowerDisplay =
         AnsiConsole.MarkupLine(sprintf "[italic %s]%s[/]\n" Theme.Comment state.CurrentFloor.Theme.Description)
 
       // Dynamic viewport calculation to fill the terminal window
-      let hudW = 58
-      let availableW = termW - hudW - 4
-      let viewW = Math.Clamp(availableW, 45, state.CurrentFloor.Width)
+      let viewW, hudW = layoutWidths termW state.CurrentFloor.Width
 
       // Vertical space: header (~4 rows) + log/inspector (4-8 rows) + borders/margins (~6 rows)
       let logLines = if termH >= 45 then 8 elif termH >= 35 then 6 else 4
@@ -957,15 +1150,17 @@ module TowerDisplay =
 
       // Layout: Left (Viewport), Right (HUD), Bottom (Log or Inspector)
       let viewportPanel = renderViewportWithCursor state inspectCursor viewW viewH
-      let hudPanel = renderHud state
+      let hudPanel = renderHudWithDebug state debug
       let bottomPanel =
         match inspectCursor with
         | Some curPt -> renderInspectionPanel state curPt
         | None -> renderMessageLog state logLines
 
+      // Pin both columns: otherwise the HUD's longest row (inventory, keys) sizes its
+      // column and squeezes the map viewport down to a sliver.
       let grid = Grid()
-      grid.AddColumn(GridColumn()) |> ignore
-      grid.AddColumn(GridColumn().NoWrap()) |> ignore
+      grid.AddColumn(GridColumn().Width(viewW + 2)) |> ignore
+      grid.AddColumn(GridColumn().Width(hudW)) |> ignore
       grid.AddRow(viewportPanel, hudPanel) |> ignore
       grid.Expand <- true
 
@@ -974,6 +1169,9 @@ module TowerDisplay =
 
       // Read player command
       let key = Console.ReadKey(true)
+      RuntimeLog.write (
+        sprintf "input: floor=%d pos=%A facing=%A inspect=%b key=%A char=%A"
+          state.CurrentFloor.FloorNumber state.PlayerPosition state.Facing (inspectCursor.IsSome) key.Key key.KeyChar)
 
       match inspectCursor with
       | Some curPt ->
@@ -1002,6 +1200,8 @@ module TowerDisplay =
             inspectCursor <- None
           | ConsoleKey.F1 ->
             showHelpManual ()
+          | ConsoleKey.F12 when debug ->
+            debugMenu ()
           | _ when key.KeyChar = 'x' || key.KeyChar = 'X' || key.KeyChar = ';' ->
             inspectCursor <- None
           | _ when key.KeyChar = '?' ->
@@ -1027,8 +1227,12 @@ module TowerDisplay =
           let posBefore = state.PlayerPosition
           let nextState, events = TowerSession.stepPlayer dir state
           state <- nextState
+          RuntimeLog.write (
+            sprintf "action: move %A %A -> %A (%d event(s))"
+              dir posBefore state.PlayerPosition events.Length)
 
           for ev in events do
+            debugLogEvent ev
             match ev with
             | TowerEvent.CombatTriggered _ when (TowerSession.adjacentEnemies state).Length > 1 ->
               // More than one foe is on us: resolve the whole pack as a group engagement.
@@ -1057,6 +1261,8 @@ module TowerDisplay =
                   ]
                   None
                   (fun () -> ())
+
+              RuntimeLog.write (sprintf "choice: %s (encounter %s)" (Markup.Remove choice) enemy.Name)
 
               if choice.Contains("Engage in Tactical") then
                 let levelBefore = state.Player.Level
@@ -1106,27 +1312,10 @@ module TowerDisplay =
                   showLevelUpBanner state levelBefore
                 else
                   onDefeatAnimation()
-                  // Player defeat: reset at floor spawn with 100% restored vitals
-                  let restoredPlayer =
-                    { state.Player with
-                        Health = Pool.Create state.Player.Health.Maximum
-                        Morale = Pool.Create state.Player.Morale.Maximum
-                        Armor = ArmorIntegrity.Create state.Player.Armor.Max
-                        WeaponCondition = WeaponCondition.Pristine
-                        Meters = StatusMeters.Zero }
-                  // Respawn non-boss grinding mobs so player can grind again
-                  let respawnedEntities =
-                    state.CurrentFloor.Entities
-                    |> Map.map (fun _ ent ->
-                      match ent with
-                      | EntityEnemy e when not (e.Id.StartsWith("boss_")) -> EntityEnemy { e with IsDefeated = false }
-                      | other -> other)
-                  let updatedFloor = { state.CurrentFloor with Entities = respawnedEntities }
+                  // Rewind: restore the player and put every non-boss mob back where it spawned, undamaged.
+                  state <- traumaReset state
                   state <-
                     { state with
-                        Player = restoredPlayer
-                        PlayerPosition = state.CurrentFloor.SpawnLocation
-                        CurrentFloor = updatedFloor
                         MessageLog = "Truck-kun strikes! Rewound through the trauma loop. You awaken at the entrance. All souls, trophies, and gear preserved!" :: state.MessageLog }
                   state <- TowerSession.updateFov state
                   AnsiConsole.MarkupLine(sprintf "\n[bold red]Trauma loop reset! Rewound to entrance. Health restored, progression preserved. Grind and prepare![/]")
@@ -1148,43 +1337,6 @@ module TowerDisplay =
               else
                 // Disengage
                 ()
-
-            | TowerEvent.ChestOpened(chest, _, _) when chest.Id = "battered_chest" ->
-              AnsiConsole.WriteLine()
-              let choices =
-                [ "🗡️ Two-handed Greatsword (Berserker) — Ferocious momentum, sweeping cleaves & high force"
-                  "🤺 Paired Stiletto & Rapier (Duelist) — Fencing precision, high reflex, agile cadences"
-                  "🛡️ Arming Sword & Reinforced Shield (Warden) — Bastion defense, fortress poise, counterplay"
-                  "🪄 Carved Ash Staff (Inquisitor) — Arcane resonance, psionic intellect, mental clarity"
-                  "🪞 Silvered Hand Mirror (Mesmer) — Phantasmal decoys, mirror clones & sensory static"
-                  "📖 Dusty Tome (Abjurer) — Runic wards, composure barriers & destabilizing runes" ]
-              let choice =
-                Display.promptSelectionWithHelp
-                  (sprintf "[bold %s]⌹ SCAVENGING THE BATTERED CHEST (Lock Broken)[/]\n[italic %s]Choose your weapon armament and awaken your class:[/]"
-                    Theme.Yellow Theme.Comment)
-                  choices
-                  None
-                  (fun () -> ())
-              let chosenClass =
-                if choice.Contains("Berserker") then "berserker"
-                elif choice.Contains("Duelist") then "duelist"
-                elif choice.Contains("Warden") then "warden"
-                elif choice.Contains("Mesmer") then "mesmer"
-                elif choice.Contains("Abjurer") then "abjurer"
-                else "inquisitor"
-              let updatedPlayer = StoryBosses.createProloguePlayer chosenClass
-              state <- { state with Player = updatedPlayer; InventoryItems = updatedPlayer.EquippedItems @ state.InventoryItems }
-              let weapon = updatedPlayer.EquippedItems |> List.tryHead |> Option.map (fun w -> w.Name) |> Option.defaultValue "Armament"
-              let panel =
-                Panel(Markup(sprintf "[bold %s]󰓥 CLASS AWAKENED: %s[/]\n[italic white]Equipped: %s  •  Combat Stance: %A[/]\n[grey]Bundle of sharpened caltrops recovered inside lid.[/]"
-                  Theme.Green (updatedPlayer.Class.Name.ToUpperInvariant()) weapon updatedPlayer.Stance))
-                  .Border(BoxBorder.Heavy)
-                  .BorderStyle(Style(foreground = Nullable Theme.ColorGreen))
-              AnsiConsole.Clear()
-              AnsiConsole.Write(panel)
-              AnsiConsole.WriteLine()
-              AnsiConsole.MarkupLine(sprintf "[%s]Press any key to step out into the rain-soaked forest...[/]" Theme.Comment)
-              Console.ReadKey(true) |> ignore
 
             | TowerEvent.ChestOpened(chest, itemOpt, _) ->
               AnsiConsole.WriteLine()
@@ -1210,6 +1362,7 @@ module TowerDisplay =
                   ]
                   None
                   (fun () -> ())
+              RuntimeLog.write (sprintf "choice: %s (altar %s)" (Markup.Remove choice) altar.Name)
               if choice.Contains("Accept") then
                 match TowerSession.applyAltarSacrifice pt state with
                 | Ok updatedState ->
@@ -1242,6 +1395,7 @@ module TowerDisplay =
                   choices
                   None
                   (fun () -> ())
+              RuntimeLog.write (sprintf "choice: %s (trader %s)" (Markup.Remove choice) merchant.Name)
               if not (choice.Contains("Leave")) then
                 let selectedIdx =
                   merchant.Wares
@@ -1276,6 +1430,7 @@ module TowerDisplay =
                   ]
                   None
                   (fun () -> ())
+              RuntimeLog.write (sprintf "choice: %s (vault %s)" (Markup.Remove choice) vault.Name)
               if choice.Contains("Attempt") then
                 match TowerSession.attemptOpenVault pt state with
                 | Ok updatedState ->
@@ -1397,10 +1552,14 @@ module TowerDisplay =
               else
                 sprintf "You tend your gear, but cannot recover while enemies are near (armor repaired%s, strain vented)." weaponMsg
             state <- { state with Player = restedPlayer; MessageLog = logMsg :: state.MessageLog }
+            RuntimeLog.write (sprintf "action: rest (%s)" (if safe then "safe" else "contested"))
             runEnemyPhase ()
 
           | ConsoleKey.F1 ->
             showHelpManual ()
+
+          | ConsoleKey.F12 when debug ->
+            debugMenu ()
 
           | ConsoleKey.Q | ConsoleKey.Escape ->
             let confirm =
@@ -1426,8 +1585,10 @@ module TowerDisplay =
     (startFloor: int)
     (onCombatDuel: int -> Combatant -> Combatant -> (CombatOutcome * Combatant))
     (onGroupCombat: int -> Combatant -> TowerEnemy list -> bool -> GroupDuelResult)
-    (onDefeatAnimation: unit -> unit) : unit =
-    runTowerCrawlWithMode initialPlayer startFloor onCombatDuel onGroupCombat onDefeatAnimation false
+    (onDefeatAnimation: unit -> unit)
+    (debug: bool)
+    (forcedSeed: int option) : unit =
+    runTowerCrawlWithMode initialPlayer startFloor onCombatDuel onGroupCombat onDefeatAnimation debug forcedSeed false
 
   /// Interactive story mode stage expedition entry point
   let runStoryCrawl
@@ -1435,5 +1596,7 @@ module TowerDisplay =
     (startFloor: int)
     (onCombatDuel: int -> Combatant -> Combatant -> (CombatOutcome * Combatant))
     (onGroupCombat: int -> Combatant -> TowerEnemy list -> bool -> GroupDuelResult)
-    (onDefeatAnimation: unit -> unit) : unit =
-    runTowerCrawlWithMode initialPlayer startFloor onCombatDuel onGroupCombat onDefeatAnimation true
+    (onDefeatAnimation: unit -> unit)
+    (debug: bool)
+    (forcedSeed: int option) : unit =
+    runTowerCrawlWithMode initialPlayer startFloor onCombatDuel onGroupCombat onDefeatAnimation debug forcedSeed true

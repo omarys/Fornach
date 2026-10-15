@@ -604,7 +604,7 @@ module Program =
       Description = "Custom player-crafted combatant."
       Factory = customFactory }
 
-  let private parseCliArgs (args: string array) : CliOptions =
+  let parseCliArgs (args: string array) : CliOptions * DebugOptions =
     let hasFlag (f: string) = args |> Array.exists (fun a -> a = f)
     let hasGroupFlag = hasFlag "--group" || hasFlag "-g"
 
@@ -628,37 +628,52 @@ module Program =
     let isMatrix = hasFlag "--balance-matrix" || hasFlag "--matrix" || hasFlag "-b"
     let isSim = hasFlag "--sim" || hasGroupFlag || isStandaloneSimFlag || hasFlag "-a1" || hasFlag "--solo"
 
-    if isBestiarySwarm then
-      let tierArg = findArg ["-t"; "--tier"] ""
-      let tierOpt =
-        match tierArg.ToLowerInvariant() with
-        | "novice" -> Some CombatTier.Novice
-        | "veteran" -> Some CombatTier.Veteran
-        | "master" -> Some CombatTier.Master
-        | "grandmaster" | "gm" -> Some CombatTier.GrandMaster
-        | _ -> None
-      RunBestiarySwarmMatrix tierOpt
-    elif isPeerMatrix then
-      RunPeerBalanceMatrix
-    elif isMatrix then
-      RunBalanceMatrix
-    elif not isSim then
-      InteractiveMenu
-    else
-      let arch1 = findArg ["--solo"; "-s"; "-a1"; "--archetype1"] "Veteran Berserker"
-      let arch2 = findArg ["--mob"; "--enemy"; "-e"; "-a2"; "--archetype2"] "Veteran Inquisitor"
-      let itersStr = findArg ["-n"; "--iterations"] "100"
-      let iters = match Int32.TryParse itersStr with true, v -> Math.Max(1, v) | _ -> 100
+    let debugOptions =
+      let forcedSeed =
+        args
+        |> Array.mapi (fun i a -> (i, a))
+        |> Array.tryFind (fun (i, a) -> a = "--seed" && i + 1 < args.Length)
+        |> Option.bind (fun (i, _) ->
+          match Int32.TryParse args.[i + 1] with
+          | true, v -> Some v
+          | _ -> None)
 
-      let countStr = findArg ["-k"; "--count"] (if hasGroupFlag then "3" else "0")
-      let mobCount = match Int32.TryParse countStr with true, v when v > 1 -> v | _ -> 0
+      { Enabled = hasFlag "--debug" || hasFlag "-d"
+        ForcedSeed = forcedSeed }
 
-      if mobCount > 1 || hasGroupFlag then
-        let effectiveCount = Math.Max(2, mobCount)
-        RunGroupSimulation(arch1, arch2, effectiveCount, iters)
+    let mode =
+      if isBestiarySwarm then
+        let tierArg = findArg [ "-t"; "--tier" ] ""
+        let tierOpt =
+          match tierArg.ToLowerInvariant() with
+          | "novice" -> Some CombatTier.Novice
+          | "veteran" -> Some CombatTier.Veteran
+          | "master" -> Some CombatTier.Master
+          | "grandmaster" | "gm" -> Some CombatTier.GrandMaster
+          | _ -> None
+        RunBestiarySwarmMatrix tierOpt
+      elif isPeerMatrix then
+        RunPeerBalanceMatrix
+      elif isMatrix then
+        RunBalanceMatrix
+      elif not isSim then
+        InteractiveMenu
       else
-        RunSimulation(arch1, arch2, iters)
+        let arch1 = findArg [ "--solo"; "-s"; "-a1"; "--archetype1" ] "Veteran Berserker"
+        let arch2 = findArg [ "--mob"; "--enemy"; "-e"; "-a2"; "--archetype2" ] "Veteran Inquisitor"
+        let itersStr = findArg [ "-n"; "--iterations" ] "100"
+        let iters = match Int32.TryParse itersStr with true, v -> Math.Max(1, v) | _ -> 100
 
+        let countStr = findArg [ "-k"; "--count" ] (if hasGroupFlag then "3" else "0")
+        let mobCount = match Int32.TryParse countStr with true, v when v > 1 -> v | _ -> 0
+
+        if mobCount > 1 || hasGroupFlag then
+          let effectiveCount = Math.Max(2, mobCount)
+          RunGroupSimulation(arch1, arch2, effectiveCount, iters)
+        else
+          RunSimulation(arch1, arch2, iters)
+
+    mode, debugOptions
 
   let private runStoryDuel (floorNumber: int) (player: Combatant) (boss: Combatant) : CombatOutcome * Combatant =
     let rng = Random()
@@ -676,6 +691,8 @@ module Program =
         "Story / Tower Tactical Duel"
         currentCombatant
         currentBoss
+
+    RuntimeLog.write (sprintf "combat start: %s vs %s (round 1)" currentCombatant.Name currentBoss.Name)
 
     while not combatOver do
       Display.renderHUD currentCombatant currentBoss round
@@ -700,6 +717,8 @@ module Program =
       currentBoss <- playerResult.Target
 
       CombatLogger.recordTurn session round 1 choice playerBefore bossBefore playerResult
+      RuntimeLog.write (
+        sprintf "combat round %d player turn: %s (%d events)" round choice playerResult.Events.Length)
 
       Display.renderRollBreakdown choice currentCombatant.Name playerResult.Contest
       playerResult.Events |> List.iter Display.logEvent
@@ -736,6 +755,8 @@ module Program =
 
         let intentDesc = sprintf "%A" enemyIntent
         CombatLogger.recordTurn session round 2 intentDesc bossBeforeTurn playerBeforeTurn enemyResult
+        RuntimeLog.write (
+          sprintf "combat round %d enemy turn: %s (%d events)" round intentDesc enemyResult.Events.Length)
 
         Display.renderRollBreakdown intentDesc currentBoss.Name enemyResult.Contest
         enemyResult.Events |> List.iter Display.logEvent
@@ -762,26 +783,53 @@ module Program =
 
     let outcomeStr = if outcome = CombatOutcome.PlayerVictorious then "PlayerVictorious" else "PlayerDefeated"
     let latestLog, _ = CombatLogger.writeSession session outcomeStr currentCombatant currentBoss
+    RuntimeLog.write (sprintf "combat end: %s (log %s)" outcomeStr latestLog)
     AnsiConsole.WriteLine()
     AnsiConsole.MarkupLine(sprintf "[dim grey]Tactical combat log saved to: %s[/]" latestLog)
 
     outcome, currentCombatant
 
-  /// Renders a compact battle HUD for a multi-enemy engagement.
-  let private renderGroupHud (player: Combatant) (enemies: TowerEnemy list) (round: int) =
+  /// Renders the multi-enemy engagement HUD: the full player panel on the left, compact enemy
+  /// panels stacked on the right, and a combat-log pane spanning the bottom.
+  let private renderGroupHud (player: Combatant) (enemies: TowerEnemy list) (round: int) (logLines: string list) =
     AnsiConsole.Clear()
     AnsiConsole.Write(
       Rule(sprintf "[bold %s]⚔ MULTI-ENEMY ENGAGEMENT — ROUND %d[/]" Theme.Yellow round)
         .Centered()
         .RuleStyle(Theme.StyleYellow)
     )
-    AnsiConsole.MarkupLine(sprintf "[bold %s]%s[/]  •  Health %d/%d  •  Morale %d/%d  •  Stance %A"
-      Theme.Green player.Name player.Health.Current player.Health.Maximum player.Morale.Current player.Morale.Maximum player.Stance)
+
+    let enemyColumn = Grid()
+    enemyColumn.AddColumn(GridColumn()) |> ignore
     for e in enemies do
-      let status =
-        if e.IsDefeated || e.Combatant.Health.IsDepleted || e.Combatant.Morale.IsDepleted then "[bold red]DEFEATED[/]"
-        else sprintf "Health %d/%d  •  Morale %d/%d" e.Combatant.Health.Current e.Combatant.Health.Maximum e.Combatant.Morale.Current e.Combatant.Morale.Maximum
-      AnsiConsole.MarkupLine(sprintf "   [bold red]%s[/] — %s" e.Name status)
+      let defeated = e.IsDefeated || e.Combatant.Health.IsDepleted || e.Combatant.Morale.IsDepleted
+      let borderColor, headerColor =
+        if defeated then Theme.ColorRed, Theme.Red else Theme.ColorPink, Theme.Pink
+      enemyColumn.AddRow(Display.createCompactCombatantPanel e.Combatant borderColor headerColor (Some player)) |> ignore
+
+    let body = Grid()
+    body.AddColumn(GridColumn()) |> ignore
+    body.AddColumn(GridColumn()) |> ignore
+    body.AddRow(Display.createCombatantPanel player Theme.ColorGreen Theme.Green None, enemyColumn) |> ignore
+    body.Expand <- true
+    AnsiConsole.Write(body)
+
+    let logGrid = Grid()
+    logGrid.AddColumn(GridColumn()) |> ignore
+    let recent = logLines |> List.rev |> List.truncate 10 |> List.rev
+    if recent.IsEmpty then
+      logGrid.AddRow(Markup(sprintf "[%s]Awaiting the first exchange...[/]" Theme.Comment)) |> ignore
+    else
+      for line in recent do
+        logGrid.AddRow(Markup(line)) |> ignore
+    logGrid.Expand <- true
+    AnsiConsole.Write(
+      Panel(logGrid)
+        .Header(sprintf "[bold %s] COMBAT LOG [/]" Theme.Cyan)
+        .Border(BoxBorder.Rounded)
+        .BorderColor(Theme.ColorCurrentLine)
+        .Expand()
+    )
     AnsiConsole.WriteLine()
 
   /// Interactive duel against a pack of enemies, modelled on runStoryDuel. The lone player resolves
@@ -798,6 +846,22 @@ module Program =
     let mutable combatOver = false
     let mutable outcome = TowerDisplay.GroupDuelOutcome.Victorious
 
+    let combatLog = System.Collections.Generic.List<string>()
+
+    let session =
+      CombatLogger.startSession
+        (sprintf "%s vs the pack [%s]" currentPlayer.Name (currentEnemies |> List.map (fun e -> e.Name) |> String.concat ", "))
+        "Story / Tower Group Engagement"
+        currentPlayer
+        (currentEnemies |> List.tryHead |> Option.map (fun e -> e.Combatant) |> Option.defaultValue currentPlayer)
+
+    let appendTurn (header: string) (events: CombatEvent list) =
+      combatLog.Add(sprintf "[bold %s]%s[/]" Theme.Yellow (Markup.Escape header))
+      for evt in events do
+        combatLog.Add(sprintf "  [grey]• %s[/]" (Markup.Escape (CombatLogger.formatCombatEvent evt)))
+
+    let logLines () = combatLog |> List.ofSeq
+
     let isLiving (e: TowerEnemy) =
       not e.IsDefeated && not e.Combatant.Health.IsDepleted && not e.Combatant.Morale.IsDepleted
 
@@ -805,8 +869,10 @@ module Program =
 
     while not combatOver && not (living ()).IsEmpty do
       priorDefenses <- 0
-      renderGroupHud currentPlayer currentEnemies round
+      let mutable turnNum = 1
+      renderGroupHud currentPlayer currentEnemies round (logLines ())
       let livingNow = living ()
+      RuntimeLog.write (sprintf "group combat round %d: %d foe(s) standing" round livingNow.Length)
 
       // 1. Target selection (only meaningful with more than one foe standing)
       let target =
@@ -819,7 +885,7 @@ module Program =
               (sprintf "[bold %s]Choose your target:[/]" Theme.Yellow)
               (indexed |> List.map fst)
               None
-              (fun () -> renderGroupHud currentPlayer currentEnemies round)
+              (fun () -> renderGroupHud currentPlayer currentEnemies round (logLines ()))
           indexed |> List.find (fun (label, _) -> label = pick) |> snd
 
       // 2. Action selection (with an optional disengage)
@@ -833,7 +899,7 @@ module Program =
           (sprintf "[bold %s]Round %d - Action against %s (Press '?' or F1 for Symbol Legend):[/]" Theme.Yellow round target.Name)
           actionChoices
           (Some 11)
-          (fun () -> renderGroupHud currentPlayer currentEnemies round)
+          (fun () -> renderGroupHud currentPlayer currentEnemies round (logLines ()))
 
       if choice.Contains("Disengage") then
         // Parting strikes from every living enemy.
@@ -841,11 +907,15 @@ module Program =
         let mutable survived = true
         for e in living () do
           let intent = AI.chooseIntent e.Combatant currentPlayer
+          let playerBeforeTurn = currentPlayer
           let r =
             if floorNumber = 1 then
               ActionResolver.resolveWithoutLethal roller intent e.Combatant currentPlayer
             else
               ActionResolver.resolveEx roller intent e.Combatant currentPlayer priorDefenses
+          CombatLogger.recordTurn session round turnNum (sprintf "%A" intent) e.Combatant playerBeforeTurn r
+          turnNum <- turnNum + 1
+          appendTurn (sprintf "Round %d — %s strikes %s (parting blow)" round e.Name currentPlayer.Name) r.Events
           currentPlayer <- r.Target
           currentEnemies <- currentEnemies |> List.map (fun en -> if en.Id = e.Id then { en with Combatant = r.Actor } else en)
           priorDefenses <- priorDefenses + 1
@@ -861,7 +931,13 @@ module Program =
         let intent = parseActionChoice choice
         let otherLiving = livingNow |> List.filter (fun e -> e.Id <> target.Id) |> List.map (fun e -> e.Combatant)
         AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes %s...[/]" Theme.Green currentPlayer.Name choice)
+        let playerBefore = currentPlayer
+        let targetBefore = targetCombatant
         let res = ActionResolver.resolveGroupTurn roller intent currentPlayer targetCombatant otherLiving
+        CombatLogger.recordTurn session round turnNum choice playerBefore targetBefore
+          { Actor = res.Actor; Target = res.PrimaryTarget; Events = res.Events; Contest = None }
+        turnNum <- turnNum + 1
+        appendTurn (sprintf "Round %d — %s uses %s on %s" round currentPlayer.Name choice target.Name) res.Events
         currentPlayer <- res.Actor
         currentEnemies <-
           currentEnemies
@@ -887,11 +963,15 @@ module Program =
           for e in living () do
             if not combatOver then
               let intent = AI.chooseIntent e.Combatant currentPlayer
+              let playerBeforeTurn = currentPlayer
               let r =
                 if floorNumber = 1 then
                   ActionResolver.resolveWithoutLethal roller intent e.Combatant currentPlayer
                 else
                   ActionResolver.resolveEx roller intent e.Combatant currentPlayer priorDefenses
+              CombatLogger.recordTurn session round turnNum (sprintf "%A" intent) e.Combatant playerBeforeTurn r
+              turnNum <- turnNum + 1
+              appendTurn (sprintf "Round %d — %s strikes %s" round e.Name currentPlayer.Name) r.Events
               currentPlayer <- r.Target
               currentEnemies <- currentEnemies |> List.map (fun en -> if en.Id = e.Id then { en with Combatant = r.Actor } else en)
               priorDefenses <- priorDefenses + 1
@@ -912,6 +992,20 @@ module Program =
         Console.ReadKey(true) |> ignore
         round <- round + 1
 
+    let outcomeStr =
+      match outcome with
+      | TowerDisplay.GroupDuelOutcome.Victorious -> "PlayerVictorious"
+      | TowerDisplay.GroupDuelOutcome.Defeated -> "PlayerDefeated"
+      | TowerDisplay.GroupDuelOutcome.Fled -> "PlayerFled"
+
+    let finalOpponent =
+      currentEnemies |> List.tryHead |> Option.map (fun e -> e.Combatant) |> Option.defaultValue currentPlayer
+
+    let latestLog, _ = CombatLogger.writeSession session outcomeStr currentPlayer finalOpponent
+    RuntimeLog.write (sprintf "group combat end: %s (log %s)" outcomeStr latestLog)
+    AnsiConsole.WriteLine()
+    AnsiConsole.MarkupLine(sprintf "[dim grey]Tactical combat log saved to: %s[/]" latestLog)
+
     let finalEnemies =
       currentEnemies
       |> List.map (fun e -> if isLiving e then e else { e with IsDefeated = true })
@@ -921,7 +1015,7 @@ module Program =
   let private createProloguePlayer (className: string) : Combatant =
     StoryBosses.createProloguePlayer className
 
-  let private runInteractiveStory () =
+  let private runInteractiveStory (debug: bool) (forcedSeed: int option) =
     AnsiConsole.Clear()
     AnsiConsole.Write(
       Rule(sprintf "[bold %s]FORNACH: THE TRAUMA LOOP & THE GRIEF STAGES[/]" Theme.Yellow)
@@ -997,175 +1091,204 @@ module Program =
     Console.ReadKey(true) |> ignore
 
     // 3. Launch 2D Spatial Map Loop for Story Campaign
-    TowerDisplay.runStoryCrawl player 1 runStoryDuel runStoryGroupDuel DeathAnimation.playTruckReplay
+    TowerDisplay.runStoryCrawl player 1 runStoryDuel runStoryGroupDuel DeathAnimation.playTruckReplay debug forcedSeed
 
   [<EntryPoint>]
   let main (args: string array) =
-    match parseCliArgs args with
-    | RunBestiarySwarmMatrix tierOpt ->
-      printBanner()
-      Simulation.renderBestiarySwarmMatrix tierOpt
-      0
+    let cliOptions, debugOptions = parseCliArgs args
 
-    | RunPeerBalanceMatrix ->
-      printBanner()
-      Simulation.renderPeerBalanceMatrix()
-      0
+    if args |> Array.exists (fun a -> a = "--verbose" || a = "-v" || a = "--log") then
+      RuntimeLog.``begin`` args |> ignore
 
-    | RunBalanceMatrix ->
-      printBanner()
-      Simulation.renderBalanceMatrix()
-      0
+    let onUnhandled (e: UnhandledExceptionEventArgs) =
+      match e.ExceptionObject with
+      | :? exn as ex -> RuntimeLog.exn "UNHANDLED EXCEPTION" ex
+      | other -> RuntimeLog.write (sprintf "UNHANDLED EXCEPTION (non-exception object): %A" other)
 
-    | RunSimulation (nameA, nameB, iters) ->
-      printBanner()
-      let optA = Archetypes.findByName nameA
-      let optB = Archetypes.findByName nameB
-      match optA, optB with
-      | Some a, Some b ->
-        let summary = Simulation.runBatch a b iters
-        Simulation.renderDashboard summary (a.Factory()) (b.Factory())
-        0
-      | None, _ ->
-        AnsiConsole.MarkupLine(sprintf "[bold %s]Error: Archetype '%s' not recognized.[/]" Theme.Red nameA)
-        1
-      | _, None ->
-        AnsiConsole.MarkupLine(sprintf "[bold %s]Error: Archetype '%s' not recognized.[/]" Theme.Red nameB)
-        1
+    AppDomain.CurrentDomain.UnhandledException.Add onUnhandled
 
-    | RunGroupSimulation (soloName, mobName, mobCount, iters) ->
-      printBanner()
-      let optSolo = Archetypes.findByName soloName
-      let optMob = Archetypes.findByName mobName
-      match optSolo, optMob with
-      | Some solo, Some mob ->
-        let summary = Simulation.runGroupBatch solo mob mobCount iters
-        Simulation.renderGroupDashboard summary (solo.Factory()) (mob.Factory())
-        0
-      | None, _ ->
-        AnsiConsole.MarkupLine(sprintf "[bold %s]Error: Archetype '%s' not recognized.[/]" Theme.Red soloName)
-        1
-      | _, None ->
-        AnsiConsole.MarkupLine(sprintf "[bold %s]Error: Archetype '%s' not recognized.[/]" Theme.Red mobName)
-        1
+    RuntimeLog.section "MODE SELECTION"
+    RuntimeLog.write (sprintf "mode=%A debug=%b forcedSeed=%A" cliOptions debugOptions.Enabled debugOptions.ForcedSeed)
 
-    | InteractiveMenu ->
-      let mutable running = true
-      while running do
-        AnsiConsole.Clear()
+    try
+      match cliOptions with
+      | RunBestiarySwarmMatrix tierOpt ->
         printBanner()
+        Simulation.renderBestiarySwarmMatrix tierOpt
+        0
 
-        let termWidth = Math.Max(80, AnsiConsole.Profile.Width)
-        let contentWidth = Math.Min(96, termWidth - 4)
-        let margin = Math.Max(0, (termWidth - contentWidth) / 2)
-        let pad = String(' ', margin)
+      | RunPeerBalanceMatrix ->
+        printBanner()
+        Simulation.renderPeerBalanceMatrix()
+        0
 
-        let formatMenuItem icon title desc color =
-          sprintf "%s%s [bold %s]%-40s[/] [italic %s]── %s[/]" pad icon color title Theme.Comment desc
+      | RunBalanceMatrix ->
+        printBanner()
+        Simulation.renderBalanceMatrix()
+        0
 
-        // Center the header and hint on the full terminal width; `pad` is the
-        // menu margin, which is narrower than the terminal whenever contentWidth
-        // (96) is capped below the terminal width. Count codepoints, not UTF-16
-        // units: the Nerd Font icons are non-BMP and occupy a single cell.
-        let centerPad (text: string) =
-          let visible = (Markup.Remove text).EnumerateRunes() |> Seq.length
-          String(' ', Math.Max(0, (termWidth - visible) / 2))
+      | RunSimulation (nameA, nameB, iters) ->
+        printBanner()
+        let optA = Archetypes.findByName nameA
+        let optB = Archetypes.findByName nameB
+        match optA, optB with
+        | Some a, Some b ->
+          let summary = Simulation.runBatch a b iters
+          Simulation.renderDashboard summary (a.Factory()) (b.Factory())
+          0
+        | None, _ ->
+          AnsiConsole.MarkupLine(sprintf "[bold %s]Error: Archetype '%s' not recognized.[/]" Theme.Red nameA)
+          1
+        | _, None ->
+          AnsiConsole.MarkupLine(sprintf "[bold %s]Error: Archetype '%s' not recognized.[/]" Theme.Red nameB)
+          1
 
-        let promptHeader = "══════════ 󰒋 SELECT EXPEDITION OR BENCHMARK MODE ══════════"
-        let promptHint = "      (󰌌 Navigate: [bold white]↑/↓[/] or [bold white]j/k[/]  •  󰌑 Select: [bold white]Enter[/]  •  󰗼 Quit: [bold white]Exit[/])"
+      | RunGroupSimulation (soloName, mobName, mobCount, iters) ->
+        printBanner()
+        let optSolo = Archetypes.findByName soloName
+        let optMob = Archetypes.findByName mobName
+        match optSolo, optMob with
+        | Some solo, Some mob ->
+          let summary = Simulation.runGroupBatch solo mob mobCount iters
+          Simulation.renderGroupDashboard summary (solo.Factory()) (mob.Factory())
+          0
+        | None, _ ->
+          AnsiConsole.MarkupLine(sprintf "[bold %s]Error: Archetype '%s' not recognized.[/]" Theme.Red soloName)
+          1
+        | _, None ->
+          AnsiConsole.MarkupLine(sprintf "[bold %s]Error: Archetype '%s' not recognized.[/]" Theme.Red mobName)
+          1
 
-        let promptTitle =
-          sprintf "%s[bold %s]%s[/]\n%s[grey]%s[/]\n"
-            (centerPad promptHeader) Theme.Yellow promptHeader (centerPad promptHint) promptHint
+      | InteractiveMenu ->
+        let mutable running = true
+        while running do
+          AnsiConsole.Clear()
+          printBanner()
 
-        let choice =
-          Display.promptWithVim(
-            SelectionPrompt<string>()
-              .Title(promptTitle)
-              .PageSize(12)
-              .AddChoices([
-                formatMenuItem "󰈙 " "Interactive Story Mode" "Narrative prologue & aspect battles" Theme.Cyan
-                formatMenuItem "󰒋 " "Ascend The Infinite Tower" "Roguelike procedural dungeon crawl" Theme.Yellow
-                formatMenuItem "󰓥 " "Interactive Duel Arena" "Tactical turn-based combat duel" Theme.Green
-                formatMenuItem "󰓎 " "Monte-Carlo Balance Simulator (1 vs 1)" "Statistical win-rate analysis" Theme.Cyan
-                formatMenuItem " " "1 vs N Encirclement Swarm Simulator" "Swarm overwhelm stress test" Theme.Pink
-                formatMenuItem " " "Custom Combatant Builder" "Interactive stat & stance forge" Theme.Orange
-                formatMenuItem "󰂺 " "View Archetype Roster" (sprintf "Inspect %d mastery archetypes" Archetypes.allArchetypes.Length) Theme.Purple
-                formatMenuItem "󰓥 " "Peer Class 1v1 Balance Matrix" "Cross-tier 100-run pairwise duel benchmark" Theme.Green
-                formatMenuItem "󰈷 " "Swarm Tipping Point Balance Matrix" "128-matchup macro balance benchmark" Theme.Yellow
-                formatMenuItem "󰞁 " "Bestiary Monster Swarm Matrix" "Swarm tipping point for all 21 monsters vs classes" Theme.Red
-                formatMenuItem "󰒋 " "Symbol & Glyph Reference Manual" "Exhaustive guide to icons, meters & hazards" Theme.Yellow
-                formatMenuItem "󰗼 " "Exit" "Close the Fornach Arena" Theme.Red
-              ])
-          )
+          let termWidth = Math.Max(80, AnsiConsole.Profile.Width)
+          let contentWidth = Math.Min(96, termWidth - 4)
+          let margin = Math.Max(0, (termWidth - contentWidth) / 2)
+          let pad = String(' ', margin)
 
-        if choice.Contains("Interactive Story Mode") then
-          runInteractiveStory ()
-        elif choice.Contains("Ascend The Infinite Tower") then
-          let playerArch = promptSelectArchetype (sprintf "[bold %s]Select Expedition Champion:[/]" Theme.Yellow)
-          let player = playerArch.Factory()
-          TowerDisplay.runTowerCrawl player 1 runStoryDuel runStoryGroupDuel DeathAnimation.playTruckReplay
-        elif choice.Contains("Interactive Duel Arena") then
-          let playerArch = promptSelectArchetype (sprintf "[bold %s]Select Player Combatant:[/]" Theme.Green)
-          let enemyArch = promptSelectArchetype (sprintf "[bold %s]Select Opponent Combatant:[/]" Theme.Pink)
-          runInteractiveDuel playerArch enemyArch
+          let formatMenuItem icon title desc color =
+            sprintf "%s%s [bold %s]%-40s[/] [italic %s]── %s[/]" pad icon color title Theme.Comment desc
 
-        elif choice.Contains("Monte-Carlo Balance Simulator (1 vs 1)") then
-          let archA = promptSelectArchetype (sprintf "[bold %s]Select Combatant A:[/]" Theme.Green)
-          let archB = promptSelectArchetype (sprintf "[bold %s]Select Combatant B:[/]" Theme.Pink)
-          runBalanceSimulator archA archB
+          // Center the header and hint on the full terminal width; `pad` is the
+          // menu margin, which is narrower than the terminal whenever contentWidth
+          // (96) is capped below the terminal width. Count codepoints, not UTF-16
+          // units: the Nerd Font icons are non-BMP and occupy a single cell.
+          let centerPad (text: string) =
+            let visible = (Markup.Remove text).EnumerateRunes() |> Seq.length
+            String(' ', Math.Max(0, (termWidth - visible) / 2))
 
-        elif choice.Contains("1 vs N Encirclement Swarm Simulator") then
-          let soloArch = promptSelectArchetype (sprintf "[bold %s]Select Solo Champion:[/]" Theme.Green)
-          let mobArch = promptSelectArchetype (sprintf "[bold %s]Select Swarm Opponent Archetype:[/]" Theme.Pink)
-          runGroupBalanceSimulator soloArch mobArch
+          let promptHeader = "══════════ 󰒋 SELECT EXPEDITION OR BENCHMARK MODE ══════════"
+          let promptHint = "      (󰌌 Navigate: [bold white]↑/↓[/] or [bold white]j/k[/]  •  󰌑 Select: [bold white]Enter[/]  •  󰗼 Quit: [bold white]Exit[/])"
 
-        elif choice.Contains("Custom Combatant Builder") then
-          let customArch = createCustomCombatantInteractive ()
-          let enemyArch = promptSelectArchetype (sprintf "[bold %s]Select Opponent to Test Against:[/]" Theme.Pink)
-          runInteractiveDuel customArch enemyArch
+          let promptTitle =
+            sprintf "%s[bold %s]%s[/]\n%s[grey]%s[/]\n"
+              (centerPad promptHeader) Theme.Yellow promptHeader (centerPad promptHint) promptHint
 
-        elif choice.Contains("View Archetype Roster") then
-          showRoster ()
-
-        elif choice.Contains("Peer Class 1v1 Balance Matrix") then
-          Simulation.renderPeerBalanceMatrix ()
-          AnsiConsole.MarkupLine(sprintf "[%s]Press any key to return to menu...[/]" Theme.Comment)
-          Console.ReadKey(true) |> ignore
-
-        elif choice.Contains("Swarm Tipping Point Balance Matrix") then
-          Simulation.renderBalanceMatrix ()
-          AnsiConsole.MarkupLine(sprintf "[%s]Press any key to return to menu...[/]" Theme.Comment)
-          Console.ReadKey(true) |> ignore
-
-        elif choice.Contains("Bestiary Monster Swarm Matrix") then
-          let tierChoice =
+          let choice =
             Display.promptWithVim(
               SelectionPrompt<string>()
-                .Title("[bold yellow]Select Champion Progression Tier for Bestiary Swarm Benchmark:[/]")
+                .Title(promptTitle)
+                .PageSize(12)
                 .AddChoices([
-                  "All Tiers (Novice, Veteran, Master, GrandMaster)"
-                  "Novice Tier (Level 1 Adventurers)"
-                  "Veteran Tier (Level 40 Champions)"
-                  "Master Tier (Level 100 Champions)"
-                  "GrandMaster Tier (Level 200 Paragons)"
+                  formatMenuItem "󰈙 " "Interactive Story Mode" "Narrative prologue & aspect battles" Theme.Cyan
+                  formatMenuItem "󰒋 " "Ascend The Infinite Tower" "Roguelike procedural dungeon crawl" Theme.Yellow
+                  formatMenuItem "󰓥 " "Interactive Duel Arena" "Tactical turn-based combat duel" Theme.Green
+                  formatMenuItem "󰓎 " "Monte-Carlo Balance Simulator (1 vs 1)" "Statistical win-rate analysis" Theme.Cyan
+                  formatMenuItem " " "1 vs N Encirclement Swarm Simulator" "Swarm overwhelm stress test" Theme.Pink
+                  formatMenuItem " " "Custom Combatant Builder" "Interactive stat & stance forge" Theme.Orange
+                  formatMenuItem "󰂺 " "View Archetype Roster" (sprintf "Inspect %d mastery archetypes" Archetypes.allArchetypes.Length) Theme.Purple
+                  formatMenuItem "󰓥 " "Peer Class 1v1 Balance Matrix" "Cross-tier 100-run pairwise duel benchmark" Theme.Green
+                  formatMenuItem "󰈷 " "Swarm Tipping Point Balance Matrix" "128-matchup macro balance benchmark" Theme.Yellow
+                  formatMenuItem "󰞁 " "Bestiary Monster Swarm Matrix" "Swarm tipping point for all 21 monsters vs classes" Theme.Red
+                  formatMenuItem "󰒋 " "Symbol & Glyph Reference Manual" "Exhaustive guide to icons, meters & hazards" Theme.Yellow
+                  formatMenuItem "󰗼 " "Exit" "Close the Fornach Arena" Theme.Red
                 ])
             )
-          let selectedTier =
-            if tierChoice.Contains("Novice") then Some CombatTier.Novice
-            elif tierChoice.Contains("Veteran") then Some CombatTier.Veteran
-            elif tierChoice.Contains("Master") && not (tierChoice.Contains("GrandMaster")) then Some CombatTier.Master
-            elif tierChoice.Contains("GrandMaster") then Some CombatTier.GrandMaster
-            else None
-          Simulation.renderBestiarySwarmMatrix selectedTier
-          AnsiConsole.MarkupLine(sprintf "[%s]Press any key to return to menu...[/]" Theme.Comment)
-          Console.ReadKey(true) |> ignore
 
-        elif choice.Contains("Symbol & Glyph Reference Manual") then
-          Display.showSymbolAndGlyphLegend ()
+          RuntimeLog.write (sprintf "menu choice: %s" (Markup.Remove choice))
 
-        elif choice.Contains("Exit") then
-          running <- false
+          if choice.Contains("Interactive Story Mode") then
+            runInteractiveStory debugOptions.Enabled debugOptions.ForcedSeed
+          elif choice.Contains("Ascend The Infinite Tower") then
+            let playerArch = promptSelectArchetype (sprintf "[bold %s]Select Expedition Champion:[/]" Theme.Yellow)
+            let player = playerArch.Factory()
+            TowerDisplay.runTowerCrawl player 1 runStoryDuel runStoryGroupDuel DeathAnimation.playTruckReplay debugOptions.Enabled debugOptions.ForcedSeed
+          elif choice.Contains("Interactive Duel Arena") then
+            let playerArch = promptSelectArchetype (sprintf "[bold %s]Select Player Combatant:[/]" Theme.Green)
+            let enemyArch = promptSelectArchetype (sprintf "[bold %s]Select Opponent Combatant:[/]" Theme.Pink)
+            runInteractiveDuel playerArch enemyArch
 
-      AnsiConsole.MarkupLine(sprintf "[bold %s]Exiting Fornach Arena. Farewell![/]" Theme.Yellow)
-      0
+          elif choice.Contains("Monte-Carlo Balance Simulator (1 vs 1)") then
+            let archA = promptSelectArchetype (sprintf "[bold %s]Select Combatant A:[/]" Theme.Green)
+            let archB = promptSelectArchetype (sprintf "[bold %s]Select Combatant B:[/]" Theme.Pink)
+            runBalanceSimulator archA archB
+
+          elif choice.Contains("1 vs N Encirclement Swarm Simulator") then
+            let soloArch = promptSelectArchetype (sprintf "[bold %s]Select Solo Champion:[/]" Theme.Green)
+            let mobArch = promptSelectArchetype (sprintf "[bold %s]Select Swarm Opponent Archetype:[/]" Theme.Pink)
+            runGroupBalanceSimulator soloArch mobArch
+
+          elif choice.Contains("Custom Combatant Builder") then
+            let customArch = createCustomCombatantInteractive ()
+            let enemyArch = promptSelectArchetype (sprintf "[bold %s]Select Opponent to Test Against:[/]" Theme.Pink)
+            runInteractiveDuel customArch enemyArch
+
+          elif choice.Contains("View Archetype Roster") then
+            showRoster ()
+
+          elif choice.Contains("Peer Class 1v1 Balance Matrix") then
+            Simulation.renderPeerBalanceMatrix ()
+            AnsiConsole.MarkupLine(sprintf "[%s]Press any key to return to menu...[/]" Theme.Comment)
+            Console.ReadKey(true) |> ignore
+
+          elif choice.Contains("Swarm Tipping Point Balance Matrix") then
+            Simulation.renderBalanceMatrix ()
+            AnsiConsole.MarkupLine(sprintf "[%s]Press any key to return to menu...[/]" Theme.Comment)
+            Console.ReadKey(true) |> ignore
+
+          elif choice.Contains("Bestiary Monster Swarm Matrix") then
+            let tierChoice =
+              Display.promptWithVim(
+                SelectionPrompt<string>()
+                  .Title("[bold yellow]Select Champion Progression Tier for Bestiary Swarm Benchmark:[/]")
+                  .AddChoices([
+                    "All Tiers (Novice, Veteran, Master, GrandMaster)"
+                    "Novice Tier (Level 1 Adventurers)"
+                    "Veteran Tier (Level 40 Champions)"
+                    "Master Tier (Level 100 Champions)"
+                    "GrandMaster Tier (Level 200 Paragons)"
+                  ])
+              )
+            let selectedTier =
+              if tierChoice.Contains("Novice") then Some CombatTier.Novice
+              elif tierChoice.Contains("Veteran") then Some CombatTier.Veteran
+              elif tierChoice.Contains("Master") && not (tierChoice.Contains("GrandMaster")) then Some CombatTier.Master
+              elif tierChoice.Contains("GrandMaster") then Some CombatTier.GrandMaster
+              else None
+            Simulation.renderBestiarySwarmMatrix selectedTier
+            AnsiConsole.MarkupLine(sprintf "[%s]Press any key to return to menu...[/]" Theme.Comment)
+            Console.ReadKey(true) |> ignore
+
+          elif choice.Contains("Symbol & Glyph Reference Manual") then
+            Display.showSymbolAndGlyphLegend ()
+
+          elif choice.Contains("Exit") then
+            running <- false
+
+        AnsiConsole.MarkupLine(sprintf "[bold %s]Exiting Fornach Arena. Farewell![/]" Theme.Yellow)
+        0
+    with e ->
+      RuntimeLog.exn "FATAL" e
+      AnsiConsole.Write(
+        Panel(Markup(sprintf "[bold red]Fatal error:[/] %s" (Markup.Escape e.Message)))
+          .Header("[bold red]UNHANDLED RUNTIME ERROR[/]")
+          .BorderColor(Color.Red)
+      )
+      if RuntimeLog.enabled then
+        AnsiConsole.MarkupLine(sprintf "[%s]Verbose log written to: %s[/]" Theme.Comment RuntimeLog.path)
+      Console.Error.WriteLine(e.ToString())
+      1

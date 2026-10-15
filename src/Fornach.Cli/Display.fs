@@ -241,6 +241,58 @@ module Display =
       .BorderColor(borderColor)
       .Expand()
 
+  /// Field lines for the compact enemy panel used in multi-enemy engagements: vitals, weapon and
+  /// armor integrity, plus — when an observer is supplied — the observer's read of the target's
+  /// primary stat and defensive opening. The combatant name is the panel header, so it is omitted.
+  let compactCombatantLines (c: Combatant) (observerOpt: Combatant option) : string list =
+    let weaponCondColor, weaponCondDesc =
+      match c.WeaponCondition with
+      | WeaponCondition.Pristine -> Theme.Green, "Pristine (100% eff)"
+      | WeaponCondition.Notched -> Theme.Yellow, "Notched (-10% dmg)"
+      | WeaponCondition.Damaged -> Theme.Orange, "Damaged (-25% dmg)"
+      | WeaponCondition.Broken -> Theme.Red, "Broken (-50% dmg)"
+
+    let armorPct = int (c.Armor.AbsorptionRatio * 100.0)
+    let armorText =
+      if c.Armor.IsShredded then
+        sprintf "[bold %s]SHREDDED (0%% soak)[/]" Theme.Red
+      else
+        sprintf "[%s]%d / %d[/] [%s](%d%% soak)[/]" Theme.Comment c.Armor.Current c.Armor.Max Theme.Yellow armorPct
+
+    let coreLines =
+      [ renderBar "󰋑 HP (Physical)" c.Health.Current c.Health.Maximum Theme.Red
+        renderBar "󰧑 Morale (Mental)" c.Morale.Current c.Morale.Maximum Theme.Cyan
+        sprintf "%-22s [bold %s]%s[/]" "󰚌 Weapon Integrity" weaponCondColor weaponCondDesc
+        sprintf "%-22s %s" " Armor Integrity" armorText ]
+
+    let assessmentLines =
+      match observerOpt with
+      | Some obs ->
+        let assess = TacticalAssessment.assess obs c
+        let primary =
+          sprintf "%-22s %s" "󰈸 Primary Stat" (Markup.Escape assess.PrimarySummary)
+        match assess.VulnerabilitySummary with
+        | Some vuln ->
+          [ primary
+            sprintf "%-22s %s" "🎯 Opening" (Markup.Escape vuln) ]
+        | None -> [ primary ]
+      | None -> []
+
+    coreLines @ assessmentLines
+
+  /// Wraps compactCombatantLines in a panel styled like createCombatantPanel, for the enemy column
+  /// of a multi-enemy engagement HUD.
+  let createCompactCombatantPanel (c: Combatant) (borderColor: Color) (headerColor: string) (observerOpt: Combatant option) =
+    let grid = Grid()
+    grid.AddColumn(GridColumn()) |> ignore
+    for line in compactCombatantLines c observerOpt do
+      grid.AddRow(Markup(line)) |> ignore
+    Panel(grid)
+      .Header(sprintf "[bold %s] %s [/]" headerColor c.Name)
+      .Border(BoxBorder.Rounded)
+      .BorderColor(borderColor)
+      .Expand()
+
   let renderHUD (player: Combatant) (enemy: Combatant) (roundNumber: int) =
     let pnlPlayer = createCombatantPanel player Theme.ColorGreen Theme.Green None
     let pnlEnemy = createCombatantPanel enemy Theme.ColorPink Theme.Pink (Some player)

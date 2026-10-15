@@ -88,6 +88,35 @@ let ``aggroed enemy with clear line of sight advances exactly one tile toward th
   Assert.Equal(3, Distance.chebyshev newPos.Value playerPos)
 
 [<Fact>]
+let ``aggroed enemy off the player's row pursues`` () =
+  // Regression: a non-horizontal Bresenham line used to spin forever inside Los.check,
+  // freezing the game the moment an off-row enemy entered the aggro radius.
+  let playerPos = { X = 3; Y = 8 }
+  let enemyPos = { X = 7; Y = 5 }
+  let enemy = makeEnemy "mob_0" "Scavenger"
+  let state = makeState playerPos (openTiles 16 16) (Map.ofList [ enemyPos, EntityEnemy enemy ])
+
+  let next, _ = TowerSession.stepEnemies state
+  let newPos = positionOf enemy.Id next
+
+  Assert.True(newPos.IsSome)
+  Assert.True(Distance.chebyshev newPos.Value playerPos < Distance.chebyshev enemyPos playerPos)
+  Assert.Equal(3, Distance.chebyshev newPos.Value playerPos)
+
+[<Fact>]
+let ``aggroed enemy on the player's row advances straight without sidestepping`` () =
+  // Diagonal steps cost more than cardinal ones, so a lined-up enemy walks straight
+  // at the player rather than cutting diagonally off the row.
+  let playerPos = { X = 3; Y = 8 }
+  let enemyPos = { X = 7; Y = 8 }
+  let enemy = makeEnemy "mob_0" "Scavenger"
+  let state = makeState playerPos (openTiles 16 16) (Map.ofList [ enemyPos, EntityEnemy enemy ])
+
+  let next, _ = TowerSession.stepEnemies state
+
+  Assert.Equal(Some { X = 6; Y = 8 }, positionOf enemy.Id next)
+
+[<Fact>]
 let ``enemy with blocked line of sight does not pursue`` () =
   let playerPos = { X = 3; Y = 8 }
   let enemyPos = { X = 7; Y = 8 }

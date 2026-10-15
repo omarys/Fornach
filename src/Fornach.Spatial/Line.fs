@@ -6,7 +6,9 @@ module Line =
   /// Returns the complete list of points from `start` to `target` (inclusive).
   let bresenham (start: Point) (target: Point) : Point list =
     let dx = abs (target.X - start.X)
-    let dy = abs (target.Y - start.Y)
+    // Canonical Bresenham requires a negative dy; with a positive dy, err only grows
+    // and the `e2 <= dx` branch never fires, so y never advances -> infinite loop.
+    let dy = -abs (target.Y - start.Y)
 
     let sx = if start.X < target.X then 1 else -1
     let sy = if start.Y < target.Y then 1 else -1

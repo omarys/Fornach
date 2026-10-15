@@ -17,6 +17,8 @@
     <Compile Include="StanceTests.fs" />
     <Compile Include="ClassBalanceTests.fs" />
     <Compile Include="CombatLoggerTests.fs" />
+    <Compile Include="GroupEngagementTests.fs" />
+    <Compile Include="DebugToolingTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

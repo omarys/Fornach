@@ -295,6 +295,69 @@ let ``TowerDisplay rendering components smoke test`` () =
   Assert.NotNull(log)
 
 [<Fact>]
+let ``layoutWidths keeps the HUD from squeezing the map viewport`` () =
+  // On a wide terminal the map gets its full width and the HUD exactly the remainder.
+  let viewW, hudW = TowerDisplay.layoutWidths 190 64
+  Assert.Equal(64, viewW)
+  Assert.Equal(190 - 64 - 4, hudW)
+  Assert.True(viewW + hudW + 4 <= 190, "the pinned columns plus the gutter must fit the terminal")
+
+  // The map is never wider than the floor, and the HUD always keeps at least its budget.
+  for termW in [ 80; 120; 160; 190; 240; 320 ] do
+    let v, h = TowerDisplay.layoutWidths termW 64
+    Assert.True(v <= 64, sprintf "termW=%d viewW=%d" termW v)
+    Assert.True(h >= 58, sprintf "termW=%d hudW=%d" termW h)
+
+[<Fact>]
+let ``traumaReset restores mobs to their spawn tiles and clears player debuffs`` () =
+  let player = createTestPlayer ()
+  let state = TowerSession.initSessionWithMode player 42 1 false
+
+  let mobPositions (s: TowerRunState) =
+    s.CurrentFloor.Entities
+    |> Map.toList
+    |> List.choose (fun (p, ent) -> match ent with EntityEnemy e -> Some (e.Id, p) | _ -> None)
+
+  let original = mobPositions state
+  Assert.False(original.IsEmpty, "the generated floor should have mobs")
+
+  // Simulate a losing fight: one mob shoved off its spawn tile and wounded, the player bleeding.
+  let firstId, firstPt = original |> List.head
+  let firstEnemy =
+    state.CurrentFloor.Entities
+    |> Map.toList
+    |> List.pick (fun (_, ent) -> match ent with EntityEnemy e when e.Id = firstId -> Some e | _ -> None)
+  let shifted = { X = firstPt.X + 2; Y = firstPt.Y }
+  let entities =
+    state.CurrentFloor.Entities
+    |> Map.remove firstPt
+    |> Map.add shifted (EntityEnemy { firstEnemy with Combatant = { firstEnemy.Combatant with Health = { firstEnemy.Combatant.Health with Current = 1 } } })
+  let damaged =
+    { state with
+        Player = { state.Player with BleedStacks = 3; Health = { state.Player.Health with Current = 1 } }
+        CurrentFloor = { state.CurrentFloor with Entities = entities } }
+
+  let reset = TowerDisplay.traumaReset damaged
+
+  Assert.Equal(0, reset.Player.BleedStacks)
+  Assert.Equal(reset.Player.Health.Maximum, reset.Player.Health.Current)
+  Assert.Equal<Set<string * Point>>(Set.ofList original, Set.ofList (mobPositions reset))
+  for (_, ent) in Map.toList reset.CurrentFloor.Entities do
+    match ent with
+    | EntityEnemy e -> Assert.Equal(e.Combatant.Health.Maximum, e.Combatant.Health.Current)
+    | _ -> ()
+
+[<Fact>]
+let ``battered chest starts plundered so it cannot re-offer the class selection`` () =
+  let floor = TowerGenerator.generateFloorWithMode 42 1 true
+  let chest =
+    floor.Entities
+    |> Map.toList
+    |> List.tryPick (fun (_, ent) -> match ent with EntityChest c when c.Id = "battered_chest" -> Some c | _ -> None)
+  Assert.True(chest.IsSome, "story floor 1 keeps the battered chest")
+  Assert.True(chest.Value.IsOpen, "the in-map chest must start plundered")
+
+[<Fact>]
 let ``TowerDisplay inspectTile correctly inspects player position, AcidSlag hazard, unopened chest, and dark fog`` () =
   let player = createTestPlayer ()
   let baseState = TowerSession.initSession player 42 1

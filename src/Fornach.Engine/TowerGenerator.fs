@@ -211,12 +211,14 @@ module TowerGenerator =
           MoraleBonus = 0
           StartingRecklessnessDelta = 0
           Triggers = [] }
+      // The prologue already has the player loot this chest (the class/weapon selection happens
+      // before the crawl), so the in-map chest starts plundered and cannot re-offer a class pick.
       let batteredChest =
         { Id = "battered_chest"
           Description = "A battered iron chest resting in the mud, its lock broken and hanging loose."
           LootKeyId = None
           ItemReward = Some caltropsItem
-          IsOpen = false }
+          IsOpen = true }
       entities <- Map.add batteredChestPos (EntityChest batteredChest) entities
 
     // B. Floor NPC & Story Quests

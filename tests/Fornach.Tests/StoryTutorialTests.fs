@@ -66,7 +66,8 @@ module StoryTutorialTests =
     let reflexBefore = state.Player.Stats.Get StatId.Reflex
     let inventoryBefore = state.InventoryItems.Length
 
-    // Step onto the battered chest east of the spawn point.
+    // The in-map battered chest now starts plundered (the prologue already looted it), so put a
+    // fresh chest carrying the same caltrops reward back on that tile to exercise the pickup.
     let chestPos =
       state.CurrentFloor.Entities
       |> Map.tryFindKey (fun _ ent ->
@@ -76,7 +77,26 @@ module StoryTutorialTests =
     Assert.True(chestPos.IsSome, "The tutorial battered chest must sit beside the spawn")
     let chestPosition = chestPos.Value
 
-    let approachState = { state with PlayerPosition = { X = chestPosition.X - 1; Y = chestPosition.Y } }
+    let reward =
+      match Map.find chestPosition state.CurrentFloor.Entities with
+      | EntityChest c -> c.ItemReward
+      | _ -> None
+
+    let freshChest =
+      EntityChest
+        { Id = "test_pickup_chest"
+          Description = "A battered iron chest, freshly restocked."
+          LootKeyId = None
+          ItemReward = reward
+          IsOpen = false }
+
+    let approachState =
+      { state with
+          PlayerPosition = { X = chestPosition.X - 1; Y = chestPosition.Y }
+          CurrentFloor =
+            { state.CurrentFloor with
+                Entities = state.CurrentFloor.Entities |> Map.add chestPosition freshChest } }
+
     let nextState, events = TowerSession.stepPlayer Direction.East approachState
 
     Assert.Contains(events, (function TowerEvent.ChestOpened(_, _, _) -> true | _ -> false))

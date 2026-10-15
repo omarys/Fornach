@@ -90,3 +90,10 @@ type CliOptions =
   | RunPeerBalanceMatrix
   | RunBalanceMatrix
   | RunBestiarySwarmMatrix of selectedTier: CombatTier option
+
+/// Debug/test-play launch options parsed alongside the CliOptions mode.
+/// Enabled = --debug/-d (HUD overlay + seed printout);
+/// ForcedSeed = --seed N (overrides the randomly chosen run seed).
+type DebugOptions =
+  { Enabled: bool
+    ForcedSeed: int option }

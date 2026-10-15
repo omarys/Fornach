@@ -171,8 +171,13 @@ module TowerSession =
           let vacated = { workingState.CurrentFloor with Entities = Map.remove pt workingState.CurrentFloor.Entities }
           let movedFloor = { vacated with Entities = Map.add step (EntityEnemy enemy) vacated.Entities }
           workingState <- { workingState with CurrentFloor = movedFloor }
-        | _ -> ()
-      | _ -> ()
+          RuntimeLog.write (sprintf "enemy %s: %A -> %A (pursuit)" enemy.Id pt step)
+        | _ ->
+          RuntimeLog.write (sprintf "enemy %s: holds at %A (no path)" enemy.Id pt)
+      | Some pt ->
+        RuntimeLog.write (sprintf "enemy %s: holds at %A (adjacent or boss)" enemy.Id pt)
+      | None ->
+        RuntimeLog.write (sprintf "enemy %s: position not found" enemy.Id)
 
     let adjacent = adjacentEnemies workingState
 
@@ -235,6 +240,12 @@ module TowerSession =
           Facing = Some Direction.North
           Locomotion = LocomotionState.Walking
           MessageLog = sprintf "Ascended to Floor %d: %s!" nextFloorNum nextFloor.Theme.Name :: state.MessageLog }
+
+    RuntimeLog.section (sprintf "FLOOR %d" nextFloorNum)
+    RuntimeLog.write (
+      sprintf "floor transition: %d -> %d (seed=%d theme=%s size=%dx%d spawn=%A)"
+        state.CurrentFloor.FloorNumber nextFloorNum state.Seed nextFloor.Theme.Name
+        nextFloor.Width nextFloor.Height nextFloor.SpawnLocation)
 
     updateFov nextState
 

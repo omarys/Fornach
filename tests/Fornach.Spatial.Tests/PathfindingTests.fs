@@ -43,3 +43,20 @@ let ``Pathfinding returns None when completely walled off`` () =
 
   let result = Pathfinding.aStar isPassable start goal
   Assert.True(result.IsNone)
+
+[<Fact>]
+let ``Pathfinding steps straight along the row when the goal shares it`` () =
+  let start = { X = 7; Y = 8 }
+  let goal = { X = 3; Y = 8 }
+  let path = (Pathfinding.aStar (fun _ -> true) start goal).Value
+  // Diagonal steps cost sqrt(2), so a straight line beats any staircase: the first
+  // step must stay on the row instead of sidestepping diagonally.
+  Assert.Equal({ X = 6; Y = 8 }, path.[1])
+  Assert.True(path |> List.forall (fun p -> p.Y = 8))
+
+[<Fact>]
+let ``Pathfinding still cuts diagonally toward a diagonal goal`` () =
+  let start = { X = 0; Y = 0 }
+  let goal = { X = 3; Y = 3 }
+  let path = (Pathfinding.aStar (fun _ -> true) start goal).Value
+  Assert.Equal<Point list>([ { X = 0; Y = 0 }; { X = 1; Y = 1 }; { X = 2; Y = 2 }; { X = 3; Y = 3 } ], path)
