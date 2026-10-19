@@ -66,6 +66,12 @@ module TowerSession =
   /// Chebyshev radius within which a living enemy takes notice of the player and gives chase
   let aggroRadius = 8
 
+  /// Foes scale to the player the moment they engage, so a guardian authored for tower floor 6
+  /// (level 185) is not fielded against a level 36 player. The authored state is untouched;
+  /// only the combatant handed to the duel is scaled.
+  let private engagedAtPlayerLevel (state: TowerRunState) (e: TowerEnemy) : TowerEnemy =
+    { e with Combatant = TierFactory.clampEngagedToPlayerLevel e.Combatant state.Player }
+
   /// Living enemies within the aggro radius that have an unobstructed line of sight to the player
   let enemiesAggroed (state: TowerRunState) : TowerEnemy list =
     state.CurrentFloor.Entities
@@ -77,7 +83,7 @@ module TowerSession =
     |> List.filter (fun (pt, _) ->
       Distance.chebyshev pt state.PlayerPosition <= aggroRadius
       && Los.check state.CurrentFloor.IsOpaque pt state.PlayerPosition)
-    |> List.map snd
+    |> List.map (fun (_, e) -> engagedAtPlayerLevel state e)
 
   /// Living enemies adjacent (Chebyshev distance 1) to the player
   let adjacentEnemies (state: TowerRunState) : TowerEnemy list =
@@ -85,7 +91,7 @@ module TowerSession =
     |> Map.toList
     |> List.choose (fun (pt, ent) ->
       match ent with
-      | EntityEnemy e when not e.IsDefeated && Distance.chebyshev pt state.PlayerPosition = 1 -> Some e
+      | EntityEnemy e when not e.IsDefeated && Distance.chebyshev pt state.PlayerPosition = 1 -> Some(engagedAtPlayerLevel state e)
       | _ -> None)
 
   /// True when at least one neighbouring tile is walkable and free of blocking entities,
@@ -270,7 +276,8 @@ module TowerSession =
       // Check for entities occupying the target point
       match Map.tryFind targetPt state.CurrentFloor.Entities with
       | Some (EntityEnemy enemy) when not enemy.IsDefeated ->
-        events <- [ TowerEvent.CombatTriggered enemy ]
+        let engaged = engagedAtPlayerLevel state enemy
+        events <- [ TowerEvent.CombatTriggered engaged ]
         let logMsg = sprintf "Encountered %s! Initiating duel..." enemy.Name
         { nextState with MessageLog = logMsg :: nextState.MessageLog }, events
 
@@ -778,21 +785,6 @@ module TowerSession =
           profile.Level previousLevel rankLine ]
 
   /// Marks a defeated enemy on the floor and awards its dropped key, souls, and alchemical trophies
-  /// Level a story stage's guardian hands the protagonist, chosen to match what the *next* stage's
-  /// biome monsters assume: per-kill experience alone (~0.3 levels per floor after the tutorial)
-  /// would leave the protagonist at level 33 walking into the Basalt Calderas' level-95 Master golem
-  /// and the Elysian Sanctuaries' level-185 GrandMasters. Floor 1 is the tutorial's authored
-  /// landing (level 32) and the last stage hands over nothing further.
-  let storyGuardianLevel (floorNumber: int) : int =
-    match floorNumber with
-    | 1 -> 32
-    | 2 -> 45
-    | 3 -> 95
-    | 4 -> 105
-    | 5 -> 110
-    | 6 -> 185
-    | _ -> 185
-
   let resolveEnemyDefeat (enemyId: string) (state: TowerRunState) : TowerRunState =
     let mutable droppedKeyOpt = None
     let mutable defeatedEnemyOpt = None
@@ -820,7 +812,7 @@ module TowerSession =
       // on the tutorial floor, where every kill accelerates leveling.
       let storyGateLevel =
         if state.IsStoryMode && state.CurrentFloor.FloorNumber <= 7 && e.DropsKeyId.IsSome then
-          Some (storyGuardianLevel state.CurrentFloor.FloorNumber)
+          Some (ProgressionScale.storyGuardianLevel state.CurrentFloor.FloorNumber)
         else
           None
 

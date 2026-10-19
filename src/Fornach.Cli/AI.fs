@@ -12,7 +12,17 @@ module AI =
 
   /// Evaluates an actor's specialization and chooses the optimal defensive reset
   let private chooseRecovery (self: Combatant) : ActionIntent =
-    if self.Plane = Physical then
+    // SteadyForm drains Recklessness, Exhaustion, Overwhelm and Frustration, but not
+    // CognitiveFatigue, Confusion or Provoke. Those three also trip the recovery gate, so routing
+    // a physical actor to SteadyForm on mental pressure locks it out permanently: the offending
+    // meter never falls back under the threshold, so every later turn is another no-op recovery.
+    // A single Arcane cast puts a physical combatant at ~62 CognitiveFatigue against a gate of 65.
+    let mentalPressure =
+      self.Meters.CognitiveFatigue.Value >= 65
+      || self.Meters.Confusion.Value >= 65
+      || self.Meters.Provoke.Value >= 65
+
+    if self.Plane = Physical && not mentalPressure then
       RecoveryAction SteadyForm
     else
       RecoveryAction CenterMind
@@ -127,16 +137,21 @@ module AI =
           else
             StandardAttack (ProwessStrike isGambit)
       else
-        // 1-on-1 Duel: Standard stance selection based on primary attribute
-        if force >= finesse && force >= prowess && self.Stance <> CombatStance.PowerStance && self.Meters.Recklessness.Value < 30 then
-          ShiftStance CombatStance.PowerStance
-        elif finesse >= force && finesse >= prowess && self.Stance <> CombatStance.AgilityStance && self.Meters.Recklessness.Value < 30 then
-          ShiftStance CombatStance.AgilityStance
-        elif prowess >= force && prowess >= finesse && self.Stance <> CombatStance.DisciplineStance && self.Meters.Recklessness.Value < 30 then
-          ShiftStance CombatStance.DisciplineStance
-        elif force >= finesse && force >= prowess then
+        // 1-on-1 Duel: resolve ONE preferred stance from the attribute ranking, then strike.
+        // Testing the candidate stance inside each rank lets two equally-ranked vectors contradict
+        // each other: standing in Power makes the Finesse test match, and standing in Agility makes
+        // the Force test match, so a combatant with tied physical attributes (which is how every
+        // class tier is authored) shifts back and forth forever and never actually attacks.
+        let preferredStance =
+          if force >= finesse && force >= prowess then CombatStance.PowerStance
+          elif finesse >= prowess then CombatStance.AgilityStance
+          else CombatStance.DisciplineStance
+
+        if self.Stance <> preferredStance && self.Meters.Recklessness.Value < 30 then
+          ShiftStance preferredStance
+        elif preferredStance = CombatStance.PowerStance then
           StandardAttack (ForceStrike isGambit)
-        elif finesse >= prowess then
+        elif preferredStance = CombatStance.AgilityStance then
           StandardAttack (FinesseCadence isGambit)
         else
           // Discipline: Evaluate Dedicated Gambits vs Standard Strike

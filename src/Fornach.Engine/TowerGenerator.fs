@@ -502,7 +502,16 @@ module TowerGenerator =
           | [] -> Bestiary.slagHound
           | list ->
             let idx = Math.Min(list.Length - 1, (floorNumber - 1) % list.Length)
-            list.[idx]
+            let rotated = list.[idx]
+            // The rotation alone used to drop GrandMaster templates on early floors (the Obsidian
+            // Fiend, level 160, as the tower-floor-3 guardian). Clamp to the level this floor's
+            // progression assumes and take the strongest legal template instead.
+            let ceiling = ProgressionScale.storyGuardianLevel floorNumber
+            if rotated.Level <= ceiling then rotated
+            else
+              match list |> List.filter (fun m -> m.Level <= ceiling) with
+              | [] -> list |> List.minBy (fun m -> m.Level)
+              | eligible -> eligible |> List.maxBy (fun m -> m.Level)
         let guardianCombatant = Bestiary.createMonster monsterTemplate
         { Id = sprintf "enemy_guardian_%d" floorNumber
           Name = monsterTemplate.Name

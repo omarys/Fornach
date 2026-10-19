@@ -314,7 +314,7 @@ module TowerDisplay =
     | None -> ()
 
     // Row 5: Hint bar
-    grid.AddRow(Markup(sprintf "[italic %s]󰌌 Pan Reticle: Arrows / Vim (h/j/k/l/y/u/b/n)  •  Exit Inspect: Esc / x / Enter  •  ? / F1: Legend & Manual[/]" Theme.Comment)) |> ignore
+    grid.AddRow(Markup(sprintf "[italic %s]󰌌 Pan Reticle: Arrows / Vim (h/j/k/l/y/u/b/n)  •  Exit Inspect: Esc / x / Enter  •  V: Chronicle Log  •  ? / F1: Legend & Manual[/]" Theme.Comment)) |> ignore
 
     Panel(grid)
       .Header(Display.stripNerdGlyphs (sprintf "[bold %s]󰍹 TILE & HAZARD INSPECTOR[/]" Theme.Yellow))
@@ -627,7 +627,7 @@ module TowerDisplay =
     row (sprintf "[bold %s]─── 󰋜 ARCHITECTURAL LEGEND ───[/]" Theme.Comment) |> ignore
     grid.AddRow(Markup(sprintf "[bold %s]@[/] You  [bold %s]![/] Enemy  [bold %s]?[/] NPC  [bold %s]⌹[/] Chest/Vault  [bold %s]†[/] Shrine  [bold #bd93f9]♨[/] Altar  [bold #8be9fd]$[/] Trader  [bold #50fa7b]✦[/] Echo  [bold #ff5555]✕[/] Trap"
       Theme.Yellow Theme.Red Theme.Cyan Theme.Yellow Theme.Green)) |> ignore
-    row (sprintf "[%s]󰌌 Keys: Arrows/Vim: Move | x/; : Inspect | C: Character | Space: Wait | ? / F1: Symbol & Glyph Legend | Q: Quit%s[/]" Theme.Comment (if debug then " | F12: Debug Menu" else "")) |> ignore
+    row (sprintf "[%s]󰌌 Keys: Arrows/Vim: Move | x/; : Inspect | C: Character | V: Chronicle Log | Space: Wait | ? / F1: Symbol & Glyph Legend | Q: Quit%s[/]" Theme.Comment (if debug then " | F12: Debug Menu" else "")) |> ignore
 
     Panel(grid)
       .Header(Display.stripNerdGlyphs (sprintf "[bold %s]󰍹 CHAMBER OBSERVATIONS[/]" Theme.Yellow))
@@ -706,6 +706,91 @@ module TowerDisplay =
       .Border(BoxBorder.Square)
       .BorderStyle(Theme.StyleComment)
       .Expand()
+
+  /// Full-screen scrollable chronicle of every message the run has produced. The log is stored
+  /// newest-first (see the renderMessageLog panel); the viewer presents it oldest-first so
+  /// scrolling down reads forward through the history.
+  /// Rows one chronicle entry occupies once Spectre wraps it, index gutter included. The viewer
+  /// pages by rows rather than entries so a few long entries cannot push the panel past the
+  /// terminal and hide the hint line.
+  let wrappedRows (width: int) (text: string) : int =
+    let usable = Math.Max(20, width - 8)
+    let length = (Display.stripNerdGlyphs text).Length
+    Math.Max(1, (length + usable - 1) / usable)
+
+  let showLogViewer (state: TowerRunState) =
+    let entries = state.MessageLog |> List.rev
+    let entryCount = state.MessageLog.Length
+    let placeholder = "The cold, ancient stones of the Infinite Tower resonate with memory."
+
+    let rowsBudget () =
+      let termH =
+        if Console.IsOutputRedirected || Console.WindowHeight <= 0 then 30
+        else Console.WindowHeight
+      Math.Max(3, termH - 8)
+
+    let width () =
+      if Console.IsOutputRedirected || Console.WindowWidth <= 0 then 100
+      else Console.WindowWidth
+
+    let mutable offset = 0
+    let mutable viewing = true
+    // A piped stdin cannot deliver keystrokes: render one page and leave rather than throw.
+    let interactive = not Console.IsInputRedirected
+
+    while viewing do
+      let budget = rowsBudget ()
+      let w = width ()
+      offset <- Math.Clamp(offset, 0, Math.Max(0, entryCount - 1))
+
+      let mutable rows = 0
+      let window =
+        entries
+        |> List.skip offset
+        |> List.takeWhile (fun msg ->
+          let cost = wrappedRows w msg
+          // Always keep the first entry, even if it alone overflows the page.
+          if rows > 0 && rows + cost > budget then false
+          else
+            rows <- rows + cost
+            true)
+
+      let body =
+        if entryCount = 0 then sprintf "[italic %s]%s[/]" Theme.Comment placeholder
+        else
+          window
+          |> List.mapi (fun i msg ->
+            sprintf "[%s]%3d[/] [bold %s]%s[/]" Theme.Comment (offset + i + 1) Theme.Foreground (Markup.Escape msg))
+          |> String.concat "\n"
+
+      AnsiConsole.Clear()
+      AnsiConsole.Write(
+        Panel(Markup(Display.stripNerdGlyphs body))
+          .Header(Display.stripNerdGlyphs (sprintf "[bold %s]󰈙 Chronicle Log[/] [%s](%d entries)[/]" Theme.Foreground Theme.Comment entryCount))
+          .Border(BoxBorder.Rounded)
+          .BorderStyle(Theme.StyleCurrentLine)
+          .Expand())
+      AnsiConsole.WriteLine()
+
+      if entryCount = 0 then
+        AnsiConsole.MarkupLine(sprintf "[%s]No events chronicled yet.  •  Close: Esc[/]" Theme.Comment)
+      else
+        AnsiConsole.MarkupLine(
+          sprintf "[%s]Showing %d-%d of %d  •  󰌌 Scroll: ↑/↓ (k/j)  •  Page: PgUp/PgDn/Space  •  Home/End  •  Close: Esc / Enter / q[/]"
+            Theme.Comment (offset + 1) (offset + window.Length) entryCount)
+
+      if not interactive then
+        viewing <- false
+      else
+        match Console.ReadKey(true).Key with
+        | ConsoleKey.Escape | ConsoleKey.Enter | ConsoleKey.Q -> viewing <- false
+        | ConsoleKey.UpArrow | ConsoleKey.K -> offset <- offset - 1
+        | ConsoleKey.DownArrow | ConsoleKey.J -> offset <- offset + 1
+        | ConsoleKey.PageUp -> offset <- offset - budget
+        | ConsoleKey.PageDown | ConsoleKey.Spacebar -> offset <- offset + budget
+        | ConsoleKey.Home -> offset <- 0
+        | ConsoleKey.End -> offset <- entryCount - 1
+        | _ -> ()
 
   /// Displays an interactive modal dialog when speaking to an NPC
   let showNpcDialog (npc: TowerNpc) =
@@ -897,6 +982,15 @@ module TowerDisplay =
 
     // Resolves a multi-enemy engagement and applies its outcome to the run state.
     let handleGroup (floorNum: int) (engaged: TowerEnemy list) =
+      // Ambush spawns build combatants straight from the bestiary (TowerSession.fs:431/449) and so
+      // bypass the level clamp that adjacentEnemies applies. Clamp here as well: this is the one door
+      // every group fight goes through and the clamp is idempotent. Without it a level-1 player can
+      // meet a level-20 Blight Sprite in a first-floor ambush and cannot damage it at all.
+      let engaged =
+        engaged
+        |> List.map (fun e ->
+          { e with Combatant = TierFactory.clampEngagedToPlayerLevel e.Combatant state.Player })
+
       if not engaged.IsEmpty then
         let canFlee = TowerSession.canEscape state
         // Armor/weapon wear during the fight is a debuff: snapshot, then restore when it ends.
@@ -923,7 +1017,14 @@ module TowerDisplay =
 
         match result.Outcome with
         | GroupDuelOutcome.Victorious ->
-          ()
+          let surviving = state.Player
+          let felled = result.Enemies |> List.filter (fun e -> e.IsDefeated) |> List.length
+          state <-
+            { state with
+                MessageLog =
+                  sprintf "Broke a pack of %d: %d put down, emerged at %d/%d HP and %d/%d Morale."
+                    engaged.Length felled surviving.Health.Current surviving.Health.Maximum surviving.Morale.Current surviving.Morale.Maximum
+                  :: state.MessageLog }
 
         | GroupDuelOutcome.Defeated ->
           onDefeatAnimation()
@@ -963,6 +1064,10 @@ module TowerDisplay =
                 enemyPoints |> List.map (fun ep -> Distance.chebyshev p ep) |> List.fold min Int32.MaxValue)
             state <- { state with PlayerPosition = escapePt }
             state <- TowerSession.updateFov state
+            state <-
+              { state with
+                  MessageLog =
+                    sprintf "Broke away from a pack of %d, falling back to firmer ground." engaged.Length :: state.MessageLog }
             fleeGrace <- 1
 
     // Runs the enemy pursuit/engagement phase after a turn-consuming action.
@@ -1218,6 +1323,9 @@ module TowerDisplay =
             showHelpManual ()
           | ConsoleKey.F12 when debug ->
             debugMenu ()
+          | _ when key.KeyChar = 'v' || key.KeyChar = 'V' ->
+            showLogViewer state
+
           | _ when key.KeyChar = 'x' || key.KeyChar = 'X' || key.KeyChar = ';' ->
             inspectCursor <- None
           | _ when key.KeyChar = '?' ->
@@ -1284,8 +1392,23 @@ module TowerDisplay =
                 let levelBefore = state.Player.Level
                 // Armor/weapon wear is a combat debuff: snapshot, then restore when the fight ends.
                 let armorBefore, weaponBefore = TowerSession.combatCondition state.Player
+                // Snapshot the pools too: the duel's own console output is lost the moment the map
+                // redraws, so its cost is summarized into the chronicle below.
+                let playerBeforeDuel = state.Player
                 let outcome, updatedPlayer = onCombatDuel state.CurrentFloor.FloorNumber state.Player enemy.Combatant
+
+                let duelTollText (after: Combatant) =
+                  let hpLost = Math.Max(0, playerBeforeDuel.Health.Current - after.Health.Current)
+                  let moraleLost = Math.Max(0, playerBeforeDuel.Morale.Current - after.Morale.Current)
+                  if hpLost = 0 && moraleLost = 0 then "without taking a scratch"
+                  else sprintf "(-%d HP, -%d Morale)" hpLost moraleLost
+
                 if outcome = CombatOutcome.PlayerVictorious then
+                  state <-
+                    { state with
+                        MessageLog =
+                          sprintf "Felled %s (Level %d) in tactical combat %s." enemy.Name enemy.Combatant.Level (duelTollText updatedPlayer)
+                          :: state.MessageLog }
                   if isBoss then
                     // Overcoming the trauma aspect grants total catharsis:
                     let catharticPlayer =
@@ -1344,14 +1467,26 @@ module TowerDisplay =
                       Health = state.Player.Health.ApplyDelta -15
                       Morale = state.Player.Morale.ApplyDelta -10
                       Meters = StatusMeters.Zero }
+                // Pools floor at zero, so the advertised cost is what was actually paid.
+                let hpPaid = Math.Max(0, state.Player.Health.Current - strainedPlayer.Health.Current)
+                let moralePaid = Math.Max(0, state.Player.Morale.Current - strainedPlayer.Morale.Current)
                 state <- { state with Player = strainedPlayer }
                 state <- TowerSession.resolveEnemyDefeat enemy.Id state
+                state <-
+                  { state with
+                      MessageLog =
+                        sprintf "Overcame %s (Level %d) with raw prowess (-%d HP, -%d Morale)."
+                          enemy.Name enemy.Combatant.Level hpPaid moralePaid
+                        :: state.MessageLog }
                 AnsiConsole.MarkupLine(sprintf "\n[bold %s]With steady resolve, you shatter the foe's stance![/]" Theme.Green)
                 Thread.Sleep(700)
                 showLevelUpBanner state levelBefore
 
               else
                 // Disengage
+                state <-
+                  { state with
+                      MessageLog = sprintf "Stepped back from %s (Level %d)." enemy.Name enemy.Combatant.Level :: state.MessageLog }
                 ()
 
             | TowerEvent.ChestOpened(chest, itemOpt, _) ->
@@ -1364,6 +1499,7 @@ module TowerDisplay =
               Thread.Sleep(900)
 
             | TowerEvent.NpcInteracted(npc, _) ->
+              // The engine already chronicles the conversation itself (and quotes the dialogue).
               showNpcDialog npc
 
             | TowerEvent.AltarEncountered(altar, pt) ->
@@ -1458,6 +1594,7 @@ module TowerDisplay =
                   Thread.Sleep(1000)
 
             | TowerEvent.EchoDiscovered echo ->
+              // Already chronicled by the engine as "󰔱 Discovered Memory Echo: ...".
               showMemoryEchoDialog echo
 
             | TowerEvent.AmbushTriggered(ambush, spawned) ->
@@ -1582,6 +1719,9 @@ module TowerDisplay =
               AnsiConsole.Confirm(sprintf "[bold %s]Do you wish to retreat from the Tower and return to the main menu?[/]" Theme.Yellow, false)
             if confirm then
               sessionActive <- false
+
+          | _ when key.KeyChar = 'v' || key.KeyChar = 'V' ->
+            showLogViewer state
 
           | _ when key.KeyChar = 'c' || key.KeyChar = 'C' ->
             showCharacterSheet state

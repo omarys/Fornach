@@ -8,10 +8,15 @@ open Spectre.Console.Rendering
 open Fornach.Domain
 open Fornach.Engine
 
-type VimInput(inner: IAnsiConsoleInput, enableHelpHotkey: bool) =
+/// Raised when the user presses Escape to abandon the current menu and return to the main menu.
+/// Caught by the interactive menu loop; anything in between is unwound.
+exception MenuCancelled
+
+type VimInput(inner: IAnsiConsoleInput, enableHelpHotkey: bool, enableVimKeys: bool) =
   let keyQueue = System.Collections.Generic.Queue<ConsoleKeyInfo>()
 
-  new(inner: IAnsiConsoleInput) = VimInput(inner, false)
+  new(inner: IAnsiConsoleInput) = VimInput(inner, false, true)
+  new(inner: IAnsiConsoleInput, enableHelpHotkey: bool) = VimInput(inner, enableHelpHotkey, true)
 
   interface IAnsiConsoleInput with
     member this.IsKeyAvailable() = keyQueue.Count > 0 || inner.IsKeyAvailable()
@@ -22,9 +27,13 @@ type VimInput(inner: IAnsiConsoleInput, enableHelpHotkey: bool) =
         let n = inner.ReadKey(intercept)
         if n.HasValue then
           let k = n.Value
-          if enableHelpHotkey && (k.Key = ConsoleKey.F1 || k.KeyChar = '?') then
+          if k.Key = ConsoleKey.Escape then
+            raise MenuCancelled
+          elif enableHelpHotkey && (k.Key = ConsoleKey.F1 || k.KeyChar = '?') then
             keyQueue.Enqueue(ConsoleKeyInfo(char 13, ConsoleKey.Enter, false, false, false))
             Nullable (ConsoleKeyInfo(char 0, ConsoleKey.End, false, false, false))
+          elif not enableVimKeys then
+            Nullable k
           else
             let translated =
               match k.Key with
@@ -47,9 +56,13 @@ type VimInput(inner: IAnsiConsoleInput, enableHelpHotkey: bool) =
           let! n = inner.ReadKeyAsync(intercept, ct)
           if n.HasValue then
             let k = n.Value
-            if enableHelpHotkey && (k.Key = ConsoleKey.F1 || k.KeyChar = '?') then
+            if k.Key = ConsoleKey.Escape then
+              return raise MenuCancelled
+            elif enableHelpHotkey && (k.Key = ConsoleKey.F1 || k.KeyChar = '?') then
               keyQueue.Enqueue(ConsoleKeyInfo(char 13, ConsoleKey.Enter, false, false, false))
               return Nullable (ConsoleKeyInfo(char 0, ConsoleKey.End, false, false, false))
+            elif not enableVimKeys then
+              return Nullable k
             else
               let translated =
                 match k.Key with
@@ -65,9 +78,10 @@ type VimInput(inner: IAnsiConsoleInput, enableHelpHotkey: bool) =
             return Nullable()
       }
 
-type VimConsole(inner: IAnsiConsole, enableHelpHotkey: bool) =
-  let vimInput = VimInput(inner.Input, enableHelpHotkey)
-  new(inner: IAnsiConsole) = VimConsole(inner, false)
+type VimConsole(inner: IAnsiConsole, enableHelpHotkey: bool, enableVimKeys: bool) =
+  let vimInput = VimInput(inner.Input, enableHelpHotkey, enableVimKeys)
+  new(inner: IAnsiConsole) = VimConsole(inner, false, true)
+  new(inner: IAnsiConsole, enableHelpHotkey: bool) = VimConsole(inner, enableHelpHotkey, true)
   interface IAnsiConsole with
     member this.Profile = inner.Profile
     member this.Cursor = inner.Cursor
@@ -104,6 +118,22 @@ module Display =
       AnsiConsole.Prompt(prompt)
     finally
       AnsiConsole.Console <- prev
+
+  /// Asks for free text where Escape abandons the current menu. Vim navigation stays off so a
+  /// typed 'j' or 'k' reaches the field instead of being translated into an arrow key.
+  let private askCancellable (prompt: TextPrompt<'T>) : 'T =
+    let prev = AnsiConsole.Console
+    try
+      AnsiConsole.Console <- VimConsole(prev, false, false)
+      AnsiConsole.Prompt(prompt)
+    finally
+      AnsiConsole.Console <- prev
+
+  let askString (message: string, defaultValue: string) : string =
+    askCancellable (TextPrompt<string>(message).DefaultValue(defaultValue))
+
+  let askInt (message: string, defaultValue: int) : int =
+    askCancellable (TextPrompt<int>(message).DefaultValue(defaultValue))
 
   let renderBar (label: string) (current: int) (maxVal: int) (colorHex: string) =
     let safeMax = Math.Max(1, maxVal)
@@ -395,6 +425,55 @@ module Display =
 
       AnsiConsole.Write(summaryPanel :> IRenderable)
       AnsiConsole.WriteLine()
+
+  /// Totals the damage events that landed on one combatant, grouped by plane. Damage events name
+  /// whoever they actually hit, so filtering by TargetId is what stops a counter-attack, reflect or
+  /// ward burn from being attributed to the wrong combatant's line.
+  let damageTotals (targetId: CombatantId) (events: CombatEvent list) : (Plane * int) list =
+    events
+    |> List.choose (function
+      | CombatEvent.DamageApplied d when d.TargetId = targetId -> Some d
+      | _ -> None)
+    |> List.groupBy (fun d -> d.Plane)
+    |> List.map (fun (plane, hits) -> plane, hits |> List.sumBy (fun d -> d.Amount))
+
+  /// Reports the damage a resolved action actually applied, so the contest output reads as
+  /// numbers instead of a bare tier multiplier. Per-plane totals come from the emitted
+  /// DamageApplied events filtered to this target (each event caps at what the pool lost, so
+  /// a finisher does not report four-digit overkill); the vitals swing beside them is the
+  /// pool-applied truth.
+  let logDamageSummary (events: CombatEvent list) (targetBefore: Combatant) (targetAfter: Combatant) =
+    let applied =
+      events
+      |> List.choose (function
+        | CombatEvent.DamageApplied d when d.TargetId = targetBefore.Id -> Some d
+        | _ -> None)
+
+    let planeTotals =
+      damageTotals targetBefore.Id events
+      |> List.map (fun (plane, total) ->
+        let color = if plane = Physical then Theme.Red else Theme.Cyan
+        sprintf "[bold %s]%d %A[/]" color total plane)
+      |> String.concat " + "
+
+    let damageText =
+      if applied.IsEmpty then sprintf "[%s]no damage applied[/]" Theme.Comment
+      else
+        let crits = applied |> List.filter (fun d -> d.IsCritical) |> List.length
+        let critTag = if crits > 0 then sprintf " [bold %s](%d critical)[/]" Theme.Yellow crits else ""
+        sprintf "%s [%s](%d hit%s)[/]%s" planeTotals Theme.Comment applied.Length (if applied.Length = 1 then "" else "s") critTag
+
+    let vitalsDelta (label: string) (color: string) (before: Pool) (after: Pool) =
+      let lost = before.Current - after.Current
+      // A resolve can also *raise* a pool (upkeep healing, a shrine pulse): print nothing then.
+      if lost <= 0 then ""
+      else sprintf "  |  [%s]%s[/] %d → %d [bold %s](-%d)[/]" color label before.Current after.Current color lost
+
+    AnsiConsole.MarkupLine(
+      sprintf "  [bold %s]⚔ Damage to %s:[/] %s%s%s"
+        Theme.Yellow (Markup.Escape targetBefore.Name) damageText
+        (vitalsDelta "HP" Theme.Red targetBefore.Health targetAfter.Health)
+        (vitalsDelta "Morale" Theme.Cyan targetBefore.Morale targetAfter.Morale))
 
   let logEvent (evt: CombatEvent) =
     match evt with

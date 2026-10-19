@@ -30,6 +30,22 @@ module ProgressionScale =
     elif level >= 40 then Veteran
     else Novice
 
+  /// Level a story stage's guardian hands the protagonist, chosen to match what the *next* stage's
+  /// biome monsters assume: per-kill experience alone (~0.3 levels per floor after the tutorial)
+  /// would leave the protagonist at level 33 walking into the Basalt Calderas' level-95 Master golem
+  /// and the Elysian Sanctuaries' level-185 GrandMasters. Floor 1 is the tutorial's authored
+  /// landing (level 32) and the last stage hands over nothing further.
+  /// Also the enemy-level ceiling for a floor's guardian, so placement cannot outrun progression.
+  let storyGuardianLevel (floorNumber: int) : int =
+    match floorNumber with
+    | 1 -> 32
+    | 2 -> 45
+    | 3 -> 95
+    | 4 -> 105
+    | 5 -> 110
+    | 6 -> 185
+    | _ -> 185
+
   /// Computes (primary, secondary, tertiary, minor, offDefensive, offOffensive) for physical classes based on 1.0 : 0.75 : 0.75 ratio
   let physicalStatsForLevel (level: int) : int * int * int * int * int * int =
     let l = Math.Max(1, level)
@@ -322,3 +338,59 @@ module TierFactory =
           { c.Progression with
               Level = level
               PrimaryStat = primaryStat } }
+
+  /// How far above the player a fight is still allowed to be, expressed in levels.
+  let private engageLevelAllowance = 2
+
+  /// Clamps an enemy to a level the player's current build can plausibly contest.
+  /// Bestiary levels are floor-themed rather than progression-aware, so tower floors 6 and 7
+  /// fielded a level 185/190 guardian against a player near level 36, whose contested defense
+  /// sat far above the player's best attack stat. Scaling here, at engage time, keeps the
+  /// authored roster and floor generation untouched.
+  /// Only ever scales down: an enemy at or below the allowance is returned unchanged.
+  let clampEngagedToPlayerLevel (enemy: Combatant) (player: Combatant) : Combatant =
+    let ceiling = player.Level + engageLevelAllowance
+    if enemy.Level <= ceiling then enemy
+    else
+      // Uniform rescale. The authored block keeps its shape (a Finesse-primary foe stays
+      // Finesse-primary) while its magnitude follows the level ratio. ProgressionScale.rescaleToLevel
+      // is deliberately additive because it preserves hand-authored and gear-modified base stats,
+      // which for a monster authored 150 levels up would leave Reflex at three times the player's
+      // offense (and drive armor negative) -- precisely the problem this exists to remove.
+      let factor = float ceiling / float enemy.Level
+      let scale (v: int) = max 1 (int (Math.Round(float v * factor)))
+
+      let scaledStats =
+        Attributes.all
+        |> List.fold
+          (fun (stats: StatBlock) stat ->
+            let current = enemy.Stats.Get stat
+            stats.Modify(stat, scale current - current))
+          enemy.Stats
+
+      let scalePool (p: Pool) =
+        let maximum = scale p.Maximum
+        { Current = max 1 (int (Math.Round(float p.Current * float maximum / float (max 1 p.Maximum))))
+          Maximum = maximum }
+
+      let armorMax = scale enemy.Armor.Max
+
+      let primaryStat =
+        if enemy.Plane = Physical then
+          let prim, _, _, _, _, _ = ProgressionScale.physicalStatsForLevel ceiling
+          prim
+        else
+          let prim, _, _, _, _ = ProgressionScale.magicStatsForLevel ceiling
+          prim
+
+      { enemy with
+          Stats = scaledStats
+          Health = scalePool enemy.Health
+          Morale = scalePool enemy.Morale
+          Armor =
+            { Current = max 1 (int (Math.Round(float enemy.Armor.Current * float armorMax / float (max 1 enemy.Armor.Max))))
+              Max = armorMax }
+          Progression =
+            { enemy.Progression with
+                Level = ceiling
+                PrimaryStat = primaryStat } }

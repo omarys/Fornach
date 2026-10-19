@@ -16,6 +16,12 @@
     <Compile Include="BalanceRegressionTests.fs" />
     <Compile Include="StanceTests.fs" />
     <Compile Include="ClassBalanceTests.fs" />
+    <Compile Include="AttackEstimatorTests.fs" />
+    <Compile Include="EngageScalingTests.fs" />
+    <Compile Include="MenuCancelTests.fs" />
+    <Compile Include="AiRecoveryLockTests.fs" />
+    <Compile Include="AmbushScalingTests.fs" />
+    <Compile Include="AiStanceTests.fs" />
     <Compile Include="CombatLoggerTests.fs" />
     <Compile Include="GroupEngagementTests.fs" />
     <Compile Include="DebugToolingTests.fs" />

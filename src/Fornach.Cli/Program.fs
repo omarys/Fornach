@@ -168,6 +168,17 @@ module Program =
 
       let assess = TacticalAssessment.assess player enemy
 
+      // Orders attack groups by estimated effectiveness against what the player has scouted.
+      // Obscured insight means nothing is known, so the archetype's own priority order stands.
+      let rankStrikes (groups: (AttackClassification * string list) list) : string list =
+        if assess.InsightLevel = Obscured then
+          groups |> List.collect snd
+        else
+          groups
+          |> List.map (fun (attack, labels) -> AttackEstimator.estimate player enemy attack, labels)
+          |> List.sortBy (fun (score, _) -> -score)
+          |> List.collect snd
+
       if player.Plane = Physical then
         let fortSuffix =
           match assess.InsightLevel with
@@ -229,14 +240,23 @@ module Program =
             sprintf "⚔️  [bold %s]Masterful Disarm[/] (Discipline Stance Gambit: Spend Study Stacks to Degrade Opponent Weapon, 0 Recklessness)" Theme.Purple
         ]
 
-        // Order strikes prioritizing player's primary class archetype vector
-        let martialStrikes =
+        // Archetype vector leads the list and breaks ties between equally effective strikes
+        let martialGroups =
           match player.Class.Vector with
-          | Vector.Power -> powerStrikes @ agilityStrikes @ disciplineStrikes
-          | Vector.Agility -> agilityStrikes @ disciplineStrikes @ powerStrikes
-          | Vector.Discipline -> disciplineStrikes @ powerStrikes @ agilityStrikes
+          | Vector.Power ->
+            [ ForceStrike false, powerStrikes
+              FinesseCadence false, agilityStrikes
+              ProwessStrike false, disciplineStrikes ]
+          | Vector.Agility ->
+            [ FinesseCadence false, agilityStrikes
+              ProwessStrike false, disciplineStrikes
+              ForceStrike false, powerStrikes ]
+          | Vector.Discipline ->
+            [ ProwessStrike false, disciplineStrikes
+              ForceStrike false, powerStrikes
+              FinesseCadence false, agilityStrikes ]
 
-        yield! martialStrikes
+        yield! rankStrikes martialGroups
 
         // Physical Defensive Reset
         sprintf "🛡️  [%s]Steady Form[/] (Physical Reset: Drain Recklessness via Poise, build Study)" Theme.Green
@@ -310,13 +330,22 @@ module Program =
           sprintf "⚡ [bold %s]Disorienting Shockwave: Staggering Pulse[/] (Aegis Lattice Gambit: +25 Recklessness, Swarm Pulse)%s" Theme.Orange (strainTag disProf)
         ]
 
-        let spells =
+        let spellGroups =
           match player.Class.Vector with
-          | Vector.Power -> powerSpells @ agilitySpells @ disciplineSpells
-          | Vector.Agility -> agilitySpells @ disciplineSpells @ powerSpells
-          | Vector.Discipline -> disciplineSpells @ powerSpells @ agilitySpells
+          | Vector.Power ->
+            [ ArcaneCataclysm false, powerSpells
+              SynapticGlamour false, agilitySpells
+              RunicWardTrap false, disciplineSpells ]
+          | Vector.Agility ->
+            [ SynapticGlamour false, agilitySpells
+              RunicWardTrap false, disciplineSpells
+              ArcaneCataclysm false, powerSpells ]
+          | Vector.Discipline ->
+            [ RunicWardTrap false, disciplineSpells
+              ArcaneCataclysm false, powerSpells
+              SynapticGlamour false, agilitySpells ]
 
-        yield! spells
+        yield! rankStrikes spellGroups
 
         // Mental Defensive Reset
         sprintf "🧠 [%s]Center Mind[/] (Mental Reset: Drain Recklessness, clear Confusion, restore Arcane Ward)" Theme.Cyan
@@ -367,6 +396,7 @@ module Program =
       CombatLogger.recordTurn session round 1 choice playerBefore enemyBefore playerResult
 
       Display.renderRollBreakdown choice player.Name playerResult.Contest
+      Display.logDamageSummary playerResult.Events enemyBefore enemy
       playerResult.Events |> List.iter Display.logEvent
 
       let playerExecutedEnemy =
@@ -398,6 +428,7 @@ module Program =
         CombatLogger.recordTurn session round 2 intentDesc enemyBeforeTurn playerBeforeTurn enemyResult
 
         Display.renderRollBreakdown intentDesc enemy.Name enemyResult.Contest
+        Display.logDamageSummary enemyResult.Events playerBeforeTurn player
         enemyResult.Events |> List.iter Display.logEvent
 
         let enemyExecutedPlayer =
@@ -518,25 +549,25 @@ module Program =
     )
     AnsiConsole.WriteLine()
 
-    let name = AnsiConsole.Ask<string>(sprintf "[%s]Enter combatant name:[/] " Theme.Foreground, "Gladiator")
-    let hp = AnsiConsole.Ask<int>(sprintf "[%s]Enter Max Health (HP):[/] " Theme.Red, 2000)
-    let morale = AnsiConsole.Ask<int>(sprintf "[%s]Enter Max Morale:[/] " Theme.Cyan, 2000)
-    let armor = AnsiConsole.Ask<int>(sprintf "[%s]Enter Armor Durability (0-100):[/] " Theme.Yellow, 50)
+    let name = Display.askString(sprintf "[%s]Enter combatant name:[/] " Theme.Foreground, "Gladiator")
+    let hp = Display.askInt(sprintf "[%s]Enter Max Health (HP):[/] " Theme.Red, 2000)
+    let morale = Display.askInt(sprintf "[%s]Enter Max Morale:[/] " Theme.Cyan, 2000)
+    let armor = Display.askInt(sprintf "[%s]Enter Armor Durability (0-100):[/] " Theme.Yellow, 50)
 
     AnsiConsole.MarkupLine(sprintf "\n[bold %s]Assign Attributes (Uncapped 30–500):[/]" Theme.Yellow)
-    let force = AnsiConsole.Ask<int>(sprintf "  [%s]Force (Physical Offense Power):[/] " Theme.Red, 120)
-    let fort = AnsiConsole.Ask<int>(sprintf "  [%s]Fortitude (Physical Defense Power):[/] " Theme.Red, 110)
-    let finesse = AnsiConsole.Ask<int>(sprintf "  [%s]Finesse (Physical Offense Agility):[/] " Theme.Green, 80)
-    let reflex = AnsiConsole.Ask<int>(sprintf "  [%s]Reflex (Physical Defense Agility):[/] " Theme.Green, 80)
-    let prowess = AnsiConsole.Ask<int>(sprintf "  [%s]Prowess (Martial Offense Discipline):[/] " Theme.Purple, 100)
-    let poise = AnsiConsole.Ask<int>(sprintf "  [%s]Poise (Martial Defense Discipline):[/] " Theme.Purple, 100)
+    let force = Display.askInt(sprintf "  [%s]Force (Physical Offense Power):[/] " Theme.Red, 120)
+    let fort = Display.askInt(sprintf "  [%s]Fortitude (Physical Defense Power):[/] " Theme.Red, 110)
+    let finesse = Display.askInt(sprintf "  [%s]Finesse (Physical Offense Agility):[/] " Theme.Green, 80)
+    let reflex = Display.askInt(sprintf "  [%s]Reflex (Physical Defense Agility):[/] " Theme.Green, 80)
+    let prowess = Display.askInt(sprintf "  [%s]Prowess (Martial Offense Discipline):[/] " Theme.Purple, 100)
+    let poise = Display.askInt(sprintf "  [%s]Poise (Martial Defense Discipline):[/] " Theme.Purple, 100)
 
-    let intellect = AnsiConsole.Ask<int>(sprintf "  [%s]Intellect / Presence (Mental Offense Power):[/] " Theme.Cyan, 60)
-    let resolve = AnsiConsole.Ask<int>(sprintf "  [%s]Resolve / Will (Mental Defense Power):[/] " Theme.Cyan, 60)
-    let acuity = AnsiConsole.Ask<int>(sprintf "  [%s]Acuity / Guile (Mental Offense Agility):[/] " Theme.Pink, 60)
-    let intuition = AnsiConsole.Ask<int>(sprintf "  [%s]Intuition / Insight (Mental Defense Agility):[/] " Theme.Pink, 60)
-    let acumen = AnsiConsole.Ask<int>(sprintf "  [%s]Acumen / Leverage (Mental Offense Discipline):[/] " Theme.Orange, 60)
-    let composure = AnsiConsole.Ask<int>(sprintf "  [%s]Composure (Mental Defense Discipline):[/] " Theme.Orange, 60)
+    let intellect = Display.askInt(sprintf "  [%s]Intellect / Presence (Mental Offense Power):[/] " Theme.Cyan, 60)
+    let resolve = Display.askInt(sprintf "  [%s]Resolve / Will (Mental Defense Power):[/] " Theme.Cyan, 60)
+    let acuity = Display.askInt(sprintf "  [%s]Acuity / Guile (Mental Offense Agility):[/] " Theme.Pink, 60)
+    let intuition = Display.askInt(sprintf "  [%s]Intuition / Insight (Mental Defense Agility):[/] " Theme.Pink, 60)
+    let acumen = Display.askInt(sprintf "  [%s]Acumen / Leverage (Mental Offense Discipline):[/] " Theme.Orange, 60)
+    let composure = Display.askInt(sprintf "  [%s]Composure (Mental Defense Discipline):[/] " Theme.Orange, 60)
 
     let statsList = [
       Force, force; Fortitude, fort
@@ -673,6 +704,7 @@ module Program =
         sprintf "combat round %d player turn: %s (%d events)" round choice playerResult.Events.Length)
 
       Display.renderRollBreakdown choice currentCombatant.Name playerResult.Contest
+      Display.logDamageSummary playerResult.Events bossBefore currentBoss
       playerResult.Events |> List.iter Display.logEvent
 
       let playerExecutedEnemy =
@@ -711,6 +743,7 @@ module Program =
           sprintf "combat round %d enemy turn: %s (%d events)" round intentDesc enemyResult.Events.Length)
 
         Display.renderRollBreakdown intentDesc currentBoss.Name enemyResult.Contest
+        Display.logDamageSummary enemyResult.Events playerBeforeTurn currentCombatant
         enemyResult.Events |> List.iter Display.logEvent
 
         let enemyExecutedPlayer =
@@ -1104,106 +1137,110 @@ module Program =
       | InteractiveMenu ->
         let mutable running = true
         while running do
-          AnsiConsole.Clear()
-          printBanner()
+          try
+            AnsiConsole.Clear()
+            printBanner()
 
-          let termWidth = Math.Max(80, AnsiConsole.Profile.Width)
-          let contentWidth = Math.Min(96, termWidth - 4)
-          let margin = Math.Max(0, (termWidth - contentWidth) / 2)
-          let pad = String(' ', margin)
+            let termWidth = Math.Max(80, AnsiConsole.Profile.Width)
+            let contentWidth = Math.Min(96, termWidth - 4)
+            let margin = Math.Max(0, (termWidth - contentWidth) / 2)
+            let pad = String(' ', margin)
 
-          let formatMenuItem icon title desc color =
-            sprintf "%s%s [bold %s]%-40s[/] [italic %s]── %s[/]" pad icon color title Theme.Comment desc
+            let formatMenuItem icon title desc color =
+              sprintf "%s%s [bold %s]%-40s[/] [italic %s]── %s[/]" pad icon color title Theme.Comment desc
 
-          // Center the header and hint on the full terminal width; `pad` is the
-          // menu margin, which is narrower than the terminal whenever contentWidth
-          // (96) is capped below the terminal width. Count codepoints, not UTF-16
-          // units: the Nerd Font icons are non-BMP and occupy a single cell.
-          let centerPad (text: string) =
-            let visible = (Markup.Remove text).EnumerateRunes() |> Seq.length
-            String(' ', Math.Max(0, (termWidth - visible) / 2))
+            // Center the header and hint on the full terminal width; `pad` is the
+            // menu margin, which is narrower than the terminal whenever contentWidth
+            // (96) is capped below the terminal width. Count codepoints, not UTF-16
+            // units: the Nerd Font icons are non-BMP and occupy a single cell.
+            let centerPad (text: string) =
+              let visible = (Markup.Remove text).EnumerateRunes() |> Seq.length
+              String(' ', Math.Max(0, (termWidth - visible) / 2))
 
-          let promptHeader = "══════════ 󰒋 SELECT EXPEDITION OR BENCHMARK MODE ══════════"
-          let promptHint = "      (󰌌 Navigate: [bold white]↑/↓[/] or [bold white]j/k[/]  •  󰌑 Select: [bold white]Enter[/]  •  󰗼 Quit: [bold white]Exit[/])"
+            let promptHeader = "══════════ 󰒋 SELECT EXPEDITION OR BENCHMARK MODE ══════════"
+            let promptHint = "      (󰌌 Navigate: [bold white]↑/↓[/] or [bold white]j/k[/]  •  󰌑 Select: [bold white]Enter[/]  •  󰗼 Quit: [bold white]Exit[/])"
 
-          let promptTitle =
-            sprintf "%s[bold %s]%s[/]\n%s[grey]%s[/]\n"
-              (centerPad promptHeader) Theme.Yellow promptHeader (centerPad promptHint) promptHint
+            let promptTitle =
+              sprintf "%s[bold %s]%s[/]\n%s[grey]%s[/]\n"
+                (centerPad promptHeader) Theme.Yellow promptHeader (centerPad promptHint) promptHint
 
-          let choice =
-            Display.promptWithVim(
-              SelectionPrompt<string>()
-                .Title(promptTitle)
-                .PageSize(12)
-                .AddChoices([
-                  formatMenuItem "󰈙 " "Interactive Story Mode" "Narrative prologue & aspect battles" Theme.Cyan
-                  formatMenuItem "󰒋 " "Ascend The Infinite Tower" "Roguelike procedural dungeon crawl" Theme.Yellow
-                  formatMenuItem "󰓥 " "Interactive Duel Arena" "Tactical turn-based combat duel" Theme.Green
-                  formatMenuItem "󰓎 " "Monte-Carlo Balance Simulator (1 vs 1)" "Statistical win-rate analysis" Theme.Cyan
-                  formatMenuItem " " "1 vs N Encirclement Swarm Simulator" "Swarm overwhelm stress test" Theme.Pink
-                  formatMenuItem " " "Custom Combatant Builder" "Interactive stat & stance forge" Theme.Orange
-                  formatMenuItem "󰂺 " "View Archetype Roster" (sprintf "Inspect %d mastery archetypes" Archetypes.allArchetypes.Length) Theme.Purple
-                  formatMenuItem "󰓥 " "Peer Class 1v1 Balance Matrix" "Cross-tier 100-run pairwise duel benchmark" Theme.Green
-                  formatMenuItem "󰈷 " "Swarm Tipping Point Balance Matrix" "128-matchup macro balance benchmark" Theme.Yellow
-                  formatMenuItem "󰞁 " "Bestiary Monster Swarm Matrix" "Swarm tipping point for all 21 monsters vs classes" Theme.Red
-                  formatMenuItem "󰒋 " "Symbol & Glyph Reference Manual" "Exhaustive guide to icons, meters & hazards" Theme.Yellow
-                  formatMenuItem "󰗼 " "Exit" "Close the Fornach Arena" Theme.Red
-                ])
-            )
+            let choice =
+              Display.promptWithVim(
+                SelectionPrompt<string>()
+                  .Title(promptTitle)
+                  .PageSize(12)
+                  .AddChoices([
+                    formatMenuItem "󰈙 " "Interactive Story Mode" "Narrative prologue & aspect battles" Theme.Cyan
+                    formatMenuItem "󰒋 " "Ascend The Infinite Tower" "Roguelike procedural dungeon crawl" Theme.Yellow
+                    formatMenuItem "󰓥 " "Interactive Duel Arena" "Tactical turn-based combat duel" Theme.Green
+                    formatMenuItem "󰓎 " "Monte-Carlo Balance Simulator (1 vs 1)" "Statistical win-rate analysis" Theme.Cyan
+                    formatMenuItem " " "1 vs N Encirclement Swarm Simulator" "Swarm overwhelm stress test" Theme.Pink
+                    formatMenuItem " " "Custom Combatant Builder" "Interactive stat & stance forge" Theme.Orange
+                    formatMenuItem "󰂺 " "View Archetype Roster" (sprintf "Inspect %d mastery archetypes" Archetypes.allArchetypes.Length) Theme.Purple
+                    formatMenuItem "󰓥 " "Peer Class 1v1 Balance Matrix" "Cross-tier 100-run pairwise duel benchmark" Theme.Green
+                    formatMenuItem "󰈷 " "Swarm Tipping Point Balance Matrix" "128-matchup macro balance benchmark" Theme.Yellow
+                    formatMenuItem "󰞁 " "Bestiary Monster Swarm Matrix" "Swarm tipping point for all 21 monsters vs classes" Theme.Red
+                    formatMenuItem "󰒋 " "Symbol & Glyph Reference Manual" "Exhaustive guide to icons, meters & hazards" Theme.Yellow
+                    formatMenuItem "󰗼 " "Exit" "Close the Fornach Arena" Theme.Red
+                  ])
+              )
 
-          RuntimeLog.write (sprintf "menu choice: %s" (Markup.Remove choice))
+            RuntimeLog.write (sprintf "menu choice: %s" (Markup.Remove choice))
 
-          if choice.Contains("Interactive Story Mode") then
-            runInteractiveStory debugOptions.Enabled debugOptions.ForcedSeed
-          elif choice.Contains("Ascend The Infinite Tower") then
-            let playerArch = promptSelectArchetype (sprintf "[bold %s]Select Expedition Champion:[/]" Theme.Yellow)
-            let player = playerArch.Factory()
-            TowerDisplay.runTowerCrawl player 1 runStoryDuel runStoryGroupDuel DeathAnimation.playTruckReplay debugOptions.Enabled debugOptions.ForcedSeed
-          elif choice.Contains("Interactive Duel Arena") then
-            let playerArch = promptSelectArchetype (sprintf "[bold %s]Select Player Combatant:[/]" Theme.Green)
-            let enemyArch = promptSelectArchetype (sprintf "[bold %s]Select Opponent Combatant:[/]" Theme.Pink)
-            runInteractiveDuel playerArch enemyArch
+            if choice.Contains("Interactive Story Mode") then
+              runInteractiveStory debugOptions.Enabled debugOptions.ForcedSeed
+            elif choice.Contains("Ascend The Infinite Tower") then
+              let playerArch = promptSelectArchetype (sprintf "[bold %s]Select Expedition Champion:[/]" Theme.Yellow)
+              let player = playerArch.Factory()
+              TowerDisplay.runTowerCrawl player 1 runStoryDuel runStoryGroupDuel DeathAnimation.playTruckReplay debugOptions.Enabled debugOptions.ForcedSeed
+            elif choice.Contains("Interactive Duel Arena") then
+              let playerArch = promptSelectArchetype (sprintf "[bold %s]Select Player Combatant:[/]" Theme.Green)
+              let enemyArch = promptSelectArchetype (sprintf "[bold %s]Select Opponent Combatant:[/]" Theme.Pink)
+              runInteractiveDuel playerArch enemyArch
 
-          elif choice.Contains("Monte-Carlo Balance Simulator (1 vs 1)") then
-            let archA = promptSelectArchetype (sprintf "[bold %s]Select Combatant A:[/]" Theme.Green)
-            let archB = promptSelectArchetype (sprintf "[bold %s]Select Combatant B:[/]" Theme.Pink)
-            runBalanceSimulator archA archB
+            elif choice.Contains("Monte-Carlo Balance Simulator (1 vs 1)") then
+              let archA = promptSelectArchetype (sprintf "[bold %s]Select Combatant A:[/]" Theme.Green)
+              let archB = promptSelectArchetype (sprintf "[bold %s]Select Combatant B:[/]" Theme.Pink)
+              runBalanceSimulator archA archB
 
-          elif choice.Contains("1 vs N Encirclement Swarm Simulator") then
-            let soloArch = promptSelectArchetype (sprintf "[bold %s]Select Solo Champion:[/]" Theme.Green)
-            let mobArch = promptSelectArchetype (sprintf "[bold %s]Select Swarm Opponent Archetype:[/]" Theme.Pink)
-            runGroupBalanceSimulator soloArch mobArch
+            elif choice.Contains("1 vs N Encirclement Swarm Simulator") then
+              let soloArch = promptSelectArchetype (sprintf "[bold %s]Select Solo Champion:[/]" Theme.Green)
+              let mobArch = promptSelectArchetype (sprintf "[bold %s]Select Swarm Opponent Archetype:[/]" Theme.Pink)
+              runGroupBalanceSimulator soloArch mobArch
 
-          elif choice.Contains("Custom Combatant Builder") then
-            let customArch = createCustomCombatantInteractive ()
-            let enemyArch = promptSelectArchetype (sprintf "[bold %s]Select Opponent to Test Against:[/]" Theme.Pink)
-            runInteractiveDuel customArch enemyArch
+            elif choice.Contains("Custom Combatant Builder") then
+              let customArch = createCustomCombatantInteractive ()
+              let enemyArch = promptSelectArchetype (sprintf "[bold %s]Select Opponent to Test Against:[/]" Theme.Pink)
+              runInteractiveDuel customArch enemyArch
 
-          elif choice.Contains("View Archetype Roster") then
-            showRoster ()
+            elif choice.Contains("View Archetype Roster") then
+              showRoster ()
 
-          elif choice.Contains("Peer Class 1v1 Balance Matrix") then
-            Simulation.renderPeerBalanceMatrix ()
-            AnsiConsole.MarkupLine(sprintf "[%s]Press any key to return to menu...[/]" Theme.Comment)
-            Console.ReadKey(true) |> ignore
+            elif choice.Contains("Peer Class 1v1 Balance Matrix") then
+              Simulation.renderPeerBalanceMatrix ()
+              AnsiConsole.MarkupLine(sprintf "[%s]Press any key to return to menu...[/]" Theme.Comment)
+              Console.ReadKey(true) |> ignore
 
-          elif choice.Contains("Swarm Tipping Point Balance Matrix") then
-            Simulation.renderBalanceMatrix ()
-            AnsiConsole.MarkupLine(sprintf "[%s]Press any key to return to menu...[/]" Theme.Comment)
-            Console.ReadKey(true) |> ignore
+            elif choice.Contains("Swarm Tipping Point Balance Matrix") then
+              Simulation.renderBalanceMatrix ()
+              AnsiConsole.MarkupLine(sprintf "[%s]Press any key to return to menu...[/]" Theme.Comment)
+              Console.ReadKey(true) |> ignore
 
-          elif choice.Contains("Bestiary Monster Swarm Matrix") then
-            // The swarm benchmark reports the apex tier and the Legend tier (level 1000) only, so there
-            // is nothing to pick; renderBestiarySwarmMatrix ignores its tier argument.
-            Simulation.renderBestiarySwarmMatrix None
-            AnsiConsole.MarkupLine(sprintf "[%s]Press any key to return to menu...[/]" Theme.Comment)
-            Console.ReadKey(true) |> ignore
+            elif choice.Contains("Bestiary Monster Swarm Matrix") then
+              // The swarm benchmark reports the apex tier and the Legend tier (level 1000) only, so there
+              // is nothing to pick; renderBestiarySwarmMatrix ignores its tier argument.
+              Simulation.renderBestiarySwarmMatrix None
+              AnsiConsole.MarkupLine(sprintf "[%s]Press any key to return to menu...[/]" Theme.Comment)
+              Console.ReadKey(true) |> ignore
 
-          elif choice.Contains("Symbol & Glyph Reference Manual") then
-            Display.showSymbolAndGlyphLegend ()
+            elif choice.Contains("Symbol & Glyph Reference Manual") then
+              Display.showSymbolAndGlyphLegend ()
 
-          elif choice.Contains("Exit") then
-            running <- false
+            elif choice.Contains("Exit") then
+              running <- false
+          with
+          | MenuCancelled ->
+            AnsiConsole.Cursor.Show(true)
 
         AnsiConsole.MarkupLine(sprintf "[bold %s]Exiting Fornach Arena. Farewell![/]" Theme.Yellow)
         0

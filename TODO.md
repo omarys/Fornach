@@ -63,3 +63,9 @@ Reference: [`docs/adr/0004-monster-bestiary-and-world-encounters.md`](file:///ho
   - [ ] **Sensory Flashbacks**: Scatter interactive roadside memory fragments across story chapters in [`StoryRunner.fs`](file:///home/omary/Dev/fornach/src/Fornach.Story/StoryRunner.fs), unlocking narrative clues about the protagonist's lost twin (Lyra).
   - [ ] **Psychological Anomaly Events**: Implement atmospheric "Truck-kun" reality breaks (phantom headlights in fog, tire skid marks on cobblestones, radio static).
   - [ ] **Alternative Resolutions**: Support moral/peaceful encounter resolutions (e.g. comforting a weeping specter to achieve Morale equilibrium without physical bloodshed).
+
+- [ ] **7. Quick-Play Mode (automatic encounters)**:
+  - [x] **Effectiveness Ranking**: [`AttackEstimator.fs`](file:///home/omary/Dev/fornach/src/Fornach.Engine/AttackEstimator.fs) scores any attack against scouted enemy stats; the encounter menu orders strikes and spells by expected damage (`Program.buildActionChoices`), falling back to archetype order when the enemy is `Obscured`.
+  - [ ] **Auto-Resolution**: Drive map collisions into a full auto round (attack pick + defense + damage application) using the top-ranked option, so an encounter resolves without the tactical menu.
+  - [x] **Combat Log Visibility**: Resolved actions print applied damage and the vitals swing (`Display.logDamageSummary`); duel, boss, pack and quick-resolve outcomes append a chronicle entry to the map log; `V` opens the scrollable Chronicle Log viewer (`TowerDisplay.showLogViewer`).
+  - [ ] **Movement Semantics**: Standing still maps to Deep Breath / Steady Stance, advancing into an enemy maps to an attack, and retreating maps to a withdrawal round.

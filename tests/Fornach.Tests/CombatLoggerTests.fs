@@ -3,6 +3,7 @@ namespace Fornach.Tests
 open System
 open System.IO
 open Xunit
+open Spectre.Console
 open Fornach.Domain
 open Fornach.Engine
 open Fornach.Cli
@@ -137,3 +138,100 @@ module CombatLoggerTests =
     let lowBar = Fornach.Cli.Display.renderBar "󰋑 Health" 100 2400 Theme.Red
     Assert.Contains("(  4%)", lowBar)
     Assert.Contains("CRITICAL", lowBar)
+
+  /// Builds a DamageApplied event attributed to `target`, so a test can mix events landing on
+  /// different combatants (cleave, cataclysm splash, molten-aura burns) into one event list.
+  let private hit (target: CombatantId) (plane: Plane) (amount: int) : CombatEvent =
+    CombatEvent.DamageApplied
+      { TargetId = target
+        Plane = plane
+        Amount = amount
+        IsCritical = false
+        IsArmorCompromised = false }
+
+  [<Fact>]
+  let ``damage totals count only the events that landed on the target`` () =
+    let victim = CombatantId.New()
+    let bystander = CombatantId.New()
+
+    let totals =
+      Display.damageTotals victim [ hit victim Physical 47; hit victim Physical 8; hit victim Mental 12; hit bystander Physical 999 ]
+      |> Map.ofList
+
+    Assert.Equal(55, totals[Physical])
+    Assert.Equal(12, totals[Mental])
+
+  [<Fact>]
+  let ``damage totals are empty when every event landed elsewhere`` () =
+    let victim = CombatantId.New()
+    Assert.Empty(Display.damageTotals victim [ hit (CombatantId.New()) Physical 999 ])
+
+  /// Runs `f` against a detached, non-ANSI Spectre console and returns everything it wrote.
+  let private captureConsole (f: unit -> unit) =
+    let writer = new StringWriter()
+    let settings = AnsiConsoleSettings()
+    settings.Ansi <- AnsiSupport.No
+    settings.Interactive <- InteractionSupport.No
+    settings.Out <- AnsiConsoleOutput(writer)
+    let previous = AnsiConsole.Console
+    AnsiConsole.Console <- AnsiConsole.Create(settings)
+
+    try
+      f ()
+    finally
+      AnsiConsole.Console <- previous
+
+    writer.ToString()
+
+  [<Fact>]
+  let ``damage summary prints per-plane damage and the vitals swing`` () =
+    let before = createTestCombatant "Training Dummy" 100 100 200 0
+
+    let after =
+      { before with
+          Health = before.Health.ApplyDelta -55
+          Morale = before.Morale.ApplyDelta -12 }
+
+    let output =
+      captureConsole (fun () ->
+        Display.logDamageSummary [ hit before.Id Physical 47; hit before.Id Physical 8; hit before.Id Mental 12 ] before after)
+
+    // Per-plane totals are summed, so two Physical strikes report as one 55.
+    Assert.Contains("55 Physical", output)
+    Assert.Contains("12 Mental", output)
+    Assert.Contains("(3 hits)", output)
+    Assert.Contains(sprintf "HP %d → %d" before.Health.Current after.Health.Current, output)
+    Assert.Contains(sprintf "Morale %d → %d" before.Morale.Current after.Morale.Current, output)
+
+  [<Fact>]
+  let ``damage summary says so when nothing landed on the target`` () =
+    let before = createTestCombatant "Bystander" 100 100 200 0
+    let output = captureConsole (fun () -> Display.logDamageSummary [] before before)
+
+    Assert.Contains("no damage applied", output)
+    Assert.DoesNotContain("HP", output)
+
+  [<Fact>]
+  let ``a lethal blow reports the health it removed, not its overkill`` () =
+    let attacker = createTestCombatant "Executioner" 400 400 200 0
+    let victim = createTestCombatant "Wretch" 100 100 4 0
+    let roller (_min: int) (_max: int) = 6
+
+    let res = ActionResolver.resolve roller (StandardAttack(ForceStrike false)) attacker victim
+
+    let claimed =
+      res.Events
+      |> List.sumBy (function
+        | CombatEvent.DamageApplied d -> d.Amount
+        | _ -> 0)
+
+    Assert.True(res.Target.Health.IsDepleted, sprintf "the wretch survived on %d HP" res.Target.Health.Current)
+    Assert.True(claimed <= victim.Health.Current, sprintf "events claimed %d damage against a %d HP pool" claimed victim.Health.Current)
+
+  [<Fact>]
+  let ``log viewer sizes an entry by the rows it wraps into`` () =
+    Assert.Equal(1, TowerDisplay.wrappedRows 100 "A short line")
+    // 100 columns leaves 92 usable ones (index gutter + panel padding).
+    Assert.Equal(2, TowerDisplay.wrappedRows 100 (String.replicate 150 "x"))
+    Assert.Equal(4, TowerDisplay.wrappedRows 100 (String.replicate 300 "x"))
+    Assert.Equal(1, TowerDisplay.wrappedRows 100 "")

@@ -86,7 +86,8 @@ module IndesResolver =
       CombatEvent.DamageApplied {
         TargetId = attacker.Id
         Plane = Physical
-        Amount = punctureDmg
+        // Same rule as the resolver's damage events: report what the pool actually lost, not overkill.
+        Amount = Math.Min(punctureDmg, attacker.Health.Current)
         IsCritical = false
         IsArmorCompromised = false
       }

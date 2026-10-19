@@ -95,7 +95,9 @@ module ActionResolver =
       let evt =
         { TargetId = target.Id
           Plane = Physical
-          Amount = actualDmg
+          // A pool clamps at zero, so overkill is not damage dealt: a finisher's 9999 padding must
+          // not be reported as thousands of points of health removed.
+          Amount = Math.Min(actualDmg, targetWithWard.Health.Current)
           IsCritical = isCrit
           IsArmorCompromised = updatedArmor.IsShredded || isCrit }
 
@@ -130,7 +132,7 @@ module ActionResolver =
       let evt =
         { TargetId = target.Id
           Plane = Mental
-          Amount = actualDmg
+          Amount = Math.Min(actualDmg, targetWithWard.Morale.Current)
           IsCritical = isCrit
           IsArmorCompromised = false }
 
