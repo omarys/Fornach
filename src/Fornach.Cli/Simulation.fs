@@ -569,7 +569,14 @@ module Simulation =
             batchBaseSeed
             iterations
             (fun () -> lock gate (fun () -> task.Increment 1.0))
-            (fun roller -> runSingleGroupMatch roller soloArch.Factory mobArch.Factory mobCount maxRoundsPerMatch)
+            (fun roller ->
+              // The swarm's solo is the player-style champion; its mobs are plain opposition.
+              runSingleGroupMatch
+                roller
+                (fun () -> { soloArch.Factory() with PlayerStyle = true })
+                (fun () -> { mobArch.Factory() with PlayerStyle = false })
+                mobCount
+                maxRoundsPerMatch)
           |> Array.toList
         )
 
@@ -796,22 +803,14 @@ module Simulation =
   let renderBalanceMatrix () =
     AnsiConsole.WriteLine()
     AnsiConsole.Write(
-      Rule(sprintf "[bold %s]FORNACH ARCHETYPE BALANCE BENCHMARK: 128 MATCHUP MATRIX[/]" Theme.Purple)
+      Rule(sprintf "[bold %s]FORNACH ARCHETYPE BALANCE BENCHMARK: FIGHTER & MAGE MATCHUP MATRIX[/]" Theme.Purple)
         .Centered()
         .RuleStyle(Theme.StyleCurrentLine)
     )
     AnsiConsole.WriteLine()
 
-    // The benchmark tooling deliberately keeps the legacy specialized archetypes (see Archetypes.fs),
-    // so its rosters stay on the six-class list rather than CharacterClass.PlayerClasses.
-    let championClasses = [
-      CharacterClass.Berserker
-      CharacterClass.Duelist
-      CharacterClass.Warden
-      CharacterClass.Inquisitor
-      CharacterClass.Mesmer
-      CharacterClass.Abjurer
-    ]
+    // The macro benchmark measures the two classes the game lets you build.
+    let championClasses = CharacterClass.PlayerClasses
 
     let tiers = [
       CombatTier.Novice
@@ -875,24 +874,10 @@ module Simulation =
 
             let notes =
               match cls, tier with
-              | CharacterClass.Warden, GrandMaster
-              | CharacterClass.Justicar, GrandMaster -> "BastionZoneControl limits frontline to 3; Prowess disparity triggers massive AoOs; resilient against swarms."
-              | CharacterClass.Warden, Master
-              | CharacterClass.Justicar, Master -> "BastionZoneControl limits frontline to 3; exceptional defense soak against physical hordes."
-              | CharacterClass.Warden, _
-              | CharacterClass.Justicar, _ -> "Discipline posture & bastion geometry resist early encirclement penalties."
-              | CharacterClass.Berserker, GrandMaster -> "Berserk Tincture deadens 35% physical damage & unleashes Frenzy bonus swings; cleaves up to 5 adjacent foes."
-              | CharacterClass.Berserker, _ -> "Brute kinetic Force & high HP pool; vulnerable to compounding flank penalties over prolonged duels."
-              | CharacterClass.Duelist, GrandMaster -> "Caltrop Pouch strips flank penalties for 2 turns; Agility disparity triggers lethal AoO counters."
-              | CharacterClass.Duelist, _ -> "High Finesse & Reflex dodge initial attacks; overwhelmed once caltrops expire against large mobs."
-              | CharacterClass.Inquisitor, GrandMaster -> "Dread Warhorn inflicts +25 Cognitive Fatigue on all attackers; devastates Mage morale & triggers mental routs."
-              | CharacterClass.Inquisitor, _ -> "Formidable mental dominance; vulnerable if physical brute force bypasses lower physical armor."
-              | CharacterClass.Mesmer, GrandMaster -> "Mirror Mirage forces flankers to attack decoys; Prismatic Flare punishes enemy recklessness."
-              | CharacterClass.Mesmer, _ -> "Deceptive sensory phantasms disrupt attackers; susceptible to dogpiling once illusions exhaust."
-              | CharacterClass.Abjurer, GrandMaster
-              | CharacterClass.Strategist, GrandMaster -> "Aegis of Retribution reduces damage by 35% and reflects 50% back; destabilizing ground wards trip flankers with heavy Frustration."
-              | CharacterClass.Abjurer, _
-              | CharacterClass.Strategist, _ -> "Runic composure wards & destabilizing ground glyphs disrupt oncoming attackers through calculated attrition."
+              | CharacterClass.Fighter, GrandMaster -> "Fluid stances keep every vector available; BastionZoneControl holds the frontline to 3 while Prowess disparity drives massed AoO counters."
+              | CharacterClass.Fighter, _ -> "Bastion frontage and stance-shifted parries resist early encirclement; compounding flank penalties still erode it in prolonged swarms."
+              | CharacterClass.Mage, GrandMaster -> "Threaded Complex Forms: Resonance spikes burn, Phantasmal Diffusion sheds decoys, Aegis lattices ward and reflect the swarm."
+              | CharacterClass.Mage, _ -> "Complex Forms disrupt and shed attackers; an unspecialised form is still punished by physical swarms."
               | _ -> "Standard archetype profile."
 
             matrixTable.AddRow(
@@ -923,14 +908,7 @@ module Simulation =
     )
     AnsiConsole.WriteLine()
 
-    let classes = [
-      CharacterClass.Berserker
-      CharacterClass.Duelist
-      CharacterClass.Warden
-      CharacterClass.Inquisitor
-      CharacterClass.Mesmer
-      CharacterClass.Abjurer
-    ]
+    let classes = CharacterClass.PlayerClasses
 
     let tiers = [
       CombatTier.Novice
@@ -962,8 +940,9 @@ module Simulation =
             for j in i + 1 .. classes.Length - 1 do
               let clsA = classes.[i]
               let clsB = classes.[j]
-              let factoryA () = TierFactory.createClassTier clsA tier
-              let factoryB () = TierFactory.createClassTier clsB tier
+              // The peer matrix compares player builds, so both champions carry player-style discipline.
+              let factoryA () = { TierFactory.createClassTier clsA tier with PlayerStyle = true }
+              let factoryB () = { TierFactory.createClassTier clsB tier with PlayerStyle = true }
               let summary = runHeadlessBatch factoryA factoryB iterations roller
               matchupResults.[(tier, clsA, clsB)] <- summary
               task.Increment(1.0)
@@ -982,12 +961,8 @@ module Simulation =
     let matrixTable = Table().Border(TableBorder.Rounded).BorderColor(Theme.ColorCurrentLine)
     matrixTable.AddColumn(TableColumn(sprintf "[bold %s]Tier[/]" Theme.Cyan).NoWrap()) |> ignore
     matrixTable.AddColumn(TableColumn(sprintf "[bold %s]Character[/]" Theme.Foreground).NoWrap()) |> ignore
-    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]vs. Berserker[/]" Theme.Red).Centered().Padding(0, 0, 0, 0)) |> ignore
-    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]vs. Duelist[/]" Theme.Green).Centered().Padding(0, 0, 0, 0)) |> ignore
-    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]vs. Warden[/]" Theme.Yellow).Centered().Padding(0, 0, 0, 0)) |> ignore
-    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]vs. Inquisitor[/]" Theme.Pink).Centered().Padding(0, 0, 0, 0)) |> ignore
-    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]vs. Mesmer[/]" Theme.Cyan).Centered().Padding(0, 0, 0, 0)) |> ignore
-    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]vs. Abjurer[/]" Theme.Purple).Centered().Padding(0, 0, 0, 0)) |> ignore
+    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]vs. Fighter[/]" Theme.Red).Centered().Padding(0, 0, 0, 0)) |> ignore
+    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]vs. Mage[/]" Theme.Purple).Centered().Padding(0, 0, 0, 0)) |> ignore
     matrixTable.AddColumn(TableColumn(sprintf "[bold %s]Net Win%%[/]" Theme.Foreground).Centered().NoWrap().Padding(0, 0, 0, 0)) |> ignore
     matrixTable.AddColumn(TableColumn(sprintf "[bold %s]Avg TTK[/]" Theme.Comment).Centered().NoWrap().Padding(0, 0, 0, 0)) |> ignore
 
@@ -1080,54 +1055,45 @@ module Simulation =
 
   type MonsterSwarmResultRow = {
     Monster: MonsterTemplate
-    Tier: CombatTier
+    /// Champion level this row was measured at (GrandMaster = 200, Legend = 1000).
+    ChampionLevel: int
     TippingPoints: Map<CharacterClass, TippingPointResult>
   }
 
-  /// Runs a headless batch evaluating all 21 Bestiary monsters as swarms against the 6 canonical classes at a given tier
+  /// Runs a headless batch evaluating all 21 Bestiary monsters as swarms against the two player classes
+  /// (Fighter and Mage) at a given champion level. The monsters are plain opposition: they auto-attack
+  /// with a single basic strike and never shift stance, so the matrix measures the player kits against
+  /// stat blocks rather than against monster kits.
   let runBestiarySwarmBatch
-    (tier: CombatTier)
+    (championLevel: int)
     (maxMobCount: int)
     (iterationsPerProbe: int)
     (roller: DiceRoller)
     (onProgress: unit -> unit)
     : MonsterSwarmResultRow list =
-    let classes = [
-      CharacterClass.Berserker
-      CharacterClass.Duelist
-      CharacterClass.Warden
-      CharacterClass.Inquisitor
-      CharacterClass.Mesmer
-      CharacterClass.Abjurer
-    ]
+    let classes = CharacterClass.PlayerClasses
     Bestiary.allMonsters
     |> List.map (fun monster ->
       let tpMap =
         classes
         |> List.map (fun cls ->
-          let champFactory () = TierFactory.createClassTier cls tier
-          let mobFactory () = Bestiary.createMonster monster
+          // The champion is a player build; the monster is auto-attack opposition. Clearing the monster
+          // family keeps its species instincts and the fluid transitions out of the matrix.
+          let champFactory () = { TierFactory.createClassLevel cls championLevel with PlayerStyle = true }
+          let mobFactory () = { Bestiary.createMonster monster with MonsterFamily = None }
           let tp = findSwarmTippingPoint champFactory mobFactory maxMobCount iterationsPerProbe roller
           onProgress ()
           (cls, tp))
         |> Map.ofList
-      { Monster = monster; Tier = tier; TippingPoints = tpMap })
+      { Monster = monster; ChampionLevel = championLevel; TippingPoints = tpMap })
 
-  /// Evaluates and renders a comprehensive Bestiary Monster Swarm Tipping Point matrix across classes for a given tier (or all tiers)
-  let renderBestiarySwarmMatrix (selectedTierOpt: CombatTier option) =
-    let tiersToRender =
-      match selectedTierOpt with
-      | Some t -> [ t ]
-      | None -> [ CombatTier.Novice; CombatTier.Veteran; CombatTier.Master; CombatTier.GrandMaster ]
+  /// Evaluates and renders the Bestiary Monster Swarm Tipping Point matrix for the two player classes at
+  /// the apex tier and at the Legend tier (a level-1000 champion). The --tier argument is accepted for
+  /// compatibility but no longer narrows the report: the frontier is only meaningful at the top.
+  let renderBestiarySwarmMatrix (_selectedTierOpt: CombatTier option) =
+    let tiersToRender = [ "GrandMaster", 200; "Legend", 1000 ]
 
-    let classes = [
-      CharacterClass.Berserker
-      CharacterClass.Duelist
-      CharacterClass.Warden
-      CharacterClass.Inquisitor
-      CharacterClass.Mesmer
-      CharacterClass.Abjurer
-    ]
+    let classes = CharacterClass.PlayerClasses
 
     let maxMobCount = 25
     let iterations = 10
@@ -1146,12 +1112,12 @@ module Simulation =
         RemainingTimeColumn() :> ProgressColumn
       |])
       .Start(fun ctx ->
-        let task = ctx.AddTask(sprintf "[bold %s]Simulating Bestiary Monster Swarms vs 6 Classes across Tiers...[/]" Theme.Red, maxValue = totalMatchups)
+        let task = ctx.AddTask(sprintf "[bold %s]Simulating Bestiary Monster Swarms vs Fighter & Mage across Tiers...[/]" Theme.Red, maxValue = totalMatchups)
         let gate = obj()
         let increment () = lock gate (fun () -> task.Increment 1.0)
 
-        for tier in tiersToRender do
-          let tierRows = runBestiarySwarmBatch tier maxMobCount iterations roller increment
+        for _, championLevel in tiersToRender do
+          let tierRows = runBestiarySwarmBatch championLevel maxMobCount iterations roller increment
           allResults.AddRange tierRows
       )
 
@@ -1163,18 +1129,12 @@ module Simulation =
       | OverrunBy n when n <= 8 -> sprintf "[bold %s]%d[/]" Theme.Yellow n
       | OverrunBy n -> sprintf "[bold %s]%d[/]" Theme.Cyan n
 
-    for tier in tiersToRender do
-      let tierLevel = ProgressionScale.tierToLevel tier
-      let tierColor =
-        match tier with
-        | Novice -> Theme.Comment
-        | Veteran -> Theme.Cyan
-        | Master -> Theme.Yellow
-        | GrandMaster -> Theme.Purple
+    for tierLabel, championLevel in tiersToRender do
+      let tierColor = if championLevel >= 1000 then Theme.Yellow else Theme.Purple
 
       AnsiConsole.WriteLine()
       AnsiConsole.Write(
-        Rule(sprintf "[bold %s]FORNACH BESTIARY SWARM BENCHMARK: %A TIER (Level %d Champions)[/]" tierColor tier tierLevel)
+        Rule(sprintf "[bold %s]FORNACH BESTIARY SWARM BENCHMARK: %s TIER (Level %d Champions)[/]" tierColor tierLabel championLevel)
           .Centered()
           .RuleStyle(Theme.StyleCurrentLine)
       )
@@ -1185,14 +1145,10 @@ module Simulation =
       table.AddColumn(TableColumn(sprintf "[bold %s]Biome[/]" Theme.Cyan)) |> ignore
       table.AddColumn(TableColumn(sprintf "[bold %s]Role / Family[/]" Theme.Comment)) |> ignore
       table.AddColumn(TableColumn(sprintf "[bold %s]Monster Lv & Tier[/]" Theme.Yellow)) |> ignore
-      table.AddColumn(TableColumn(sprintf "[bold %s]vs. Berserker[/]" Theme.Red).Centered()) |> ignore
-      table.AddColumn(TableColumn(sprintf "[bold %s]vs. Duelist[/]" Theme.Green).Centered()) |> ignore
-      table.AddColumn(TableColumn(sprintf "[bold %s]vs. Warden[/]" Theme.Yellow).Centered()) |> ignore
-      table.AddColumn(TableColumn(sprintf "[bold %s]vs. Inquisitor[/]" Theme.Purple).Centered()) |> ignore
-      table.AddColumn(TableColumn(sprintf "[bold %s]vs. Mesmer[/]" Theme.Pink).Centered()) |> ignore
-      table.AddColumn(TableColumn(sprintf "[bold %s]vs. Abjurer[/]" Theme.Cyan).Centered()) |> ignore
+      table.AddColumn(TableColumn(sprintf "[bold %s]vs. Fighter[/]" Theme.Red).Centered()) |> ignore
+      table.AddColumn(TableColumn(sprintf "[bold %s]vs. Mage[/]" Theme.Purple).Centered()) |> ignore
 
-      let tierRows = allResults |> Seq.filter (fun r -> r.Tier = tier) |> Seq.toList
+      let tierRows = allResults |> Seq.filter (fun r -> r.ChampionLevel = championLevel) |> Seq.toList
       for r in tierRows do
         let m = r.Monster
         let monsterGlyphAndName = sprintf "[bold %s]%c[/] [bold %s]%s[/]" m.ColorHex m.Glyph Theme.Foreground m.Name
@@ -1210,12 +1166,8 @@ module Simulation =
           Markup(sprintf "[%s]%s[/]" Theme.Cyan biomeName),
           Markup(sprintf "[%s]%s[/]" Theme.Comment roleAndFamily),
           Markup(sprintf "[%s]%s[/]" Theme.Yellow monsterTierStr),
-          Markup(getTP CharacterClass.Berserker),
-          Markup(getTP CharacterClass.Duelist),
-          Markup(getTP CharacterClass.Warden),
-          Markup(getTP CharacterClass.Inquisitor),
-          Markup(getTP CharacterClass.Mesmer),
-          Markup(getTP CharacterClass.Abjurer)
+          Markup(getTP CharacterClass.Fighter),
+          Markup(getTP CharacterClass.Mage)
         ) |> ignore
 
       AnsiConsole.Write(table)

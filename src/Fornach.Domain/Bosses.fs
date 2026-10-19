@@ -19,7 +19,7 @@ module StoryBosses =
           StatId.Composure, 150 ]
 
     let id = CombatantId.New()
-    let guilt = Combatant.create id "Aspect of Guilt" 2800 2400 stats
+    let guilt = { Combatant.create id "Aspect of Guilt" 2800 2400 stats with MonsterFamily = Some MonsterFamily.GriefManifestation }
 
     let hammer =
       { Name = "Quarry Sledgehammer"
@@ -68,7 +68,7 @@ module StoryBosses =
           StatId.Composure, 155 ]
 
     let id = CombatantId.New()
-    let denial = Combatant.create id "Aspect of Denial" 2600 2600 stats
+    let denial = { Combatant.create id "Aspect of Denial" 2600 2600 stats with MonsterFamily = Some MonsterFamily.GriefManifestation }
 
     let daggers =
       { Name = "Twin Mirage Daggers"
@@ -128,7 +128,7 @@ module StoryBosses =
           StatId.Composure, 0 ] // Consumed by blind rage
 
     let id = CombatantId.New()
-    let anger = Combatant.create id "Aspect of Anger" 3300 2200 stats
+    let anger = { Combatant.create id "Aspect of Anger" 3300 2200 stats with MonsterFamily = Some MonsterFamily.GriefManifestation }
 
     let greatsword =
       { Name = "Slag-Forged Greatsword"
@@ -177,7 +177,7 @@ module StoryBosses =
           StatId.Composure, 170 ]
 
     let id = CombatantId.New()
-    let bargaining = Combatant.create id "Aspect of Bargaining" 3100 3200 stats
+    let bargaining = { Combatant.create id "Aspect of Bargaining" 3100 3200 stats with MonsterFamily = Some MonsterFamily.GriefManifestation }
 
     let rapier =
       { Name = "Gale-Wind Rapier"
@@ -225,7 +225,7 @@ module StoryBosses =
           StatId.Composure, 280 ] // Cold, still waters
 
     let id = CombatantId.New()
-    let depression = Combatant.create id "Aspect of Depression" 3800 3800 stats
+    let depression = { Combatant.create id "Aspect of Depression" 3800 3800 stats with MonsterFamily = Some MonsterFamily.GriefManifestation }
 
     let anchor =
       { Name = "Anchor of Apathy"
@@ -274,7 +274,7 @@ module StoryBosses =
           StatId.Composure, 300 ] // Peaceful harmony
 
     let id = CombatantId.New()
-    let acceptance = Combatant.create id "Aspect of Acceptance" 4400 4100 stats
+    let acceptance = { Combatant.create id "Aspect of Acceptance" 4400 4100 stats with MonsterFamily = Some MonsterFamily.GriefManifestation }
 
     let staff =
       { Name = "Unfinished Crossing Staff"
@@ -474,4 +474,7 @@ module StoryBosses =
 
     { geared with
         Name = "Protagonist"
-        EquippedItems = equipped }
+        EquippedItems = equipped
+        // The protagonist is the only player-style combatant: fluid stances/forms, preparations and a
+        // varied attack kit. Everything else fights plainly.
+        PlayerStyle = true }

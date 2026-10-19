@@ -1193,25 +1193,9 @@ module Program =
             Console.ReadKey(true) |> ignore
 
           elif choice.Contains("Bestiary Monster Swarm Matrix") then
-            let tierChoice =
-              Display.promptWithVim(
-                SelectionPrompt<string>()
-                  .Title("[bold yellow]Select Champion Progression Tier for Bestiary Swarm Benchmark:[/]")
-                  .AddChoices([
-                    "All Tiers (Novice, Veteran, Master, GrandMaster)"
-                    "Novice Tier (Level 1 Adventurers)"
-                    "Veteran Tier (Level 40 Champions)"
-                    "Master Tier (Level 100 Champions)"
-                    "GrandMaster Tier (Level 200 Paragons)"
-                  ])
-              )
-            let selectedTier =
-              if tierChoice.Contains("Novice") then Some CombatTier.Novice
-              elif tierChoice.Contains("Veteran") then Some CombatTier.Veteran
-              elif tierChoice.Contains("Master") && not (tierChoice.Contains("GrandMaster")) then Some CombatTier.Master
-              elif tierChoice.Contains("GrandMaster") then Some CombatTier.GrandMaster
-              else None
-            Simulation.renderBestiarySwarmMatrix selectedTier
+            // The swarm benchmark reports the apex tier and the Legend tier (level 1000) only, so there
+            // is nothing to pick; renderBestiarySwarmMatrix ignores its tier argument.
+            Simulation.renderBestiarySwarmMatrix None
             AnsiConsole.MarkupLine(sprintf "[%s]Press any key to return to menu...[/]" Theme.Comment)
             Console.ReadKey(true) |> ignore
 

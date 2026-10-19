@@ -72,7 +72,10 @@ type Combatant =
     Preparations: PreparationSlot list
     ActivePreparations: ActivePreparation list
     MonsterFamily: MonsterFamily option
-    MonsterTraits: MonsterTrait list }
+    MonsterTraits: MonsterTrait list
+    /// True for combatants with player-style discipline: fluid stance / Complex Form transitions,
+    /// tactical preparations, and a varied attack kit. Plain opposition leaves this false.
+    PlayerStyle: bool }
 
   /// Combatant level derived from progression profile
   member this.Level = this.Progression.Level
@@ -214,7 +217,8 @@ type Combatant =
       Preparations = defaultProg.Preparations
       ActivePreparations = []
       MonsterFamily = None
-      MonsterTraits = [] }
+      MonsterTraits = []
+      PlayerStyle = false }
 
   /// Factory for creating a combatant with explicit class archetype and progression level
   static member createWithClass id name maxHealth maxMorale (stats: StatBlock) (cls: CharacterClass) (level: int) =
@@ -255,7 +259,8 @@ type Combatant =
       Preparations = prog.Preparations
       ActivePreparations = []
       MonsterFamily = None
-      MonsterTraits = [] }
+      MonsterTraits = []
+      PlayerStyle = false }
 
   /// Pure helper to update status meters
   static member updateMeters (updater: StatusMeters -> StatusMeters) (c: Combatant) =

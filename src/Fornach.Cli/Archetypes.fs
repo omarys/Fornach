@@ -12,8 +12,13 @@ module Archetypes =
   let createClassTier (cls: CharacterClass) (tier: CombatTier) () =
     TierFactory.createClassTier cls tier
 
-  let createVeteranFighter () = TierFactory.createClassTier CharacterClass.Fighter CombatTier.Veteran
-  let createVeteranMage () = TierFactory.createClassTier CharacterClass.Mage CombatTier.Veteran
+  /// Player archetypes carry player-style discipline (fluid stances and Complex Forms, preparations,
+  /// a varied attack kit). Which side of a simulation is the player is decided by the simulation, so
+  /// the registry itself stays plain data.
+  let private asPlayer (c: Combatant) = c
+
+  let createVeteranFighter () = asPlayer (TierFactory.createClassTier CharacterClass.Fighter CombatTier.Veteran)
+  let createVeteranMage () = asPlayer (TierFactory.createClassTier CharacterClass.Mage CombatTier.Veteran)
   let createVeteranBerserker () = TierFactory.createClassTier CharacterClass.Berserker CombatTier.Veteran
   let createVeteranDuelist () = TierFactory.createClassTier CharacterClass.Duelist CombatTier.Veteran
   let createVeteranWarden () = TierFactory.createClassTier CharacterClass.Warden CombatTier.Veteran
@@ -21,8 +26,8 @@ module Archetypes =
   let createVeteranMesmer () = TierFactory.createClassTier CharacterClass.Mesmer CombatTier.Veteran
   let createVeteranAbjurer () = TierFactory.createClassTier CharacterClass.Abjurer CombatTier.Veteran
 
-  let createMasterFighter () = TierFactory.createClassTier CharacterClass.Fighter CombatTier.Master
-  let createMasterMage () = TierFactory.createClassTier CharacterClass.Mage CombatTier.Master
+  let createMasterFighter () = asPlayer (TierFactory.createClassTier CharacterClass.Fighter CombatTier.Master)
+  let createMasterMage () = asPlayer (TierFactory.createClassTier CharacterClass.Mage CombatTier.Master)
   let createMasterBerserker () = TierFactory.createClassTier CharacterClass.Berserker CombatTier.Master
   let createMasterDuelist () = TierFactory.createClassTier CharacterClass.Duelist CombatTier.Master
   let createMasterWarden () = TierFactory.createClassTier CharacterClass.Warden CombatTier.Master
@@ -30,8 +35,8 @@ module Archetypes =
   let createMasterMesmer () = TierFactory.createClassTier CharacterClass.Mesmer CombatTier.Master
   let createMasterAbjurer () = TierFactory.createClassTier CharacterClass.Abjurer CombatTier.Master
 
-  let createGrandMasterFighter () = TierFactory.createClassTier CharacterClass.Fighter CombatTier.GrandMaster
-  let createGrandMasterMage () = TierFactory.createClassTier CharacterClass.Mage CombatTier.GrandMaster
+  let createGrandMasterFighter () = asPlayer (TierFactory.createClassTier CharacterClass.Fighter CombatTier.GrandMaster)
+  let createGrandMasterMage () = asPlayer (TierFactory.createClassTier CharacterClass.Mage CombatTier.GrandMaster)
   let createGrandMasterBerserker () = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
   let createGrandMasterInquisitor () = TierFactory.createClassTier CharacterClass.Inquisitor CombatTier.GrandMaster
   let createGrandMasterDuelist () = TierFactory.createClassTier CharacterClass.Duelist CombatTier.GrandMaster

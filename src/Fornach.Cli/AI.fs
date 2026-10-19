@@ -192,6 +192,27 @@ module AI =
 
   /// Top-level tactical decision evaluator for autonomous combatants with surrounding opponent count
   let chooseIntentWithContext (self: Combatant) (opponent: Combatant) (surroundingOpponents: int) : ActionIntent =
+    if not self.PlayerStyle && self.MonsterFamily.IsNone then
+      // Plain humanoid opposition swings exactly one basic strike of its primary vector: no
+      // preparations, no stance or Complex Form transitions, no finishers, no varied attack types.
+      // Discipline is the player's edge, so nothing here is chosen on the mob's behalf. Authored
+      // monsters keep their species instinct profiles.
+      if self.Plane = Mental then
+        let intellect = self.GetStat Intellect
+        let acuity = self.GetStat Acuity
+        let acumen = self.GetStat Acumen
+        if intellect >= acuity && intellect >= acumen then StandardAttack (ArcaneCataclysm false)
+        elif acuity >= acumen then StandardAttack (SynapticGlamour false)
+        else StandardAttack (AcumenInterrogation false)
+      else
+        let force = self.GetStat Force
+        let finesse = self.GetStat Finesse
+        let prowess = self.GetStat Prowess
+        if force >= finesse && force >= prowess then StandardAttack (ForceStrike false)
+        elif finesse >= prowess then StandardAttack (FinesseCadence false)
+        else StandardAttack (ProwessStrike false)
+    else
+
     // 0. Tactical Preparations Deployment
     let prepIntentOpt =
       if surroundingOpponents >= 2 then

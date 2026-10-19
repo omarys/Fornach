@@ -525,7 +525,7 @@ module ProlongedBattleTests =
   [<Fact>]
   let ``AI facing multiple opponents shifts to Discipline Stance if Prowess is viable`` () =
     // Grandmaster has Force 350, Prowess 300. In 1v1 duel, he uses PowerStance.
-    let grandmaster = { createFighter 350 320 180 200 300 280 with Stance = CombatStance.PowerStance }
+    let grandmaster = { createFighter 350 320 180 200 300 280 with Stance = CombatStance.PowerStance; PlayerStyle = true }
     let opponent = createFighter 45 40 25 25 30 30
 
     // 1-on-1 duel: stays in Power Stance (highest stat is Force)
@@ -838,7 +838,7 @@ module ProlongedBattleTests =
   [<Fact>]
   let ``Fluid Stances automatically transition based on the last physical attack issued`` () =
     let roller = fixedRoller 6
-    let initialFighter = { createFighter 100 100 100 100 100 100 with Stance = CombatStance.PowerStance }
+    let initialFighter = { createFighter 100 100 100 100 100 100 with Stance = CombatStance.PowerStance; PlayerStyle = true }
     let target = createFighter 100 100 100 100 100 100
 
     // 1. Issuing FinesseCadence shifts actor from PowerStance to AgilityStance
@@ -868,7 +868,7 @@ module ProlongedBattleTests =
   [<Fact>]
   let ``Fluid Complex Forms automatically thread based on the last arcane spell issued`` () =
     let roller = fixedRoller 6
-    let initialMage = { createMage 100 100 100 100 100 100 with ComplexForm = None }
+    let initialMage = { createMage 100 100 100 100 100 100 with ComplexForm = None; PlayerStyle = true }
     let target = createMage 100 100 100 100 100 100
 
     // 1. Issuing ArcaneCataclysm threads ResonanceSpike

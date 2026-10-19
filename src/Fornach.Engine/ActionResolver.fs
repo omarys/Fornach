@@ -846,6 +846,12 @@ module ActionResolver =
 
     // --- Step A.0: Fluid Stance & Complex Form Transition Helper (based on last attack issued) ---
     let applyFluidTransition (actorToTransition: Combatant) : Combatant * CombatEvent list =
+      if not actorToTransition.PlayerStyle && actorToTransition.MonsterFamily.IsNone then
+        // Plain humanoid opposition never shifts discipline mid-fight: fluid stance and Complex Form
+        // transitions are the player's edge, not the mob's. Authored monsters keep their species forms.
+        actorToTransition, []
+      else
+
       if actorToTransition.Plane = Physical then
         let fluidStanceOpt =
           match atk with

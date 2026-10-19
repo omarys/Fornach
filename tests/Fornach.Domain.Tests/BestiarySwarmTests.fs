@@ -30,7 +30,7 @@ module BestiarySwarmTests =
     ]
 
     [<Fact>]
-    let ``Bestiary Swarm Matrix: All 21 monsters evaluated as swarms against all 6 canonical classes across 4 tiers`` () =
+    let ``Bestiary Swarm Matrix: all 21 monsters as swarms against Fighter and Mage at the GrandMaster and Legend tiers`` () =
       let rng = Random(42)
       let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
       let maxMobCount = 25
@@ -38,15 +38,14 @@ module BestiarySwarmTests =
 
       output.WriteLine("\n# FORNACH COMBAT ENGINE: BESTIARY MONSTER SWARM BALANCE MATRIX")
       output.WriteLine("### Swarm Tipping Point N* (Number of monsters required to achieve >= 50% win rate against Champion)")
-      output.WriteLine("### Methodology: All 21 monsters as swarms vs 6 canonical classes across all 4 tiers (N* in [1..25+])\n")
+      output.WriteLine("### Methodology: all 21 monsters as swarms vs Fighter and Mage at the GrandMaster (level 200) and Legend (level 1000) tiers (N* in [1..25+])\n")
 
-      for tier in allTiers do
-        let tierLevel = ProgressionScale.tierToLevel tier
-        output.WriteLine(sprintf "## Champion Tier: %A (Level %d)\n" tier tierLevel)
-        output.WriteLine("| Monster | Biome | Role | Monster Tier | Berserker | Duelist | Warden | Inquisitor | Mesmer | Abjurer |")
-        output.WriteLine("|:--------|:------|:-----|:-------------|:---------:|:-------:|:------:|:----------:|:------:|:-------:|")
+      for tierLabel, championLevel in [ "GrandMaster", 200; "Legend", 1000 ] do
+        output.WriteLine(sprintf "## Champion Tier: %s (Level %d)\n" tierLabel championLevel)
+        output.WriteLine("| Monster | Biome | Role | Monster Tier | Fighter | Mage |")
+        output.WriteLine("|:--------|:------|:-----|:-------------|:-------:|:----:|")
 
-        let tierRows = Simulation.runBestiarySwarmBatch tier maxMobCount iterationsPerProbe roller (fun () -> ())
+        let tierRows = Simulation.runBestiarySwarmBatch championLevel maxMobCount iterationsPerProbe roller (fun () -> ())
         Assert.Equal(21, tierRows.Length)
 
         for r in tierRows do
@@ -58,17 +57,13 @@ module BestiarySwarmTests =
             | None -> "-"
 
           output.WriteLine(
-            sprintf "| %-16s | %-16s | %-10s | %-12s | %9s | %7s | %6s | %10s | %6s | %7s |"
+            sprintf "| %-16s | %-16s | %-10s | %-12s | %9s | %6s |"
               m.Name
               m.NativeBiome.Name
               (sprintf "%A" m.Role)
               (sprintf "%A (%d)" m.Tier m.Level)
-              (tpStr CharacterClass.Berserker)
-              (tpStr CharacterClass.Duelist)
-              (tpStr CharacterClass.Warden)
-              (tpStr CharacterClass.Inquisitor)
-              (tpStr CharacterClass.Mesmer)
-              (tpStr CharacterClass.Abjurer)
+              (tpStr CharacterClass.Fighter)
+              (tpStr CharacterClass.Mage)
           )
 
         output.WriteLine("")
