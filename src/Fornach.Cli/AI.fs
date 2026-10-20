@@ -97,12 +97,6 @@ module AI =
     elif self.MonsterFamily = Some MonsterFamily.GriefManifestation then
       // Grief manifestations strike with dialectical acumen interrogations
       StandardAttack (AcumenInterrogation isGambit)
-    elif self.Class = CharacterClass.Berserker then
-      // Berserkers embody kinetic juggernaut momentum: stay in Power Stance, unleash Force strikes, and always cleave
-      if self.Stance <> CombatStance.PowerStance && self.Meters.Recklessness.Value < 50 then
-        ShiftStance CombatStance.PowerStance
-      else
-        StandardAttack (ForceStrike isGambit)
     elif self.Plane = Physical then
       // Tactical Stance Evaluation:
       // When facing multiple opponents (surroundingOpponents >= 2):
@@ -232,9 +226,9 @@ module AI =
     let prepIntentOpt =
       if surroundingOpponents >= 2 then
         // Multi-opponent Swarm:
-        // For Berserker, enraging via Berserk Tincture deadens incoming physical damage and unleashes Frenzy strikes immediately
+        // Carrying a Berserk Tincture, enraging deadens incoming physical damage and unleashes Frenzy strikes immediately
         let berserkPrep =
-          if self.Class = CharacterClass.Berserker && not (self.HasActivePreparation PreparationType.BerserkTincture) then
+          if not (self.HasActivePreparation PreparationType.BerserkTincture) then
             self.Preparations
             |> List.tryFind (fun slot -> slot.Type = PreparationType.BerserkTincture && slot.RemainingUses > 0)
             |> Option.bind (fun slot ->
@@ -296,7 +290,7 @@ module AI =
         ExecuteStrike (chooseExecutePlane self)
 
       // 2. If self is reaching dangerous entropy or status debuff levels, bleed Recklessness
-      elif (if self.Name.Contains("Anger") || self.Class = CharacterClass.Berserker then self.Meters.Recklessness.Value >= 95 else self.Meters.Recklessness.Value >= 40)
+      elif (if self.Name.Contains("Anger") then self.Meters.Recklessness.Value >= 95 else self.Meters.Recklessness.Value >= 40)
            || self.Meters.Exhaustion.Value >= 65
            || self.Meters.Overwhelm.Value >= 65
            || self.Meters.CognitiveFatigue.Value >= 65

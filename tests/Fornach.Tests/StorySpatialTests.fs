@@ -133,34 +133,35 @@ module StorySpatialTests =
     Assert.True(mage.EquippedItems |> List.exists (fun it -> it.Name = "Sharpened Caltrops"))
 
     let berserker = StoryBosses.createProloguePlayer "berserker"
-    Assert.Equal(CharacterClass.Berserker, berserker.Class)
+    Assert.Equal(CharacterClass.Warrior, berserker.Class)
     Assert.Equal(CombatStance.PowerStance, berserker.Stance)
     Assert.Contains("Greatsword", berserker.EquippedItems.Head.Name)
     Assert.True(berserker.EquippedItems |> List.exists (fun it -> it.Name = "Sharpened Caltrops"))
 
     let duelist = StoryBosses.createProloguePlayer "duelist"
-    Assert.Equal(CharacterClass.Duelist, duelist.Class)
+    Assert.Equal(CharacterClass.Rogue, duelist.Class)
     Assert.Equal(CombatStance.AgilityStance, duelist.Stance)
     Assert.Contains("Rapier", duelist.EquippedItems.Head.Name)
 
     let warden = StoryBosses.createProloguePlayer "warden"
-    Assert.Equal(CharacterClass.Warden, warden.Class)
+    Assert.Equal(CharacterClass.Soldier, warden.Class)
     Assert.Equal(CombatStance.DisciplineStance, warden.Stance)
     Assert.Contains("Buckler", warden.EquippedItems.Head.Name)
 
     let inquisitor = StoryBosses.createProloguePlayer "inquisitor"
-    Assert.Equal(CharacterClass.Inquisitor, inquisitor.Class)
+    Assert.Equal(CharacterClass.Mage, inquisitor.Class)
     Assert.Equal(CombatStance.PowerStance, inquisitor.Stance)
     Assert.Contains("Staff", inquisitor.EquippedItems.Head.Name)
 
     let mesmer = StoryBosses.createProloguePlayer "mesmer"
-    Assert.Equal(CharacterClass.Mesmer, mesmer.Class)
-    Assert.Equal(CombatStance.AgilityStance, mesmer.Stance)
+    Assert.Equal(CharacterClass.Mage, mesmer.Class)
+    // Every legacy arcane archetype key resolves to a Mage, whose baseline vector is Power
+    Assert.Equal(CombatStance.PowerStance, mesmer.Stance)
     Assert.Contains("Mirror", mesmer.EquippedItems.Head.Name)
 
     let abjurer = StoryBosses.createProloguePlayer "abjurer"
-    Assert.Equal(CharacterClass.Abjurer, abjurer.Class)
-    Assert.Equal(CombatStance.DisciplineStance, abjurer.Stance)
+    Assert.Equal(CharacterClass.Mage, abjurer.Class)
+    Assert.Equal(CombatStance.PowerStance, abjurer.Stance)
     Assert.Contains("Tome", abjurer.EquippedItems.Head.Name)
 
   [<Fact>]

@@ -34,7 +34,8 @@ module ParallelDeterminismTests =
 
   [<Fact>]
   let ``runGroupBatch: repeated invocations produce identical summaries`` () =
-    let solo = Archetypes.findByName "Grandmaster Justicar" |> Option.get
+    // "Grandmaster Justicar" no longer exists: only the two player classes carry tiered archetypes.
+    let solo = Archetypes.findByName "Grandmaster Fighter" |> Option.get
     let mob = Archetypes.findByName "Warrior" |> Option.get
 
     let first = Simulation.runGroupBatch solo mob 100 10

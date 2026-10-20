@@ -169,6 +169,17 @@ type Combatant =
     else
       baseValue
 
+  /// Guard every defence contest rolls against: the Poise/Composure blend, replaced while the defender
+  /// holds DisciplineStance by a pure Poise anchor (1.5x against physical attacks, 1.0x against mental
+  /// ones) that drops Composure. `useCombatStats` keeps each call site's existing stat view.
+  member this.GetGuard(plane: Plane, useCombatStats: bool) : int =
+    if this.Stance = CombatStance.DisciplineStance then
+      let stanceGuard = match plane with Physical -> 1.5 | Mental -> 1.0
+      int (Math.Round(float (this.GetStat Poise) * stanceGuard))
+    else
+      let stat = if useCombatStats then this.GetCombatStat else this.GetStat
+      (stat Poise + stat Composure) / 2
+
   /// Dominant arcane vector focus based on mental attribute allocation
   member this.ArcaneFocus : Vector =
     let i = this.GetStat Intellect
@@ -345,7 +356,7 @@ type Combatant =
       let reasonOpt =
         // Shared Entropy Break (evaluated first)
         let recklessnessCap =
-          if c.Class = CharacterClass.Berserker || c.HasActivePreparation PreparationType.BerserkTincture then
+          if c.HasActivePreparation PreparationType.BerserkTincture then
             120
           else
             100

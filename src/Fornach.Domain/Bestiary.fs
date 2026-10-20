@@ -42,12 +42,13 @@ type MonsterTemplate =
     let statBlock = StatBlock.Create this.Stats
     let nearestClass =
       match this.Family, this.Role with
-      | MonsterFamily.Construct, (MonsterRole.Brute | MonsterRole.Colossus) -> CharacterClass.Warden
-      | MonsterFamily.Beast, (MonsterRole.Swarmer | MonsterRole.Brute) -> CharacterClass.Berserker
-      | MonsterFamily.Beast, (MonsterRole.Skirmisher | MonsterRole.Stalker) -> CharacterClass.Duelist
-      | MonsterFamily.UndeadWraith, _ -> CharacterClass.Mesmer
-      | MonsterFamily.Aberration, (MonsterRole.Caster | MonsterRole.Colossus) -> CharacterClass.Inquisitor
-      | MonsterFamily.GriefManifestation, _ -> CharacterClass.Abjurer
+      // Monster families borrow the surviving class whose plane and vector match most closely.
+      | MonsterFamily.Construct, (MonsterRole.Brute | MonsterRole.Colossus) -> CharacterClass.Soldier
+      | MonsterFamily.Beast, (MonsterRole.Swarmer | MonsterRole.Brute) -> CharacterClass.Warrior
+      | MonsterFamily.Beast, (MonsterRole.Skirmisher | MonsterRole.Stalker) -> CharacterClass.Rogue
+      | MonsterFamily.UndeadWraith, _ -> CharacterClass.Mage
+      | MonsterFamily.Aberration, (MonsterRole.Caster | MonsterRole.Colossus) -> CharacterClass.Mage
+      | MonsterFamily.GriefManifestation, _ -> CharacterClass.Mage
       | _ -> CharacterClass.Warrior
 
     let prog = ProgressionProfile.create nearestClass this.Level

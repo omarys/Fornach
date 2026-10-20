@@ -9,6 +9,16 @@ module ActionResolver =
   // 1. Tiered Multiplier & Damage Application
   // =========================================================================
 
+  /// Damage multiplier a Study-Stack strike lands with. Defined once so the combat menu's estimate
+  /// cannot drift from what resolution actually pays.
+  let strikeMultiplier (attack: AttackClassification) (stacksHeld: int) (stackSpend: int) : float =
+    match attack with
+    | ProwessStrike _ -> 1.0 + 0.05 * float stacksHeld
+    | CalculatedFlawStrike _ -> 1.2 + 0.44 * float stackSpend
+    | ForceInsightStrike _
+    | FinesseInsightStrike _ -> if stackSpend >= 2 then 1.1 + 0.30 * float stackSpend else 1.0
+    | _ -> 1.0
+
   /// Tiered NetHits multiplier mapping contest outcome to damage lethality
   let computeTierMultiplier (netHits: int) : float =
     if netHits <= 0 then 0.0
@@ -23,6 +33,16 @@ module ActionResolver =
     elif netHits = 9 then 3.80
     elif netHits = 10 then 4.00
     else Math.Min(5.00, 4.00 + (float (netHits - 10) * 0.05))
+
+  /// Familiarity with a species pays off both ways: +2% damage dealt per kill of it (cap 20%)
+  /// and -1% damage taken from it (cap 10%). Only the player's profile ever carries mastery,
+  /// so every other matchup resolves to 1.0 without needing to identify who the player is.
+  let masteryMultiplier (attacker: Combatant) (defender: Combatant) : float =
+    let killsOf (profile: ProgressionProfile) (species: string) =
+      profile.Mastery |> Map.tryFind species |> Option.defaultValue 0 |> min 10
+
+    (1.0 + 0.02 * float (killsOf attacker.Progression defender.Name))
+    * (1.0 - 0.01 * float (killsOf defender.Progression attacker.Name))
 
   /// Applies pool damage, arcane ward barrier soak, armor soak, and massive blow armor shredding
   let private applyDamage
@@ -857,8 +877,8 @@ module ActionResolver =
       if actorToTransition.Plane = Physical then
         let fluidStanceOpt =
           match atk with
-          | ForceStrike _ -> Some CombatStance.PowerStance
-          | FinesseCadence _ -> Some CombatStance.AgilityStance
+          | ForceStrike _ | ForceInsightStrike _ -> Some CombatStance.PowerStance
+          | FinesseCadence _ | FinesseInsightStrike _ -> Some CombatStance.AgilityStance
           | ProwessStrike _ | CalculatedFlawStrike _ | MasterfulDisarm _ -> Some CombatStance.DisciplineStance
           | TraumaAttack BasaltEruption -> Some CombatStance.PowerStance
           | _ -> None
@@ -891,21 +911,40 @@ module ActionResolver =
         actorToTransition, []
 
     // --- Step A: Identify Gambit Properties ---
+    // Study Stacks actually spent this strike. Step A drains them, so reading StudyStacks again in
+    // step B would scale the payoff off the leftovers instead of the spend.
+    let mutable stackSpend = 0
+    // Step B re-checks MasterfulDisarm's requirement, so it must see the stacks held before the drain.
+    let stacksAtStart = currentActor.StudyStacks
+
     let isGambit, gambitName, selfReckSpike =
       match atk with
       | ForceStrike true -> true, "Physical Gambit: Wild Blow", 30
       | FinesseCadence true -> true, "Physical Gambit: Relentless Cadence", 25
       | ProwessStrike true -> true, "Martial Gambit: Invitational Bait", 35
+      | ForceInsightStrike stacks ->
+        let actualSpend = Math.Min(currentActor.StudyStacks, Math.Max(2, stacks))
+        stackSpend <- actualSpend
+        currentActor <- currentActor |> Combatant.addStudyStacks -actualSpend
+        events <- CombatEvent.DisciplineGambitExecuted(currentActor.Id, "Force Insight Cleave", actualSpend) :: events
+        false, "", 0 // Consumes Study Stacks with 0 Recklessness self-spike!
+      | FinesseInsightStrike stacks ->
+        let actualSpend = Math.Min(currentActor.StudyStacks, Math.Max(2, stacks))
+        stackSpend <- actualSpend
+        currentActor <- currentActor |> Combatant.addStudyStacks -actualSpend
+        events <- CombatEvent.DisciplineGambitExecuted(currentActor.Id, "Threaded Opening", actualSpend) :: events
+        false, "", 0 // Consumes Study Stacks with 0 Recklessness self-spike!
       | CalculatedFlawStrike stacks ->
         let actualSpend = Math.Min(currentActor.StudyStacks, Math.Max(2, stacks))
-        let isSameSchoolMaster = currentActor.Class = CharacterClass.Warden || currentActor.Class = CharacterClass.Justicar || (currentActor.Class = CharacterClass.Fighter && currentActor.Stance = CombatStance.DisciplineStance)
+        stackSpend <- actualSpend
+        let isSameSchoolMaster = currentActor.Class = CharacterClass.Fighter && currentActor.Stance = CombatStance.DisciplineStance
         let retained = if isSameSchoolMaster then actualSpend / 2 else 0
         currentActor <- currentActor |> Combatant.addStudyStacks -(actualSpend - retained)
         events <- CombatEvent.DisciplineGambitExecuted(currentActor.Id, "Calculated Flaw Strike", actualSpend) :: events
         false, "", 0 // Consumes Study Stacks with 0 Recklessness self-spike!
       | MasterfulDisarm stacks ->
         let off = currentActor.GetStat Prowess
-        let def = (currentTarget.GetStat Poise + currentTarget.GetStat Composure) / 2
+        let def = currentTarget.GetGuard(atk.Plane, false)
         let isPossible = off >= int (Math.Round(float def * 0.75))
         let required = Math.Max(3, int (Math.Ceiling((float def / Math.Max(1.0, float off)) * 3.5)))
         let actualSpend = Math.Min(currentActor.StudyStacks, required)
@@ -1008,7 +1047,7 @@ module ActionResolver =
           // Melee player classes (Fighter, Berserker, Duelist, Warden):
           // Mental defense is buffed to prevent instant roll blowouts against high-tier mental threats,
           // while mental damage remains greater on melee characters than on magic users.
-          if currentTarget.Class = CharacterClass.Warden || currentTarget.Class = CharacterClass.Justicar || currentTarget.Class = CharacterClass.Fighter then
+          if currentTarget.Class = CharacterClass.Fighter then
             int (Math.Round(float rawDef * 1.25))
           else
             int (Math.Round(float rawDef * 1.10))
@@ -1044,6 +1083,27 @@ module ActionResolver =
 
         off, def, wildMult, disp, upd
 
+      | ForceInsightStrike _ ->
+        let off = currentActor.GetCombatStat Force
+        let def = (currentTarget.GetCombatStat Fortitude + currentTarget.GetCombatStat Resolve) / 2
+        // Non-CLI callers can ask for the insight strike with no stacks; it must not beat the plain strike then.
+        let mult = strikeMultiplier atk currentActor.StudyStacks stackSpend
+        let ratio = float off / Math.Max(1.0, float def)
+        let baseExhaust =
+          if off >= def then
+            12 + ((off - def) / 4)
+          else
+            int (Math.Round(12.0 * Math.Pow(ratio, 2.0)))
+        let exhaust = fun isCrit -> baseExhaust + (if isCrit then 25 else 0)
+        let disp = fun isCrit -> if isCrit then Some(CrushingBlow(exhaust true)) else None
+
+        let upd isCrit (m: StatusMeters) =
+          { m with
+              Exhaustion = m.Exhaustion + (exhaust isCrit)
+              Recklessness = m.Recklessness } // 0 recklessness cost!
+
+        off, def, mult, disp, upd
+
       | FinesseCadence isRelentless ->
         let off = currentActor.GetCombatStat Finesse
         let def = (currentTarget.GetCombatStat Reflex + currentTarget.GetCombatStat Intuition) / 2
@@ -1067,10 +1127,30 @@ module ActionResolver =
 
         off, def, baseProbingMult, disp, upd
 
+      | FinesseInsightStrike _ ->
+        let off = currentActor.GetCombatStat Finesse
+        let def = (currentTarget.GetCombatStat Reflex + currentTarget.GetCombatStat Intuition) / 2
+        let mult = strikeMultiplier atk currentActor.StudyStacks stackSpend
+        let ratio = float off / Math.Max(1.0, float def)
+        let baseConfusion =
+          if off >= def then
+            12 + ((off - def) / 4)
+          else
+            int (Math.Round(12.0 * Math.Pow(ratio, 2.0)))
+        let confusion = fun isCrit -> baseConfusion + (if isCrit then 20 else 0)
+        let disp = fun isCrit -> if isCrit then Some(ArterialRupture(confusion true)) else None
+
+        let upd isCrit (m: StatusMeters) =
+          { m with
+              Confusion = m.Confusion + (confusion isCrit)
+              Recklessness = m.Recklessness } // 0 recklessness cost!
+
+        off, def, mult, disp, upd
+
       | ProwessStrike isInvitational ->
         let off = currentActor.GetCombatStat Prowess
-        let def = (currentTarget.GetCombatStat Poise + currentTarget.GetCombatStat Composure) / 2
-        let studyMult = 1.0 + (float currentActor.StudyStacks * 0.15)
+        let def = currentTarget.GetGuard(plane, true)
+        let studyMult = strikeMultiplier atk currentActor.StudyStacks stackSpend
         let baitMult = if isInvitational then 1.25 else 1.0
         let stanceMult = if currentActor.Stance = CombatStance.DisciplineStance then 1.25 else 1.0
         let ratio = float off / Math.Max(1.0, float def)
@@ -1090,12 +1170,11 @@ module ActionResolver =
         off, def, (studyMult * baitMult * stanceMult), disp, upd
 
 
-      | CalculatedFlawStrike stacks ->
+      | CalculatedFlawStrike _ ->
         let off = currentActor.GetCombatStat Prowess
-        let def = (currentTarget.GetCombatStat Poise + currentTarget.GetCombatStat Composure) / 2
+        let def = currentTarget.GetGuard(plane, true)
         let disparity = Math.Max(0, off - def)
-        let spend = Math.Min(currentActor.StudyStacks, Math.Max(2, stacks))
-        let mult = 1.2 + (0.35 * float spend)
+        let mult = strikeMultiplier atk currentActor.StudyStacks stackSpend
         let disp = fun isCrit -> if isCrit then Some DisarmOrLimbDisable else None
 
         let upd isCrit (m: StatusMeters) =
@@ -1107,7 +1186,7 @@ module ActionResolver =
 
       | MasterfulDisarm _ ->
         let off = currentActor.GetCombatStat Prowess
-        let def = (currentTarget.GetCombatStat Poise + currentTarget.GetCombatStat Composure) / 2
+        let def = currentTarget.GetGuard(plane, true)
         let disp = fun _ -> Some DisarmOrLimbDisable
 
         let upd _ (m: StatusMeters) =
@@ -1157,7 +1236,7 @@ module ActionResolver =
 
       | AcumenInterrogation isCheckmate ->
         let off = currentActor.GetCombatStat Acumen
-        let rawDef = (currentTarget.GetCombatStat Poise + currentTarget.GetCombatStat Composure) / 2
+        let rawDef = currentTarget.GetGuard(plane, true)
         let def = resolveMentalDefense rawDef
         let disparity = Math.Max(0, off - def)
         let disparityReck = int (Math.Round(float disparity / 10.0))
@@ -1239,7 +1318,7 @@ module ActionResolver =
 
       | RunicWardTrap isAnomalousGlyph ->
         let off = currentActor.GetCombatStat Acumen
-        let rawDef = (currentTarget.GetCombatStat Poise + currentTarget.GetCombatStat Composure) / 2
+        let rawDef = currentTarget.GetGuard(plane, true)
         let def = resolveMentalDefense rawDef
         let disparity = Math.Max(0, off - def)
         let disparityReck = int (Math.Round(float disparity / 12.0))
@@ -1259,7 +1338,7 @@ module ActionResolver =
 
       | DisorientingShockwave isStaggeringPulse ->
         let off = currentActor.GetCombatStat Acumen
-        let rawDef = (currentTarget.GetCombatStat Poise + currentTarget.GetCombatStat Composure) / 2
+        let rawDef = currentTarget.GetGuard(plane, true)
         let def = resolveMentalDefense rawDef
         let disparity = Math.Max(0, off - def)
         let disparityReck = int (Math.Round(float disparity / 12.0))
@@ -1305,7 +1384,7 @@ module ActionResolver =
 
       | TraumaAttack CoerciveBargain ->
         let off = currentActor.GetCombatStat Acumen
-        let rawDef = (currentTarget.GetCombatStat Poise + currentTarget.GetCombatStat Composure) / 2
+        let rawDef = currentTarget.GetGuard(plane, true)
         let def = resolveMentalDefense rawDef
         let disparity = Math.Max(0, off - def)
         let disp = fun isCrit -> if isCrit then Some DialecticalParalysis else None
@@ -1319,7 +1398,7 @@ module ActionResolver =
 
       | TraumaAttack ApathyDoldrums ->
         let off = currentActor.GetCombatStat Fortitude
-        let rawDef = (currentTarget.GetCombatStat Poise + currentTarget.GetCombatStat Composure) / 2
+        let rawDef = currentTarget.GetGuard(plane, true)
         let def = resolveMentalDefense rawDef
         let disparity = Math.Max(0, off - def)
         let disp = fun isCrit -> if isCrit then Some(CognitiveRupture(40)) else None
@@ -1348,10 +1427,10 @@ module ActionResolver =
       match atk with
       | MasterfulDisarm _ ->
         let off = currentActor.GetStat Prowess
-        let def = (currentTarget.GetStat Poise + currentTarget.GetStat Composure) / 2
+        let def = currentTarget.GetGuard(plane, false)
         let isPossible = off >= int (Math.Round(float def * 0.75))
         let required = Math.Max(3, int (Math.Ceiling((float def / Math.Max(1.0, float off)) * 3.5)))
-        if not isPossible || currentActor.StudyStacks < required then
+        if not isPossible || stacksAtStart < required then
           events <-
             CombatEvent.DisarmExecuted(
               currentTarget.Id,
@@ -1576,7 +1655,7 @@ module ActionResolver =
       let fatigueTolerance = Math.Min(85, 45 + (defIntuition / 12))
       let maxClones = if currentTarget.Progression.Level >= 100 then 2 else 1
 
-      if currentTarget.Class = CharacterClass.Mesmer && currentTarget.MirrorClones < maxClones && currentFatigue < fatigueTolerance && currentExhaustion < 75 then
+      if currentTarget.Class = CharacterClass.Mage && currentTarget.MirrorClones < maxClones && currentFatigue < fatigueTolerance && currentExhaustion < 75 then
         let statDelta = defIntuition - atkAcuity
         let fatiguePenalty = (currentFatigue / 4) + (currentExhaustion / 4)
         let statSlope = if statDelta >= 0 then 0.25 else 0.40
@@ -1600,7 +1679,7 @@ module ActionResolver =
           events <- CombatEvent.PassiveGenerationTriggered(currentTarget.Id, sprintf "%s intuitively wove ambient mirror clones %s(Active Clones: %d/%d)." currentTarget.Class.Name costMsg currentTarget.MirrorClones maxClones) :: events
 
       // B. Abjurer: Passive Composure Abjuration Ward (Disparity-Scaled Cost)
-      if (currentTarget.Class = CharacterClass.Abjurer || currentTarget.Class = CharacterClass.Strategist) then
+      if currentTarget.Class = CharacterClass.Mage then
         let defComposure = currentTarget.GetStat Composure
         let atkComposure = currentActor.GetStat Composure
         let disparity = defComposure - atkComposure
@@ -1621,7 +1700,7 @@ module ActionResolver =
           events <- CombatEvent.PassiveGenerationTriggered(currentTarget.Id, sprintf "%s reinforced composure ward by +%d %s(Active Ward: %d)." currentTarget.Class.Name wardGen costMsg currentTarget.ArcaneWard) :: events
 
       // C. Inquisitor: Imposing Dread Presence (Disparity-Scaled Cost)
-      if currentTarget.Class = CharacterClass.Inquisitor && currentActor.Meters.Recklessness.Value < 20 then
+      if currentTarget.Class = CharacterClass.Mage && currentActor.Meters.Recklessness.Value < 20 then
         let defIntellect = currentTarget.GetStat Intellect
         let atkResolve = currentActor.GetStat Resolve
         let disparity = defIntellect - atkResolve
@@ -1659,7 +1738,7 @@ module ActionResolver =
         let fatiguePenalty = (currentTarget.Meters.Exhaustion.Value / 4) + (currentTarget.Meters.Recklessness.Value / 4)
         let slope = if delta >= 0 then 0.20 else 0.40
         let baseChance = if hasDiffusion then 50.0 else 25.0
-        let forceDispersion = if currentActor.Class = CharacterClass.Berserker || (currentActor.Class = CharacterClass.Fighter && currentActor.Stance = CombatStance.PowerStance) then 15 else 0
+        let forceDispersion = if currentActor.Class = CharacterClass.Fighter && currentActor.Stance = CombatStance.PowerStance then 15 else 0
         let swapChance = Math.Clamp(int (baseChance + float delta * slope) + rollMargin - fatiguePenalty - forceDispersion, 10, 48)
         if priorDefenses < 5 && roller 1 100 <= swapChance then
           let fatigueCost, exhaustionCost =
@@ -1697,7 +1776,7 @@ module ActionResolver =
 
     // B. Abjurer: Destabilizing Ground Ward (Acumen vs. Poise)
     // Capped at up to 5 flanking spaces; priorDefenses penalty removed, limited by stat minus Exhaustion/Recklessness
-    if not decoyIntercepted && (currentTarget.Class = CharacterClass.Abjurer || currentTarget.Class = CharacterClass.Strategist) then
+    if not decoyIntercepted && currentTarget.Class = CharacterClass.Mage then
       let defAcumen = currentTarget.GetStat Acumen
       let atkPoise = currentActor.GetStat Poise
       let disparity = defAcumen - atkPoise
@@ -1743,7 +1822,7 @@ module ActionResolver =
 
     // C. Inquisitor: Synaptic Mind-Shock (Intellect vs. Fortitude)
     // Capped at up to 5 flanking spaces; priorDefenses penalty removed, limited by stat minus Exhaustion/Recklessness
-    if not decoyIntercepted && currentTarget.Class = CharacterClass.Inquisitor then
+    if not decoyIntercepted && currentTarget.Class = CharacterClass.Mage then
       let defIntellect = float (currentTarget.GetStat Intellect)
       let atkFortitude = float (currentActor.GetStat Fortitude)
       let disparity = int defIntellect - int atkFortitude
@@ -1908,8 +1987,8 @@ module ActionResolver =
           currentTarget <- Combatant.updateMeters (fun m -> { m with Overwhelm = m.Overwhelm + flankOverwhelm }) currentTarget
 
       // Agility crit bonus: combo tracker + opponent confusion/overwhelm increases crit chance
-      let isAgilityAtk = match atk with FinesseCadence _ -> true | _ -> false
-      let isForceAtk = match atk with ForceStrike _ -> true | _ -> false
+      let isAgilityAtk = match atk with FinesseCadence _ | FinesseInsightStrike _ -> true | _ -> false
+      let isForceAtk = match atk with ForceStrike _ | ForceInsightStrike _ -> true | _ -> false
       let agilityCritRolled =
         if isAgilityAtk then
           let comboBonus = currentActor.ComboTracker.VitalOpeningBonus
@@ -1965,10 +2044,15 @@ module ActionResolver =
 
       // Aegis of Retribution: 35% damage reduction applied to recipient
       let rawDmg =
+        // Only the primary strike is mastery-scaled; splash, burn and reflect riders are not.
+        // Zero-damage utility actions stay zero — Serene Resolution must not start chipping morale.
+        let scaled =
+          if baseRawDmg <= 0 then baseRawDmg
+          else max 1 (int (Math.Round(float baseRawDmg * masteryMultiplier currentActor currentTarget)))
         if currentTarget.HasActivePreparation PreparationType.AegisOfRetribution then
-          Math.Max(1, int (Math.Round(float baseRawDmg * 0.65)))
+          Math.Max(1, int (Math.Round(float scaled * 0.65)))
         else
-          baseRawDmg
+          scaled
 
       // Track Recklessness before updates for Neurotoxin check
       let reckBefore = currentTarget.Meters.Recklessness.Value
@@ -2052,7 +2136,9 @@ module ActionResolver =
       // Aegis of Retribution / Retribution Ward / Aegis Lattice: reflects incoming damage back to attacker as radiant retribution + Frustration
       let hasRetributionAegis = currentTarget.HasActivePreparation PreparationType.AegisOfRetribution
       let hasAegisLattice = currentTarget.ComplexForm = Some ComplexForm.AegisLattice && (wardEvts |> List.exists (function CombatEvent.ArcaneWardAbsorbed _ -> true | _ -> false))
-      let hasAbjurerWard = (currentTarget.Class = CharacterClass.Abjurer || currentTarget.Class = CharacterClass.Strategist) && (wardEvts |> List.exists (function CombatEvent.ArcaneWardAbsorbed _ -> true | _ -> false))
+      let hasAbjurerWard =
+        currentTarget.Class = CharacterClass.Mage
+        && (wardEvts |> List.exists (function CombatEvent.ArcaneWardAbsorbed _ -> true | _ -> false))
       if (hasRetributionAegis || hasAegisLattice || hasAbjurerWard) && baseRawDmg > 0 then
         let reflectRatio = if hasRetributionAegis || hasAegisLattice then 0.50 else 0.25
         let reflectDmg = Math.Max(12, int (Math.Round(float baseRawDmg * reflectRatio)))
@@ -2529,15 +2615,14 @@ module ActionResolver =
           SecondaryTargets = currentAdjacent
           Events = allEvents }
       else
-        let isCleaving =
-          currentActor.Class = CharacterClass.Berserker
-          || currentActor.Stance = CombatStance.PowerStance
+        let isCleaving = currentActor.Stance = CombatStance.PowerStance
 
         if isCleaving then
           // Power Stance & Berserker Cleave:
           // Dynamic cleave targets scaling with Force / Tier + preparation bonuses
           let baseCleave =
-            if currentActor.Class = CharacterClass.Berserker then
+            // Pre-reduction this 5-target cap belonged to the deleted Berserker class; the Fighter carries that kit now.
+            if currentActor.Class = CharacterClass.Fighter && currentActor.Stance = CombatStance.PowerStance then
               Math.Min(5, Math.Max(2, currentActor.GetStat Force / 35))
             else
               2

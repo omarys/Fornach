@@ -26,6 +26,10 @@ type AttackClassification =
   | FinesseCadence of isRelentlessCadence: bool
   /// Martial Discipline (Prowess vs. Poise): Stance pressure and tactical disarms causing Frustration
   | ProwessStrike of isInvitationalBait: bool
+  /// Power Gambit: Studied cleave through a read opening, consuming Study Stacks to strike Fortitude (0 Recklessness)
+  | ForceInsightStrike of stacksToSpend: int
+  /// Agility Gambit: Studied thrust into a read opening, consuming Study Stacks to strike Reflex (0 Recklessness)
+  | FinesseInsightStrike of stacksToSpend: int
   /// Dedicated Discipline Gambit: Precision flaw exploitation consuming Study Stacks (0 Recklessness)
   | CalculatedFlawStrike of stacksToSpend: int
   /// Dedicated Discipline Gambit: Tactical disarm requiring Study Stacks scaled by target Poise vs. Prowess
@@ -66,6 +70,8 @@ type AttackClassification =
     match this with
     | ForceStrike _
     | FinesseCadence _
+    | ForceInsightStrike _
+    | FinesseInsightStrike _
     | ProwessStrike _
     | CalculatedFlawStrike _
     | MasterfulDisarm _ -> CombatMode.Physical
@@ -85,10 +91,12 @@ type AttackClassification =
   member this.Vector : Vector =
     match this with
     | ForceStrike _
+    | ForceInsightStrike _
     | AuthorityDecree _
     | ArcaneCataclysm _
     | TraumaAttack BasaltEruption -> Power
     | FinesseCadence _
+    | FinesseInsightStrike _
     | GuileDeception _
     | SynapticGlamour _
     | MirrorIllusion _
@@ -106,6 +114,8 @@ type AttackClassification =
     match this with
     | ForceStrike _
     | FinesseCadence _
+    | ForceInsightStrike _
+    | FinesseInsightStrike _
     | ProwessStrike _
     | CalculatedFlawStrike _
     | MasterfulDisarm _

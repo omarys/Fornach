@@ -810,9 +810,20 @@ module TowerSession =
       // The stage guardian carries the keystone; beating it opens the gate and hands the protagonist
       // the strength the next biome assumes. Ordinary kills keep the normal per-kill value, except
       // on the tutorial floor, where every kill accelerates leveling.
+      //
+      // The top-up is measured from the level the PREVIOUS stage handed over, so optional kills are
+      // never swallowed: a player who clears every fight arrives at the gate carrying that many levels
+      // of lead, and keeps it for the rest of the ascent.
+      let stageEntryLevel =
+        let floorNum = state.CurrentFloor.FloorNumber
+        if floorNum <= 1 then 1 else ProgressionScale.storyGuardianLevel (floorNum - 1)
+      let carriedLead =
+        // Capped at three levels: the tutorial pays 100x the normal per-kill XP, so an uncapped lead
+        // would hand a completionist twenty levels by stage two and flatten the rest of the ascent.
+        min 3 (max 0 (state.Player.Level - stageEntryLevel))
       let storyGateLevel =
         if state.IsStoryMode && state.CurrentFloor.FloorNumber <= 7 && e.DropsKeyId.IsSome then
-          Some (ProgressionScale.storyGuardianLevel state.CurrentFloor.FloorNumber)
+          Some (ProgressionScale.storyGuardianLevel state.CurrentFloor.FloorNumber + carriedLead)
         else
           None
 
@@ -871,8 +882,23 @@ module TowerSession =
       if newXp > 0 then applyExperience state.Player newXp
       else state.Player, []
 
+    // Every kill of a species sharpens the player against the next one.
+    let masteredPlayer =
+      match defeatedEnemyOpt with
+      | Some e ->
+        let species = e.Combatant.Name
+        let profile = leveledPlayer.Progression
+        let kills = (profile.Mastery |> Map.tryFind species |> Option.defaultValue 0) + 1
+        if kills <= 10 then
+          logMessages <-
+            sprintf "Mastery of %s: %d kills (+%d%% damage dealt, -%d%% damage taken)."
+              species kills (kills * 2) kills :: logMessages
+        { leveledPlayer with
+            Progression = { profile with Mastery = profile.Mastery.Add(species, kills) } }
+      | None -> leveledPlayer
+
     { state with
-        Player = leveledPlayer
+        Player = masteredPlayer
         CurrentFloor = updatedFloor
         CollectedKeys = newKeys
         Souls = newSouls

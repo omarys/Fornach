@@ -19,44 +19,15 @@ module Archetypes =
 
   let createVeteranFighter () = asPlayer (TierFactory.createClassTier CharacterClass.Fighter CombatTier.Veteran)
   let createVeteranMage () = asPlayer (TierFactory.createClassTier CharacterClass.Mage CombatTier.Veteran)
-  let createVeteranBerserker () = TierFactory.createClassTier CharacterClass.Berserker CombatTier.Veteran
-  let createVeteranDuelist () = TierFactory.createClassTier CharacterClass.Duelist CombatTier.Veteran
-  let createVeteranWarden () = TierFactory.createClassTier CharacterClass.Warden CombatTier.Veteran
-  let createVeteranInquisitor () = TierFactory.createClassTier CharacterClass.Inquisitor CombatTier.Veteran
-  let createVeteranMesmer () = TierFactory.createClassTier CharacterClass.Mesmer CombatTier.Veteran
-  let createVeteranAbjurer () = TierFactory.createClassTier CharacterClass.Abjurer CombatTier.Veteran
 
   let createMasterFighter () = asPlayer (TierFactory.createClassTier CharacterClass.Fighter CombatTier.Master)
   let createMasterMage () = asPlayer (TierFactory.createClassTier CharacterClass.Mage CombatTier.Master)
-  let createMasterBerserker () = TierFactory.createClassTier CharacterClass.Berserker CombatTier.Master
-  let createMasterDuelist () = TierFactory.createClassTier CharacterClass.Duelist CombatTier.Master
-  let createMasterWarden () = TierFactory.createClassTier CharacterClass.Warden CombatTier.Master
-  let createMasterInquisitor () = TierFactory.createClassTier CharacterClass.Inquisitor CombatTier.Master
-  let createMasterMesmer () = TierFactory.createClassTier CharacterClass.Mesmer CombatTier.Master
-  let createMasterAbjurer () = TierFactory.createClassTier CharacterClass.Abjurer CombatTier.Master
 
   let createGrandMasterFighter () = asPlayer (TierFactory.createClassTier CharacterClass.Fighter CombatTier.GrandMaster)
   let createGrandMasterMage () = asPlayer (TierFactory.createClassTier CharacterClass.Mage CombatTier.GrandMaster)
-  let createGrandMasterBerserker () = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
-  let createGrandMasterInquisitor () = TierFactory.createClassTier CharacterClass.Inquisitor CombatTier.GrandMaster
-  let createGrandMasterDuelist () = TierFactory.createClassTier CharacterClass.Duelist CombatTier.GrandMaster
-  let createGrandMasterMesmer () = TierFactory.createClassTier CharacterClass.Mesmer CombatTier.GrandMaster
-  let createGrandMasterWarden () = TierFactory.createClassTier CharacterClass.Warden CombatTier.GrandMaster
-  let createGrandMasterJusticar () = TierFactory.createClassTier CharacterClass.Justicar CombatTier.GrandMaster
-  let createGrandMasterAbjurer () = TierFactory.createClassTier CharacterClass.Abjurer CombatTier.GrandMaster
-  let createGrandMasterStrategist = createGrandMasterAbjurer
 
   let createGrandmasterFighter = createGrandMasterFighter
   let createGrandmasterMage = createGrandMasterMage
-  let createGrandmasterBerserker = createGrandMasterBerserker
-  let createGrandmasterTitan = createGrandMasterBerserker
-  let createGrandmasterInquisitor = createGrandMasterInquisitor
-  let createGrandmasterDuelist = createGrandMasterDuelist
-  let createGrandmasterMesmer = createGrandMasterMesmer
-  let createGrandmasterWarden = createGrandMasterWarden
-  let createGrandmasterJusticar = createGrandMasterJusticar
-  let createGrandmasterAbjurer = createGrandMasterAbjurer
-  let createGrandmasterStrategist = createGrandMasterAbjurer
 
   // =========================================================================
   // Novice Archetypes (Level 1)
@@ -99,42 +70,6 @@ module Archetypes =
       Description = "Normalized Mental Master (staff): fluidly threads Resonance Spikes, Phantasmal static, and Aegis Lattices."
       Factory = createVeteranMage }
 
-    { Name = "Veteran Berserker"
-      Tier = Veteran
-      Discipline = CombatMode.Physical
-      Description = "Power Primary (1.0 : 0.75 : 0.75): seasoned kinetic slayer commanding heavy Force and cleaves."
-      Factory = createVeteranBerserker }
-
-    { Name = "Veteran Duelist"
-      Tier = Veteran
-      Discipline = CombatMode.Physical
-      Description = "Agility Primary (1.0 : 0.75 : 0.75): agile fencer executing probing cadences seeking vital openings."
-      Factory = createVeteranDuelist }
-
-    { Name = "Veteran Warden"
-      Tier = Veteran
-      Discipline = CombatMode.Physical
-      Description = "Discipline Primary (1.0 : 0.75 : 0.75): bastion knight commanding zone control and unyielding defense."
-      Factory = createVeteranWarden }
-
-    { Name = "Veteran Inquisitor"
-      Tier = Veteran
-      Discipline = CombatMode.Arcane
-      Description = "Power Primary (1.0 : 0.75 : 0.75): psychic mystic shredding mental defenses via raw Intellect."
-      Factory = createVeteranInquisitor }
-
-    { Name = "Veteran Mesmer"
-      Tier = Veteran
-      Discipline = CombatMode.Arcane
-      Description = "Agility Primary (1.0 : 0.75 : 0.75): guile illusionist conjuring decoy mirror swarms and sensory static."
-      Factory = createVeteranMesmer }
-
-    { Name = "Veteran Abjurer"
-      Tier = Veteran
-      Discipline = CombatMode.Arcane
-      Description = "Discipline Primary (1.0 : 0.75 : 0.75): discipline abjurer commanding defensive wards and posture shockwaves."
-      Factory = createVeteranAbjurer }
-
     { Name = "Master Fighter"
       Tier = Master
       Discipline = CombatMode.Physical
@@ -146,42 +81,6 @@ module Archetypes =
       Discipline = CombatMode.Arcane
       Description = "Master arcane practitioner threading complex forms with absolute precision."
       Factory = createMasterMage }
-
-    { Name = "Master Berserker"
-      Tier = Master
-      Discipline = CombatMode.Physical
-      Description = "Power Primary (1.0 : 0.75 : 0.75): unstoppable martial juggernaut wielding sweeping momentum."
-      Factory = createMasterBerserker }
-
-    { Name = "Master Duelist"
-      Tier = Master
-      Discipline = CombatMode.Physical
-      Description = "Agility Primary (1.0 : 0.75 : 0.75): fencing master with razor precision and lethal counter-openings."
-      Factory = createMasterDuelist }
-
-    { Name = "Master Warden"
-      Tier = Master
-      Discipline = CombatMode.Physical
-      Description = "Discipline Primary (1.0 : 0.75 : 0.75): bastion master commanding impenetrable zone control."
-      Factory = createMasterWarden }
-
-    { Name = "Master Inquisitor"
-      Tier = Master
-      Discipline = CombatMode.Arcane
-      Description = "Power Primary (1.0 : 0.75 : 0.75): ascendant psion with staggering psychic projection."
-      Factory = createMasterInquisitor }
-
-    { Name = "Master Mesmer"
-      Tier = Master
-      Discipline = CombatMode.Arcane
-      Description = "Agility Primary (1.0 : 0.75 : 0.75): master phantasmist weaving intricate mirror labyrinths."
-      Factory = createMasterMesmer }
-
-    { Name = "Master Abjurer"
-      Tier = Master
-      Discipline = CombatMode.Arcane
-      Description = "Discipline Primary (1.0 : 0.75 : 0.75): grand abjurer placing destabilizing ground glyphs and barriers."
-      Factory = createMasterAbjurer }
 
     // =========================================================================
     // GrandMaster Tier (Level 200, 6 Preparations, Max Stats 840+)
@@ -198,54 +97,6 @@ module Archetypes =
       Discipline = CombatMode.Arcane
       Description = "Grandmaster arcane channeler: normalized mental stats with +25% complex form specialization and spell armor."
       Factory = createGrandMasterMage }
-
-    { Name = "Grandmaster Berserker"
-      Tier = GrandMaster
-      Discipline = CombatMode.Physical
-      Description = "Power Primary (1.0 : 0.75 : 0.75): kinetic slayer wielding wild momentum and cleaves."
-      Factory = createGrandMasterBerserker }
-
-    { Name = "Grandmaster Inquisitor"
-      Tier = GrandMaster
-      Discipline = CombatMode.Arcane
-      Description = "Power Primary (1.0 : 0.75 : 0.75): psychic dread arcanist unleashing Dread Warhorn and Synaptic Brand."
-      Factory = createGrandMasterInquisitor }
-
-    { Name = "Grandmaster Duelist"
-      Tier = GrandMaster
-      Discipline = CombatMode.Physical
-      Description = "Agility Primary (1.0 : 0.75 : 0.75): master fencer deploying Caltrop Pouches, seeking vital openings."
-      Factory = createGrandMasterDuelist }
-
-    { Name = "Grandmaster Mesmer"
-      Tier = GrandMaster
-      Discipline = CombatMode.Arcane
-      Description = "Agility Primary (1.0 : 0.75 : 0.75): phantasmist weaving Mirror Mirages, decoy swaps, and Prismatic Flares."
-      Factory = createGrandMasterMesmer }
-
-    { Name = "Grandmaster Warden"
-      Tier = GrandMaster
-      Discipline = CombatMode.Physical
-      Description = "Discipline Primary (1.0 : 0.75 : 0.75): bastion knight planting Bastion Zone Control and polearms."
-      Factory = createGrandMasterWarden }
-
-    { Name = "Grandmaster Justicar"
-      Tier = GrandMaster
-      Discipline = CombatMode.Physical
-      Description = "Discipline Primary (legacy alias for Warden): knight warder planting Bastion Zone Control."
-      Factory = createGrandMasterJusticar }
-
-    { Name = "Grandmaster Abjurer"
-      Tier = GrandMaster
-      Discipline = CombatMode.Arcane
-      Description = "Discipline Primary (1.0 : 0.75 : 0.75): runic warder commanding Heraldic Treatises and ground glyphs."
-      Factory = createGrandMasterAbjurer }
-
-    { Name = "Grandmaster Strategist"
-      Tier = GrandMaster
-      Discipline = CombatMode.Arcane
-      Description = "Discipline Primary (legacy alias for Abjurer): tactical mastermind."
-      Factory = createGrandMasterStrategist }
 
     // =========================================================================
     // Novice Archetypes (Level 1)

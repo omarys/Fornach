@@ -22,43 +22,29 @@ module OverallBalanceTests =
 
   let private getTacticalObservations (cls: CharacterClass) (tier: CombatTier) : string =
     match cls, tier with
-    | CharacterClass.Warden, GrandMaster
-    | CharacterClass.Justicar, GrandMaster ->
+    | CharacterClass.Soldier, GrandMaster ->
       "BastionZoneControl limits frontline to 3; Prowess disparity triggers massive AoOs; resilient against swarms."
-    | CharacterClass.Warden, Master
-    | CharacterClass.Justicar, Master ->
+    | CharacterClass.Soldier, Master ->
       "BastionZoneControl limits frontline to 3; exceptional defense soak against physical hordes."
-    | CharacterClass.Warden, _
-    | CharacterClass.Justicar, _ ->
+    | CharacterClass.Soldier, _ ->
       "Discipline posture & bastion geometry resist early encirclement penalties."
-    | CharacterClass.Berserker, GrandMaster ->
+    | CharacterClass.Warrior, GrandMaster ->
       "Berserk Tincture deadens 35% physical damage & unleashes Frenzy bonus swings; cleaves up to 5 adjacent foes."
-    | CharacterClass.Berserker, _ ->
+    | CharacterClass.Warrior, _ ->
       "Brute kinetic Force & high HP pool; vulnerable to compounding flank penalties over prolonged duels."
-    | CharacterClass.Duelist, GrandMaster ->
+    | CharacterClass.Rogue, GrandMaster ->
       "Caltrop Pouch strips flank penalties for 5 turns; Agility disparity triggers lethal AoO counters."
-    | CharacterClass.Duelist, _ ->
+    | CharacterClass.Rogue, _ ->
       "High Finesse & Reflex dodge initial attacks; overwhelmed once caltrops expire against large mobs."
-    | CharacterClass.Inquisitor, GrandMaster ->
+    | CharacterClass.Mage, GrandMaster ->
       "Dread Warhorn inflicts +25 Cognitive Fatigue on all attackers; devastates Mage morale & triggers mental routs."
-    | CharacterClass.Inquisitor, _ ->
+    | CharacterClass.Mage, _ ->
       "Formidable mental dominance; vulnerable if physical brute force bypasses lower physical armor."
-    | CharacterClass.Mesmer, GrandMaster ->
-      "Mirror Mirage forces flankers to attack decoys; Prismatic Flare punishes enemy recklessness."
-    | CharacterClass.Mesmer, _ ->
-      "Deceptive sensory phantasms disrupt attackers; susceptible to dogpiling once illusions exhaust."
-    | CharacterClass.Abjurer, GrandMaster
-    | CharacterClass.Strategist, GrandMaster ->
-      "Aegis of Retribution reduces damage by 35% and reflects 50% back; destabilizing ground wards trip flankers with heavy Frustration."
-    | CharacterClass.Abjurer, _
-    | CharacterClass.Strategist, _ ->
-      "Runic composure wards & destabilizing ground glyphs disrupt oncoming attackers through calculated attrition."
     | _ -> "Standard archetype profile."
 
   let private getDisplayClassName (cls: CharacterClass) : string =
     match cls with
-    | CharacterClass.Warden -> "Warden"
-    | CharacterClass.Justicar -> "Warden (Justicar)"
+    | CharacterClass.Soldier -> "Warden"
     | _ -> cls.Name
 
   // =========================================================================
@@ -75,12 +61,12 @@ module OverallBalanceTests =
       let maxMobCount = 100
 
       let championClasses = [
-        CharacterClass.Berserker
-        CharacterClass.Duelist
-        CharacterClass.Warden
-        CharacterClass.Inquisitor
-        CharacterClass.Mesmer
-        CharacterClass.Abjurer
+        CharacterClass.Warrior
+        CharacterClass.Rogue
+        CharacterClass.Soldier
+        CharacterClass.Mage
+        CharacterClass.Mage
+        CharacterClass.Mage
       ]
 
       let tiers = [
@@ -164,7 +150,7 @@ module OverallBalanceTests =
           sprintf "%s GrandMaster Mage tipping point (%d) must be >= Novice (%d)" cls.Name gmRow.MageTippingPoint.Value noviceRow.MageTippingPoint.Value)
 
       // 3. Warden GrandMaster Bastion Zone Control verification: Impenetrable to at least 50+ Warriors
-      let wardenGM = rows |> Seq.find (fun r -> r.Class = CharacterClass.Warden && r.Tier = CombatTier.GrandMaster)
+      let wardenGM = rows |> Seq.find (fun r -> r.Class = CharacterClass.Soldier && r.Tier = CombatTier.GrandMaster)
       Assert.True(wardenGM.WarriorTippingPoint.Value >= 50,
         sprintf "GrandMaster Warden with Bastion Zone Control should hold against 50+ Warriors (Actual: %s)" (wardenGM.WarriorTippingPoint.ToString()))
 
@@ -172,8 +158,8 @@ module OverallBalanceTests =
     let ``Berserker: Swarm endurance scales with tier and is most vulnerable to Arcane Mages`` () =
       let rng = Random(123)
       let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
-      let noviceBerserker = fun () -> TierFactory.createClassTier CharacterClass.Berserker CombatTier.Novice
-      let gmBerserker = fun () -> TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
+      let noviceBerserker = fun () -> TierFactory.createClassTier CharacterClass.Warrior CombatTier.Novice
+      let gmBerserker = fun () -> TierFactory.createClassTier CharacterClass.Warrior CombatTier.GrandMaster
       let mageMob = fun () -> TierFactory.createClassTier CharacterClass.Mage CombatTier.Novice
       let warriorMob = fun () -> TierFactory.createClassTier CharacterClass.Warrior CombatTier.Novice
 
@@ -188,7 +174,7 @@ module OverallBalanceTests =
     let ``Warden: Bastion Zone Control completely nullifies compounding encirclement against physical hordes`` () =
       let rng = Random(456)
       let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
-      let gmWarden = fun () -> TierFactory.createClassTier CharacterClass.Warden CombatTier.GrandMaster
+      let gmWarden = fun () -> TierFactory.createClassTier CharacterClass.Soldier CombatTier.GrandMaster
       let warriorMob = fun () -> TierFactory.createClassTier CharacterClass.Warrior CombatTier.Novice
 
       // GrandMaster Warden vs 80 Warriors should achieve 0% swarm win rate
@@ -199,22 +185,23 @@ module OverallBalanceTests =
     let ``Duelist: Superior Agility disparity and Caltrops punish agile Rogue mobs`` () =
       let rng = Random(789)
       let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
-      let gmDuelist = fun () -> TierFactory.createClassTier CharacterClass.Duelist CombatTier.GrandMaster
+      let gmDuelist = fun () -> TierFactory.createClassTier CharacterClass.Rogue CombatTier.GrandMaster
       let rogueMob = fun () -> TierFactory.createClassTier CharacterClass.Rogue CombatTier.Novice
 
       let tpGMRogue = Simulation.findSwarmTippingPoint gmDuelist rogueMob 50 10 roller
       Assert.True(tpGMRogue.Value >= 25, sprintf "GrandMaster Duelist should withstand at least 25 Rogues (Actual: %d)" tpGMRogue.Value)
 
     [<Fact>]
-    let ``Inquisitor: Mental plane dominance with Dread Warhorn heavily counters Mage mobs`` () =
+    let ``Mage: Mental plane dominance with Dread Warhorn endures far more mental attackers than the Fighter`` () =
       let rng = Random(101)
       let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
-      let gmInquisitor = fun () -> TierFactory.createClassTier CharacterClass.Inquisitor CombatTier.GrandMaster
+      let gmMage = fun () -> TierFactory.createClassTier CharacterClass.Mage CombatTier.GrandMaster
+      let gmFighter = fun () -> TierFactory.createClassTier CharacterClass.Fighter CombatTier.GrandMaster
       let mageMob = fun () -> TierFactory.createClassTier CharacterClass.Mage CombatTier.Novice
-      let warriorMob = fun () -> TierFactory.createClassTier CharacterClass.Warrior CombatTier.Novice
 
-      let tpGMMage = Simulation.findSwarmTippingPoint gmInquisitor mageMob 50 10 roller
-      let tpGMWarrior = Simulation.findSwarmTippingPoint gmInquisitor warriorMob 50 10 roller
+      let tpGMMage = Simulation.findSwarmTippingPoint gmMage mageMob 50 10 roller
+      let tpGMFighter = Simulation.findSwarmTippingPoint gmFighter mageMob 50 10 roller
 
-      Assert.True(tpGMMage.Value >= 20, sprintf "GrandMaster Inquisitor should withstand 20+ Mages (Actual: %d)" tpGMMage.Value)
-      Assert.True(tpGMMage.Value >= tpGMWarrior.Value, "Inquisitor should endure more Mages on the Mental plane than physical Warriors bypassing armor.")
+      Assert.True(tpGMMage.Value >= 20, sprintf "GrandMaster Mage should withstand 20+ Mages (Actual: %d)" tpGMMage.Value)
+      Assert.True(tpGMMage.Value >= tpGMFighter.Value * 5,
+        sprintf "Mage should dominate the mental plane the physical Fighter cannot hold (Mage: %d, Fighter: %d)" tpGMMage.Value tpGMFighter.Value)

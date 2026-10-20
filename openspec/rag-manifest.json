@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-10-07T19:42:03.675Z",
+  "generatedAt": "2026-10-19T20:43:58.125Z",
   "specVersion": "1.0.0",
   "domains": [
     {
-      "domain": "context",
-      "specPath": "openspec/specs/context/spec.md",
+      "domain": "agents",
+      "specPath": "openspec/specs/agents/spec.md",
       "sourceFiles": [
         "/home/omary/Dev/fornach/.pre-commit-config.yaml",
         "/home/omary/Dev/fornach/CONTEXT.md",
@@ -12,11 +12,13 @@
         "/home/omary/Dev/fornach/README.md",
         "/home/omary/Dev/fornach/TODO.md",
         "/home/omary/Dev/fornach/.gitignore",
+        "/home/omary/Dev/fornach/AGENTS.md",
         "/home/omary/Dev/fornach/dotnet-tools.json",
         "/home/omary/Dev/fornach/Fornach.slnx",
+        "/home/omary/Dev/fornach/package.json",
         "/home/omary/Dev/fornach/skills-lock.json"
       ],
-      "requirementCount": 19,
+      "requirementCount": 20,
       "dependsOn": [],
       "calledBy": []
     },
@@ -27,16 +29,16 @@
         "/home/omary/Dev/fornach/src/Fornach.Cli/Types.fs",
         "/home/omary/Dev/fornach/src/Fornach.Cli/Archetypes.fs",
         "/home/omary/Dev/fornach/src/Fornach.Cli/EnvironmentScenes.fs",
+        "/home/omary/Dev/fornach/src/Fornach.Cli/AI.fs",
         "/home/omary/Dev/fornach/src/Fornach.Cli/Simulation.fs",
         "/home/omary/Dev/fornach/src/Fornach.Cli/TowerDisplay.fs",
-        "/home/omary/Dev/fornach/src/Fornach.Cli/AI.fs",
         "/home/omary/Dev/fornach/src/Fornach.Cli/DeathAnimation.fs",
-        "/home/omary/Dev/fornach/src/Fornach.Cli/Program.fs",
         "/home/omary/Dev/fornach/src/Fornach.Cli/Theme.fs",
         "/home/omary/Dev/fornach/src/Fornach.Cli/Display.fs",
-        "/home/omary/Dev/fornach/src/Fornach.Cli/Fornach.Cli.fsproj"
+        "/home/omary/Dev/fornach/src/Fornach.Cli/Fornach.Cli.fsproj",
+        "/home/omary/Dev/fornach/src/Fornach.Cli/Program.fs"
       ],
-      "requirementCount": 1,
+      "requirementCount": 72,
       "dependsOn": [],
       "calledBy": []
     },
@@ -57,15 +59,15 @@
         "/home/omary/Dev/fornach/src/Fornach.Domain/TowerTheme.fs",
         "/home/omary/Dev/fornach/src/Fornach.Domain/Vision.fs",
         "/home/omary/Dev/fornach/src/Fornach.Domain/Bestiary.fs",
+        "/home/omary/Dev/fornach/src/Fornach.Domain/Bosses.fs",
         "/home/omary/Dev/fornach/src/Fornach.Domain/Collapse.fs",
         "/home/omary/Dev/fornach/src/Fornach.Domain/Equipment.fs",
         "/home/omary/Dev/fornach/src/Fornach.Domain/Identifiers.fs",
         "/home/omary/Dev/fornach/src/Fornach.Domain/Pool.fs",
         "/home/omary/Dev/fornach/src/Fornach.Domain/Triggers.fs",
-        "/home/omary/Dev/fornach/src/Fornach.Domain/Bosses.fs",
         "/home/omary/Dev/fornach/src/Fornach.Domain/Fornach.Domain.fsproj"
       ],
-      "requirementCount": 14,
+      "requirementCount": 107,
       "dependsOn": [],
       "calledBy": []
     },
@@ -78,12 +80,14 @@
         "/home/omary/Dev/fornach/src/Fornach.Engine/DicePool.fs",
         "/home/omary/Dev/fornach/src/Fornach.Engine/IndesResolver.fs",
         "/home/omary/Dev/fornach/src/Fornach.Engine/TowerSession.fs",
-        "/home/omary/Dev/fornach/src/Fornach.Engine/WorldEvents.fs",
+        "/home/omary/Dev/fornach/src/Fornach.Engine/TowerGenerator.fs",
         "/home/omary/Dev/fornach/src/Fornach.Engine/ActionResolver.fs",
-        "/home/omary/Dev/fornach/src/Fornach.Engine/Fornach.Engine.fsproj",
-        "/home/omary/Dev/fornach/src/Fornach.Engine/TowerGenerator.fs"
+        "/home/omary/Dev/fornach/src/Fornach.Engine/AttackEstimator.fs",
+        "/home/omary/Dev/fornach/src/Fornach.Engine/RuntimeLog.fs",
+        "/home/omary/Dev/fornach/src/Fornach.Engine/WorldEvents.fs",
+        "/home/omary/Dev/fornach/src/Fornach.Engine/Fornach.Engine.fsproj"
       ],
-      "requirementCount": 10,
+      "requirementCount": 47,
       "dependsOn": [],
       "calledBy": []
     },
@@ -102,7 +106,7 @@
         "/home/omary/Dev/fornach/src/Fornach.Spatial/Line.fs",
         "/home/omary/Dev/fornach/src/Fornach.Spatial/Los.fs"
       ],
-      "requirementCount": 10,
+      "requirementCount": 18,
       "dependsOn": [],
       "calledBy": []
     },
@@ -115,7 +119,21 @@
         "/home/omary/Dev/fornach/src/Fornach.Story/Bosses.fs",
         "/home/omary/Dev/fornach/src/Fornach.Story/Fornach.Story.fsproj"
       ],
-      "requirementCount": 5,
+      "requirementCount": 18,
+      "dependsOn": [],
+      "calledBy": []
+    },
+    {
+      "domain": "openwiki-visualizer",
+      "specPath": "openspec/specs/openwiki-visualizer/spec.md",
+      "sourceFiles": [
+        "/home/omary/Dev/fornach/docs/openwiki-visualizer/graph.json",
+        "/home/omary/Dev/fornach/docs/openwiki-visualizer/client-lib.js",
+        "/home/omary/Dev/fornach/docs/openwiki-visualizer/index.html",
+        "/home/omary/Dev/fornach/docs/openwiki-visualizer/client.js",
+        "/home/omary/Dev/fornach/docs/openwiki-visualizer/styles.css"
+      ],
+      "requirementCount": 49,
       "dependsOn": [],
       "calledBy": []
     }

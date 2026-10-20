@@ -14,12 +14,12 @@ module BestiarySwarmTests =
   type BestiarySwarmFixture(output: ITestOutputHelper) =
 
     let canonicalClasses = [
-      CharacterClass.Berserker
-      CharacterClass.Duelist
-      CharacterClass.Warden
-      CharacterClass.Inquisitor
-      CharacterClass.Mesmer
-      CharacterClass.Abjurer
+      CharacterClass.Warrior
+      CharacterClass.Rogue
+      CharacterClass.Soldier
+      CharacterClass.Mage
+      CharacterClass.Mage
+      CharacterClass.Mage
     ]
 
     let allTiers = [
@@ -80,7 +80,7 @@ module BestiarySwarmTests =
       let sprite = Bestiary.byId "blight_sprite" |> Option.get
 
       for m in [ hound; sprite ] do
-        for cls in [ CharacterClass.Berserker; CharacterClass.Duelist; CharacterClass.Inquisitor ] do
+        for cls in [ CharacterClass.Warrior; CharacterClass.Rogue; CharacterClass.Mage ] do
           let champFactory () = TierFactory.createClassTier cls tier
           let mobFactory () = Bestiary.createMonster m
           let tp = Simulation.findSwarmTippingPoint champFactory mobFactory maxMob iters roller
@@ -101,7 +101,7 @@ module BestiarySwarmTests =
       let hound = Bestiary.byId "slag_hound" |> Option.get
       let crawler = Bestiary.byId "magma_crawler" |> Option.get
 
-      let wardenFactory () = TierFactory.createClassTier CharacterClass.Warden tier
+      let wardenFactory () = TierFactory.createClassTier CharacterClass.Soldier tier
       for m in [ hound; crawler ] do
         let mobFactory () = Bestiary.createMonster m
         let tp = Simulation.findSwarmTippingPoint wardenFactory mobFactory maxMob iters roller
@@ -126,7 +126,7 @@ module BestiarySwarmTests =
       ]
 
       for boss in colossi do
-        for cls in [ CharacterClass.Duelist; CharacterClass.Berserker; CharacterClass.Mesmer ] do
+        for cls in [ CharacterClass.Rogue; CharacterClass.Warrior; CharacterClass.Mage ] do
           let champFactory () = TierFactory.createClassTier cls tier
           let mobFactory () = Bestiary.createMonster boss
           let tp = Simulation.findSwarmTippingPoint champFactory mobFactory maxMob iters roller
@@ -142,7 +142,7 @@ module BestiarySwarmTests =
       let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
       let tier = CombatTier.GrandMaster
 
-      let inquisitor = TierFactory.createClassTier CharacterClass.Inquisitor tier
+      let inquisitor = TierFactory.createClassTier CharacterClass.Mage tier
       let harpyTemplate = Bestiary.byId "gale_harpy" |> Option.get
 
       let primary = Bestiary.createMonster harpyTemplate

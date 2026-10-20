@@ -101,7 +101,7 @@ module BestiaryTests =
     let gargoyle = Bestiary.createMonster gargoyleTemplate
 
     // Attacker with full armor
-    let attacker = TierFactory.createClassTier CharacterClass.Berserker CombatTier.Veteran
+    let attacker = TierFactory.createClassTier CharacterClass.Warrior CombatTier.Veteran
     let initialArmor = attacker.Armor.Current
 
     // Berserker attacks with ForceStrike
@@ -122,7 +122,7 @@ module BestiaryTests =
     let crawlerTemplate = Bestiary.byId "magma_crawler" |> Option.get
     let crawler = Bestiary.createMonster crawlerTemplate
 
-    let attacker = TierFactory.createClassTier CharacterClass.Duelist CombatTier.Veteran
+    let attacker = TierFactory.createClassTier CharacterClass.Rogue CombatTier.Veteran
     let initialHp = attacker.Health.Current
 
     let action = StandardAttack (FinesseCadence false)
@@ -149,8 +149,8 @@ module BestiaryTests =
     let golemTemplate = Bestiary.byId "basalt_golem" |> Option.get
     let golem = Bestiary.createMonster golemTemplate
 
-    let lightTarget = { TierFactory.createClassTier CharacterClass.Duelist CombatTier.Veteran with Armor = ArmorIntegrity.Create 30 }
-    let heavyTarget = { TierFactory.createClassTier CharacterClass.Warden CombatTier.Veteran with Armor = ArmorIntegrity.Create 150 }
+    let lightTarget = { TierFactory.createClassTier CharacterClass.Rogue CombatTier.Veteran with Armor = ArmorIntegrity.Create 30 }
+    let heavyTarget = { TierFactory.createClassTier CharacterClass.Soldier CombatTier.Veteran with Armor = ArmorIntegrity.Create 150 }
 
     let chosen = AI.chooseGroupTarget golem [ lightTarget; heavyTarget ]
     Assert.Equal(150, chosen.Armor.Max)
@@ -160,8 +160,8 @@ module BestiaryTests =
     let specterTemplate = Bestiary.byId "siren_specter" |> Option.get
     let specter = Bestiary.createMonster specterTemplate
 
-    let stoicTarget = { TierFactory.createClassTier CharacterClass.Warden CombatTier.GrandMaster with Morale = Pool.Create 10000 }
-    let shakenTarget = { TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster with Morale = Pool.Create 1500 }
+    let stoicTarget = { TierFactory.createClassTier CharacterClass.Soldier CombatTier.GrandMaster with Morale = Pool.Create 10000 }
+    let shakenTarget = { TierFactory.createClassTier CharacterClass.Warrior CombatTier.GrandMaster with Morale = Pool.Create 1500 }
 
     let chosen = AI.chooseGroupTarget specter [ stoicTarget; shakenTarget ]
     Assert.Equal(1500, chosen.Morale.Current)

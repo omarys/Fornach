@@ -14,7 +14,7 @@ module ProgressionTests =
 
   [<Fact>]
   let ``GrantXP below threshold accumulates without levelling`` () =
-    let profile = ProgressionProfile.create CharacterClass.Warden 5
+    let profile = ProgressionProfile.create CharacterClass.Soldier 5
     let after, gained = profile.GrantXP 10
 
     Assert.Equal(0, gained)
@@ -24,7 +24,7 @@ module ProgressionTests =
 
   [<Fact>]
   let ``GrantXP levels up once at threshold and carries the remainder`` () =
-    let profile = ProgressionProfile.create CharacterClass.Berserker 1
+    let profile = ProgressionProfile.create CharacterClass.Warrior 1
     let after, gained = profile.GrantXP 150
 
     Assert.Equal(1, gained)
@@ -34,7 +34,7 @@ module ProgressionTests =
   [<Fact>]
   let ``GrantXP crosses multiple levels in a single award`` () =
     // Level 1 needs 100 XP and level 2 needs 200 XP, so 320 XP reaches level 3 with 20 left over.
-    let profile = ProgressionProfile.create CharacterClass.Duelist 1
+    let profile = ProgressionProfile.create CharacterClass.Rogue 1
     let after, gained = profile.GrantXP 320
 
     Assert.Equal(2, gained)
@@ -52,7 +52,7 @@ module ProgressionTests =
 
   [<Fact>]
   let ``rescaleToLevel raises stats and pools while preserving the health ratio`` () =
-    let novice = TierFactory.createClassLevel CharacterClass.Berserker 1
+    let novice = TierFactory.createClassLevel CharacterClass.Warrior 1
     let wounded = { novice with Health = novice.Health.ApplyDelta -(novice.Health.Maximum / 2) }
     let veteran = TierFactory.rescaleToLevel wounded 40
 
@@ -66,7 +66,7 @@ module ProgressionTests =
 
   [<Fact>]
   let ``rescaleToLevel preserves identity, class, and name`` () =
-    let novice = TierFactory.createClassLevel CharacterClass.Duelist 1
+    let novice = TierFactory.createClassLevel CharacterClass.Rogue 1
     let veteran = TierFactory.rescaleToLevel novice 40
 
     Assert.Equal(novice.Id, veteran.Id)
@@ -75,7 +75,7 @@ module ProgressionTests =
 
   [<Fact>]
   let ``applyExperience levels the player and rescales their stats`` () =
-    let player = TierFactory.createClassLevel CharacterClass.Berserker 1
+    let player = TierFactory.createClassLevel CharacterClass.Warrior 1
     let leveled, messages = TowerSession.applyExperience player 150
 
     Assert.Equal(2, leveled.Level)
@@ -84,7 +84,7 @@ module ProgressionTests =
 
   [<Fact>]
   let ``defeating a foe grants souls and experience`` () =
-    let player = TierFactory.createClassLevel CharacterClass.Berserker 1
+    let player = TierFactory.createClassLevel CharacterClass.Warrior 1
     let state = TowerSession.initSession player 1234 1
 
     let enemyOpt =
@@ -101,6 +101,41 @@ module ProgressionTests =
       Assert.True(after.Souls > 0)
       Assert.True(after.Player.Progression.CurrentXP > 0 || after.Player.Level > 1)
     | None -> failwith "Floor 1 generated no enemies to defeat"
+
+  [<Fact>]
+  let ``defeating an enemy records mastery of its species`` () =
+    let player = TierFactory.createClassLevel CharacterClass.Fighter 32
+    let state = TowerSession.initSessionWithMode player 99 2 true
+    let enemy =
+      state.CurrentFloor.Entities
+      |> Map.toList
+      |> List.pick (fun (_, ent) ->
+        match ent with
+        | EntityEnemy e when not e.IsDefeated -> Some e
+        | _ -> None)
+
+    let after = TowerSession.resolveEnemyDefeat enemy.Id state
+    let kills =
+      after.Player.Progression.Mastery
+      |> Map.tryFind enemy.Combatant.Name
+      |> Option.defaultValue 0
+
+    Assert.Equal(1, kills)
+
+  [<Fact>]
+  let ``optional kills carry their level lead through the stage gate`` () =
+    let resolveWithStartLevel startLevel =
+      let player = TierFactory.createClassLevel CharacterClass.Fighter startLevel
+      let state = TowerSession.initSessionWithMode player 77 2 true
+      TowerSession.resolveEnemyDefeat "boss_stage_2" state
+
+    // Floor 2's guardian hands over the level floor 3 assumes.
+    let bossOnly = resolveWithStartLevel (ProgressionScale.storyGuardianLevel 1)
+    Assert.Equal(ProgressionScale.storyGuardianLevel 2, bossOnly.Player.Level)
+
+    // Two levels earned from optional fights survive the gate instead of being swallowed by the top-up.
+    let withLead = resolveWithStartLevel (ProgressionScale.storyGuardianLevel 1 + 2)
+    Assert.Equal(ProgressionScale.storyGuardianLevel 2 + 2, withLead.Player.Level)
 
   [<Fact>]
   let ``Spell armor bonus progression matches the 5% per 10 levels table from level 50 to 200`` () =
@@ -140,10 +175,10 @@ module ProgressionTests =
 
   [<Fact>]
   let ``Magic classes physical stat growth stops developing after level 49`` () =
-    let inq49 = TierFactory.createClassLevel CharacterClass.Inquisitor 49
-    let inq50 = TierFactory.createClassLevel CharacterClass.Inquisitor 50
-    let inq100 = TierFactory.createClassLevel CharacterClass.Inquisitor 100
-    let inq200 = TierFactory.createClassLevel CharacterClass.Inquisitor 200
+    let inq49 = TierFactory.createClassLevel CharacterClass.Mage 49
+    let inq50 = TierFactory.createClassLevel CharacterClass.Mage 50
+    let inq100 = TierFactory.createClassLevel CharacterClass.Mage 100
+    let inq200 = TierFactory.createClassLevel CharacterClass.Mage 200
 
     // Physical offensive stats must stop developing after level 49
     Assert.Equal(63, inq49.GetStat Force)
@@ -162,18 +197,18 @@ module ProgressionTests =
     Assert.Equal(63, inq200.GetStat Prowess)
 
     // Meanwhile, physical class (Berserker) continues physical growth unimpeded
-    let ber49 = TierFactory.createClassLevel CharacterClass.Berserker 49
-    let ber50 = TierFactory.createClassLevel CharacterClass.Berserker 50
-    let ber100 = TierFactory.createClassLevel CharacterClass.Berserker 100
+    let ber49 = TierFactory.createClassLevel CharacterClass.Warrior 49
+    let ber50 = TierFactory.createClassLevel CharacterClass.Warrior 50
+    let ber100 = TierFactory.createClassLevel CharacterClass.Warrior 100
     Assert.True(ber50.GetStat Force > ber49.GetStat Force)
     Assert.True(ber100.GetStat Force > ber50.GetStat Force)
 
   [<Fact>]
   let ``Spell armor applies percentage of mental stats to physical defense for magic classes`` () =
-    let inq49 = TierFactory.createClassLevel CharacterClass.Inquisitor 49
-    let inq50 = TierFactory.createClassLevel CharacterClass.Inquisitor 50
-    let inq100 = TierFactory.createClassLevel CharacterClass.Inquisitor 100
-    let inq200 = TierFactory.createClassLevel CharacterClass.Inquisitor 200
+    let inq49 = TierFactory.createClassLevel CharacterClass.Mage 49
+    let inq50 = TierFactory.createClassLevel CharacterClass.Mage 50
+    let inq100 = TierFactory.createClassLevel CharacterClass.Mage 100
+    let inq200 = TierFactory.createClassLevel CharacterClass.Mage 200
 
     // Level 49: 0% spell armor, base Fortitude = 106, Reflex = 63, Poise = 135
     Assert.Equal(0.0, inq49.SpellArmorBonus, 3)
@@ -181,20 +216,20 @@ module ProgressionTests =
     Assert.Equal(63, inq49.GetStat Reflex)
     Assert.Equal(135, inq49.GetStat Poise)
 
-    // Level 50: 5% spell armor (Resolve = 216 -> +11 Fortitude; Intuition = 162 -> +8 Reflex; Composure = 162 -> +8 Poise)
+    // Level 50: 5% spell armor (the Mage's Resolve, Intuition and Composure are all primary = 216 -> +11 each)
     Assert.Equal(0.05, inq50.SpellArmorBonus, 3)
     Assert.Equal(106 + 11, inq50.GetStat Fortitude)
-    Assert.Equal(63 + 8, inq50.GetStat Reflex)
-    Assert.Equal(135 + 8, inq50.GetStat Poise)
+    Assert.Equal(63 + 11, inq50.GetStat Reflex)
+    Assert.Equal(135 + 11, inq50.GetStat Poise)
 
-    // Level 100: 30% spell armor (Resolve = 396 -> +119 Fortitude; Intuition/Composure = 297 -> +89)
+    // Level 100: 30% spell armor (all mental attributes = 396 -> +119 each)
     Assert.Equal(0.30, inq100.SpellArmorBonus, 3)
     Assert.Equal(106 + 119, inq100.GetStat Fortitude)
-    Assert.Equal(63 + 89, inq100.GetStat Reflex)
-    Assert.Equal(135 + 89, inq100.GetStat Poise)
+    Assert.Equal(63 + 119, inq100.GetStat Reflex)
+    Assert.Equal(135 + 119, inq100.GetStat Poise)
 
-    // Level 200: 80% spell armor (Resolve = 756 -> +605 Fortitude; Intuition/Composure = 567 -> +454)
+    // Level 200: 80% spell armor (all mental attributes = 756 -> +605 each)
     Assert.Equal(0.80, inq200.SpellArmorBonus, 3)
     Assert.Equal(106 + 605, inq200.GetStat Fortitude)
-    Assert.Equal(63 + 454, inq200.GetStat Reflex)
-    Assert.Equal(135 + 454, inq200.GetStat Poise)
+    Assert.Equal(63 + 605, inq200.GetStat Reflex)
+    Assert.Equal(135 + 605, inq200.GetStat Poise)

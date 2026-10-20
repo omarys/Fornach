@@ -69,12 +69,19 @@ type PreparationType =
   /// Class association for this preparation
   member this.Class : CharacterClass =
     match this with
-    | ShockwaveSlam | BerserkTincture -> CharacterClass.Berserker
-    | DreadWarhorn | SynapticBrand -> CharacterClass.Inquisitor
-    | CaltropPouch | ConcealedBlade -> CharacterClass.Duelist
-    | MirrorMirage | PrismaticFlare -> CharacterClass.Mesmer
-    | BastionZoneControl | ParryingBuckler -> CharacterClass.Warden
-    | AegisOfRetribution | HeraldicTreatise | SocraticDossier -> CharacterClass.Abjurer
+    | ShockwaveSlam
+    | BerserkTincture
+    | CaltropPouch
+    | ConcealedBlade
+    | BastionZoneControl
+    | ParryingBuckler -> CharacterClass.Fighter
+    | DreadWarhorn
+    | SynapticBrand
+    | MirrorMirage
+    | PrismaticFlare
+    | AegisOfRetribution
+    | HeraldicTreatise
+    | SocraticDossier -> CharacterClass.Mage
 
   /// Human-readable display name
   member this.Name : string =
@@ -148,22 +155,25 @@ type PreparationType =
         let bonus = Math.Max((lvl - 1) / 20, Math.Max(0, (primaryStat - 40) / 80))
         Math.Max(this.BaseDuration, this.BaseDuration + bonus)
 
-  /// Retrieves the pair of preparations (1 CrowdControl, 1 SingleTargetDuel) belonging to a class.
-  /// Generic NPC classes (Warrior, Rogue, Soldier) do not possess specialized preparation abilities.
+  /// Retrieves the preparations belonging to a class: the Fighter carries the physical kit and the
+  /// Mage the mental one. Generic NPC classes (Warrior, Rogue, Soldier) possess none.
   static member ForClass (cls: CharacterClass) : PreparationType list =
     match cls with
-    | CharacterClass.Berserker -> [ ShockwaveSlam; BerserkTincture ]
-    | CharacterClass.Inquisitor -> [ DreadWarhorn; SynapticBrand ]
-    | CharacterClass.Duelist -> [ CaltropPouch; ConcealedBlade ]
-    | CharacterClass.Mesmer -> [ MirrorMirage; PrismaticFlare ]
-    | CharacterClass.Warden
-    | CharacterClass.Justicar -> [ BastionZoneControl; ParryingBuckler ]
-    | CharacterClass.Abjurer -> [ AegisOfRetribution; SocraticDossier ]
-    | CharacterClass.Strategist -> [ HeraldicTreatise; SocraticDossier ]
-    | CharacterClass.Fighter -> [ BastionZoneControl; ParryingBuckler ]
-    // The Mage carries no preparation pair: its kit is the three Complex Forms threaded by the attacks
-    // it declares (Resonance spike, Phantasmal Diffusion, Aegis lattice).
-    | CharacterClass.Mage -> []
+    | CharacterClass.Fighter ->
+      [ ShockwaveSlam
+        BerserkTincture
+        CaltropPouch
+        ConcealedBlade
+        BastionZoneControl
+        ParryingBuckler ]
+    | CharacterClass.Mage ->
+      [ DreadWarhorn
+        SynapticBrand
+        MirrorMirage
+        PrismaticFlare
+        AegisOfRetribution
+        HeraldicTreatise
+        SocraticDossier ]
     | CharacterClass.Warrior
     | CharacterClass.Rogue
     | CharacterClass.Soldier -> []
@@ -188,6 +198,8 @@ type ProgressionProfile = {
   Class: CharacterClass
   PrimaryStat: int
   Preparations: PreparationSlot list
+  /// Kills per defeated enemy species (keyed by the enemy's display name), capped by the reader.
+  Mastery: Map<string, int>
 } with
   /// Preparation capacity: strictly limited to 2 uses per encounter
   static member CalculateMaxPrepUses (_primaryStat: int) : int = 2
@@ -205,7 +217,8 @@ type ProgressionProfile = {
       CurrentXP = 0
       Class = cls
       PrimaryStat = primaryStat
-      Preparations = slots }
+      Preparations = slots
+      Mastery = Map.empty }
 
   /// Creates profile with estimated primary stat for level
   static member create (cls: CharacterClass) (level: int) : ProgressionProfile =

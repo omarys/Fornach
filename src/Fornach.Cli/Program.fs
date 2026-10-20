@@ -70,10 +70,14 @@ module Program =
       StandardAttack (ForceStrike false)
     elif choice.Contains("Force Strike: Wild Blow") then
       StandardAttack (ForceStrike true)
+    elif choice.Contains("Force Strike: Insight Cleave") then
+      StandardAttack (ForceInsightStrike 3)
     elif choice.Contains("Finesse Cadence: Rapid Probing") then
       StandardAttack (FinesseCadence false)
     elif choice.Contains("Finesse Cadence: Relentless Blitz") then
       StandardAttack (FinesseCadence true)
+    elif choice.Contains("Finesse Cadence: Threaded Opening") then
+      StandardAttack (FinesseInsightStrike 3)
     elif choice.Contains("Prowess Strike: Stance Pressure") then
       StandardAttack (ProwessStrike false)
     elif choice.Contains("Prowess Strike: Invitational Bait") then
@@ -223,11 +227,17 @@ module Program =
         let powerStrikes = [
           sprintf "⚔️  [%s]Force Strike: Standard Cleave[/] (Power Stance • Cleave vs. Fortitude%s)" Theme.Red fortSuffix
           sprintf "⚡ [bold %s]Force Strike: Wild Blow[/] (Power Stance Gambit: +30 Recklessness, 1.5x Dmg)" Theme.Red
+          // Dedicated Power Gambit (costs Study Stacks with 0 Recklessness!)
+          if player.StudyStacks >= 2 then
+            sprintf "🎯 [bold %s]Force Strike: Insight Cleave[/] (Power Stance Gambit: Spend Study Stacks for a Read Opening, 0 Recklessness)" Theme.Red
         ]
 
         let agilityStrikes = [
           sprintf "⚔️  [%s]Finesse Cadence: Rapid Probing[/] (Agility Stance • Probing Cadence vs. Reflex%s)" Theme.Green refSuffix
           sprintf "⚡ [bold %s]Finesse Cadence: Relentless Blitz[/] (Agility Stance Gambit: +25 Recklessness)" Theme.Green
+          // Dedicated Agility Gambit (costs Study Stacks with 0 Recklessness!)
+          if player.StudyStacks >= 2 then
+            sprintf "🎯 [bold %s]Finesse Cadence: Threaded Opening[/] (Agility Stance Gambit: Spend Study Stacks to Thread a Vital Opening, 0 Recklessness)" Theme.Green
         ]
 
         let disciplineStrikes = [
@@ -642,8 +652,8 @@ module Program =
       elif not isSim then
         InteractiveMenu
       else
-        let arch1 = findArg [ "--solo"; "-s"; "-a1"; "--archetype1" ] "Veteran Berserker"
-        let arch2 = findArg [ "--mob"; "--enemy"; "-e"; "-a2"; "--archetype2" ] "Veteran Inquisitor"
+        let arch1 = findArg [ "--solo"; "-s"; "-a1"; "--archetype1" ] "Veteran Fighter"
+        let arch2 = findArg [ "--mob"; "--enemy"; "-e"; "-a2"; "--archetype2" ] "Veteran Mage"
         let itersStr = findArg [ "-n"; "--iterations" ] "100"
         let iters = match Int32.TryParse itersStr with true, v -> Math.Max(1, v) | _ -> 100
 

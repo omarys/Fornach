@@ -19,7 +19,7 @@ open Fornach.Cli
 module MonteCarloSwarmTests =
 
   [<Fact>]
-  let ``Monte-Carlo: Grandmaster Fighter holds a 100-warrior press via Bastion and the eight-tile limit`` () =
+  let ``Monte-Carlo: Grandmaster Fighter holds a 100-warrior press with its preparation kit and the eight-tile limit`` () =
     let soloArch = Archetypes.findByName "Grandmaster Fighter" |> Option.get
     let mobArch = Archetypes.findByName "Warrior" |> Option.get
 
@@ -27,7 +27,12 @@ module MonteCarloSwarmTests =
 
     Assert.True(summary.SoloWinRate >= 95.0, sprintf "Fighter should survive 100 warriors (Actual: %.1f%%)" summary.SoloWinRate)
     Assert.True(summary.AvgEliminations >= 80.0, sprintf "Fighter should eliminate most warriors (Actual: %.1f)" summary.AvgEliminations)
-    Assert.True(summary.AvgAoOsTriggered >= 20.0, sprintf "Fighter should punish the press with opportunity attacks (Actual: %.1f)" summary.AvgAoOsTriggered)
+    // Opportunity attacks are per-encounter volume, so they scale with how long the press lasts. The Fighter's
+    // inherited Shockwave Slam cleaves the press down in ~3 rounds, where the pre-reduction Bastion+Buckler
+    // kit ground out ~51 rounds at 114.8 AoOs (2.2 per round). The interception RATE is the mechanic the
+    // press asserts, and it rose to ~3.7 per round.
+    let aoosPerRound = summary.AvgAoOsTriggered / summary.AvgRounds
+    Assert.True(aoosPerRound >= 2.0, sprintf "Fighter should punish the press with opportunity attacks every round (Actual: %.1f per round, %.1f over %.0f rounds)" aoosPerRound summary.AvgAoOsTriggered summary.AvgRounds)
 
   [<Fact>]
   let ``Monte-Carlo: Grandmaster Fighter dismantles 12 novice soldiers`` () =

@@ -29,7 +29,7 @@ let private getOk = function Ok v -> v | Error e -> failwithf "Expected Ok, got:
 let private getError = function Error e -> e | Ok _ -> failwith "Expected Error, got Ok"
 
 [<Fact>]
-let ``TowerGenerator procedurally populates 2 to 4 dynamic encounters per floor`` () =
+let ``TowerGenerator procedurally populates 2 to 5 dynamic encounters per floor`` () =
   for floorNum in 1 .. 7 do
     let floor = TowerGenerator.generateFloor (42 + floorNum) floorNum
     let encounters =
@@ -40,7 +40,7 @@ let ``TowerGenerator procedurally populates 2 to 4 dynamic encounters per floor`
         | EntityEncounter enc -> Some (pt, enc)
         | _ -> None)
 
-    Assert.True(encounters.Length >= 2 && encounters.Length <= 4, sprintf "Floor %d had %d encounters (expected 2-4)" floorNum encounters.Length)
+    Assert.True(encounters.Length >= 2 && encounters.Length <= 5, sprintf "Floor %d had %d encounters (expected 2-5)" floorNum encounters.Length)
 
     for (pt, _) in encounters do
       Assert.NotEqual(floor.SpawnLocation, pt)
@@ -48,6 +48,28 @@ let ``TowerGenerator procedurally populates 2 to 4 dynamic encounters per floor`
       let tileOpt = Map.tryFind pt floor.Tiles
       Assert.True(tileOpt.IsSome, "Encounter point should exist in floor tiles")
       Assert.True(tileOpt.Value.IsWalkable, "Encounter tile must be walkable")
+
+[<Fact>]
+let ``every story floor carries an ambush and mobs across all six plazas`` () =
+  for floorNum in 1 .. 7 do
+    let floor = TowerGenerator.generateFloorWithMode 4242 floorNum true
+    let entities = floor.Entities |> Map.toList
+    let ambushes =
+      entities
+      |> List.filter (fun (_, ent) ->
+        match ent with
+        | EntityEncounter (FloorEncounter.AmbushLair _) -> true
+        | _ -> false)
+    let mobs =
+      entities
+      |> List.filter (fun (_, ent) ->
+        match ent with
+        | EntityEnemy e -> e.Id.StartsWith "grind_mob_"
+        | _ -> false)
+
+    // Floors on the trader/trap branch used to be the only story floors without an ambush.
+    Assert.Equal(1, ambushes.Length)
+    Assert.True(mobs.Length >= 5, sprintf "Floor %d had only %d grind mobs (expected 5-6)" floorNum (mobs.Length))
 
 [<Fact>]
 let ``SacrificialAltar applies costs and rewards correctly and prevents double-use`` () =

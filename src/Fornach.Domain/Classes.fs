@@ -1,36 +1,12 @@
 namespace Fornach.Domain
 
-/// Character classes in Fornach, encompassing specialized player archetypes
-/// and generic non-player character (NPC) classes.
+/// Character classes in Fornach: the two core player archetypes, plus generic NPC classes.
 type CharacterClass =
-  // --- Simplified Core Player Archetypes ---
+  // --- Core Player Archetypes ---
   /// Physical: Fighter with sword and shield, mastering kinetic momentum, precision parrying, and bastion guard
   | Fighter
   /// Mental: Mage with staff, channeling cognitive resonance, phantasmal static, and protective wards
   | Mage
-
-  // --- Specialized Player Archetypes (with Tactical Preparations) ---
-  // Power Vector (Force & Intellect)
-  /// Physical: Power Primary (1.0 : 0.75 : 0.75), relentless kinetic momentum, cleaves
-  | Berserker
-  /// Mental: Dread Arcanist/Psychic, raw cognitive dominance, mind-shock
-  | Inquisitor
-
-  // Agility Vector (Finesse & Acuity)
-  /// Physical: Agility Primary (1.0 : 0.75 : 0.75), technical precision, parry/riposte
-  | Duelist
-  /// Mental: Phantasmist/Illusionist, sensory static, feedback traps, mirror decoy swaps
-  | Mesmer
-
-  // Discipline Vector (Prowess & Acumen)
-  /// Physical: Discipline Primary (1.0 : 0.75 : 0.75), heavy bastion polearm, zone control
-  | Warden
-  /// Physical: Discipline Primary (legacy alias for Warden)
-  | Justicar
-  /// Mental: Abjuration/Wards, composure-woven barriers, destabilizing ground runes
-  | Abjurer
-  /// Mental: Dialectician/Judge (legacy alias for Abjurer)
-  | Strategist
 
   // --- Generic NPC Classes (without specialized player preparations) ---
   /// Generic Power NPC class: Kinetic brute, front-line shock troop
@@ -44,7 +20,7 @@ type CharacterClass =
   member this.IsGeneric : bool =
     match this with
     | Warrior | Rogue | Soldier -> true
-    | Fighter | Mage | Berserker | Inquisitor | Duelist | Mesmer | Warden | Justicar | Abjurer | Strategist -> false
+    | Fighter | Mage -> false
 
   /// True if this is a playable archetype (see PlayerClasses). The kit may come from preparations,
   /// Complex Forms, or fluid stance transitions rather than preparations alone.
@@ -53,40 +29,30 @@ type CharacterClass =
   /// The underlying stat Vector (Power, Agility, or Discipline)
   member this.Vector : Vector =
     match this with
-    | Fighter | Berserker | Inquisitor | Warrior -> Power
-    | Duelist | Rogue | Mesmer -> Agility
-    | Warden | Justicar | Abjurer | Strategist | Soldier -> Discipline
+    | Fighter | Warrior -> Power
+    | Rogue -> Agility
+    | Soldier -> Discipline
     | Mage -> Power // Baseline vector; arcane casting dynamically specializes based on stats / fluid forms
 
   /// The primary governing attribute of this class archetype
   member this.PrimaryStat : StatId =
     match this with
-    | Fighter | Berserker | Warrior -> Force
-    | Inquisitor | Mage -> Intellect
-    | Duelist | Rogue -> Finesse
-    | Mesmer -> Acuity
-    | Warden | Justicar | Soldier -> Prowess
-    | Abjurer | Strategist -> Acumen
+    | Fighter | Warrior -> Force
+    | Mage -> Intellect
+    | Rogue -> Finesse
+    | Soldier -> Prowess
 
   /// The operative combat Plane (Physical or Mental)
   member this.Plane : Plane =
     match this with
-    | Fighter | Berserker | Duelist | Rogue | Warden | Justicar | Warrior | Soldier -> Physical
-    | Mage | Inquisitor | Mesmer | Abjurer | Strategist -> Mental
+    | Fighter | Rogue | Warrior | Soldier -> Physical
+    | Mage -> Mental
 
   /// Display name of the character class
   member this.Name : string =
     match this with
     | Fighter -> "Fighter"
     | Mage -> "Mage"
-    | Berserker -> "Berserker"
-    | Inquisitor -> "Inquisitor"
-    | Duelist -> "Duelist"
-    | Mesmer -> "Mesmer"
-    | Warden -> "Warden"
-    | Justicar -> "Justicar"
-    | Abjurer -> "Abjurer"
-    | Strategist -> "Abjurer"
     | Warrior -> "Warrior"
     | Rogue -> "Rogue"
     | Soldier -> "Soldier"
@@ -96,14 +62,6 @@ type CharacterClass =
     match this with
     | Fighter -> "Fighter (Martial Master)"
     | Mage -> "Mage (Arcane Practitioner)"
-    | Berserker -> "Berserker (Kinetic Slayer)"
-    | Inquisitor -> "Inquisitor (Dread Arcanist)"
-    | Duelist -> "Duelist (Master Fencer)"
-    | Mesmer -> "Mesmer (Phantasmist)"
-    | Warden -> "Warden (Bastion Knight)"
-    | Justicar -> "Justicar (Knight Warder)"
-    | Abjurer
-    | Strategist -> "Abjurer (Runic Warder)"
     | Warrior -> "Warrior (Generic Power NPC)"
     | Rogue -> "Rogue (Generic Finesse NPC)"
     | Soldier -> "Soldier (Generic Discipline NPC)"
@@ -113,14 +71,6 @@ type CharacterClass =
     match this with
     | Fighter -> "Master of physical martial combat with sword and shield, seamlessly flowing between kinetic cleaves, fencing cadences, and bastion defense."
     | Mage -> "Master of arcane disciplines with runic staff, seamlessly threading resonance spikes, phantasmal static, and protective abjuration lattices."
-    | Berserker -> "Massive kinetic momentum, devastating cleaves, and reckless wild follow-through."
-    | Inquisitor -> "Raw cognitive dominance, imposing psychic presence, and synaptic mind-shocks."
-    | Duelist -> "Rapid probing cadences, technical parries, and lethal precision punctures."
-    | Mesmer -> "Intuitive mirror clones, sensory static, and acuteness-based phantasmal decoy swaps."
-    | Warden -> "Impenetrable bastion guard, zone control polearms, and unyielding line defense."
-    | Justicar -> "Defensive bastion tactics and precision ripostes."
-    | Abjurer
-    | Strategist -> "Composure-woven wards, destabilizing tactical ground runes, and protective abjuration barriers."
     | Warrior -> "Standard brute relying on kinetic Force and physical Fortitude without specialized preparations."
     | Rogue -> "Skirmisher relying on Finesse and Reflex without specialized dueling preparations."
     | Soldier -> "Disciplined rank-and-file fighter maintaining guard and Prowess without specialized preparations."
@@ -128,11 +78,8 @@ type CharacterClass =
   /// Core simplified player class archetypes
   static member PlayerClasses = [ Fighter; Mage ]
 
-  /// Specialized legacy player class archetypes
-  static member SpecializedClasses = [ Berserker; Inquisitor; Duelist; Mesmer; Warden; Justicar; Abjurer ]
-
   /// All generic NPC classes
   static member GenericClasses = [ Warrior; Rogue; Soldier ]
 
   /// All character classes
-  static member All = [ Fighter; Berserker; Inquisitor; Duelist; Mesmer; Warden; Justicar; Abjurer; Warrior; Rogue; Soldier; Mage ]
+  static member All = [ Fighter; Mage; Warrior; Rogue; Soldier ]

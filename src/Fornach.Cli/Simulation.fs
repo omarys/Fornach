@@ -490,7 +490,7 @@ module Simulation =
           // Handle if attacker died to an Attack of Opportunity, caltrops, reactive retribution, or collapsed from Frustration/meters
           let attackerDefeated = newAttacker.Health.IsDepleted || newAttacker.Morale.IsDepleted || CollapseState.isCollapsed newAttacker.Collapse
           if attackerDefeated then
-            if solo.Class = CharacterClass.Warden || solo.Class = CharacterClass.Justicar then
+            if solo.Class = CharacterClass.Fighter then
               // Reading the School: Neutralizing a student of this martial school yields persistent Study Stacks
               solo <- solo |> Combatant.addStudyStacks 1
             mob <- mob |> List.filter (fun m -> m.Id <> newAttacker.Id)
@@ -854,8 +854,6 @@ module Simulation =
 
             let displayName =
               match cls with
-              | CharacterClass.Warden -> "Warden"
-              | CharacterClass.Justicar -> "Warden (Justicar)"
               | _ -> cls.Name
 
             let tierColor =

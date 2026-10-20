@@ -150,19 +150,19 @@ Run batch simulations directly from the command line:
 
 ```bash
 # Balanced tactical duel (Veteran vs. Veteran)
-dotnet run --project src/Fornach.Cli -- --sim -a1 "Veteran Inquisitor" -a2 "Veteran Duelist" -n 100
+dotnet run --project src/Fornach.Cli -- --sim -a1 "Veteran Fighter" -a2 "Veteran Mage" -n 100
 
 # Skewed matchup verification (GrandMaster vs. Novice)
-dotnet run --project src/Fornach.Cli -- --sim -a1 "Grandmaster Berserker" -a2 "Soldier" -n 50
+dotnet run --project src/Fornach.Cli -- --sim -a1 "Grandmaster Fighter" -a2 "Soldier" -n 50
 
 # Mirror match balance check
-dotnet run --project src/Fornach.Cli -- --sim -a1 "Veteran Juggernaut" -a2 "Veteran Juggernaut" -n 100
+dotnet run --project src/Fornach.Cli -- --sim -a1 "Veteran Mage" -a2 "Veteran Mage" -n 100
 ```
 
 #### CLI Simulation Flags:
 - `--sim` / `-s`: Run in headless simulation mode (skips interactive menu).
-- `-a1` / `--archetype1 <name>`: First combatant name (default: `"Veteran Juggernaut"`).
-- `-a2` / `--archetype2 <name>`: Second combatant name (default: `"Veteran Inquisitor"`).
+- `-a1` / `--archetype1 <name>`: First combatant name (default: `"Veteran Fighter"`).
+- `-a2` / `--archetype2 <name>`: Second combatant name (default: `"Veteran Mage"`).
 - `-n` / `--iterations <count>`: Number of simulated duels (default: `100`).
 
 ---

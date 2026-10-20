@@ -368,8 +368,12 @@ module WorldEvents =
         | 0 ->
           let traderPos = { X = p1.X - 3; Y = p1.Y - 2 }
           let trapPos = { X = p4.X - 3; Y = p4.Y + 2 }
+          let ambushPos = { X = p3.X + 3; Y = p3.Y - 2 }
           traderPos, FloorEncounter.WanderingTrader (createTrader theme floorNum)
           trapPos, FloorEncounter.MechanicalTrapGauntlet (createTrap theme floorNum)
+          // Every floor carries an ambush: the floors on this branch used to be the only ones without
+          // one, which made clean floors 3 and 6 the thinnest fights in the story.
+          ambushPos, FloorEncounter.AmbushLair (createAmbush theme floorNum)
         | 1 ->
           let ambushPos = { X = p3.X + 3; Y = p3.Y - 2 }
           let vaultPos = { X = p3.X - 3; Y = p3.Y + 2 }

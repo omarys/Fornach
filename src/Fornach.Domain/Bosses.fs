@@ -399,7 +399,7 @@ module StoryBosses =
       | "mage" ->
         CharacterClass.Mage, staff, Some robes
       | "berserker" ->
-        CharacterClass.Berserker,
+        CharacterClass.Warrior,
         { Name = "Heavy Iron Greatsword"
           Slot = EquipmentSlot.Weapon
           Description = "A two-handed cleaver with brutal momentum and jagged edges."
@@ -410,7 +410,7 @@ module StoryBosses =
           Triggers = [] },
         None
       | "duelist" ->
-        CharacterClass.Duelist,
+        CharacterClass.Rogue,
         { Name = "Twin Stiletto & Rapier"
           Slot = EquipmentSlot.Weapon
           Description = "Finely balanced blades forged for fluid, relentless fencing cadences."
@@ -421,7 +421,7 @@ module StoryBosses =
           Triggers = [] },
         None
       | "warden" ->
-        CharacterClass.Warden,
+        CharacterClass.Soldier,
         { Name = "Iron Arming Sword & Tower Buckler"
           Slot = EquipmentSlot.Weapon
           Description = "A notched steel blade paired with an iron-banded buckler for unyielding defense."
@@ -432,7 +432,7 @@ module StoryBosses =
           Triggers = [] },
         None
       | "mesmer" ->
-        CharacterClass.Mesmer,
+        CharacterClass.Mage,
         { Name = "Silvered Hand Mirror"
           Slot = EquipmentSlot.Weapon
           Description = "A cracked silver mirror that folds light into phantasmal decoys and sensory static."
@@ -443,7 +443,7 @@ module StoryBosses =
           Triggers = [] },
         None
       | "abjurer" ->
-        CharacterClass.Abjurer,
+        CharacterClass.Mage,
         { Name = "Dusty Tome"
           Slot = EquipmentSlot.Weapon
           Description = "A composure-woven grimoire of warding runes and abjuration barriers."
@@ -454,7 +454,7 @@ module StoryBosses =
           Triggers = [] },
         None
       | "inquisitor" ->
-        CharacterClass.Inquisitor,
+        CharacterClass.Mage,
         { Name = "Carved Ash Staff"
           Slot = EquipmentSlot.Weapon
           Description = "A runic focus humming with psychic resonance and mental clarity."

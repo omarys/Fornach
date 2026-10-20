@@ -73,8 +73,8 @@ module BalanceRegressionTests =
 
   [<Fact>]
   let ``ExecuteStrike still kills a collapsed target`` () =
-    let actor = TierFactory.createClassLevel CharacterClass.Berserker 1
-    let target = TierFactory.createClassLevel CharacterClass.Berserker 1
+    let actor = TierFactory.createClassLevel CharacterClass.Warrior 1
+    let target = TierFactory.createClassLevel CharacterClass.Warrior 1
     let collapsed = { target with Collapse = CollapseState.Collapsed SomaticAnoxia }
     let roller (_min: int) (_max: int) = 6
 

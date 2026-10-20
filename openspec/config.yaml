@@ -1,17 +1,24 @@
 schema: spec-driven
 openlore:
   version: 1.2.0
-  generatedAt: 2026-10-07T19:42:03.650Z
+  generatedAt: 2026-10-19T20:43:58.098Z
   domains:
-    - context
+    - agents
     - fornach-cli
     - fornach-domain
     - fornach-engine
     - fornach-spatial
     - fornach-story
+    - openwiki-visualizer
   confidence: 0.95
 context: |-
+  # User-provided context (preserved)
   # Auto-detected by openlore
   Tech stack: F#, .NET
   Architecture: Layered (routes → controllers → services → repositories)
   Domains: context, fornach-cli, fornach-domain, fornach-engine, fornach-spatial, fornach-story
+
+  # Auto-detected by openlore
+  Tech stack: F#, .NET
+  Architecture: Layered (routes → controllers → services → repositories)
+  Domains: agents, fornach-cli, fornach-domain, fornach-engine, fornach-spatial, fornach-story, openwiki, openwiki-visualizer

@@ -27,12 +27,12 @@ module StoryTutorialTests =
       match className with
       | "fighter" -> CharacterClass.Fighter
       | "mage" -> CharacterClass.Mage
-      | "berserker" -> CharacterClass.Berserker
-      | "duelist" -> CharacterClass.Duelist
-      | "warden" -> CharacterClass.Warden
-      | "mesmer" -> CharacterClass.Mesmer
-      | "abjurer" -> CharacterClass.Abjurer
-      | _ -> CharacterClass.Inquisitor
+      | "berserker" -> CharacterClass.Warrior
+      | "duelist" -> CharacterClass.Rogue
+      | "warden" -> CharacterClass.Soldier
+      | "mesmer" -> CharacterClass.Mage
+      | "abjurer" -> CharacterClass.Mage
+      | _ -> CharacterClass.Mage
     Assert.Equal("Protagonist", player.Name)
     Assert.Equal(1, player.Level)
     Assert.Equal(expectedClass, player.Class)

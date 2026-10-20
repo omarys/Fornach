@@ -15,9 +15,27 @@ let ``statPair mirrors the stats ActionResolver contests against`` () =
   Assert.Equal((Acumen, [ Poise; Composure ]), AttackEstimator.statPair (AttackClassification.RunicWardTrap false))
 
 [<Fact>]
+let ``a DisciplineStance defender is estimated against its real Poise guard`` () =
+  let attacker = TierFactory.createClassLevel CharacterClass.Rogue 100
+  let baseTarget = TierFactory.createClassLevel CharacterClass.Soldier 100
+  let prowl = AttackClassification.ProwessStrike false
+
+  let stanced stance = { baseTarget with Stance = stance }
+  let power = stanced CombatStance.PowerStance
+  let discipline = stanced CombatStance.DisciplineStance
+
+  // Same stats, 1.5x Poise guard: the estimate can only drop, never rise, from the stance.
+  Assert.True(discipline.GetGuard(Physical, true) > power.GetGuard(Physical, true))
+  Assert.True(AttackEstimator.estimate attacker discipline prowl <= AttackEstimator.estimate attacker power prowl)
+
+  // A Prowess strike that cannot beat the guard is estimated as a whiff, not as the best option.
+  let weak = { attacker with Stats = attacker.Stats.With(Prowess, 1) }
+  Assert.Equal(0.0, AttackEstimator.estimate weak discipline prowl)
+
+[<Fact>]
 let ``a softer defense estimates more damage than a hardened one`` () =
-  let attacker = TierFactory.createClassLevel CharacterClass.Duelist 100
-  let baseTarget = TierFactory.createClassLevel CharacterClass.Warden 100
+  let attacker = TierFactory.createClassLevel CharacterClass.Rogue 100
+  let baseTarget = TierFactory.createClassLevel CharacterClass.Soldier 100
   let cadence = AttackClassification.FinesseCadence false
 
   let glassJaw =
@@ -33,11 +51,11 @@ let ``a softer defense estimates more damage than a hardened one`` () =
 
 [<Fact>]
 let ``the duel menu promotes the strike the scouted enemy is softest to`` () =
-  let player = TierFactory.createClassLevel CharacterClass.Duelist 100
+  let player = TierFactory.createClassLevel CharacterClass.Rogue 100
 
   // Agility-poised duelist against an enemy who shrugs off agility but folds to force:
   // the archetype's own order lists Finesse first, so a correct ranking has to reorder it.
-  let baseEnemy = TierFactory.createClassLevel CharacterClass.Warden 100
+  let baseEnemy = TierFactory.createClassLevel CharacterClass.Soldier 100
 
   let enemy =
     { baseEnemy with

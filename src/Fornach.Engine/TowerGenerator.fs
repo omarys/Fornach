@@ -522,7 +522,7 @@ module TowerGenerator =
     entities <- Map.add guardianPos (EntityEnemy guardianEnemy) entities
 
     // F. Grinding Mob Encounters across other plazas
-    let grindPlazaIndices = [ 1; 2; 3; 5 ]
+    let grindPlazaIndices = [ 0; 1; 2; 3; 4; 5 ]
     for i, pIdx in List.indexed grindPlazaIndices do
       if pIdx < plazas.Length then
         let p = plazas.[pIdx]

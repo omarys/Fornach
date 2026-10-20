@@ -9,7 +9,7 @@ module StanceTests =
 
   [<Fact>]
   let ``Power stance boosts Power-vector combat stats and penalizes the plane's other vectors`` () =
-    let berserker = TierFactory.createClassLevel CharacterClass.Berserker 40 // PowerStance
+    let berserker = TierFactory.createClassLevel CharacterClass.Warrior 40 // PowerStance
 
     Assert.Equal(CombatStance.PowerStance, berserker.Stance)
     Assert.True(berserker.GetCombatStat Force > berserker.Stats.Get Force)
@@ -19,7 +19,7 @@ module StanceTests =
 
   [<Fact>]
   let ``Agility stance boosts Agility-vector combat stats and penalizes the plane's other vectors`` () =
-    let duelist = TierFactory.createClassLevel CharacterClass.Duelist 40 // AgilityStance
+    let duelist = TierFactory.createClassLevel CharacterClass.Rogue 40 // AgilityStance
 
     Assert.Equal(CombatStance.AgilityStance, duelist.Stance)
     Assert.True(duelist.GetCombatStat Finesse > duelist.Stats.Get Finesse)
@@ -28,7 +28,7 @@ module StanceTests =
 
   [<Fact>]
   let ``Discipline stance boosts Discipline-vector combat stats and penalizes the plane's other vectors`` () =
-    let warden = TierFactory.createClassLevel CharacterClass.Warden 40 // DisciplineStance
+    let warden = TierFactory.createClassLevel CharacterClass.Soldier 40 // DisciplineStance
 
     Assert.Equal(CombatStance.DisciplineStance, warden.Stance)
     Assert.True(warden.GetCombatStat Prowess > warden.Stats.Get Prowess)
@@ -37,7 +37,7 @@ module StanceTests =
 
   [<Fact>]
   let ``canonical stats and GetStat stay stance-neutral`` () =
-    let berserker = TierFactory.createClassLevel CharacterClass.Berserker 40
+    let berserker = TierFactory.createClassLevel CharacterClass.Warrior 40
 
     Assert.Equal(berserker.Stats.Get Force, berserker.GetStat Force)
     Assert.Equal(berserker.Stats.Get Finesse, berserker.GetStat Finesse)
@@ -45,7 +45,7 @@ module StanceTests =
 
   [<Fact>]
   let ``a mental combatant's stance boosts its own plane's vector`` () =
-    let mage = TierFactory.createClassLevel CharacterClass.Inquisitor 40 // PowerStance, Mental plane
+    let mage = TierFactory.createClassLevel CharacterClass.Mage 40 // PowerStance, Mental plane
 
     Assert.Equal(Plane.Mental, mage.Plane)
     Assert.True(mage.GetCombatStat Intellect > mage.Stats.Get Intellect)
@@ -53,7 +53,7 @@ module StanceTests =
 
   [<Fact>]
   let ``shifting stance changes the combat stat view`` () =
-    let berserker = TierFactory.createClassLevel CharacterClass.Berserker 40
+    let berserker = TierFactory.createClassLevel CharacterClass.Warrior 40
     let powerForce = berserker.GetCombatStat Force
     let powerFinesse = berserker.GetCombatStat Finesse
 

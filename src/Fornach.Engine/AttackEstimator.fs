@@ -11,8 +11,10 @@ module AttackEstimator =
   let statPair (attack: AttackClassification) : StatId * StatId list =
     match attack with
     | ForceStrike _
+    | ForceInsightStrike _
     | TraumaAttack BasaltEruption -> Force, [ Fortitude; Resolve ]
     | FinesseCadence _
+    | FinesseInsightStrike _
     | TraumaAttack DenialPhaseShift -> Finesse, [ Reflex; Intuition ]
     | ProwessStrike _
     | CalculatedFlawStrike _
@@ -50,8 +52,22 @@ module AttackEstimator =
     let defValue =
       match defenseStats with
       | [ single ] -> target.GetCombatStat single
+      // A DisciplineStance defender's guard is 1.5x Poise, not the Poise/Composure blend.
+      | [ first; second ] when first = Poise && second = Composure -> target.GetGuard(attack.Plane, true)
       | [ first; second ] -> (target.GetCombatStat first + target.GetCombatStat second) / 2
       | _ -> target.GetCombatStat (List.head defenseStats)
+
+    // Study-Stack strikes pay more for spending, so the estimate has to weigh the stacks the
+    // strike would actually burn — same helper the resolver uses, so the two cannot drift.
+    let requestedSpend =
+      match attack with
+      | CalculatedFlawStrike spend
+      | ForceInsightStrike spend
+      | FinesseInsightStrike spend
+      | MasterfulDisarm spend -> spend
+      | _ -> 0
+
+    let stackSpend = Math.Min(actor.StudyStacks, Math.Max(2, requestedSpend))
 
     let netHits =
       expectedHits attack.Vector actor.StudyStacks offValue defValue
@@ -59,4 +75,8 @@ module AttackEstimator =
 
     let tierMult = ActionResolver.computeTierMultiplier (int (Math.Round netHits))
     let planeFactor = match attack.Plane with Physical -> 1.50 | Mental -> 1.15
-    float offValue * planeFactor * tierMult
+    float offValue
+    * planeFactor
+    * tierMult
+    * ActionResolver.strikeMultiplier attack actor.StudyStacks stackSpend
+    * ActionResolver.masteryMultiplier actor target

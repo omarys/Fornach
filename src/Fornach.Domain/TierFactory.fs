@@ -113,8 +113,7 @@ module TierFactory =
     let health, baseMorale, baseArmor = ProgressionScale.poolsForLevel cls.Plane level
     let morale, armor =
       match cls with
-      | CharacterClass.Warden
-      | CharacterClass.Justicar ->
+      | CharacterClass.Soldier ->
         int (Math.Round(float baseMorale * 1.15)),
         int (Math.Round(float baseArmor * 1.15))
       | _ -> baseMorale, baseArmor
@@ -129,34 +128,6 @@ module TierFactory =
           [ Force, prim; Fortitude, prim
             Finesse, prim; Reflex, prim
             Prowess, prim; Poise, prim
-            Intellect, min; Resolve, offDef
-            Acuity, min; Intuition, offDef
-            Acumen, min; Composure, offDef ]
-        | CharacterClass.Berserker ->
-          // Power Primary (1.0 : 0.75 : 0.75): Power 1.0, Agility 0.75, Discipline 0.75
-          // Power Archetype: Composure (defensive discipline), Acumen (tactical reading), and Resolve (mental grit) boosted
-          [ Force, prim; Fortitude, prim
-            Finesse, sec; Reflex, sec
-            Prowess, sec; Poise, sec
-            Intellect, min; Resolve, offDef
-            Acuity, min; Intuition, min
-            Acumen, offOff; Composure, offDef ]
-        | CharacterClass.Duelist ->
-          // Agility Primary (1.0 : 0.75 : 0.75): Agility 1.0, Discipline 0.75, Power 0.75
-          // Agility Archetype: Intuition (defensive awareness), Acuity (offensive precision), and Resolve boosted
-          [ Finesse, prim; Reflex, prim
-            Prowess, sec; Poise, sec
-            Force, sec; Fortitude, sec
-            Intellect, min; Resolve, offDef
-            Acuity, offOff; Intuition, offDef
-            Acumen, min; Composure, min ]
-        | CharacterClass.Warden
-        | CharacterClass.Justicar ->
-          // Discipline Primary (1.0 : 0.75 : 0.75): Discipline 1.0, Power 0.75, Agility 0.75
-          // Discipline Archetype: Intuition (defensive awareness), Resolve (mental fortitude), and Composure boosted
-          [ Prowess, prim; Poise, prim
-            Force, sec; Fortitude, sec
-            Finesse, sec; Reflex, sec
             Intellect, min; Resolve, offDef
             Acuity, min; Intuition, offDef
             Acumen, min; Composure, offDef ]
@@ -209,19 +180,6 @@ module TierFactory =
           | CharacterClass.Mage ->
             // Normalized mental stats: all mental defenses are prim, so spell armor scales from prim across all 3 defenses
             offPhys, min, offPoise, prim, prim, prim
-          | CharacterClass.Inquisitor ->
-            // Mental Power Primary (Intellect/Resolve), Agility & Discipline Secondary
-            // Physical: Fortitude gets spell armor from Resolve, Reflex from Intuition, Poise from Composure
-            offPhys, min, offPoise, prim, sec, sec
-          | CharacterClass.Mesmer ->
-            // Mental Agility Primary (Acuity/Intuition), Power & Discipline Secondary
-            // Physical: Fortitude gets spell armor from Resolve, Reflex from Intuition, Poise from Composure
-            min, offPhys, offPoise, sec, prim, sec
-          | CharacterClass.Abjurer
-          | CharacterClass.Strategist ->
-            // Mental Discipline Primary (Acumen/Composure), Power & Agility Secondary
-            // Physical: Fortitude gets spell armor from Resolve, Reflex from Intuition, Poise from Composure
-            offPhys, offPhys, offPoise, sec, sec, prim
           | _ ->
             offPhys, min, offPoise, prim, sec, sec
 
@@ -236,19 +194,6 @@ module TierFactory =
             [ Intellect, prim; Resolve, prim
               Acuity, prim; Intuition, prim
               Acumen, prim; Composure, prim ]
-          | CharacterClass.Inquisitor ->
-            [ Intellect, prim; Resolve, prim
-              Acuity, sec; Intuition, sec
-              Acumen, sec; Composure, sec ]
-          | CharacterClass.Mesmer ->
-            [ Acuity, prim; Intuition, prim
-              Intellect, sec; Resolve, sec
-              Acumen, sec; Composure, sec ]
-          | CharacterClass.Abjurer
-          | CharacterClass.Strategist ->
-            [ Acumen, prim; Composure, prim
-              Intellect, sec; Resolve, sec
-              Acuity, sec; Intuition, sec ]
           | _ ->
             [ Intellect, prim; Resolve, prim
               Acuity, sec; Intuition, sec
@@ -266,18 +211,10 @@ module TierFactory =
     let stance =
       match cls with
       | CharacterClass.Fighter
-      | CharacterClass.Berserker
       | CharacterClass.Warrior
-      | CharacterClass.Inquisitor
       | CharacterClass.Mage -> CombatStance.PowerStance
-      | CharacterClass.Duelist
-      | CharacterClass.Rogue
-      | CharacterClass.Mesmer -> CombatStance.AgilityStance
-      | CharacterClass.Warden
-      | CharacterClass.Justicar
-      | CharacterClass.Soldier
-      | CharacterClass.Abjurer
-      | CharacterClass.Strategist -> CombatStance.DisciplineStance
+      | CharacterClass.Rogue -> CombatStance.AgilityStance
+      | CharacterClass.Soldier -> CombatStance.DisciplineStance
 
     { Combatant.createWithClass id name health morale stats cls level with
         Armor = ArmorIntegrity.Create armor

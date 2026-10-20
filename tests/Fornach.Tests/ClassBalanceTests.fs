@@ -10,56 +10,44 @@ open Fornach.Cli
 let ``Physical sub-classes follow exact 1.0 to 0.75 to 0.75 stat ratios`` () =
   let level = 200 // GrandMaster tier
 
-  // 1. Berserker: Power Primary (Power 1.0, Agility 0.75, Discipline 0.75)
-  let berserker = TierFactory.createClassLevel CharacterClass.Berserker level
-  Assert.Equal(841, berserker.GetStat Force)
-  Assert.Equal(631, berserker.GetStat Finesse)
-  Assert.Equal(631, berserker.GetStat Prowess)
+  // 1. Warrior: Power Primary (Power 1.0, Agility 0.75, Discipline 0.75)
+  let warrior = TierFactory.createClassLevel CharacterClass.Warrior level
+  Assert.Equal(841, warrior.GetStat Force)
+  Assert.Equal(631, warrior.GetStat Finesse)
+  Assert.Equal(631, warrior.GetStat Prowess)
 
-  // 2. Duelist: Agility Primary (Agility 1.0, Discipline 0.75, Power 0.75)
-  let duelist = TierFactory.createClassLevel CharacterClass.Duelist level
-  Assert.Equal(841, duelist.GetStat Finesse)
-  Assert.Equal(631, duelist.GetStat Prowess)
-  Assert.Equal(631, duelist.GetStat Force)
+  // 2. Rogue: Agility Primary (Agility 1.0, Discipline 0.75, Power 0.75)
+  let rogue = TierFactory.createClassLevel CharacterClass.Rogue level
+  Assert.Equal(841, rogue.GetStat Finesse)
+  Assert.Equal(631, rogue.GetStat Prowess)
+  Assert.Equal(631, rogue.GetStat Force)
 
-  // 3. Warden: Discipline Primary (Discipline 1.0, Power 0.75, Agility 0.75)
-  let warden = TierFactory.createClassLevel CharacterClass.Warden level
-  Assert.Equal(841, warden.GetStat Prowess)
-  Assert.Equal(631, warden.GetStat Force)
-  Assert.Equal(631, warden.GetStat Finesse)
+  // 3. Soldier: Discipline Primary (Discipline 1.0, Power 0.75, Agility 0.75)
+  let soldier = TierFactory.createClassLevel CharacterClass.Soldier level
+  Assert.Equal(841, soldier.GetStat Prowess)
+  Assert.Equal(631, soldier.GetStat Force)
+  Assert.Equal(631, soldier.GetStat Finesse)
 
 [<Fact>]
-let ``Magic classes follow 1.0 to 0.75 to 0.75 mental utility ratio`` () =
+let ``Mage mental stats grow at the full 1.0 ratio on all three mental axes`` () =
   let level = 200 // GrandMaster tier
 
-  // Inquisitor: Power Mental Primary, Agility & Discipline Secondary
-  let inquisitor = TierFactory.createClassLevel CharacterClass.Inquisitor level
-  Assert.Equal(756, inquisitor.GetStat Intellect)
-  Assert.Equal(567, inquisitor.GetStat Acuity)
-  Assert.Equal(567, inquisitor.GetStat Acumen)
-
-  // Mesmer: Agility Mental Primary, Power & Discipline Secondary
-  let mesmer = TierFactory.createClassLevel CharacterClass.Mesmer level
-  Assert.Equal(756, mesmer.GetStat Acuity)
-  Assert.Equal(567, mesmer.GetStat Intellect)
-  Assert.Equal(567, mesmer.GetStat Acumen)
-
-  // Strategist: Discipline Mental Primary, Power & Agility Secondary
-  let strategist = TierFactory.createClassLevel CharacterClass.Strategist level
-  Assert.Equal(756, strategist.GetStat Acumen)
-  Assert.Equal(567, strategist.GetStat Intellect)
-  Assert.Equal(567, strategist.GetStat Acuity)
+  // The Mage is the only arcane class left and normalizes Intellect, Acuity and Acumen at the primary 1.0 ratio
+  let mage = TierFactory.createClassLevel CharacterClass.Mage level
+  Assert.Equal(756, mage.GetStat Intellect)
+  Assert.Equal(756, mage.GetStat Acuity)
+  Assert.Equal(756, mage.GetStat Acumen)
 
 [<Fact>]
-let ``Mesmer active Phantasmal Decoy Swap defuses incoming kinetic strike in the Nach`` () =
+let ``Mage active Phantasmal Decoy Swap defuses incoming kinetic strike in the Nach`` () =
   let roller : DiceRoller = fun _ _ -> 1 // Guaranteed favorable roll
-  let mesmer = TierFactory.createClassTier CharacterClass.Mesmer CombatTier.GrandMaster
-  let berserker = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
+  let mage = TierFactory.createClassTier CharacterClass.Mage CombatTier.GrandMaster
+  let warrior = TierFactory.createClassTier CharacterClass.Warrior CombatTier.GrandMaster
 
-  // Berserker attacks with ForceStrike: Wild Blow
+  // Warrior attacks with ForceStrike: Wild Blow
   let attack = AttackClassification.ForceStrike true
   let intent = ActionIntent.StandardAttack attack
-  let result = ActionResolver.resolve roller intent berserker mesmer
+  let result = ActionResolver.resolve roller intent warrior mage
 
   // Assert decoy intercepted
   let swapEvent =
@@ -68,21 +56,22 @@ let ``Mesmer active Phantasmal Decoy Swap defuses incoming kinetic strike in the
   Assert.True(swapEvent.IsSome)
   Assert.True(swapEvent.Value)
 
-  // Mesmer Health must be undamaged!
-  Assert.Equal(mesmer.Health.Current, result.Target.Health.Current)
+  // Mage Health must be undamaged!
+  Assert.Equal(mage.Health.Current, result.Target.Health.Current)
   // Attacker gained confusion and combo reset
   Assert.True(result.Actor.Meters.Confusion.Value > 0)
   Assert.Equal(0, result.Actor.ComboTracker.ConsecutiveHits)
 
 [<Fact>]
-let ``Strategist Destabilizing Ground Ward disrupts incoming attacker mid-swing in the Nach`` () =
-  let roller : DiceRoller = fun _ _ -> 6 // High roll for Strategist
-  let strategist = TierFactory.createClassTier CharacterClass.Strategist CombatTier.GrandMaster
-  let berserker = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
+let ``A Mage's Destabilizing Ground Ward disrupts incoming attacker mid-swing in the Nach`` () =
+  // A d100 of 100 beats the mirror-clone weave (clamped to at most 90), so the ground ward is the defense that answers
+  let roller : DiceRoller = fun min max -> if min = 1 && max = 100 then 100 else 6
+  let mage = TierFactory.createClassTier CharacterClass.Mage CombatTier.GrandMaster
+  let warrior = TierFactory.createClassTier CharacterClass.Warrior CombatTier.GrandMaster
 
   let attack = AttackClassification.ForceStrike true
   let intent = ActionIntent.StandardAttack attack
-  let result = ActionResolver.resolve roller intent berserker strategist
+  let result = ActionResolver.resolve roller intent warrior mage
 
   let wardEvent =
     result.Events
@@ -90,14 +79,16 @@ let ``Strategist Destabilizing Ground Ward disrupts incoming attacker mid-swing 
   Assert.True(wardEvent.IsSome)
 
 [<Fact>]
-let ``Inquisitor Synaptic Mind-Shock disrupts attacker focus in the Nach`` () =
-  let roller : DiceRoller = fun _ _ -> 6
-  let inquisitor = TierFactory.createClassTier CharacterClass.Inquisitor CombatTier.GrandMaster
-  let berserker = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
+let ``A Mage's Synaptic Mind-Shock disrupts attacker focus in the Nach`` () =
+  // A d100 of 100 beats the mirror-clone weave and a Soldier's Poise (841) beats the ground ward's margin,
+  // so mind-shock is the defense left to answer the strike
+  let roller : DiceRoller = fun min max -> if min = 1 && max = 100 then 100 else 6
+  let mage = TierFactory.createClassTier CharacterClass.Mage CombatTier.GrandMaster
+  let soldier = TierFactory.createClassTier CharacterClass.Soldier CombatTier.GrandMaster
 
   let attack = AttackClassification.ForceStrike false
   let intent = ActionIntent.StandardAttack attack
-  let result = ActionResolver.resolve roller intent berserker inquisitor
+  let result = ActionResolver.resolve roller intent soldier mage
 
   let shockEvent =
     result.Events
@@ -120,98 +111,99 @@ let ``ActionResolver computeTierMultiplier is normalized with diminishing return
   Assert.Equal(5.00, mult36)
 
 [<Fact>]
-let ``Grandmaster Mesmer fends off Novice Warrior with zero fatigue and zero exhaustion (Spherical Chicken)`` () =
+let ``Grandmaster Mage fends off Novice Warrior with zero fatigue and zero exhaustion (Spherical Chicken)`` () =
   let roller : DiceRoller = fun _ _ -> 1
-  let gmMesmer = TierFactory.createClassTier CharacterClass.Mesmer CombatTier.GrandMaster
+  let gmMage = TierFactory.createClassTier CharacterClass.Mage CombatTier.GrandMaster
   let noviceWarrior = TierFactory.createClassTier CharacterClass.Warrior CombatTier.Novice
 
   let attack = AttackClassification.ForceStrike false
   let intent = ActionIntent.StandardAttack attack
-  let result = ActionResolver.resolve roller intent noviceWarrior gmMesmer
+  let result = ActionResolver.resolve roller intent noviceWarrior gmMage
 
   // Passive clone weaving + Phantasmal Decoy Swap both incurred 0 drain due to massive disparity
   Assert.Equal(0, result.Target.Meters.CognitiveFatigue.Value)
   Assert.Equal(0, result.Target.Meters.Exhaustion.Value)
-  Assert.Equal(gmMesmer.Health.Current, result.Target.Health.Current)
+  Assert.Equal(gmMage.Health.Current, result.Target.Health.Current)
 
 [<Fact>]
-let ``Novice Mesmer facing Novice Warrior incurs disparity-scaled fatigue and exhaustion costs`` () =
+let ``Novice Mage facing Novice Warrior incurs disparity-scaled fatigue and exhaustion costs`` () =
   let roller : DiceRoller = fun _ _ -> 1
-  let noviceMesmer = TierFactory.createClassTier CharacterClass.Mesmer CombatTier.Novice
+  let noviceMage = TierFactory.createClassTier CharacterClass.Mage CombatTier.Novice
   let noviceWarrior = TierFactory.createClassTier CharacterClass.Warrior CombatTier.Novice
 
   let attack = AttackClassification.ForceStrike false
   let intent = ActionIntent.StandardAttack attack
-  let result = ActionResolver.resolve roller intent noviceWarrior noviceMesmer
+  let result = ActionResolver.resolve roller intent noviceWarrior noviceMage
 
-  // Disparity is small (< 30), so both passive weave (+4) and active swap (+5 fatigue, +3 exhaustion) incur standard costs
-  Assert.Equal(9, result.Target.Meters.CognitiveFatigue.Value)
+  // Disparity is small (< 30), so every passive incurs its standard cost: ambient weave (+4), decoy swap
+  // (+5 fatigue, +3 exhaustion), composure ward reinforcement (+4) and psychic presence (+4)
+  Assert.Equal(17, result.Target.Meters.CognitiveFatigue.Value)
   Assert.Equal(3, result.Target.Meters.Exhaustion.Value)
-  Assert.Equal(noviceMesmer.Health.Current, result.Target.Health.Current)
+  Assert.Equal(noviceMage.Health.Current, result.Target.Health.Current)
 
 [<Fact>]
-let ``Grandmaster Abjurer fends off Novice Warrior with zero fatigue and zero exhaustion`` () =
+let ``Grandmaster Mage fends off Novice Warrior with zero fatigue and zero exhaustion`` () =
   let roller : DiceRoller = fun _ _ -> 6
-  let gmAbjurer = TierFactory.createClassTier CharacterClass.Abjurer CombatTier.GrandMaster
+  let gmMage = TierFactory.createClassTier CharacterClass.Mage CombatTier.GrandMaster
   let noviceWarrior = TierFactory.createClassTier CharacterClass.Warrior CombatTier.Novice
 
   let attack = AttackClassification.ForceStrike false
   let intent = ActionIntent.StandardAttack attack
-  let result = ActionResolver.resolve roller intent noviceWarrior gmAbjurer
+  let result = ActionResolver.resolve roller intent noviceWarrior gmMage
 
   Assert.Equal(0, result.Target.Meters.CognitiveFatigue.Value)
   Assert.Equal(0, result.Target.Meters.Exhaustion.Value)
   Assert.True(result.Target.ArcaneWard > 0)
 
 [<Fact>]
-let ``Grandmaster Inquisitor fends off Novice Warrior with zero fatigue drain`` () =
+let ``Grandmaster Mage fends off Novice Warrior with zero fatigue drain`` () =
   let roller : DiceRoller = fun _ _ -> 6
-  let gmInquisitor = TierFactory.createClassTier CharacterClass.Inquisitor CombatTier.GrandMaster
+  let gmMage = TierFactory.createClassTier CharacterClass.Mage CombatTier.GrandMaster
   let noviceWarrior = TierFactory.createClassTier CharacterClass.Warrior CombatTier.Novice
 
   let attack = AttackClassification.ForceStrike false
   let intent = ActionIntent.StandardAttack attack
-  let result = ActionResolver.resolve roller intent noviceWarrior gmInquisitor
+  let result = ActionResolver.resolve roller intent noviceWarrior gmMage
 
   Assert.Equal(0, result.Target.Meters.CognitiveFatigue.Value)
 
 [<Fact>]
 let ``Physical archetypes receive thematic mental boosts and mages receive poise`` () =
   let level = 200 // GrandMaster tier
-  let gmDuelist = TierFactory.createClassLevel CharacterClass.Duelist level
-  let gmBerserker = TierFactory.createClassLevel CharacterClass.Berserker level
-  let gmWarden = TierFactory.createClassLevel CharacterClass.Warden level
-  let gmMesmer = TierFactory.createClassLevel CharacterClass.Mesmer level
+  let gmRogue = TierFactory.createClassLevel CharacterClass.Rogue level
+  let gmWarrior = TierFactory.createClassLevel CharacterClass.Warrior level
+  let gmSoldier = TierFactory.createClassLevel CharacterClass.Soldier level
+  let gmMage = TierFactory.createClassLevel CharacterClass.Mage level
 
   // Agility archetype: boosted Intuition (offDef = 420) and Acuity (offOff = 317)
-  Assert.Equal(420, gmDuelist.GetStat Intuition)
-  Assert.Equal(317, gmDuelist.GetStat Acuity)
-  Assert.Equal(214, gmDuelist.GetStat Composure)
+  Assert.Equal(420, gmRogue.GetStat Intuition)
+  Assert.Equal(317, gmRogue.GetStat Acuity)
+  Assert.Equal(214, gmRogue.GetStat Composure)
 
   // Power archetype: boosted Composure (offDef = 420) and Acumen (offOff = 317)
-  Assert.Equal(420, gmBerserker.GetStat Composure)
-  Assert.Equal(317, gmBerserker.GetStat Acumen)
-  Assert.Equal(214, gmBerserker.GetStat Intuition)
+  Assert.Equal(420, gmWarrior.GetStat Composure)
+  Assert.Equal(317, gmWarrior.GetStat Acumen)
+  Assert.Equal(214, gmWarrior.GetStat Intuition)
 
   // Discipline archetype: boosted Intuition (offDef = 420) and Resolve (offDef = 420)
-  Assert.Equal(420, gmWarden.GetStat Intuition)
-  Assert.Equal(420, gmWarden.GetStat Resolve)
-  Assert.Equal(214, gmWarden.GetStat Acuity)
+  Assert.Equal(420, gmSoldier.GetStat Intuition)
+  Assert.Equal(420, gmSoldier.GetStat Resolve)
+  Assert.Equal(214, gmSoldier.GetStat Acuity)
 
   // Magic user: physical stat growth stopped developing after level 49; physical defense boosted by spell armor (80% at GM tier)
-  Assert.Equal(63, gmMesmer.GetStat Force) // Physical offense stopped developing after level 49
-  Assert.Equal(589, gmMesmer.GetStat Poise) // 135 base + 80% of Composure (454)
-  Assert.Equal(711, gmMesmer.GetStat Reflex) // 106 base + 80% of Intuition (605)
+  Assert.Equal(63, gmMage.GetStat Force) // Physical offense stopped developing after level 49
+  Assert.Equal(740, gmMage.GetStat Poise) // 135 base + 80% of Composure (756)
+  Assert.Equal(668, gmMage.GetStat Reflex) // 63 base + 80% of Intuition (756)
 
 [<Fact>]
-let ``Mesmer mirror decoy shatters upon being attacked, inflicting retaliatory Morale blast damage`` () =
+let ``Mage mirror decoy shatters upon being attacked, inflicting retaliatory Morale blast damage`` () =
   let roller : DiceRoller = fun _ _ -> 1
-  let gmMesmer = TierFactory.createClassTier CharacterClass.Mesmer CombatTier.GrandMaster
-  let gmDuelist = TierFactory.createClassTier CharacterClass.Duelist CombatTier.GrandMaster
+  let gmMage = TierFactory.createClassTier CharacterClass.Mage CombatTier.GrandMaster
+  let gmRogue = TierFactory.createClassTier CharacterClass.Rogue CombatTier.GrandMaster
 
   let attack = AttackClassification.FinesseCadence false
   let intent = ActionIntent.StandardAttack attack
-  let result = ActionResolver.resolve roller intent gmDuelist gmMesmer
+  let result = ActionResolver.resolve roller intent gmRogue gmMage
 
   // Decoy intercepted and shattered
   let shatteredEvent =
@@ -221,7 +213,7 @@ let ``Mesmer mirror decoy shatters upon being attacked, inflicting retaliatory M
   Assert.True(shatteredEvent.Value > 0)
 
   // Attacker took retaliatory Morale damage from shatter
-  Assert.True(result.Actor.Morale.Current < gmDuelist.Morale.Current)
+  Assert.True(result.Actor.Morale.Current < gmRogue.Morale.Current)
   // Attacker gained confusion and combo reset from shatter shockwave
   Assert.True(result.Actor.Meters.Confusion.Value > 0)
   Assert.Equal(0, result.Actor.ComboTracker.ConsecutiveHits)
@@ -229,12 +221,12 @@ let ``Mesmer mirror decoy shatters upon being attacked, inflicting retaliatory M
 [<Fact>]
 let ``Physical character cannot execute magic attacks and action is blocked`` () =
   let roller : DiceRoller = fun _ _ -> 4
-  let berserker = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
-  let mesmer = TierFactory.createClassTier CharacterClass.Mesmer CombatTier.GrandMaster
+  let warrior = TierFactory.createClassTier CharacterClass.Warrior CombatTier.GrandMaster
+  let mage = TierFactory.createClassTier CharacterClass.Mage CombatTier.GrandMaster
 
   let attack = AttackClassification.ArcaneCataclysm false
   let intent = ActionIntent.StandardAttack attack
-  let result = ActionResolver.resolve roller intent berserker mesmer
+  let result = ActionResolver.resolve roller intent warrior mage
 
   Assert.True(result.Contest.IsNone, "Blocked attack must not produce a contest.")
   let resetEvent =
@@ -247,12 +239,12 @@ let ``Physical character cannot execute magic attacks and action is blocked`` ()
 [<Fact>]
 let ``Magic character cannot execute physical martial attacks and action is blocked`` () =
   let roller : DiceRoller = fun _ _ -> 4
-  let mesmer = TierFactory.createClassTier CharacterClass.Mesmer CombatTier.GrandMaster
-  let berserker = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
+  let mage = TierFactory.createClassTier CharacterClass.Mage CombatTier.GrandMaster
+  let warrior = TierFactory.createClassTier CharacterClass.Warrior CombatTier.GrandMaster
 
   let attack = AttackClassification.ForceStrike false
   let intent = ActionIntent.StandardAttack attack
-  let result = ActionResolver.resolve roller intent mesmer berserker
+  let result = ActionResolver.resolve roller intent mage warrior
 
   Assert.True(result.Contest.IsNone, "Blocked attack must not produce a contest.")
   let resetEvent =
@@ -265,35 +257,35 @@ let ``Magic character cannot execute physical martial attacks and action is bloc
 [<Fact>]
 let ``Physical character successfully executes physical strike and produces contest`` () =
   let roller : DiceRoller = fun _ _ -> 4
-  let berserker = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
-  let warden = TierFactory.createClassTier CharacterClass.Warden CombatTier.GrandMaster
+  let warrior = TierFactory.createClassTier CharacterClass.Warrior CombatTier.GrandMaster
+  let soldier = TierFactory.createClassTier CharacterClass.Soldier CombatTier.GrandMaster
 
   let attack = AttackClassification.ForceStrike false
   let intent = ActionIntent.StandardAttack attack
-  let result = ActionResolver.resolve roller intent berserker warden
+  let result = ActionResolver.resolve roller intent warrior soldier
 
   Assert.True(result.Contest.IsSome, "Valid physical attack must produce contest.")
 
 [<Fact>]
 let ``Magic character successfully executes magic strike and produces contest`` () =
   let roller : DiceRoller = fun _ _ -> 4
-  let mesmer = TierFactory.createClassTier CharacterClass.Mesmer CombatTier.GrandMaster
-  let berserker = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
+  let mage = TierFactory.createClassTier CharacterClass.Mage CombatTier.GrandMaster
+  let warrior = TierFactory.createClassTier CharacterClass.Warrior CombatTier.GrandMaster
 
   let attack = AttackClassification.SynapticGlamour false
   let intent = ActionIntent.StandardAttack attack
-  let result = ActionResolver.resolve roller intent mesmer berserker
+  let result = ActionResolver.resolve roller intent mage warrior
 
   Assert.True(result.Contest.IsSome, "Valid magic attack must produce contest.")
 
 [<Fact>]
 let ``Mental character can thread complex forms and emits ComplexFormThreaded event`` () =
   let roller : DiceRoller = fun _ _ -> 4
-  let inquisitor = TierFactory.createClassTier CharacterClass.Inquisitor CombatTier.GrandMaster
-  let enemy = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
+  let mage = TierFactory.createClassTier CharacterClass.Mage CombatTier.GrandMaster
+  let enemy = TierFactory.createClassTier CharacterClass.Warrior CombatTier.GrandMaster
 
   let intent = ActionIntent.ThreadComplexForm ComplexForm.AegisLattice
-  let result = ActionResolver.resolve roller intent inquisitor enemy
+  let result = ActionResolver.resolve roller intent mage enemy
 
   Assert.Equal(Some ComplexForm.AegisLattice, result.Actor.ComplexForm)
   let threadedEvt =
@@ -309,11 +301,11 @@ let ``Mental character can thread complex forms and emits ComplexFormThreaded ev
 [<Fact>]
 let ``Physical character cannot thread complex forms and action is blocked`` () =
   let roller : DiceRoller = fun _ _ -> 4
-  let berserker = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
-  let enemy = TierFactory.createClassTier CharacterClass.Mesmer CombatTier.GrandMaster
+  let warrior = TierFactory.createClassTier CharacterClass.Warrior CombatTier.GrandMaster
+  let enemy = TierFactory.createClassTier CharacterClass.Mage CombatTier.GrandMaster
 
   let intent = ActionIntent.ThreadComplexForm ComplexForm.ResonanceSpike
-  let result = ActionResolver.resolve roller intent berserker enemy
+  let result = ActionResolver.resolve roller intent warrior enemy
 
   Assert.True(result.Contest.IsNone, "Blocked form threading must not produce contest.")
   let resetEvt =
@@ -326,11 +318,11 @@ let ``Physical character cannot thread complex forms and action is blocked`` () 
 [<Fact>]
 let ``Mental character cannot shift physical martial stances and action is blocked`` () =
   let roller : DiceRoller = fun _ _ -> 4
-  let inquisitor = TierFactory.createClassTier CharacterClass.Inquisitor CombatTier.GrandMaster
-  let enemy = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
+  let mage = TierFactory.createClassTier CharacterClass.Mage CombatTier.GrandMaster
+  let enemy = TierFactory.createClassTier CharacterClass.Warrior CombatTier.GrandMaster
 
   let intent = ActionIntent.ShiftStance CombatStance.PowerStance
-  let result = ActionResolver.resolve roller intent inquisitor enemy
+  let result = ActionResolver.resolve roller intent mage enemy
 
   Assert.True(result.Contest.IsNone, "Blocked stance shift must not produce contest.")
   let resetEvt =
@@ -343,14 +335,14 @@ let ``Mental character cannot shift physical martial stances and action is block
 [<Fact>]
 let ``Resonance Spike boosts arcane spell damage and inflicts Fading drain and extra cognitive fatigue`` () =
   let roller : DiceRoller = fun _ _ -> 5
-  let inquisitor = TierFactory.createClassTier CharacterClass.Inquisitor CombatTier.GrandMaster
-  let enemy = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
+  let mage = TierFactory.createClassTier CharacterClass.Mage CombatTier.GrandMaster
+  let enemy = TierFactory.createClassTier CharacterClass.Warrior CombatTier.GrandMaster
 
-  // Inquisitor defaults to ResonanceSpike
-  Assert.Equal(Some ComplexForm.ResonanceSpike, inquisitor.ComplexForm)
+  // Mage defaults to ResonanceSpike
+  Assert.Equal(Some ComplexForm.ResonanceSpike, mage.ComplexForm)
 
   let intent = ActionIntent.StandardAttack (AttackClassification.ArcaneCataclysm false)
-  let result = ActionResolver.resolve roller intent inquisitor enemy
+  let result = ActionResolver.resolve roller intent mage enemy
 
   // Verify Fading drain suffered by caster
   let fadingEvt =
@@ -371,12 +363,12 @@ let ``Resonance Spike boosts arcane spell damage and inflicts Fading drain and e
 
 [<Fact>]
 let ``Aegis Lattice regenerates +15 Arcane Ward on turn upkeep`` () =
-  let inquisitor =
-    TierFactory.createClassTier CharacterClass.Inquisitor CombatTier.GrandMaster
+  let mage =
+    TierFactory.createClassTier CharacterClass.Mage CombatTier.GrandMaster
     |> Combatant.setComplexForm (Some ComplexForm.AegisLattice)
     |> fun c -> { c with ArcaneWard = 20 }
 
-  let updated, events = ActionResolver.applyTurnUpkeep inquisitor
+  let updated, events = ActionResolver.applyTurnUpkeep mage
 
   Assert.Equal(35, updated.ArcaneWard)
   let wardEvt =
@@ -389,11 +381,11 @@ let ``Aegis Lattice regenerates +15 Arcane Ward on turn upkeep`` () =
 
 [<Fact>]
 let ``Phantasmal Diffusion passively replenishes mirror clones during turn upkeep`` () =
-  let mesmer =
-    TierFactory.createClassTier CharacterClass.Mesmer CombatTier.GrandMaster
+  let mage =
+    TierFactory.createClassTier CharacterClass.Mage CombatTier.GrandMaster
     |> fun c -> { c with MirrorClones = 0; ComplexForm = Some ComplexForm.PhantasmalDiffusion }
 
-  let updated, events = ActionResolver.applyTurnUpkeep mesmer
+  let updated, events = ActionResolver.applyTurnUpkeep mage
 
   Assert.Equal(1, updated.MirrorClones)
   let cloneEvt =
@@ -407,13 +399,13 @@ let ``Phantasmal Diffusion passively replenishes mirror clones during turn upkee
 [<Fact>]
 let ``Aegis Lattice grounds Overchannel back to standard cast`` () =
   let roller : DiceRoller = fun _ _ -> 4
-  let inquisitor =
-    TierFactory.createClassTier CharacterClass.Inquisitor CombatTier.GrandMaster
+  let mage =
+    TierFactory.createClassTier CharacterClass.Mage CombatTier.GrandMaster
     |> Combatant.setComplexForm (Some ComplexForm.AegisLattice)
-  let enemy = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
+  let enemy = TierFactory.createClassTier CharacterClass.Warrior CombatTier.GrandMaster
 
   let intent = ActionIntent.StandardAttack (AttackClassification.ArcaneCataclysm true)
-  let result = ActionResolver.resolve roller intent inquisitor enemy
+  let result = ActionResolver.resolve roller intent mage enemy
 
   let gambitDeclared =
     result.Events
@@ -425,15 +417,17 @@ let ``Aegis Lattice grounds Overchannel back to standard cast`` () =
 
 [<Fact>]
 let ``Aegis Lattice reflects 50% damage and 15 Frustration when Arcane Ward absorbs incoming damage`` () =
-  let roller : DiceRoller = fun _ _ -> 4
-  let berserker = TierFactory.createClassTier CharacterClass.Berserker CombatTier.GrandMaster
-  let inquisitor =
-    TierFactory.createClassTier CharacterClass.Inquisitor CombatTier.GrandMaster
+  // A d100 of 100 beats the mirror-clone weave and a Fighter's Poise (841) beats the ground ward's margin,
+  // so the strike reaches the ward and is absorbed
+  let roller : DiceRoller = fun min max -> if min = 1 && max = 100 then 100 else 4
+  let fighter = TierFactory.createClassTier CharacterClass.Fighter CombatTier.GrandMaster
+  let mage =
+    TierFactory.createClassTier CharacterClass.Mage CombatTier.GrandMaster
     |> Combatant.setComplexForm (Some ComplexForm.AegisLattice)
     |> fun c -> { c with ArcaneWard = 100 }
 
   let intent = ActionIntent.StandardAttack (AttackClassification.ForceStrike false)
-  let result = ActionResolver.resolve roller intent berserker inquisitor
+  let result = ActionResolver.resolve roller intent fighter mage
 
   let reflectEvt =
     result.Events
@@ -450,49 +444,38 @@ let ``Aegis Lattice reflects 50% damage and 15 Frustration when Arcane Ward abso
 let ``Combat action choices are ordered by class archetype vector`` () =
   let dummyEnemy = TierFactory.createClassLevel CharacterClass.Warrior 1
 
-  // 1. Berserker (Power Vector): Force / Fortitude must be top choices
-  let berserker = TierFactory.createClassLevel CharacterClass.Berserker 1
-  let berserkerChoices = Program.buildActionChoices berserker dummyEnemy
+  // 1. Warrior (Power Vector): Force / Fortitude must be top choices
+  let warrior = TierFactory.createClassLevel CharacterClass.Warrior 1
+  let berserkerChoices = Program.buildActionChoices warrior dummyEnemy
   Assert.Contains("Force Strike: Standard Cleave", berserkerChoices.[0])
   Assert.Contains("Force Strike: Wild Blow", berserkerChoices.[1])
 
-  // 2. Duelist (Agility Vector): Finesse / Reflex must be top choices
-  let duelist = TierFactory.createClassLevel CharacterClass.Duelist 1
-  let duelistChoices = Program.buildActionChoices duelist dummyEnemy
+  // 2. Rogue (Agility Vector): Finesse / Reflex must be top choices
+  let rogue = TierFactory.createClassLevel CharacterClass.Rogue 1
+  let duelistChoices = Program.buildActionChoices rogue dummyEnemy
   Assert.Contains("Finesse Cadence: Rapid Probing", duelistChoices.[0])
   Assert.Contains("Finesse Cadence: Relentless Blitz", duelistChoices.[1])
 
-  // 3. Warden (Discipline Vector): Prowess / Poise must be top choices
-  let warden = TierFactory.createClassLevel CharacterClass.Warden 1
-  let wardenChoices = Program.buildActionChoices warden dummyEnemy
+  // 3. Soldier (Discipline Vector): Prowess / Poise must be top choices
+  let soldier = TierFactory.createClassLevel CharacterClass.Soldier 1
+  let wardenChoices = Program.buildActionChoices soldier dummyEnemy
   Assert.Contains("Prowess Strike: Stance Pressure", wardenChoices.[0])
   Assert.Contains("Prowess Strike: Invitational Bait", wardenChoices.[1])
 
-  // 4. Inquisitor (Power Mental Vector): Arcane Cataclysm must be top choice
-  let inquisitor = TierFactory.createClassLevel CharacterClass.Inquisitor 1
-  let inquisitorChoices = Program.buildActionChoices inquisitor dummyEnemy
+  // 4. Mage (Power Mental Vector): Arcane Cataclysm must be top choice
+  let mage = TierFactory.createClassLevel CharacterClass.Mage 1
+  let inquisitorChoices = Program.buildActionChoices mage dummyEnemy
   Assert.Contains("Arcane Cataclysm: Elemental Blast", inquisitorChoices.[0])
-
-  // 5. Mesmer (Agility Mental Vector): Synaptic Glamour must be top choice
-  let mesmer = TierFactory.createClassLevel CharacterClass.Mesmer 1
-  let mesmerChoices = Program.buildActionChoices mesmer dummyEnemy
-  Assert.Contains("Synaptic Glamour: Neural Static", mesmerChoices.[0])
-
-  // 6. Abjurer (Discipline Mental Vector): Runic Ward Trap must be top choice
-  let abjurer = TierFactory.createClassLevel CharacterClass.Abjurer 1
-  let abjurerChoices = Program.buildActionChoices abjurer dummyEnemy
-  Assert.Contains("Runic Ward Trap: Abjuration Glyph", abjurerChoices.[0])
 
 [<Fact>]
 let ``All built action choices parse successfully to non-fallback ActionIntent`` () =
   let dummyEnemy = TierFactory.createClassLevel CharacterClass.Warrior 1
   let classes = [
-    CharacterClass.Berserker
-    CharacterClass.Duelist
-    CharacterClass.Warden
-    CharacterClass.Inquisitor
-    CharacterClass.Mesmer
-    CharacterClass.Abjurer
+    CharacterClass.Warrior
+    CharacterClass.Rogue
+    CharacterClass.Soldier
+    CharacterClass.Fighter
+    CharacterClass.Mage
   ]
 
   for cls in classes do
@@ -505,3 +488,33 @@ let ``All built action choices parse successfully to non-fallback ActionIntent``
         | ActionIntent.RecoveryAction SteadyForm ->
           Assert.True(false, sprintf "Choice '%s' unexpectedly fell through to default SteadyForm fallback!" choice)
         | _ -> ()
+
+[<Fact>]
+let ``Study Stack gambit labels parse to their intended intents`` () =
+  let dummyEnemy = TierFactory.createClassLevel CharacterClass.Warrior 1
+
+  for cls in [ CharacterClass.Warrior; CharacterClass.Rogue ] do
+    let player = TierFactory.createClassLevel cls 1
+    let readied = { player with StudyStacks = 3 }
+    let choices = Program.buildActionChoices readied dummyEnemy
+    Assert.Contains(choices, fun (c: string) -> c.Contains("Force Strike: Insight Cleave"))
+    Assert.Contains(choices, fun (c: string) -> c.Contains("Finesse Cadence: Threaded Opening"))
+
+    let intentOf (anchor: string) =
+      choices |> List.find (fun (c: string) -> c.Contains anchor) |> Program.parseActionChoice
+
+    match intentOf "Force Strike: Insight Cleave" with
+    | ActionIntent.StandardAttack (ForceInsightStrike minted) ->
+      Assert.True(minted >= 2, sprintf "Force insight cleave must spend at least 2 stacks, minted %d" minted)
+    | other -> Assert.True(false, sprintf "Force insight cleave parsed to %A" other)
+
+    match intentOf "Finesse Cadence: Threaded Opening" with
+    | ActionIntent.StandardAttack (FinesseInsightStrike minted) ->
+      Assert.True(minted >= 2, sprintf "Finesse threaded opening must spend at least 2 stacks, minted %d" minted)
+    | other -> Assert.True(false, sprintf "Finesse threaded opening parsed to %A" other)
+
+  // The gambits stay hidden below their 2-stack floor
+  let spent = { TierFactory.createClassLevel CharacterClass.Warrior 1 with StudyStacks = 1 }
+  let spentChoices = Program.buildActionChoices spent dummyEnemy
+  Assert.DoesNotContain(spentChoices, fun (c: string) -> c.Contains("Insight Cleave"))
+  Assert.DoesNotContain(spentChoices, fun (c: string) -> c.Contains("Threaded Opening"))

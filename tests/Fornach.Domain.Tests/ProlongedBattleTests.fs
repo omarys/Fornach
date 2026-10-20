@@ -30,6 +30,60 @@ module ProlongedBattleTests =
       (fighterStats force fort finesse reflex prowess poise) CharacterClass.Warrior level
 
   [<Fact>]
+  let ``a disarm holding exactly the required stacks is not reported as failed`` () =
+    let roller = fixedRoller 6
+    let actor = createFighter 50 50 50 50 400 50
+    let target = createFighter 50 50 50 50 50 300
+    let probe = MasterfulDisarm 3
+    let off = actor.GetStat Prowess
+    let def = target.GetGuard(probe.Plane, false)
+    let required = Math.Max(3, int (Math.Ceiling((float def / Math.Max(1.0, float off)) * 3.5)))
+
+    // The drain happens in step A; the requirement must be checked against the pre-drain count.
+    let armed = actor |> Combatant.addStudyStacks required
+    let result = ActionResolver.resolve roller (StandardAttack (MasterfulDisarm required)) armed target
+
+    let reportedFailed =
+      result.Events
+      |> List.exists (function
+        | CombatEvent.DisarmExecuted (_, _, msg) -> msg.Contains "failed"
+        | _ -> false)
+
+    Assert.False(reportedFailed, sprintf "disarm with exactly %d stacks must not drain and then fail" required)
+
+  [<Fact>]
+  let ``mastery raises damage dealt and lowers damage taken against that species`` () =
+    let roller = fixedRoller 6
+    let species = "Blight Sprite"
+
+    let asPlayer kills =
+      let c = createFighter 120 50 50 50 50 50
+      { c with
+          Name = "TestFighter"
+          PlayerStyle = true
+          Progression = { c.Progression with Mastery = Map.ofList [ species, kills ] } }
+
+    let damageBetween (attacker: Combatant) (target: Combatant) =
+      let res = ActionResolver.resolve roller (StandardAttack (ForceStrike false)) attacker target
+      target.Health.Current - res.Target.Health.Current
+
+    let sprite = { createFighter 50 50 50 50 50 50 with Name = species }
+
+    // Offense: five wins against the species hit harder than none.
+    let plainHit = damageBetween (asPlayer 0) sprite
+    let masteredHit = damageBetween (asPlayer 5) sprite
+    Assert.True(masteredHit > plainHit, sprintf "mastered hit %d should exceed %d" masteredHit plainHit)
+
+    // The bonus is capped at ten kills.
+    Assert.Equal(damageBetween (asPlayer 10) sprite, damageBetween (asPlayer 50) sprite)
+
+    // Defense: the same species hurts a player who has beaten it less than one who has not.
+    let attacker = { createFighter 120 50 50 50 50 50 with Name = species }
+    let takenByPlain = damageBetween attacker (asPlayer 0)
+    let takenByMastered = damageBetween attacker (asPlayer 10)
+    Assert.True(takenByMastered < takenByPlain, sprintf "mastered defence %d should undercut %d" takenByMastered takenByPlain)
+
+  [<Fact>]
   let ``Force strike with high disparity inflicts greater Exhaustion than even match`` () =
     let roller = fixedRoller 6 // always hits
     let highDisparityAtk = createFighter 120 50 50 50 50 50
@@ -886,3 +940,132 @@ module ProlongedBattleTests =
     // 3. Issuing RunicWardTrap threads AegisLattice
     let resAegis = ActionResolver.resolve roller (StandardAttack (RunicWardTrap false)) resDiffusion.Actor target
     Assert.Equal(Some ComplexForm.AegisLattice, resAegis.Actor.ComplexForm)
+
+  let private damageTaken attacker atk defender =
+    let res = ActionResolver.resolve (fixedRoller 6) (StandardAttack atk) attacker defender
+    defender.Health.Current - res.Target.Health.Current, res
+
+  let private studyStacksOf (res: ActionResult) =
+    res.Events
+    |> List.pick (function
+      | CombatEvent.DisciplineGambitExecuted(_, _, spent) -> Some spent
+      | _ -> None)
+
+  [<Fact>]
+  let ``Force insight cleave spends Study Stacks with zero Recklessness cost`` () =
+    let attacker = { createFighter 120 50 50 50 50 50 with StudyStacks = 6 }
+    let target = createFighter 50 50 50 50 50 50
+
+    let _, res = damageTaken attacker (ForceInsightStrike 3) target
+
+    Assert.Equal(3, studyStacksOf res)
+    Assert.Equal(attacker.Meters.Recklessness.Value, res.Actor.Meters.Recklessness.Value)
+
+  [<Fact>]
+  let ``Force insight cleave scales with the stacks actually spent`` () =
+    let target = createFighter 50 50 50 50 50 50
+    let mk stacks = { createFighter 120 50 50 50 50 50 with StudyStacks = stacks }
+
+    // Same spend, different leftovers: the payoff must follow the spend, not what step A left behind
+    let dmgFew, _ = damageTaken (mk 4) (ForceInsightStrike 2) target
+    let dmgMany, _ = damageTaken (mk 8) (ForceInsightStrike 2) target
+    Assert.Equal(dmgFew, dmgMany)
+
+    let dmgMore, _ = damageTaken (mk 8) (ForceInsightStrike 4) target
+    Assert.True(dmgMore > dmgFew, sprintf "Spending 4 stacks (%d) must outdamage 2 stacks (%d)" dmgMore dmgFew)
+
+  [<Fact>]
+  let ``Finesse threaded opening spends Study Stacks with zero Recklessness cost`` () =
+    let attacker = { createFighter 50 50 120 50 50 50 with StudyStacks = 6 }
+    let target = createFighter 50 50 50 50 50 50
+
+    let _, res = damageTaken attacker (FinesseInsightStrike 3) target
+
+    Assert.Equal(3, studyStacksOf res)
+    Assert.Equal(attacker.Meters.Recklessness.Value, res.Actor.Meters.Recklessness.Value)
+    Assert.True(
+      res.Target.Meters.Confusion.Value > target.Meters.Confusion.Value,
+      "The threaded opening must press the Agility line's Confusion pressure")
+
+  [<Fact>]
+  let ``Finesse threaded opening scales with the stacks actually spent`` () =
+    let target = createFighter 50 50 50 50 50 50
+    let mk stacks = { createFighter 50 50 120 50 50 50 with StudyStacks = stacks }
+
+    let dmgFew, _ = damageTaken (mk 4) (FinesseInsightStrike 2) target
+    let dmgMany, _ = damageTaken (mk 8) (FinesseInsightStrike 2) target
+    Assert.Equal(dmgFew, dmgMany)
+
+    let dmgMore, _ = damageTaken (mk 8) (FinesseInsightStrike 4) target
+    Assert.True(dmgMore > dmgFew, sprintf "Spending 4 stacks (%d) must outdamage 2 stacks (%d)" dmgMore dmgFew)
+
+  [<Fact>]
+  let ``Free Prowess read is worth only 0.05 damage multiplier per Study Stack`` () =
+    let target = createFighter 50 50 50 50 50 50
+    let mk stacks = { createFighter 50 50 50 50 120 50 with StudyStacks = stacks }
+
+    let dmgZero, _ = damageTaken (mk 0) (ProwessStrike false) target
+    let dmgTen, _ = damageTaken (mk 10) (ProwessStrike false) target
+
+    // 1.0 -> 1.5 multiplier: riding the read stays a small edge (0.15 would nearly double it)
+    let ratio = float dmgTen / float dmgZero
+    Assert.True(ratio > 1.40 && ratio < 1.60, sprintf "10 free stacks should scale damage ~1.5x, got %.3f" ratio)
+
+  [<Fact>]
+  let ``Calculated flaw strike pays 0.44 multiplier per stack and follows the spent amount`` () =
+    let target = createFighter 50 50 50 50 50 50
+    let mk stacks = { createFighter 50 50 50 50 120 50 with StudyStacks = stacks }
+
+    let dmgFor stacks spend = fst (damageTaken (mk stacks) (CalculatedFlawStrike spend) target)
+    let d2, d4, d6 = dmgFor 8 2, dmgFor 8 4, dmgFor 8 6
+
+    // Damage is multiplicative in the class multiplier, so the slope/intercept of the spend curve
+    // recovers the per-stack factor relative to the 1.2 base multiplier.
+    let slope = float (d6 - d2) / 4.0
+    let intercept = float d2 - 2.0 * slope
+    let perStack = 1.2 * slope / intercept
+    Assert.True(perStack > 0.42 && perStack < 0.46, sprintf "Expected 0.44 per stack, fitted %.3f" perStack)
+
+    // Step A drains the stacks first, so a bigger leftover pile must not inflate the payoff
+    Assert.Equal(dmgFor 4 2, dmgFor 12 2)
+
+  [<Fact>]
+  let ``Discipline stance guard anchors on Poise alone`` () =
+    let stats =
+      StatBlock.Create [
+        Force, 50; Fortitude, 50; Finesse, 50; Reflex, 50; Prowess, 50; Poise, 100
+        Intellect, 50; Resolve, 50; Acuity, 50; Intuition, 50; Acumen, 50; Composure, 300
+      ]
+    let defender = Combatant.create (CombatantId.New()) "Guard" 2000 2000 stats
+
+    Assert.Equal(200, defender.GetGuard(Plane.Physical, true))
+    Assert.Equal(200, defender.GetGuard(Plane.Mental, true))
+
+    let disciplined = { defender with Stance = CombatStance.DisciplineStance }
+    Assert.Equal(150, disciplined.GetGuard(Plane.Physical, true))
+    Assert.Equal(100, disciplined.GetGuard(Plane.Mental, true))
+
+  [<Fact>]
+  let ``Discipline stance guard ignores Composure at every defence contest`` () =
+    let attacker = createFighter 50 50 50 50 400 50
+
+    let guardStats composure =
+      StatBlock.Create [
+        Force, 50; Fortitude, 50; Finesse, 50; Reflex, 50; Prowess, 50; Poise, 100
+        Intellect, 50; Resolve, 50; Acuity, 50; Intuition, 50; Acumen, 50; Composure, composure
+      ]
+
+    let guardFighter composure stance =
+      { Combatant.create (CombatantId.New()) "Guard" 2000 2000 (guardStats composure) with Stance = stance }
+
+    // Anchored on Poise alone: Composure no longer pads a DisciplineStance guard
+    let dmgLow, _ = damageTaken attacker (ProwessStrike false) (guardFighter 100 CombatStance.DisciplineStance)
+    let dmgHigh, _ = damageTaken attacker (ProwessStrike false) (guardFighter 400 CombatStance.DisciplineStance)
+    Assert.Equal(dmgLow, dmgHigh)
+
+    // Outside the stance the Poise/Composure blend still guards
+    let dmgBlendLow, _ = damageTaken attacker (ProwessStrike false) (guardFighter 100 CombatStance.PowerStance)
+    let dmgBlendHigh, _ = damageTaken attacker (ProwessStrike false) (guardFighter 400 CombatStance.PowerStance)
+    Assert.True(
+      dmgBlendHigh < dmgBlendLow,
+      sprintf "Composure must keep padding the out-of-stance guard: %d vs %d" dmgBlendHigh dmgBlendLow)

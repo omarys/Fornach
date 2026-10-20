@@ -683,6 +683,16 @@ module TowerDisplay =
         | EntityEnemy e -> e.Id.StartsWith("boss_")
         | _ -> true)
     let entities = pristineMobs |> List.fold (fun acc (pt, ent) -> Map.add pt ent acc) withoutMobs
+    // Re-arm ambush lairs. `IsTriggered` is written into the live map when the pack springs, and the
+    // spawned pack is regenerated away by the rewind above, so without this a lost ambush fight leaves
+    // the site permanently "cleared". Chests/vaults/shrines are deliberately left consumed: re-arming
+    // them would re-grant loot the player already banked.
+    let entities =
+      entities
+      |> Map.map (fun _ ent ->
+        match ent with
+        | EntityEncounter (AmbushLair a) -> EntityEncounter (AmbushLair { a with IsTriggered = false })
+        | other -> other)
     { state with
         Player = player
         PlayerPosition = state.CurrentFloor.SpawnLocation

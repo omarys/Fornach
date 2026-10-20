@@ -28,16 +28,17 @@ module TacticalAssessmentTests =
     Assert.True(assess.StrategicAdvice.Contains("build Study Stacks"))
 
   [<Fact>]
-  let ``Prologue Inquisitor leads all classes in scrutiny yet still reads Stone Gargoyle as guarded at level 1`` () =
+  let ``Prologue Mage scrutiny still reads Stone Gargoyle as guarded at level 1`` () =
+    // The Mage's inquisitor loadout: Acumen 40 + Intuition 40/4 (10) = 50
     let player = StoryBosses.createProloguePlayer "inquisitor"
     let gargoyle = Bestiary.stoneGargoyle.ToCombatant (CombatantId.New())
 
     let assess = TacticalAssessment.assess player gargoyle
 
-    // Inquisitor Acumen 30 + Intuition 30/4 (7) = 37 vs Composure 150 (Ratio ~0.25)
+    // Acumen 40 + Intuition 40/4 (10) = 50 vs Composure 150 (Ratio ~0.33)
     Assert.Equal(TacticalInsightLevel.Obscured, assess.InsightLevel)
     Assert.Equal("GUARDED POSTURE", assess.Headline)
-    Assert.Equal(30 + 30 / 4, assess.EffectiveAcumen)
+    Assert.Equal(40 + 40 / 4, assess.EffectiveAcumen)
     Assert.Equal(StatId.Reflex, assess.PrimaryStat)
     Assert.Equal(240, assess.PrimaryStatValue)
     Assert.True(assess.VulnerabilitySummary.IsNone)

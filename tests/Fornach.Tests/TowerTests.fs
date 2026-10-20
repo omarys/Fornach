@@ -488,7 +488,7 @@ let ``TowerDisplay inspectTile correctly inspects player position, AcidSlag haza
 
   // 5. Inspect hostile guardian in direct line-of-sight
   let enemyPos = { X = playerPos.X; Y = playerPos.Y - 1 }
-  let enemyCombatant = TierFactory.createClassLevel CharacterClass.Berserker 5
+  let enemyCombatant = TierFactory.createClassLevel CharacterClass.Warrior 5
   let testEnemy =
     EntityEnemy
       { Id = "enemy1"
@@ -506,7 +506,7 @@ let ``TowerDisplay inspectTile correctly inspects player position, AcidSlag haza
   let enemyInspect = TowerDisplay.inspectTile stateWithEnemy enemyPos
   Assert.True(enemyInspect.EntitySummary.IsSome)
   Assert.Contains("HOSTILE GUARDIAN: Plaza Sentinel", enemyInspect.EntitySummary.Value)
-  Assert.Contains("Lv.5 Berserker", enemyInspect.EntitySummary.Value)
+  Assert.Contains("Lv.5 Warrior", enemyInspect.EntitySummary.Value)
 
 [<Fact>]
 let ``TowerDisplay inspectTile identifies all distinct hazard types and provides tactical warning`` () =
