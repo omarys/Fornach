@@ -25,6 +25,7 @@
     <Compile Include="CombatLoggerTests.fs" />
     <Compile Include="GroupEngagementTests.fs" />
     <Compile Include="DebugToolingTests.fs" />
+    <Compile Include="CombatTacticsTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -116,6 +116,12 @@ module CombatLogger =
       sprintf "Mirror Clones Conjured: +%d (Total: %d)" added tot
     | CombatEvent.MirrorCloneDecoyed (_, _, rem) ->
       sprintf "Mirror Clone Decoyed: strike absorbed by illusion decoy (Remaining: %d)" rem
+    | CombatEvent.ActionInterrupted (_, _, tech, reason) ->
+      sprintf "Action Interrupted [%s]: %s" tech reason
+    | CombatEvent.StaffSiphoned (_, _, fatigue, reck, ward) ->
+      sprintf "Staff Siphoned: -%d Fatigue, -%d Recklessness, +%d Ward" fatigue reck ward
+    | CombatEvent.ShieldRaised (_, armor, stacks) ->
+      sprintf "Shield Raised: +%d Armor fortified, +%d Study Stacks" armor stacks
     | other ->
       sprintf "%A" other
 

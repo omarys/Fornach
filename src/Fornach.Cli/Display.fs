@@ -338,7 +338,204 @@ module Display =
       .BorderColor(borderColor)
       .Expand()
 
-  let renderHUD (player: Combatant) (enemy: Combatant) (roundNumber: int) =
+  /// Formats an autonomous combatant's telegraphed action intent into:
+  /// (title: string, description: string, counterplayTip: string, vectorTag: string)
+  let formatTelegraphedIntent (intent: ActionIntent) (actor: Combatant) : string * string * string * string =
+    match intent with
+    | StandardAttack atk ->
+      match atk with
+      | ForceStrike true ->
+        sprintf "⚡ [bold %s]HEAVY POWER WINDUP: Wild Blow[/]" Theme.Red,
+        "Coiling muscles for a devastating, reckless cleave (+30 Recklessness)!",
+        sprintf "Disrupt with [bold %s]Shield Bash[/] or slip past with [bold %s]Agility Evasion[/]!" Theme.Cyan Theme.Green,
+        "Power"
+      | ForceStrike false ->
+        sprintf "⚔️ [%s]Force Cleave[/]" Theme.Red,
+        "Advancing with a heavy kinetic cleave against Fortitude.",
+        sprintf "Counter with [bold %s]Agility Evasion[/] or brace with [bold %s]Discipline Stance[/]." Theme.Green Theme.Purple,
+        "Power"
+      | FinesseCadence true ->
+        sprintf "⚡ [bold %s]RAPID AGILITY FLURRY: Relentless Blitz[/]" Theme.Green,
+        "Stepping into an aggressive, relentless multi-thrust opening (+25 Recklessness)!",
+        sprintf "Brace with [bold %s]Discipline Bastion / AoO[/] or parry with [bold %s]Raise Shield[/]!" Theme.Purple Theme.Cyan,
+        "Agility"
+      | FinesseCadence false ->
+        sprintf "⚔️ [%s]Finesse Cadence[/]" Theme.Green,
+        "Testing distance with rapid probing thrusts against Reflex.",
+        sprintf "Intercept with [bold %s]Discipline Guard[/] to build Study Stacks." Theme.Purple,
+        "Agility"
+      | ProwessStrike true ->
+        sprintf "⚡ [bold %s]MARTIAL TRAP: Invitational Bait[/]" Theme.Purple,
+        "Lowering guard deliberately to bait a reckless overextension (+35 Recklessness)!",
+        sprintf "Break the stance with [bold %s]Power Cleave[/] or match technique with [bold %s]Insight Strike[/]!" Theme.Red Theme.Yellow,
+        "Discipline"
+      | ProwessStrike false ->
+        sprintf "⚔️ [%s]Prowess Pressure[/]" Theme.Purple,
+        "Circling with measured poise to probe flaws and build tactical study.",
+        sprintf "Overwhelm defensive poise with [bold %s]Power Guard-Break[/]." Theme.Red,
+        "Discipline"
+      | ShieldBash true ->
+        sprintf "⚡ [bold %s]SHIELD SLAM WINDUP[/]" Theme.Purple,
+        "Bracing shield forward for a bone-shattering charge!",
+        sprintf "Dodge sideways with [bold %s]Agility Finesse[/]!" Theme.Green,
+        "Discipline"
+      | ShieldBash false ->
+        sprintf "🛡️ [%s]Shield Bash[/]" Theme.Purple,
+        "Advancing behind a raised guard to batter posture.",
+        sprintf "Out-range or strike through with [bold %s]Power Cleave[/]." Theme.Red,
+        "Discipline"
+      | CalculatedFlawStrike _ ->
+        sprintf "🎯 [bold %s]DISCIPLINE GAMBIT: Calculated Flaw Strike[/]" Theme.Purple,
+        "Exploiting a studied vital opening with pinpoint precision!",
+        "Deflect or mitigate by recovering posture.",
+        "Discipline"
+      | MasterfulDisarm _ ->
+        sprintf "⚡ [bold %s]DISARM ATTEMPT: Masterful Disarm[/]" Theme.Purple,
+        "Twisting weapon leverage to wrest your weapon away!",
+        "Maintain distance or reset stance balance.",
+        "Discipline"
+      | ForceInsightStrike _ ->
+        sprintf "🎯 [bold %s]POWER GAMBIT: Insight Cleave[/]" Theme.Red,
+        "Unleashing accumulated study into a read opening!",
+        "Evasive maneuvers or emergency recovery.",
+        "Power"
+      | FinesseInsightStrike _ ->
+        sprintf "🎯 [bold %s]AGILITY GAMBIT: Threaded Opening[/]" Theme.Green,
+        "Threading a lethal strike through an exposed seam!",
+        "Brace guard and close vital openings.",
+        "Agility"
+      | AuthorityDecree true ->
+        sprintf "⚡ [bold %s]SOCIAL DOMINANCE: Imperious Demand[/]" Theme.Pink,
+        "Projecting overwhelming psychic authority (+30 Recklessness)!",
+        "Disrupt focus or counter with dialectical pressure.",
+        "Power"
+      | AuthorityDecree false ->
+        sprintf "👑 [%s]Authority Decree[/]" Theme.Pink,
+        "Asserting command presence against Resolve.",
+        "Steel mental composure.",
+        "Power"
+      | GuileDeception _ ->
+        sprintf "🎭 [%s]Guile Misdirection[/]" Theme.Comment,
+        "Weaving rhetorical deception and perceptual traps.",
+        "Rely on disciplined intuition.",
+        "Agility"
+      | AcumenInterrogation _ ->
+        sprintf "⚖️ [%s]Acumen Interrogation[/]" Theme.Purple,
+        "Setting procedural traps to provoke frustration.",
+        "Avoid reckless emotional outbursts.",
+        "Discipline"
+      | ArcaneCataclysm true ->
+        sprintf "⚡ [bold %s]ARCANE OVERCHANNEL: Destructive Rupture[/]" Theme.Pink,
+        "Channeling turbulent, raw elemental fury (+35 Recklessness)!",
+        sprintf "Disrupt immediately with [bold %s]Shield Bash[/] or bypass with [bold %s]Agility Glamour[/]!" Theme.Cyan Theme.Purple,
+        "Power"
+      | ArcaneCataclysm false ->
+        sprintf "✨ [%s]Arcane Cataclysm[/]" Theme.Pink,
+        "Gathering focused elemental energy against Resolve.",
+        sprintf "Weave [bold %s]Arcane Ward[/] or disrupt cast tempo." Theme.Cyan,
+        "Power"
+      | SynapticGlamour true ->
+        sprintf "⚡ [bold %s]PSYCHIC FRACTURE: Neural Static[/]" Theme.Purple,
+        "Broadcasting blinding psychic dissonance (+25 Recklessness)!",
+        sprintf "Anchor focus with [bold %s]Center Mind[/] or [bold %s]Runic Ward Trap[/]!" Theme.Cyan Theme.Cyan,
+        "Agility"
+      | SynapticGlamour false ->
+        sprintf "✨ [%s]Synaptic Glamour[/]" Theme.Purple,
+        "Sending subtle sensory ripples against Intuition.",
+        "Hold mental balance.",
+        "Agility"
+      | MirrorIllusion _ ->
+        sprintf "🪞 [%s]Mirror Mirage Weave[/]" Theme.Purple,
+        "Splitting reflections into phantasmal decoys.",
+        "Area sweep or disciplined observation.",
+        "Agility"
+      | RunicWardTrap true ->
+        sprintf "⚡ [bold %s]ARCANE TRAP: Anomalous Glyph[/]" Theme.Cyan,
+        "Etching a reactive abjuration trap in the ether (+30 Recklessness)!",
+        "Break through with overwhelming Power.",
+        "Discipline"
+      | RunicWardTrap false ->
+        sprintf "🛡️ [%s]Runic Ward Trap[/]" Theme.Cyan,
+        "Erecting an abjuration ward barrier.",
+        "Shatter ward with raw power.",
+        "Discipline"
+      | DisorientingShockwave _ ->
+        sprintf "🌀 [%s]Disorienting Shockwave[/]" Theme.Orange,
+        "Pulsing psychic shockwaves to break tempo and posture.",
+        "Maintain grounded poise.",
+        "Discipline"
+      | StaffSiphon ->
+        sprintf "✨ [bold %s]Staff Siphon: Runic Clarity[/]" Theme.Cyan,
+        "Channeling the staff to drain morale and siphon mental clarity.",
+        "Interrupt or break engagement.",
+        "Discipline"
+      | TraumaAttack BasaltEruption ->
+        sprintf "🌋 [bold %s]TRAUMA GAMBIT: Basalt Eruption[/]" Theme.Red,
+        "Volcanic rage swelling to pulverize armor and flesh!",
+        sprintf "Evade or interrupt with [bold %s]Shield Bash[/]!" Theme.Cyan,
+        "Power"
+      | TraumaAttack DenialPhaseShift ->
+        sprintf "🌫️ [bold %s]TRAUMA GAMBIT: Denial Phase Shift[/]" Theme.Green,
+        "Shifting phase through phantasmal decoys!",
+        "Discipline containment or keen focus.",
+        "Agility"
+      | TraumaAttack CoerciveBargain ->
+        sprintf "⚖️ [bold %s]TRAUMA GAMBIT: Coercive Bargain[/]" Theme.Purple,
+        "Enforcing a predatory psychic contract to drain Morale!",
+        "Break contract with relentless force.",
+        "Discipline"
+      | TraumaAttack ApathyDoldrums ->
+        sprintf "⚓ [bold %s]TRAUMA GAMBIT: Apathy Doldrums[/]" Theme.Comment,
+        "Drowning focus in numbing cognitive apathy!",
+        "Venting breath or steeled resolve.",
+        "Discipline"
+      | TraumaAttack SereneResolution ->
+        sprintf "🕊️ [bold %s]Pacifist Release: Serene Resolution[/]" Theme.Cyan,
+        "Accepting the inevitable, calming all turbulent entropy.",
+        "Hold your ground.",
+        "Discipline"
+    | RecoveryAction SteadyForm ->
+      sprintf "🛡️ [%s]Steady Form (Recovery)[/]" Theme.Yellow,
+      "Lowering weapon to bleed Recklessness and restore physical posture.",
+      "Seize the opening with an aggressive strike!",
+      "Defensive"
+    | RecoveryAction RaiseShield ->
+      sprintf "🛡️ [bold %s]Raise Shield (Bastion Posture)[/]" Theme.Green,
+      "Tucking behind the shield to restore armor and prepare counter-ripostes.",
+      "Break guard with heavy Power cleave!",
+      "Defensive"
+    | RecoveryAction CenterMind ->
+      sprintf "🧠 [%s]Center Mind (Recovery)[/]" Theme.Cyan,
+      "Recentering mental focus to bleed fatigue and restore wards.",
+      "Strike while somatic guard is resetting!",
+      "Defensive"
+    | RecoveryAction SteadyBreathing ->
+      sprintf "🌬️ [%s]Steady Breathing (Recovery)[/]" Theme.Cyan,
+      "Drawing deep breath to vent strain meters and recover Morale.",
+      "Press the attack before meters reset!",
+      "Defensive"
+    | ExecuteStrike plane ->
+      sprintf "☠️ [bold blink %s]FATAL EXECUTION ATTEMPT (%A)[/]" Theme.Red plane,
+      "Targeting a collapsed opening to deliver a fatal coup-de-grâce!",
+      "Desperate emergency recovery required!",
+      "Finisher"
+    | ShiftStance stance ->
+      sprintf "↺ [%s]Stance Shift: %A[/]" Theme.Purple stance,
+      sprintf "Transitioning combat stance to %A." stance,
+      "Adapt tactical counters to new stance.",
+      "Stance"
+    | ThreadComplexForm form ->
+      sprintf "🧵 [%s]Form Thread: %s[/]" Theme.Cyan form.Name,
+      sprintf "Attuning mental complex form to %s." form.Name,
+      "Counter spell school vector.",
+      "ComplexForm"
+    | DeployPreparation (prep, _) ->
+      sprintf "🎒 [%s]Deploying Preparation: %A[/]" Theme.Orange prep,
+      "Deploying tactical asset.",
+      "Prepare for tactical shift.",
+      "Preparation"
+
+  let renderHUDWithTelegraph (player: Combatant) (enemy: Combatant) (roundNumber: int) (enemyIntentOpt: ActionIntent option) =
     let pnlPlayer = createCombatantPanel player Theme.ColorGreen Theme.Green None
     let pnlEnemy = createCombatantPanel enemy Theme.ColorPink Theme.Pink (Some player)
     let grid = Grid()
@@ -353,7 +550,28 @@ module Display =
         .RuleStyle(Theme.StylePurple)
     )
     AnsiConsole.Write(grid)
+
+    match enemyIntentOpt with
+    | Some intent ->
+      let title, desc, tip, _ = formatTelegraphedIntent intent enemy
+      let telegraphGrid = Grid()
+      telegraphGrid.AddColumn(GridColumn()) |> ignore
+      telegraphGrid.AddRow(Markup(sprintf "  [bold %s]󰓥 Telegraphed Windup:[/] %s" Theme.Yellow title)) |> ignore
+      telegraphGrid.AddRow(Markup(sprintf "  [grey]%s[/]" desc)) |> ignore
+      telegraphGrid.AddRow(Markup(sprintf "  [italic %s]💡 Counterplay:[/] %s" Theme.Green tip)) |> ignore
+      let banner =
+        Panel(telegraphGrid)
+          .Header(sprintf "[bold %s] ⚡ ENEMY TELEGRAPHED INTENT ── READ THE WINDUP [/]" Theme.Yellow)
+          .Border(BoxBorder.Double)
+          .BorderColor(Theme.ColorYellow)
+          .Expand()
+      AnsiConsole.Write(banner)
+    | None -> ()
+
     AnsiConsole.WriteLine()
+
+  let renderHUD (player: Combatant) (enemy: Combatant) (roundNumber: int) =
+    renderHUDWithTelegraph player enemy roundNumber None
 
   let renderRollBreakdown (actionName: string) (actorName: string) (contestOpt: ContestResult option) =
     match contestOpt with
@@ -683,6 +901,15 @@ module Display =
 
     | CombatEvent.AlchemicalTrophyHarvested (_, trophyName, value) ->
       AnsiConsole.MarkupLine(sprintf "  [bold %s]💎 TROPHY HARVESTED:[/] Obtained [bold %s]%s[/] (Essence Value: [bold %s]%d[/])!" Theme.Cyan Theme.Yellow trophyName Theme.Cyan value)
+
+    | CombatEvent.ActionInterrupted (_, _, tech, reason) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🛡️ TECHNIQUE COUNTER (%s):[/] [bold %s]%s[/]" Theme.Cyan tech Theme.Yellow reason)
+
+    | CombatEvent.StaffSiphoned (_, _, fatigue, reck, ward) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]✨ STAFF SIPHON:[/] Siphoned mental clarity (-%d Fatigue, -%d Recklessness) and reinforced Arcane Ward (+%d Barrier)!" Theme.Cyan fatigue reck ward)
+
+    | CombatEvent.ShieldRaised (_, armor, stacks) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🛡️ BASTION SHIELD:[/] Fortified armor soak (+%d Armor) and braced stance (+%d Study Stacks)!" Theme.Green armor stacks)
 
   /// Creates the Panel for the comprehensive Symbol & Glyph Reference Guide
   let createSymbolAndGlyphLegendPanel () : Panel =

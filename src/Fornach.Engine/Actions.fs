@@ -26,6 +26,8 @@ type AttackClassification =
   | FinesseCadence of isRelentlessCadence: bool
   /// Martial Discipline (Prowess vs. Poise): Stance pressure and tactical disarms causing Frustration
   | ProwessStrike of isInvitationalBait: bool
+  /// Martial Discipline (Prowess vs. Poise): Shield bash that bludgeons target, inflicts Frustration, and interrupts telegraphed Gambits
+  | ShieldBash of isHeavySlam: bool
   /// Power Gambit: Studied cleave through a read opening, consuming Study Stacks to strike Fortitude (0 Recklessness)
   | ForceInsightStrike of stacksToSpend: int
   /// Agility Gambit: Studied thrust into a read opening, consuming Study Stacks to strike Reflex (0 Recklessness)
@@ -58,6 +60,8 @@ type AttackClassification =
   | RunicWardTrap of isAnomalousGlyph: bool
   /// Arcane Discipline (Acumen vs. Composure): Disorienting shockwave that disrupts enemy balance and stance tempo
   | DisorientingShockwave of isStaggeringPulse: bool
+  /// Arcane Discipline (Acumen vs. Composure): Channeled staff strike eroding Morale and siphoning cognitive clarity (-20 Fatigue, -15 Recklessness, +15 Ward)
+  | StaffSiphon
 
   // -------------------------------------------------------------------------
   // 4. Psychological Trauma Gambits (Boss / Manifestation Mechanics)
@@ -73,6 +77,7 @@ type AttackClassification =
     | ForceInsightStrike _
     | FinesseInsightStrike _
     | ProwessStrike _
+    | ShieldBash _
     | CalculatedFlawStrike _
     | MasterfulDisarm _ -> CombatMode.Physical
     | AuthorityDecree _
@@ -82,7 +87,8 @@ type AttackClassification =
     | SynapticGlamour _
     | MirrorIllusion _
     | RunicWardTrap _
-    | DisorientingShockwave _ -> CombatMode.Arcane
+    | DisorientingShockwave _
+    | StaffSiphon -> CombatMode.Arcane
     | TraumaAttack BasaltEruption -> CombatMode.Physical
     | TraumaAttack (CoerciveBargain | ApathyDoldrums | SereneResolution) -> CombatMode.Social
     | TraumaAttack DenialPhaseShift -> CombatMode.Arcane
@@ -102,11 +108,13 @@ type AttackClassification =
     | MirrorIllusion _
     | TraumaAttack DenialPhaseShift -> Agility
     | ProwessStrike _
+    | ShieldBash _
     | CalculatedFlawStrike _
     | MasterfulDisarm _
     | AcumenInterrogation _
     | RunicWardTrap _
     | DisorientingShockwave _
+    | StaffSiphon
     | TraumaAttack (CoerciveBargain | ApathyDoldrums | SereneResolution) -> Discipline
 
   /// Identifies the target Plane (Physical or Mental)
@@ -117,6 +125,7 @@ type AttackClassification =
     | ForceInsightStrike _
     | FinesseInsightStrike _
     | ProwessStrike _
+    | ShieldBash _
     | CalculatedFlawStrike _
     | MasterfulDisarm _
     | TraumaAttack BasaltEruption -> Physical
@@ -128,6 +137,7 @@ type AttackClassification =
     | MirrorIllusion _
     | RunicWardTrap _
     | DisorientingShockwave _
+    | StaffSiphon
     | TraumaAttack (DenialPhaseShift | CoerciveBargain | ApathyDoldrums | SereneResolution) -> Mental
 
   /// Verifies if this attack classification is permitted for the combatant's operative plane
@@ -143,6 +153,8 @@ type AttackClassification =
 type DefensiveReset =
   /// Physical reset: uses Poise to bleed Recklessness, vents physical strain, and generates Study Stacks
   | SteadyForm
+  /// Fighter shield posture: uses Poise to bleed Recklessness, restores Armor Integrity (+20), and gains 2 Study Stacks
+  | RaiseShield
   /// Mental/Social reset: uses Composure to bleed Recklessness, clears mental strain, and generates Insight
   | CenterMind
   /// Universal respiratory regulation: vents all dynamic status meters (Confusion, Frustration, Exhaustion, Overwhelm, etc.) and restores Morale

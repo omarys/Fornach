@@ -105,7 +105,7 @@ module Archetypes =
     { Name = "Fighter"
       Tier = Novice
       Discipline = CombatMode.Physical
-      Description = "Novice martial combatant equipped with sword and shield."
+      Description = "Novice martial combatant equipped with a sword."
       Factory = createNoviceFighter }
 
     { Name = "Warrior"

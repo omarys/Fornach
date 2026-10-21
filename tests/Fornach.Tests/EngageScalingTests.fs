@@ -23,7 +23,9 @@ let ``a guardian authored far above the player is clamped to the engage allowanc
 [<Fact>]
 let ``clamping turns an unhittable guardian into a fightable one`` () =
   let player = playerAt 36
-  let attack = AttackClassification.FinesseCadence false
+  // A Power-stance Fighter swings the Power vector; an Agility strike is off-vector (0.75x) and the
+  // contest says so, which is exactly what the estimate now reflects.
+  let attack = AttackClassification.ForceStrike false
   let raw = Bestiary.createMonster Bestiary.starlitEidolon
 
   let clamped = TierFactory.clampEngagedToPlayerLevel raw player

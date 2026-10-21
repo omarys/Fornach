@@ -82,6 +82,10 @@ module Program =
       StandardAttack (ProwessStrike false)
     elif choice.Contains("Prowess Strike: Invitational Bait") then
       StandardAttack (ProwessStrike true)
+    elif choice.Contains("Shield Bash: Heavy Slam") then
+      StandardAttack (ShieldBash true)
+    elif choice.Contains("Shield Bash") then
+      StandardAttack (ShieldBash false)
     elif choice.Contains("Authority Decree: Imperious Command") then
       StandardAttack (AuthorityDecree false)
     elif choice.Contains("Authority Decree: Overwhelming Demand") then
@@ -114,6 +118,8 @@ module Program =
       StandardAttack (DisorientingShockwave false)
     elif choice.Contains("Disorienting Shockwave: Staggering Pulse") then
       StandardAttack (DisorientingShockwave true)
+    elif choice.Contains("Staff Siphon") then
+      StandardAttack StaffSiphon
     elif choice.Contains("Shift Stance: Power Stance") then
       ShiftStance CombatStance.PowerStance
     elif choice.Contains("Shift Stance: Agility Stance") then
@@ -140,6 +146,8 @@ module Program =
       ThreadComplexForm ComplexForm.PhantasmalDiffusion
     elif choice.Contains("Thread Form: Aegis Lattice") then
       ThreadComplexForm ComplexForm.AegisLattice
+    elif choice.Contains("Raise Shield") then
+      RecoveryAction RaiseShield
     elif choice.Contains("Steady Form") then
       RecoveryAction SteadyForm
     elif choice.Contains("Center Mind") then
@@ -149,7 +157,7 @@ module Program =
     else
       RecoveryAction SteadyForm
 
-  let buildActionChoices (player: Combatant) (enemy: Combatant) : string list =
+  let buildActionChoicesWithTelegraph (player: Combatant) (enemy: Combatant) (enemyIntentOpt: ActionIntent option) : string list =
     [
       // Finisher (only for the player's operative discipline)
       if enemy.IsExecuteEligible then
@@ -171,6 +179,28 @@ module Program =
         sprintf "⚓ [bold %s]Trauma: Apathy Doldrums[/] (Discipline Gambit: Inflict 40 Cognitive Fatigue)" Theme.Comment
 
       let assess = TacticalAssessment.assess player enemy
+
+      // Tactical Counterplay Badges based on Telegraphed Enemy Intent
+      let powerCounterTag, agilityCounterTag, disciplineCounterTag, shieldInterruptTag, raiseShieldTag =
+        match enemyIntentOpt with
+        | Some (StandardAttack atk) ->
+          let isHeavyGambit =
+            match atk with
+            | ForceStrike true | FinesseCadence true | ProwessStrike true | ArcaneCataclysm true | TraumaAttack _ -> true
+            | _ -> false
+
+          let interruptBadge =
+            if isHeavyGambit then sprintf " [bold %s]★ SHIELD INTERRUPT (Disrupts Windup!)[/]" Theme.Yellow
+            elif atk.Vector = Vector.Power then sprintf " [bold %s]★ INTERRUPT OPPORTUNITY[/]" Theme.Cyan
+            else ""
+
+          let powTag = if atk.Vector = Vector.Discipline then sprintf " [bold %s]★ Guard Break[/]" Theme.Red else ""
+          let agiTag = if atk.Vector = Vector.Power then sprintf " [bold %s]★ Counter-Evasion[/]" Theme.Green else ""
+          let disTag = if atk.Vector = Vector.Agility then sprintf " [bold %s]★ Bastion Counter[/]" Theme.Purple else ""
+          let rShieldTag = if atk.Vector = Vector.Agility then sprintf " [bold %s]★ Parry Opening[/]" Theme.Green else ""
+
+          powTag, agiTag, disTag, interruptBadge, rShieldTag
+        | _ -> "", "", "", "", ""
 
       // Orders attack groups by estimated effectiveness against what the player has scouted.
       // Obscured insight means nothing is known, so the archetype's own priority order stands.
@@ -225,7 +255,7 @@ module Program =
 
         // Physical Martial Strikes grouped by vector (attacks fluidly transition combat stance)
         let powerStrikes = [
-          sprintf "⚔️  [%s]Force Strike: Standard Cleave[/] (Power Stance • Cleave vs. Fortitude%s)" Theme.Red fortSuffix
+          sprintf "⚔️  [%s]Force Strike: Standard Cleave[/] (Power Stance • Cleave vs. Fortitude%s)%s" Theme.Red fortSuffix powerCounterTag
           sprintf "⚡ [bold %s]Force Strike: Wild Blow[/] (Power Stance Gambit: +30 Recklessness, 1.5x Dmg)" Theme.Red
           // Dedicated Power Gambit (costs Study Stacks with 0 Recklessness!)
           if player.StudyStacks >= 2 then
@@ -233,7 +263,7 @@ module Program =
         ]
 
         let agilityStrikes = [
-          sprintf "⚔️  [%s]Finesse Cadence: Rapid Probing[/] (Agility Stance • Probing Cadence vs. Reflex%s)" Theme.Green refSuffix
+          sprintf "⚔️  [%s]Finesse Cadence: Rapid Probing[/] (Agility Stance • Probing Cadence vs. Reflex%s)%s" Theme.Green refSuffix agilityCounterTag
           sprintf "⚡ [bold %s]Finesse Cadence: Relentless Blitz[/] (Agility Stance Gambit: +25 Recklessness)" Theme.Green
           // Dedicated Agility Gambit (costs Study Stacks with 0 Recklessness!)
           if player.StudyStacks >= 2 then
@@ -241,8 +271,11 @@ module Program =
         ]
 
         let disciplineStrikes = [
-          sprintf "⚔️  [%s]Prowess Strike: Stance Pressure[/] (Discipline Stance • Study Stacks vs. Poise%s)" Theme.Purple poiseSuffix
+          sprintf "⚔️  [%s]Prowess Strike: Stance Pressure[/] (Discipline Stance • Study Stacks vs. Poise%s)%s" Theme.Purple poiseSuffix disciplineCounterTag
           sprintf "⚡ [bold %s]Prowess Strike: Invitational Bait[/] (Discipline Stance Gambit: +35 Recklessness)" Theme.Purple
+          // Active Armament Technique: Fighter Sword & Shield Bash
+          sprintf "🛡️  [bold %s]Shield Bash: Standard Slam[/] (Discipline Stance • Prowess vs. Poise, Frustration & Stagger)%s" Theme.Cyan shieldInterruptTag
+          sprintf "⚡ [bold %s]Shield Bash: Heavy Slam[/] (Discipline Stance Gambit: +25 Recklessness, Stagger & Interrupt)%s" Theme.Cyan shieldInterruptTag
           // Dedicated Discipline Gambits (cost Study Stacks with 0 Recklessness!)
           if player.StudyStacks >= 2 then
             sprintf "🎯 [bold %s]Calculated Flaw Strike[/] (Discipline Stance Gambit: Spend Study Stacks for Vital Opening, 0 Recklessness)" Theme.Purple
@@ -268,6 +301,8 @@ module Program =
 
         yield! rankStrikes martialGroups
 
+        // Active Armament Recovery: Shield Bastion Guard
+        sprintf "🛡️  [bold %s]Raise Shield[/] (Bastion Posture: Fortify Armor +20, Gain 2 Study Stacks, Bleed Recklessness)%s" Theme.Green raiseShieldTag
         // Physical Defensive Reset
         sprintf "🛡️  [%s]Steady Form[/] (Physical Reset: Drain Recklessness via Poise, build Study)" Theme.Green
 
@@ -321,20 +356,27 @@ module Program =
           | Obscured -> ""
 
         let powerSpells = [
-          sprintf "✨ [%s]Arcane Cataclysm: Elemental Blast[/] (Resonance Spike Form • Intellect vs. Resolve%s)%s" Theme.Pink resolveSuffix (strainTag powProf)
+          sprintf "✨ [%s]Arcane Cataclysm: Elemental Blast[/] (Resonance Spike Form • Intellect vs. Resolve%s)%s%s" Theme.Pink resolveSuffix (strainTag powProf) powerCounterTag
           if player.ComplexForm <> Some ComplexForm.AegisLattice then
             sprintf "⚡ [bold %s]Arcane Cataclysm: Overchannel[/] (Resonance Spike Gambit: +35 Recklessness, Splash)%s" Theme.Pink (strainTag powProf)
         ]
 
         let agilitySpells = [
-          sprintf "✨ [%s]Synaptic Glamour: Neural Static[/] (Phantasmal Diffusion Form • Acuity vs. Intuition%s)%s" Theme.Purple intuitionSuffix (strainTag agiProf)
+          sprintf "✨ [%s]Synaptic Glamour: Neural Static[/] (Phantasmal Diffusion Form • Acuity vs. Intuition%s)%s%s" Theme.Purple intuitionSuffix (strainTag agiProf) agilityCounterTag
           sprintf "⚡ [bold %s]Synaptic Glamour: Mind Fracture[/] (Phantasmal Diffusion Gambit: +25 Recklessness)%s" Theme.Purple (strainTag agiProf)
           sprintf "🪞 [%s]Mirror Illusion: Phantasmal Decoys[/] (Phantasmal Diffusion Form • Weave Mirror Clones)%s" Theme.Purple (strainTag agiProf)
           sprintf "⚡ [bold %s]Mirror Illusion: Decoy Swarm[/] (Phantasmal Diffusion Gambit: +25 Recklessness, Extra Clones)%s" Theme.Purple (strainTag agiProf)
         ]
 
+        let siphonClarityTag =
+          if player.Meters.CognitiveFatigue.Value >= 20 || player.Meters.Recklessness.Value >= 20 then
+            sprintf " [bold %s]★ Vents Fatigue & Calms Mind[/]" Theme.Green
+          else ""
+
         let disciplineSpells = [
-          sprintf "🛡️  [%s]Runic Ward Trap: Abjuration Glyph[/] (Aegis Lattice Form • Acumen vs. Composure%s, Ward)%s" Theme.Cyan composureSuffix (strainTag disProf)
+          // Active Armament Technique: Mage Staff Siphon
+          sprintf "✨ [bold %s]Staff Siphon: Runic Clarity[/] (Aegis Lattice Form • Strike Morale, Siphon -20 Fatigue, -15 Recklessness, +15 Ward)%s%s%s" Theme.Cyan composureSuffix disciplineCounterTag siphonClarityTag
+          sprintf "🛡️  [%s]Runic Ward Trap: Abjuration Glyph[/] (Aegis Lattice Form • Acumen vs. Composure%s, Ward)%s%s" Theme.Cyan composureSuffix (strainTag disProf) disciplineCounterTag
           sprintf "⚡ [bold %s]Runic Ward Trap: Anomalous Glyph[/] (Aegis Lattice Gambit: +30 Recklessness, Heavy Ward)%s" Theme.Cyan (strainTag disProf)
           sprintf "🌀 [%s]Disorienting Shockwave: Balance Disruption[/] (Aegis Lattice Form • Break Posture & Tempo)%s" Theme.Orange (strainTag disProf)
           sprintf "⚡ [bold %s]Disorienting Shockwave: Staggering Pulse[/] (Aegis Lattice Gambit: +25 Recklessness, Swarm Pulse)%s" Theme.Orange (strainTag disProf)
@@ -364,6 +406,9 @@ module Program =
       sprintf "🌬️  [%s]Steady Breathing[/] (Universal Reset: Deep breath vents Confusion, Frustration, Exhaustion & Overwhelm, restores Morale)" Theme.Cyan
     ]
 
+  let buildActionChoices (player: Combatant) (enemy: Combatant) : string list =
+    buildActionChoicesWithTelegraph player enemy None
+
   let private runInteractiveDuel (playerArch: ArchetypeInfo) (enemyArch: ArchetypeInfo) =
     let rng = Random()
     let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
@@ -373,6 +418,7 @@ module Program =
     let mutable round = 1
     let mutable combatOver = false
     let mutable outcome = "PlayerDefeated"
+    let mutable enemyInterrupted = false
 
     let session =
       CombatLogger.startSession
@@ -382,16 +428,17 @@ module Program =
         enemy
 
     while not combatOver do
-      Display.renderHUD player enemy round
+      let enemyIntent = AI.chooseIntent enemy player
+      Display.renderHUDWithTelegraph player enemy round (Some enemyIntent)
 
       // 1. Choose Player Action
-      let choices = buildActionChoices player enemy
+      let choices = buildActionChoicesWithTelegraph player enemy (Some enemyIntent)
       let choice =
         Display.promptSelectionWithHelp
           (sprintf "[bold %s]Round %d - Select Tactical Action for %s (Press '?' or F1 for Symbol Legend):[/]" Theme.Yellow round player.Name)
           choices
-          (Some 11)
-          (fun () -> Display.renderHUD player enemy round)
+          (Some 12)
+          (fun () -> Display.renderHUDWithTelegraph player enemy round (Some enemyIntent))
 
       let playerIntent = parseActionChoice choice
 
@@ -402,6 +449,10 @@ module Program =
       let playerResult = ActionResolver.resolve roller playerIntent player enemy
       player <- playerResult.Actor
       enemy <- playerResult.Target
+
+      enemyInterrupted <-
+        playerResult.Events
+        |> List.exists (function CombatEvent.ActionInterrupted _ -> true | _ -> false)
 
       CombatLogger.recordTurn session round 1 choice playerBefore enemyBefore playerResult
 
@@ -424,22 +475,28 @@ module Program =
         )
       else
         // 2. Enemy AI Turn
-        AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s evaluates the field and responds...[/]" Theme.Pink enemy.Name)
-        let enemyIntent = AI.chooseIntent enemy player
-
         let enemyBeforeTurn = enemy
         let playerBeforeTurn = player
 
-        let enemyResult = ActionResolver.resolve roller enemyIntent enemy player
+        let enemyResult =
+          if enemyInterrupted then
+            AnsiConsole.MarkupLine(sprintf "\n[bold %s]⚡ %s is staggered from the technique interrupt! Attack defused![/]" Theme.Yellow enemy.Name)
+            let recoverIntent = RecoveryAction SteadyForm
+            ActionResolver.resolve roller recoverIntent enemy player
+          else
+            AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes telegraphed action...[/]" Theme.Pink enemy.Name)
+            ActionResolver.resolve roller enemyIntent enemy player
+
         enemy <- enemyResult.Actor
         player <- enemyResult.Target
 
-        let intentDesc = sprintf "%A" enemyIntent
+        let intentDesc = if enemyInterrupted then "Staggered Recovery (Interrupted)" else sprintf "%A" enemyIntent
         CombatLogger.recordTurn session round 2 intentDesc enemyBeforeTurn playerBeforeTurn enemyResult
 
         Display.renderRollBreakdown intentDesc enemy.Name enemyResult.Contest
         Display.logDamageSummary enemyResult.Events playerBeforeTurn player
         enemyResult.Events |> List.iter Display.logEvent
+        if enemyInterrupted then enemyInterrupted <- false
 
         let enemyExecutedPlayer =
           enemyResult.Events
@@ -677,6 +734,7 @@ module Program =
     let mutable round = 1
     let mutable combatOver = false
     let mutable outcome = CombatOutcome.PlayerDefeated
+    let mutable enemyInterrupted = false
 
     let session =
       CombatLogger.startSession
@@ -688,16 +746,17 @@ module Program =
     RuntimeLog.write (sprintf "combat start: %s vs %s (round 1)" currentCombatant.Name currentBoss.Name)
 
     while not combatOver do
-      Display.renderHUD currentCombatant currentBoss round
+      let enemyIntent = AI.chooseIntent currentBoss currentCombatant
+      Display.renderHUDWithTelegraph currentCombatant currentBoss round (Some enemyIntent)
 
       // 1. Choose Player Action
-      let choices = buildActionChoices currentCombatant currentBoss
+      let choices = buildActionChoicesWithTelegraph currentCombatant currentBoss (Some enemyIntent)
       let choice =
         Display.promptSelectionWithHelp
           (sprintf "[bold %s]Round %d - Tactical Action against %s (Press '?' or F1 for Symbol Legend):[/]" Theme.Yellow round currentBoss.Name)
           choices
-          (Some 11)
-          (fun () -> Display.renderHUD currentCombatant currentBoss round)
+          (Some 12)
+          (fun () -> Display.renderHUDWithTelegraph currentCombatant currentBoss round (Some enemyIntent))
 
       let playerIntent = parseActionChoice choice
 
@@ -708,6 +767,10 @@ module Program =
       let playerResult = ActionResolver.resolve roller playerIntent currentCombatant currentBoss
       currentCombatant <- playerResult.Actor
       currentBoss <- playerResult.Target
+
+      enemyInterrupted <-
+        playerResult.Events
+        |> List.exists (function CombatEvent.ActionInterrupted _ -> true | _ -> false)
 
       CombatLogger.recordTurn session round 1 choice playerBefore bossBefore playerResult
       RuntimeLog.write (
@@ -732,22 +795,26 @@ module Program =
         )
       else
         // 2. Enemy AI Turn
-        AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s lashes out with psychological fury...[/]" Theme.Pink currentBoss.Name)
-        let enemyIntent = AI.chooseIntent currentBoss currentCombatant
-
         let bossBeforeTurn = currentBoss
         let playerBeforeTurn = currentCombatant
 
         let enemyResult =
-          if floorNumber = 1 then
-            // Tutorial grace: the level-1 protagonist cannot be one-shot on the opening stage.
-            ActionResolver.resolveWithoutLethal roller enemyIntent currentBoss currentCombatant
+          if enemyInterrupted then
+            AnsiConsole.MarkupLine(sprintf "\n[bold %s]⚡ %s is staggered from the technique interrupt! Attack defused![/]" Theme.Yellow currentBoss.Name)
+            let recoverIntent = RecoveryAction SteadyForm
+            ActionResolver.resolve roller recoverIntent currentBoss currentCombatant
           else
-            ActionResolver.resolve roller enemyIntent currentBoss currentCombatant
+            AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes telegraphed action...[/]" Theme.Pink currentBoss.Name)
+            if floorNumber = 1 then
+              // Tutorial grace: the level-1 protagonist cannot be one-shot on the opening stage.
+              ActionResolver.resolveWithoutLethal roller enemyIntent currentBoss currentCombatant
+            else
+              ActionResolver.resolve roller enemyIntent currentBoss currentCombatant
+
         currentBoss <- enemyResult.Actor
         currentCombatant <- enemyResult.Target
 
-        let intentDesc = sprintf "%A" enemyIntent
+        let intentDesc = if enemyInterrupted then "Staggered Recovery (Interrupted)" else sprintf "%A" enemyIntent
         CombatLogger.recordTurn session round 2 intentDesc bossBeforeTurn playerBeforeTurn enemyResult
         RuntimeLog.write (
           sprintf "combat round %d enemy turn: %s (%d events)" round intentDesc enemyResult.Events.Length)
@@ -755,6 +822,7 @@ module Program =
         Display.renderRollBreakdown intentDesc currentBoss.Name enemyResult.Contest
         Display.logDamageSummary enemyResult.Events playerBeforeTurn currentCombatant
         enemyResult.Events |> List.iter Display.logEvent
+        if enemyInterrupted then enemyInterrupted <- false
 
         let enemyExecutedPlayer =
           enemyResult.Events
@@ -885,15 +953,16 @@ module Program =
 
       // 2. Action selection (with an optional disengage)
       let targetCombatant = target.Combatant
+      let targetIntent = AI.chooseIntent targetCombatant currentPlayer
       let actionChoices =
-        buildActionChoices currentPlayer targetCombatant
+        buildActionChoicesWithTelegraph currentPlayer targetCombatant (Some targetIntent)
         @ (if canFlee then [ "🏃  Disengage (withdraw — each foe strikes as you break away)" ] else [])
 
       let choice =
         Display.promptSelectionWithHelp
           (sprintf "[bold %s]Round %d - Action against %s (Press '?' or F1 for Symbol Legend):[/]" Theme.Yellow round target.Name)
           actionChoices
-          (Some 11)
+          (Some 12)
           (fun () -> renderGroupHud currentPlayer currentEnemies round (logLines ()))
 
       if choice.Contains("Disengage") then
@@ -929,6 +998,9 @@ module Program =
         let playerBefore = currentPlayer
         let targetBefore = targetCombatant
         let res = ActionResolver.resolveGroupTurn roller intent currentPlayer targetCombatant otherLiving
+        let isTargetInterrupted =
+          res.Events
+          |> List.exists (function CombatEvent.ActionInterrupted(_, tId, _, _) when tId = target.Combatant.Id -> true | _ -> false)
         CombatLogger.recordTurn session round turnNum choice playerBefore targetBefore
           { Actor = res.Actor; Target = res.PrimaryTarget; Events = res.Events; Contest = None }
         turnNum <- turnNum + 1
@@ -958,12 +1030,17 @@ module Program =
           AnsiConsole.MarkupLine(sprintf "\n[bold %s]The pack retaliates...[/]" Theme.Pink)
           for e in living () |> List.truncate 8 do
             if not combatOver then
-              let intent = AI.chooseIntent e.Combatant currentPlayer
               let playerBeforeTurn = currentPlayer
               let r =
-                if floorNumber = 1 then
+                if e.Combatant.Id = target.Combatant.Id && isTargetInterrupted then
+                  AnsiConsole.MarkupLine(sprintf "\n[bold %s]⚡ %s is staggered from the technique interrupt! Attack defused![/]" Theme.Yellow e.Name)
+                  let recoverIntent = RecoveryAction SteadyForm
+                  ActionResolver.resolve roller recoverIntent e.Combatant currentPlayer
+                elif floorNumber = 1 then
+                  let intent = AI.chooseIntent e.Combatant currentPlayer
                   ActionResolver.resolveWithoutLethal roller intent e.Combatant currentPlayer
                 else
+                  let intent = AI.chooseIntent e.Combatant currentPlayer
                   ActionResolver.resolveEx roller intent e.Combatant currentPlayer priorDefenses
               CombatLogger.recordTurn session round turnNum (sprintf "%A" intent) e.Combatant playerBeforeTurn r
               turnNum <- turnNum + 1

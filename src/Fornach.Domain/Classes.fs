@@ -3,7 +3,7 @@ namespace Fornach.Domain
 /// Character classes in Fornach: the two core player archetypes, plus generic NPC classes.
 type CharacterClass =
   // --- Core Player Archetypes ---
-  /// Physical: Fighter with sword and shield, mastering kinetic momentum, precision parrying, and bastion guard
+  /// Physical: Fighter with a sword, mastering kinetic momentum, precision parrying, and bastion guard
   | Fighter
   /// Mental: Mage with staff, channeling cognitive resonance, phantasmal static, and protective wards
   | Mage

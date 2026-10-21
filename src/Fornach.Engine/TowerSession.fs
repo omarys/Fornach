@@ -428,7 +428,9 @@ module TowerSession =
 
           let mutable spawnedEnemies = []
           // 1. Leader
-          let leaderCombatant = Bestiary.createMonster ambush.Pack.Leader
+          let leaderCombatant =
+            Bestiary.createMonster ambush.Pack.Leader
+            |> fun c -> TierFactory.clampEngagedToPlayerLevel c state.Player
           let leaderEnemy =
             { Id = sprintf "%s_leader" ambush.Id
               Name = ambush.Pack.Leader.Name
@@ -446,7 +448,9 @@ module TowerSession =
           for i, minionTemplate in List.indexed ambush.Pack.Minions do
             match spawnCandidates with
             | spawnPos :: rest ->
-              let minionCombatant = Bestiary.createMonster minionTemplate
+              let minionCombatant =
+                Bestiary.createMonster minionTemplate
+                |> fun c -> TierFactory.clampEngagedToPlayerLevel c state.Player
               let minionEnemy =
                 { Id = sprintf "%s_minion_%d" ambush.Id i
                   Name = minionTemplate.Name

@@ -205,3 +205,12 @@ type CombatEvent =
 
   /// Alchemical material or trophy harvested upon monster defeat
   | AlchemicalTrophyHarvested of harvesterId: CombatantId * trophyName: string * essenceValue: int
+
+  /// Attack interrupted by a defensive technique like Shield Bash or Counter-play
+  | ActionInterrupted of actorId: CombatantId * targetId: CombatantId * techniqueName: string * reason: string
+
+  /// Mage channeled their staff to siphon cognitive fatigue and recklessness while bolstering Arcane Ward
+  | StaffSiphoned of casterId: CombatantId * targetId: CombatantId * fatigueRestored: int * recklessnessDrained: int * wardRestored: int
+
+  /// Fighter braced behind their shield, fortifying armor soak and establishing bastion guard
+  | ShieldRaised of actorId: CombatantId * armorFortified: int * studyStacksGained: int

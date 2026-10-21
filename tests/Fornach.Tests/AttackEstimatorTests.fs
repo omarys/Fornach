@@ -33,6 +33,38 @@ let ``a DisciplineStance defender is estimated against its real Poise guard`` ()
   Assert.Equal(0.0, AttackEstimator.estimate weak discipline prowl)
 
 [<Fact>]
+let ``an off-stance strike estimates lower than an on-stance one`` () =
+  let power = TierFactory.createClassLevel CharacterClass.Fighter 100 // PowerStance
+  let target = TierFactory.createClassLevel CharacterClass.Soldier 100
+
+  // The contest reads GetCombatStat, so the Power vector strikes at 1.25x and Agility at 0.75x.
+  let force = AttackEstimator.estimate power target (AttackClassification.ForceStrike false)
+  let agility = AttackEstimator.estimate power target (AttackClassification.FinesseCadence false)
+  Assert.True(force > agility)
+
+[<Fact>]
+let ``a flagged strike variant estimates higher than its plain form`` () =
+  let fighter = TierFactory.createClassLevel CharacterClass.Fighter 100
+  let baseTarget = TierFactory.createClassLevel CharacterClass.Soldier 100
+  // Soft target, so the variance bars are wide enough for both variants to land.
+  let soft =
+    { baseTarget with
+        Stats = baseTarget.Stats.With(Fortitude, 1).With(Resolve, 1) }
+
+  let wild = AttackEstimator.estimate fighter soft (AttackClassification.ForceStrike true)
+  let plain = AttackEstimator.estimate fighter soft (AttackClassification.ForceStrike false)
+  Assert.True(wild > plain)
+
+[<Fact>]
+let ``a mental strike is estimated against the defender's mental grounding`` () =
+  let attacker = TierFactory.createClassLevel CharacterClass.Mage 100
+  let plain = TierFactory.createClassLevel CharacterClass.Fighter 100
+  let grounded = { plain with PlayerStyle = true } // same stats, but the class grounding applies
+  let decree = AttackClassification.AuthorityDecree false
+
+  Assert.True(AttackEstimator.estimate attacker grounded decree <= AttackEstimator.estimate attacker plain decree)
+
+[<Fact>]
 let ``a softer defense estimates more damage than a hardened one`` () =
   let attacker = TierFactory.createClassLevel CharacterClass.Rogue 100
   let baseTarget = TierFactory.createClassLevel CharacterClass.Soldier 100
