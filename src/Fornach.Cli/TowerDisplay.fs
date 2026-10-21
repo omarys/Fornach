@@ -954,6 +954,86 @@ module TowerDisplay =
     AnsiConsole.MarkupLine(sprintf "[%s]Press any key to return to the chamber...[/]" Theme.Comment)
     Console.ReadKey(true) |> ignore
 
+  /// Opens the inventory panel. Read-only apart from the use key: it returns the kind the player
+  /// chose so the caller stays the only place that mutates session state.
+  let showInventoryPanel (state: TowerRunState) : ConsumableKind option =
+    let mutable byName = false
+    let mutable chosen = None
+    let mutable viewing = true
+    // A piped stdin cannot deliver keystrokes: render one page and leave rather than throw.
+    let interactive = not Console.IsInputRedirected
+
+    while viewing do
+      let rows = Consumables.describe state.UnidentifiedConsumables byName state.Consumables
+
+      let body =
+        if rows.IsEmpty then
+          sprintf "[italic %s]Nothing carried. Fallen enemies drop what they can salvage.[/]" Theme.Comment
+        else
+          rows
+          |> List.map (fun (kind, name, description, count) ->
+            let label =
+              if state.UnidentifiedConsumables.Contains kind then
+                sprintf "[%s]%s[/]" Theme.Comment (Markup.Escape name)
+              else
+                sprintf "[bold %s]%s[/]" Theme.Foreground (Markup.Escape name)
+
+            sprintf "%s [%s]x%d[/]  [%s]%s[/]" label Theme.Comment count Theme.Comment (Markup.Escape description))
+          |> String.concat "\n"
+
+      AnsiConsole.Clear()
+
+      AnsiConsole.Write(
+        Panel(Markup(Display.stripNerdGlyphs body))
+          .Header(
+            Display.stripNerdGlyphs (
+              sprintf
+                "[bold %s]󰏖 INVENTORY[/] [%s](%d kinds, sorted by %s)[/]"
+                Theme.Cyan
+                Theme.Comment
+                rows.Length
+                (if byName then "name" else "most recent")
+            )
+          )
+          .Border(BoxBorder.Rounded)
+          .BorderStyle(Theme.StyleCurrentLine)
+          .Expand()
+      )
+
+      AnsiConsole.WriteLine()
+
+      if rows.IsEmpty then
+        AnsiConsole.MarkupLine(sprintf "[%s]Sort: S  •  Close: Esc[/]" Theme.Comment)
+      else
+        AnsiConsole.MarkupLine(
+          sprintf "[%s]Sort: S (now %s)  •  Use: U  •  Close: Esc / Enter / q[/]"
+            Theme.Comment
+            (if byName then "by name" else "by most recent")
+        )
+
+      if not interactive then
+        viewing <- false
+      else
+        match Console.ReadKey(true).Key with
+        | ConsoleKey.Escape
+        | ConsoleKey.Enter
+        | ConsoleKey.Q -> viewing <- false
+        | ConsoleKey.S -> byName <- not byName
+        | ConsoleKey.U ->
+          let labels =
+            rows |> List.map (fun (_, name, _, count) -> sprintf "%s x%d" name count)
+
+          let choice = Display.promptSelectionWithHelp "Use which consumable?" labels None (fun () -> ())
+
+          match labels |> List.tryFindIndex ((=) choice) with
+          | Some i ->
+            chosen <- Some(rows |> List.item i |> fun (kind, _, _, _) -> kind)
+            viewing <- false
+          | None -> ()
+        | _ -> ()
+
+    chosen
+
   /// Displays a celebratory banner when the player has gained a level.
   let showLevelUpBanner (state: TowerRunState) (previousLevel: int) : unit =
     let p = state.Player
@@ -1806,34 +1886,17 @@ module TowerDisplay =
           | _ when key.KeyChar = 'c' || key.KeyChar = 'C' ->
             showCharacterSheet state
 
-          // Minimum wiring: use one unit of a carried kind. The full inventory panel is a later pass.
           | _ when key.KeyChar = 'i' || key.KeyChar = 'I' ->
-            let labels =
-              state.Consumables
-              |> List.map (fun (kind, cnt) ->
-                let label =
-                  if state.UnidentifiedConsumables.Contains kind then sprintf "? (%s)" kind.Name
-                  else kind.Name
+            match showInventoryPanel state with
+            | Some kind ->
+              match TowerSession.useConsumable kind state with
+              | Ok updated ->
+                state <- updated
+                AnsiConsole.MarkupLine(sprintf "\n[bold %s]Used %s.[/]" Theme.Green kind.Name)
+              | Error msg -> AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s[/]" Theme.Red msg)
 
-                sprintf "%s x%d" label cnt)
-
-            if labels.IsEmpty then
-              AnsiConsole.MarkupLine(sprintf "\n[%s]No consumables carried.[/]" Theme.Comment) |> ignore
-            else
-              let choice = Display.promptSelectionWithHelp "Use which consumable?" labels None (fun () -> ())
-
-              match labels |> List.tryFindIndex ((=) choice) with
-              | Some i ->
-                let kind, _ = state.Consumables.[i]
-
-                match TowerSession.useConsumable kind state with
-                | Ok updated ->
-                  state <- updated
-                  AnsiConsole.MarkupLine(sprintf "\n[bold %s]Used %s.[/]" Theme.Green kind.Name)
-                | Error msg -> AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s[/]" Theme.Red msg)
-
-                Thread.Sleep(700)
-              | None -> ()
+              Thread.Sleep(700)
+            | None -> ()
 
           | _ when key.KeyChar = 'x' || key.KeyChar = 'X' || key.KeyChar = ';' ->
             // Enter Inspect Mode centered on player position

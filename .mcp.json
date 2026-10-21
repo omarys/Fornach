@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "openlore": {
+      "command": "/home/omary/.local/share/mise/installs/node/26.12.0/bin/node",
+      "args": [
+        "/home/omary/.npm-global/lib/node_modules/openlore/dist/cli/index.js",
+        "mcp",
+        "--preset",
+        "substrate"
+      ]
+    }
+  },
+  "_openlore": {
+    "managed": true,
+    "version": 1,
+    "fingerprint": "eaeb95f8c1f17036",
+    "paths": [
+      "mcpServers.openlore"
+    ]
+  }
+}

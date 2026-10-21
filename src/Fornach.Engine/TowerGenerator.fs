@@ -556,7 +556,15 @@ module TowerGenerator =
     entities <- Map.add chestPos (EntityChest chest) entities
 
     // E. Floor Enemies & Guardians (or Story Bosses)
-    let guardianPlaza = plazaAt 4
+    // The player spawns in the entrance chamber and the stairway is in the far one. The guardian
+    // must sit in neither, or a floor can open with the boss inside the room the player starts in,
+    // or standing on the exit. It is still anchored to a room center, so "same room" is exactly
+    // "same center point". A degenerate one-room floor has nowhere else to go, so fall back.
+    let guardianPlaza =
+      let away = plazas |> List.filter (fun p -> p.Center <> spawn && p.Center <> stairway)
+      let pool = if List.isEmpty away then plazas else away
+      pool.[Math.Min(4, pool.Length - 1)]
+
     let guardianPos = guardianPlaza.Center
     tiles <- Map.add guardianPos (Floor surface) tiles
 

@@ -83,11 +83,31 @@ module Consumables =
     | Ration
     | SpiritSeed -> None
 
-  /// Adds one unit to the bag.
+  /// Adds one unit to the bag. The kind moves to the front: bag order is newest-first, which is
+  /// what the inventory panel sorts "by most recent" on.
   let add (kind: ConsumableKind) (bag: (ConsumableKind * int) list) : (ConsumableKind * int) list =
-    match bag |> List.tryFindIndex (fun (k, _) -> k = kind) with
-    | Some i -> bag |> List.mapi (fun j (k, n) -> if j = i then k, n + 1 else k, n)
-    | None -> bag @ [ kind, 1 ]
+    match bag |> List.tryFind (fun (k, _) -> k = kind) with
+    | Some (_, n) -> (kind, n + 1) :: (bag |> List.filter (fun (k, _) -> k <> kind))
+    | None -> (kind, 1) :: bag
+
+  /// Rows for the inventory panel: the kind, its display name and description, and the count. An
+  /// unidentified kind is concealed — its real name and description must not leak before a shrine
+  /// reveals it; the kind is still returned so the caller knows which row was picked. `byName` sorts
+  /// alphabetically; otherwise bag order is kept, which is newest-first (see `add`).
+  let describe
+    (unidentified: Set<ConsumableKind>)
+    (byName: bool)
+    (bag: (ConsumableKind * int) list)
+    : (ConsumableKind * string * string * int) list =
+    let rows =
+      bag
+      |> List.map (fun (kind, count) ->
+        if unidentified.Contains kind then
+          kind, "Unidentified", "A shrine can reveal what this is.", count
+        else
+          kind, kind.Name, kind.Description, count)
+
+    if byName then rows |> List.sortBy (fun (_, name, _, _) -> name) else rows
 
   let count (kind: ConsumableKind) (bag: (ConsumableKind * int) list) : int =
     bag |> List.sumBy (fun (k, n) -> if k = kind then n else 0)

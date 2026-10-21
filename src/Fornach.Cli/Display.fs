@@ -135,6 +135,12 @@ module Display =
   let askInt (message: string, defaultValue: int) : int =
     askCancellable (TextPrompt<int>(message).DefaultValue(defaultValue))
 
+  /// Widest label any bar/meter row carries (`󰧑 Cognitive Fatigue`), measured in UTF-16 units — the
+  /// leading Nerd Font glyph sits outside the BMP so it counts as 2. Every bar pads its label to
+  /// this width, which is what puts the bar, the numbers and the percentage in one column across
+  /// both the vitals and the strain block. Raise this if a longer label is ever introduced.
+  let private barLabelWidth = 20
+
   let renderBar (label: string) (current: int) (maxVal: int) (colorHex: string) =
     let safeMax = Math.Max(1, maxVal)
     let safeCurr = Math.Clamp(current, 0, safeMax)
@@ -156,10 +162,10 @@ module Display =
       else
         colorHex, ""
 
-    // Kept narrow (label 14, bar 8) so a bar plus its wound/critical alert tag still fits the
-    // 54-cell HUD column; wider rows are clipped by the panel and wasted.
-    sprintf "%-10s [%s]%s[/][grey27]%s[/] [bold %s]%4d[/][%s]/[/]%4d [bold %s](%3d%%)[/]%s"
-      label dynamicColor filled empty dynamicColor safeCurr Theme.Comment safeMax dynamicColor pctInt alertTag
+    // Label is padded before interpolation, not by a %-Ns format: `label.Length` overcounts the
+    // glyph by one unit, and .NET's width specifier counts that overcount as real width.
+    sprintf "%s [%s]%s[/][grey27]%s[/] [bold %s]%4d[/][%s]/[/]%4d [bold %s](%3d%%)[/]%s"
+      (label.PadRight barLabelWidth) dynamicColor filled empty dynamicColor safeCurr Theme.Comment safeMax dynamicColor pctInt alertTag
 
   let renderMeter (label: string) (m: Meter) (colorHex: string) =
     let pct = Math.Clamp(int (Math.Round((float m.Value / 100.0) * 8.0)), 0, 8)
@@ -169,8 +175,8 @@ module Display =
       if m.Value >= 75 then Theme.Red
       elif m.Value >= 40 then Theme.Yellow
       else colorHex
-    sprintf "%-10s [%s]%s[/][%s]%s[/] [bold %s]%3d%%[/]"
-      label warnColor filled Theme.CurrentLine empty Theme.Foreground m.Value
+    sprintf "%s [%s]%s[/][%s]%s[/] [bold %s]%3d%%[/]"
+      (label.PadRight barLabelWidth) warnColor filled Theme.CurrentLine empty Theme.Foreground m.Value
 
   let createCombatantPanel (c: Combatant) (borderColor: Color) (headerColor: string) (observerOpt: Combatant option) =
     let grid = Grid()

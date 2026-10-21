@@ -1,6 +1,6 @@
 # Fornach Balance, Combat Mechanics & Class Progression Handoff
 
-## Status: 352 Tests Passing (0 Warnings)
+## Status: 437 Tests Passing (258 `Fornach.Tests` + 179 `Fornach.Domain.Tests`, 0 Warnings)
 
 This document provides a comprehensive handoff of the recent combat balance tuning, archetype progression overhauls, tactical preparation enhancements, swarm simulation refinements, and a solution-wide performance profile (see §4) completed in the `Fornach` codebase.
 
@@ -96,6 +96,59 @@ This document provides a comprehensive handoff of the recent combat balance tuni
 
 ---
 
+### K. Attack Ordering by Estimated Effectiveness
+- [`AttackEstimator.fs`](file:///home/omary/Dev/fornach/src/Fornach.Engine/AttackEstimator.fs) scores every available strike/spell against the scouted enemy stats; `Program.buildActionChoices` then orders the encounter menu by expected damage. An `Obscured` enemy falls back to archetype order — the estimator never guesses stats it does not have.
+- Stance and off-vector penalties are reflected in the estimate; `AttackEstimatorTests.fs` guards the ranking, including a monotonicity test (a bigger enemy pool must not raise a strike's rank) and an end-to-end menu-order test.
+- This is TODO item 7's first sub-item and the factory for Quick-Play; see §7.
+
+### L. Traversal Economy — Perceive, Repair, Hone
+- **FOV dilation** lives in [`Vision.fs`](file:///home/omary/Dev/fornach/src/Fornach.Domain/Vision.fs): `LocomotionState.Walking` sees **120°**; each turn spent waiting widens the arc by **90°** (45 per side) up to **360°**; moving again narrows it. `TowerSession.updateFov` recomputes it per move and costs ~0.2 ms.
+- **Safe steps** (the same gate armor repair uses) restore **5% of max armor** and, every **fourth** safe step, hone the weapon one condition step (`TowerSession.honeOnSafeStep`). `restHoneWeapon` deliberately stops **one step short of Pristine** — rest can pull a ruined weapon back, never to full.
+- **Resting** restores **33% of max** Health, Morale and Armor, all clamped by `restCap` at **80% of maximum** (`TowerSession.restRecoveryFraction = 0.80`). The 100% ceiling belongs to shrines and to the consumables in §P.
+- `TowerDisplay.fs:1713` (5% step armor), `:1747-1752` (33% rest) are the TUI call sites; the arithmetic itself lives in `TowerSession.recoverOutOfCombat`.
+
+### M. Wounds — Bleed Decay and the Regen Gate
+- Bleed stacks decay **1 per safe step** and **5 per rest** (`TowerSession.bleedClosedPerStep` / `bleedClosedPerRest`), floored at 0.
+- Health and Morale regeneration is **gated on the player having zero bleed stacks** after that turn's decay; armour repair and weapon honing are *not* gated. A bleeding player therefore still maintains gear but cannot heal, and the status line says so.
+- In combat the existing tick is unchanged: `ActionResolver.fs:835-839` applies `stacks × 1.2%` of max health and consumes one stack per turn.
+
+### N. Altars — Costs Are Percentages of Max
+- Altar costs were flat integers (`SacrificeHealth 25`, `SacrificeMorale 30`, `ShredArmor 30` in [`WorldEvents.fs`](file:///home/omary/Dev/fornach/src/Fornach.Engine/WorldEvents.fs)). Against pools that scale into the thousands at high tier those became free, so an altar could never bite.
+- `applyAltarSacrifice` (`TowerSession.fs:823+`) now reads every cost through `percentOf <pool.Maximum> <pct>`: **health 25%, morale 25–30%, armor 30%**. Health cost is clamped to leave **at least 1 HP**, so an altar can never end a run.
+- Consequence to preserve: accepting a health-cost altar from full always lands strictly below the 80% rest cap, which is the point — the dip is now unavoidable rather than level-dependent.
+
+### O. Shrines — Repeatable Consolidation Point
+- A shrine is no longer consumed: the `when not shrine.IsUsed` guards are gone from the engine step branch and from both TUI sites, and `IsUsed` is never written. Stepping onto it re-triggers every time.
+- Each visit runs `TowerSession.shrineBlessing`: full restore (Health/Morale/Armor/weapon/meters/bleed) → reveal **every** carried unidentified consumable → consume and apply **all** carried rare materials. Re-application of an already-identified bag is a no-op, never a duplicate upgrade.
+- **Known, deliberate balance hole:** a repeatable shrine is an unlimited full restore, so it also resets the 80% caps and the bleed gate. The user was told and asked for no cost or cooldown; a per-visit soul cost is the one-line brake if that changes.
+
+### P. Loot, Consumables and Identification
+- `MonsterLootEntry` gained a `Category: LootCategory` (`Humanoid | Beast | Plant | Construct | Spirit`) in [`Bestiary.fs`](file:///home/omary/Dev/fornach/src/Fornach.Domain/Bestiary.fs). It is a **separate axis from `MonsterFamily`** on purpose — family drives traits and balance, category drives drops. Bandits have no template at all (built by `TierFactory.createClassLevel`) and resolve to `Humanoid` on the non-bestiary fallback path in `TowerSession.resolveEnemyDefeat`.
+- Six kinds in [`Consumables.fs`](file:///home/omary/Dev/fornach/src/Fornach.Domain/Consumables.fs), one per category entry: `ArmorRepairKit` (Humanoid 45%), `GrindingStone` (Humanoid 25%), `Ration` (Beast 50%), `SpiritSeed` (Plant 50%), `WeaponMaterial` (Construct 35%), `MentalMaterial` (Spirit 30%). Drops are additive to souls and trophies; a kill can still drop nothing.
+- Effects are the **only** way past the rest caps: repair kit → armour to Max, grinding stone → weapon to Pristine, ration → Health to Max, spirit seed → Morale to Max, materials → **+8** permanently to the class's primary offensive (or mental) stat (`Consumables.materialUpgrade`).
+- `Spirit`-category species yield **1.5×** souls (`Bestiary.SoulsFor`).
+- Found kinds are marked unidentified; **unidentified items cannot be used** and render as `?` in the HUD. Only a shrine reveals them (see §O). Inventory carry state is `TowerRunState.Consumables` + `UnidentifiedConsumables`.
+- **Inventory panel** (`I` → `TowerDisplay.showInventoryPanel`, rendering rows from `Consumables.describe`): every carried kind with count and description, sorted **by most recent** (default) or **by name** with `S`. A concealed row shows `Unidentified` / "A shrine can reveal what this is." — the panel never touches `kind.Name` or `kind.Description` for an unrevealed kind, which is why sorting by name clusters all unknown rows under `U` rather than leaking an alphabetical ordering. `U` picks a row and hands the kind back to the game loop, which stays the only place that mutates session state. `Consumables.add` now moves a kind to the front of the bag, so bag order *is* recency.
+
+### Q. Story Density, Ambushes and Log Visibility
+- Ambush waypoints in `WorldEvents.generateFloorEncounters` previously launched a **stale survivor** of the encounter rather than the member the player had not fought — roughly 72% / 42% / 21% of ambushes on the affected floors. Fixed; the ambusher is now drawn from the undefeated members.
+- Floors 3 and 6 (`| 0 ->` branches) now also emit an ambush waypoint; optional fights went 43 → 63 and encounters per floor are 2–5 (test bound widened accordingly).
+- Resolved actions print applied damage plus the vitals swing (`Display.logDamageSummary`); duel, boss, pack and quick-resolve outcomes append a chronicle entry to the map log, and `V` opens `TowerDisplay.showLogViewer`.
+
+### R. Rendering Path and What Actually Costs Time
+- Measured with a throwaway off-screen Spectre console (StringWriter, no TTY): engine `stepPlayer` **0.12–0.47 ms**, `updateFov` **0.17–0.24 ms**, whole frame render **8.2 ms**, and a per-frame `AnsiConsole.Live(...).AutoClear(false)` cycle **26.3 ms**. The map's 1485-cell markup building is only **0.2 ms** — it was never the problem.
+- **Do not wrap the frame in `Live`.** It was tried, measured 17 ms dearer than writing the same frame directly, and reverted (`TowerDisplay.fs:1325`). A long-lived Live session is also unsafe: combat and dialog output is written inline inside the same loop and a Live region cannot track text written past its height.
+- Split of the remaining render: HUD **4.9–7.2 ms** (the largest single item, because it built ~110-cell rows into a 58-column panel and had ~40% clipped away), viewport 2.2–3.1 ms, log 1.9–2.7 ms. Frame allocations are **3.93 MB**, which is what produces the long p95 tail.
+- HUD rows were therefore trimmed to the **54-cell usable column** (58 minus border and padding): labels `%-10s`, bars 7 cells, static glyph/key legends removed from the panel and left only in the `?`/F1 overlay (`Display.showSymbolAndGlyphLegend`). Anything added to `renderHudWithDebug` must respect that budget — the worst remaining row is 42 cells, plus an 11-cell `⚠ CRITICAL` tag.
+- Still on the table if the floor ever feels slow: hand-built ANSI for viewport + HUD, measured at **0.70 ms** for the same per-cell drawing that costs 2.16 ms through Spectre (and 0.125 ms for a whole styled frame). It requires splitting the public `renderHud`/`renderViewport` renderable API that tests assert on.
+
+### S. Working Notes for the Next Agent
+- [`TowerDisplay.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/TowerDisplay.fs) is ~1875 lines. Edit it with the `edit` tool, surgically. Do **not** rewrite it from a script: a scripted rewrite read the wrong path back and overwrote the file with `Display.fs` during this session. It was recovered from `HEAD` (`1857fd6`, which already contained the session's work) with only that turn's edits re-applied — but the recovery was luck, not process.
+- Suite counts drift fast. Verify with `dotnet test tests/Fornach.Tests/Fornach.Tests.fsproj` and `dotnet test tests/Fornach.Domain.Tests/Fornach.Domain.Tests.fsproj` rather than trusting the number in this header.
+- `git status` is the source of truth for what is committed: `HEAD` is ahead of several handoff sections, so check `git log --oneline -3` before assuming a described change is uncommitted.
+
+---
+
 ## 2. Archetype Tipping-Point Matrix (Novice mobs vs. Fighter & Mage)
 
 Results from `dotnet run --project src/Fornach.Cli -- --balance-matrix`: `CharacterClass.PlayerClasses` × 4 tiers swept against the 4 Novice base classes (8 champion rows, 32 matchups, `Random(42)`, 10 iterations, cap 100 mobs). Each cell is the largest number of simultaneous Novice mobs of that base class the champion survives; `100+` is the sweep cap, reported as `Impenetrable`.
@@ -139,6 +192,8 @@ Results from `dotnet run --project src/Fornach.Cli -- --balance-matrix`: `Charac
 **Method:** Release binaries, purpose-built `#r` harness against the built DLLs, tiered compilation disabled for micro-benchmarks, median-of-5. No profiler was available on this machine (`dotnet-counters`/`-trace`/`-gcdump` all absent).
 
 **Currency:** §4.1–§4.5 were measured *before* the `StatBlock` rework of [ADR 0002](file:///home/omary/Dev/fornach/docs/adr/0002-array-backed-statblock-and-static-baseline.md) landed. §4.2's `StatBlock` / `Baseline` / `createGrandMasterBerserker` rows and the §4.4 ranking are superseded by **§4.6**, which is the current profile.
+
+**Scope:** this section is about the *simulation* harness (duels, batches, Monte-Carlo). It says nothing about the TUI render path — engine-step, FOV, frame, HUD and the vett…
 
 ### 4.1 Already shipped — parallel Monte-Carlo batches
 
@@ -247,7 +302,11 @@ This also fully explains the `createGrandMasterBerserker` row of §4.2 (43 µs /
 - [ ] **2. Infinite Tower Boss Scaling**:
   - Verify Grief Aspect bosses in [`docs/STORY_AND_TOWER.md`](file:///home/omary/Dev/fornach/docs/STORY_AND_TOWER.md) against the revised preparations and meter interactions.
 - [ ] **3. Spatial Grid Integration**:
-  - Connect `Fornach.Spatial` FOV, pathfinding, and directional flanking to the turn resolution loop.
+  - FOV is **wired** — [`Vision.fs`](file:///home/omary/Dev/fornach/src/Fornach.Domain/Vision.fs) computes a dilated arc and `TowerSession.updateFov` runs it per move (§1 L). Directional flanking and grid pathfinding are still **not** connected to turn resolution.
+- [ ] **4. Quick-Play Mode** — the remaining half of TODO §7; see §7 below.
+- [ ] **5. Shrine balance brake**: repeatable shrines are an unlimited full restore (§1 O). If the caps are meant to bite, add a per-visit soul cost that scales with floor.
+- [ ] **6. Shrine-gated identification risk**: unidentified consumables cannot be used until a shrine, so a long floor can strand the player's loot. Measure shrines-per-floor on floors 5+ before deciding whether that is a reward or a trap (§1 P).
+- [ ] **7. Bestiary unlock on repeated kills** was raised by the user but never scoped or implemented — do not assume it exists.
 
 ---
 
@@ -269,3 +328,30 @@ Recommended specifically for the performance work in §4:
 
 Recommended for content expansion:
 - **`domain-modeling` & `roguelike`**: The architecture for the Monster Bestiary, ecological traits, dynamic Tower encounters, and main story memory fragments is specified in [`docs/adr/0004-monster-bestiary-and-world-encounters.md`](file:///home/omary/Dev/fornach/docs/adr/0004-monster-bestiary-and-world-encounters.md) and tracked in [`TODO.md`](file:///home/omary/Dev/fornach/TODO.md).
+
+Recommended for the work described in §1 K–R:
+- **`roguelike`**: FOV dilation, safe-step traversal economy, shrine/altar placement and the loot loop are roguelike systems; read it before touching [`Vision.fs`](file:///home/omary/Dev/fornach/src/Fornach.Domain/Vision.fs), `TowerSession` recovery helpers, or floor generation.
+- **`diagnosing-bugs`**: The measure-first loop behind §1 R (and the reverted `Live` experiment) is exactly its structure. Measure with an off-screen `StringWriter` console before changing the render path.
+- **`fsharp-testing`**: Every change here is guarded by xUnit tests in `tests/Fornach.Tests`; the balance-sensitive ones (`AttackEstimatorTests`, `RepairTests`, `BleedRecoveryTests`, `LootConsumableTests`, `EngageScalingTests`) show the expected shape.
+- **`domain-modeling`**: `LootCategory` being a deliberate second axis beside `MonsterFamily` (§1 P) is a domain decision worth an ADR if it grows; the existing ADRs live in [`docs/adr/`](file:///home/omary/Dev/fornach/docs/adr).
+- **`ponytail`**: This session ran in it. The reverted `Live` wrapper is its lesson in one line: the smallest change that works would have been no change at all.
+- **`unslop`**: Still applies to everything written here.
+
+**No skill covers F#/.NET TUI rendering or Spectre.Console performance.** Use the measured numbers in §1 R instead of guessing.
+
+---
+
+## 7. Quick-Play Mode — the Forward Plan
+
+Origin: the user's request that the tactical encounter menu be skippable by automating attack selection and each attack/defence round when a player/enemy collision occurs on the map. Standing still should simulate **Deep Breath / Steady Stance**, advancing into an enemy should simulate an **attack**, and retreating should simulate a **withdrawal**. The detailed checklist lives in [`TODO.md`](file:///home/omary/Dev/fornach/TODO.md) §7 item 7 — do not duplicate it here.
+
+What already exists and should be built on:
+- **Attack selection is solved** — [`AttackEstimator.fs`](file:///home/omary/Dev/fornach/src/Fornach.Engine/AttackEstimator.fs) already ranks options and the menu already consumes that ranking (§1 K). Auto-resolution only needs to pick the top-ranked entry rather than a player.
+- **The round machinery already exists** — `resolveDuel` / `resolveGroupFight` drive attack, defence and damage without the TUI, and already log applied damage plus the vitals swing (§1 Q).
+- **Recovery vocabulary exists** — `Steady Form` is the universal reset (all seven strain meters, Morale, Study Stacks); bleeding now decays with movement and waiting (§1 M). "Wait" on the map already maps to meaningful sim behaviour, so the movement semantics above are a mapping problem, not new mechanics.
+- **What is missing**: driving map collisions into a full auto round without the tactical menu, and the three movement→action mappings. Both are open in TODO §7.
+
+Design constraints worth keeping:
+- Auto-resolution must emit the same `CombatEvent`s so the Chronicle Log and damage summaries keep working unchanged.
+- An `Obscured` enemy still has no stats to rank; quick-play must degrade to archetype order (§1 K), not fail.
+- Anything auto-resolved remains behind the ambush-correctness fix in §1 Q: never resolve against a stale survivor.

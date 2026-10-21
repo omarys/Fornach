@@ -19,6 +19,8 @@
     <Compile Include="AttackEstimatorTests.fs" />
     <Compile Include="EngageScalingTests.fs" />
     <Compile Include="MenuCancelTests.fs" />
+    <Compile Include="HudAlignmentTests.fs" />
+    <Compile Include="RoomPlacementTests.fs" />
     <Compile Include="AiRecoveryLockTests.fs" />
     <Compile Include="AmbushScalingTests.fs" />
     <Compile Include="AiStanceTests.fs" />

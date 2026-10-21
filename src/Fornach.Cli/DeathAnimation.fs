@@ -6,11 +6,20 @@ open Spectre.Console
 
 module DeathAnimation =
 
+  // The truck drives LEFT, so its cab and windshield face left and the horn trails behind it.
+  // NOTE: these strings go through Markup — the `[[` and `]]` around HONK are Spectre escapes that
+  // render as literal brackets, so the horn costs 2 cells less on screen than in source. Keep the
+  // art free of other brackets, which Markup would eat as tags.
   let private truckFrames =
-    [| @"   ______                    "
-       @"  /|_||_\`.__                "
-       @" (   _    _ _\  [[==HONK!==]]  "
-       @" =`-(_)--(_)-'               " |]
+    [| @"                    ______   "
+       @"                __.`/_||_|\  "
+       @"                /_ _    _   )  [[==HONK!==]] "
+       @"               '-(_)--(_)-`= " |]
+
+  /// The road stops two cells short of the console: a borderless Panel still carries one cell of
+  /// padding per side, and a line that fills the width exactly spills its last characters onto a
+  /// wrapped line.
+  let private roadLine (consoleWidth: int) = String('=', Math.Max(1, consoleWidth - 2))
 
   let private impactFrames =
     [| @"      \  |  /      "
@@ -24,7 +33,9 @@ module DeathAnimation =
 
     let consoleWidth = Math.Max(60, AnsiConsole.Profile.Width)
     let playerPos = 8
-    let truckWidth = 30
+    // Frame width including the horn trailing behind, plus one cell so the horn never touches the
+    // right edge and trips the wrap.
+    let truckWidth = 44
     let totalSteps = consoleWidth - playerPos
 
     // Phase 1: High-speed approach
@@ -79,7 +90,7 @@ module DeathAnimation =
             grid.AddRow(Markup row1) |> ignore
             grid.AddRow(Markup row2) |> ignore
             grid.AddRow(Markup row3) |> ignore
-            grid.AddRow(Markup(sprintf "[grey]%s[/]" (String('=', consoleWidth))))
+            grid.AddRow(Markup(sprintf "[grey]%s[/]" (roadLine consoleWidth)))
             |> ignore
 
             ctx.UpdateTarget(Panel(grid).Border(BoxBorder.None))
@@ -117,7 +128,7 @@ module DeathAnimation =
             |> ignore
 
             grid.AddRow(
-              Markup(sprintf "[bold red]%s[/]" (String('=', consoleWidth)))
+              Markup(sprintf "[bold red]%s[/]" (roadLine consoleWidth))
             )
             |> ignore
 

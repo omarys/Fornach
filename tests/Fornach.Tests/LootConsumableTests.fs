@@ -510,3 +510,53 @@ let ``morale and armor altars also cost a percentage of the maximum`` () =
       armorBefore - int (Math.Round(float armorState.Player.Armor.Max * 0.30))
 
     Assert.Equal(expected, paid.Player.Armor.Current)
+
+[<Fact>]
+let ``the inventory panel conceals an unidentified kind's name and description`` () =
+  let bag = [ ConsumableKind.ArmorRepairKit, 2; ConsumableKind.Ration, 1 ]
+
+  let rows =
+    Consumables.describe (Set.ofList [ ConsumableKind.ArmorRepairKit ]) false bag
+
+  let kit = rows |> List.find (fun (kind, _, _, _) -> kind = ConsumableKind.ArmorRepairKit)
+  let (_, kitName, kitDescription, kitCount) = kit
+
+  Assert.Equal("Unidentified", kitName)
+  Assert.DoesNotContain("Repair", kitName)
+  Assert.DoesNotContain("armor", kitDescription)
+  Assert.Equal(2, kitCount)
+
+  // A revealed kind shows its real text in the same call.
+  let (_, rationName, rationDescription, _) =
+    rows |> List.find (fun (kind, _, _, _) -> kind = ConsumableKind.Ration)
+
+  Assert.Equal("Ration", rationName)
+  Assert.Equal(ConsumableKind.Ration.Description, rationDescription)
+
+[<Fact>]
+let ``the inventory panel sorts by most recent or by name`` () =
+  // add moves a kind to the front, so pickup order is newest-first.
+  let bag =
+    []
+    |> Consumables.add ConsumableKind.Ration
+    |> Consumables.add ConsumableKind.GrindingStone
+    |> Consumables.add ConsumableKind.ArmorRepairKit
+
+  let names (rows: (ConsumableKind * string * string * int) list) =
+    rows |> List.map (fun (_, name, _, _) -> name)
+
+  let byRecent = Consumables.describe Set.empty false bag
+  Assert.Equal<string list>([ "Armor Repair Kit"; "Grinding Stone"; "Ration" ], names byRecent)
+
+  let byName = Consumables.describe Set.empty true bag
+  Assert.Equal<string list>([ "Armor Repair Kit"; "Grinding Stone"; "Ration" ], names byName)
+
+  // Picking up the ration again makes it the most recent without changing the alphabetical order.
+  let repicked = Consumables.add ConsumableKind.Ration bag
+  Assert.Equal<string list>([ "Ration"; "Armor Repair Kit"; "Grinding Stone" ], names (Consumables.describe Set.empty false repicked))
+  Assert.Equal<string list>([ "Armor Repair Kit"; "Grinding Stone"; "Ration" ], names (Consumables.describe Set.empty true repicked))
+  Assert.Equal(2, Consumables.count ConsumableKind.Ration repicked)
+
+[<Fact>]
+let ``an empty bag lists nothing rather than a placeholder row`` () =
+  Assert.Empty(Consumables.describe Set.empty false [])
