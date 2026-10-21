@@ -140,9 +140,9 @@ module Display =
     let safeCurr = Math.Clamp(current, 0, safeMax)
     let pctRatio = float safeCurr / float safeMax
     let pctInt = int (Math.Round(pctRatio * 100.0))
-    let barUnits = Math.Clamp(int (Math.Round(pctRatio * 20.0)), 0, 20)
+    let barUnits = Math.Clamp(int (Math.Round(pctRatio * 7.0)), 0, 7)
     let filled = String('█', barUnits)
-    let empty = String('░', 20 - barUnits)
+    let empty = String('░', 7 - barUnits)
 
     let dynamicColor, alertTag =
       if label.Contains("HP") || label.Contains("Health") then
@@ -156,18 +156,20 @@ module Display =
       else
         colorHex, ""
 
-    sprintf "%-22s [%s]%s[/][grey27]%s[/] [bold %s]%5d[/] [%s]/[/] [%s]%-5d[/] [bold %s](%3d%%)[/]%s"
-      label dynamicColor filled empty dynamicColor safeCurr Theme.Comment Theme.Comment safeMax dynamicColor pctInt alertTag
+    // Kept narrow (label 14, bar 8) so a bar plus its wound/critical alert tag still fits the
+    // 54-cell HUD column; wider rows are clipped by the panel and wasted.
+    sprintf "%-10s [%s]%s[/][grey27]%s[/] [bold %s]%4d[/][%s]/[/]%4d [bold %s](%3d%%)[/]%s"
+      label dynamicColor filled empty dynamicColor safeCurr Theme.Comment safeMax dynamicColor pctInt alertTag
 
   let renderMeter (label: string) (m: Meter) (colorHex: string) =
-    let pct = Math.Clamp(int (Math.Round((float m.Value / 100.0) * 15.0)), 0, 15)
+    let pct = Math.Clamp(int (Math.Round((float m.Value / 100.0) * 8.0)), 0, 8)
     let filled = String('█', pct)
-    let empty = String('░', 15 - pct)
+    let empty = String('░', 8 - pct)
     let warnColor =
       if m.Value >= 75 then Theme.Red
       elif m.Value >= 40 then Theme.Yellow
       else colorHex
-    sprintf "%-22s [%s]%s[/][%s]%s[/] [bold %s]%3d%%[/]"
+    sprintf "%-10s [%s]%s[/][%s]%s[/] [bold %s]%3d%%[/]"
       label warnColor filled Theme.CurrentLine empty Theme.Foreground m.Value
 
   let createCombatantPanel (c: Combatant) (borderColor: Color) (headerColor: string) (observerOpt: Combatant option) =
