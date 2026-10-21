@@ -29,7 +29,7 @@ let private getOk = function Ok v -> v | Error e -> failwithf "Expected Ok, got:
 let private getError = function Error e -> e | Ok _ -> failwith "Expected Error, got Ok"
 
 [<Fact>]
-let ``TowerGenerator procedurally populates 2 to 5 dynamic encounters per floor`` () =
+let ``TowerGenerator procedurally populates 2 to 6 dynamic encounters per floor`` () =
   for floorNum in 1 .. 7 do
     let floor = TowerGenerator.generateFloor (42 + floorNum) floorNum
     let encounters =
@@ -40,7 +40,7 @@ let ``TowerGenerator procedurally populates 2 to 5 dynamic encounters per floor`
         | EntityEncounter enc -> Some (pt, enc)
         | _ -> None)
 
-    Assert.True(encounters.Length >= 2 && encounters.Length <= 5, sprintf "Floor %d had %d encounters (expected 2-5)" floorNum encounters.Length)
+    Assert.True(encounters.Length >= 2 && encounters.Length <= 6, sprintf "Floor %d had %d encounters (expected 2-6)" floorNum encounters.Length)
 
     for (pt, _) in encounters do
       Assert.NotEqual(floor.SpawnLocation, pt)
@@ -101,8 +101,9 @@ let ``SacrificialAltar applies costs and rewards correctly and prevents double-u
   Assert.True(result.IsOk)
   let updatedState = getOk result
 
-  // Assert Cost applied: -25 HP
-  Assert.Equal(initialHp - 25, updatedState.Player.Health.Current)
+  // Assert Cost applied: 25% of the maximum, read off the player
+  let healthToll = int (System.Math.Round(float testState.Player.Health.Maximum * 0.25))
+  Assert.Equal(initialHp - healthToll, updatedState.Player.Health.Current)
   // Assert Reward applied: +15 Force
   Assert.Equal(initialForce + 15, updatedState.Player.Stats.Get StatId.Force)
 
@@ -377,7 +378,8 @@ let ``Defeating Bestiary monster awards Souls and rolled Trophies`` () =
       Name = Bestiary.slagHound.Name
       Combatant = houndCombatant
       DropsKeyId = Some "quarry_keystone"
-      IsDefeated = false }
+      IsDefeated = false
+      ChaseCharge = 0.0 }
 
   let enemyPos = { X = 25; Y = 25 }
   let floorWithEnemy =
@@ -417,7 +419,7 @@ let ``TowerDisplay inspectTile formats inspection detail for encounters`` () =
   let detail = TowerDisplay.inspectTile state altarPos
   Assert.True(detail.EntitySummary.IsSome)
   Assert.Contains("SACRIFICIAL ALTAR: Altar of the Iron Quarryman", detail.EntitySummary.Value)
-  Assert.Contains("Sacrifice 25 Health", detail.EntitySummary.Value)
+  Assert.Contains("Sacrifice 25% Health", detail.EntitySummary.Value)
 
 [<Fact>]
 let ``createAmbush scales monster tiers according to floor progression and prevents high-level brutes on Floor 1`` () =

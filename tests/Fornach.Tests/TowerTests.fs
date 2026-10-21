@@ -495,7 +495,8 @@ let ``TowerDisplay inspectTile correctly inspects player position, AcidSlag haza
         Name = "Plaza Sentinel"
         Combatant = enemyCombatant
         DropsKeyId = None
-        IsDefeated = false }
+        IsDefeated = false
+        ChaseCharge = 0.0 }
   let stateWithEnemy =
     { state with
         CurrentFloor =
@@ -544,3 +545,124 @@ let ``TowerDisplay renderInspectionPanel and renderViewportWithCursor execute cl
 
   let cursorViewport = TowerDisplay.renderViewportWithCursor state (Some state.PlayerPosition) 45 21
   Assert.NotNull(cursorViewport)
+
+let private walkableAt (floor: TowerFloor) (p: Point) =
+  match Map.tryFind p floor.Tiles with
+  | Some t -> t.IsWalkable
+  | None -> false
+
+let private grindMobCount (floor: TowerFloor) =
+  floor.Entities
+  |> Map.toList
+  |> List.filter (fun (_, ent) ->
+    match ent with
+    | EntityEnemy e -> e.Id.StartsWith "grind_mob_"
+    | _ -> false)
+  |> List.length
+
+[<Fact>]
+let ``every floor reaches every dynamic encounter anchor and the stairway from spawn`` () =
+  for isStory in [ false; true ] do
+    for floorNum in 1 .. 8 do
+      let floor = TowerGenerator.generateFloorWithMode (500 + floorNum) floorNum isStory
+
+      let anchors =
+        floor.Entities
+        |> Map.toList
+        |> List.choose (fun (pt, ent) ->
+          match ent with
+          | EntityEncounter _ -> Some pt
+          | _ -> None)
+
+      Assert.NotEmpty anchors
+
+      let targets = anchors @ [ floor.StairwayLocation ]
+
+      for target in targets do
+        let path = Pathfinding.aStar (walkableAt floor) floor.SpawnLocation target
+        Assert.True(
+          path.IsSome,
+          sprintf "story=%b floor %d: no path from spawn to %A" isStory floorNum target
+        )
+        Assert.Equal(target, List.last path.Value)
+
+[<Fact>]
+let ``different seeds on the same floor produce different tile maps`` () =
+  let a = TowerGenerator.generateFloor 11 3
+  let b = TowerGenerator.generateFloor 12 3
+  Assert.NotEqual<Map<Point, TowerTile>>(a.Tiles, b.Tiles)
+
+[<Fact>]
+let ``the same seed and floor number reproduce an identical tile map`` () =
+  let a = TowerGenerator.generateFloor 2024 4
+  let b = TowerGenerator.generateFloor 2024 4
+  Assert.Equal<Map<Point, TowerTile>>(a.Tiles, b.Tiles)
+  Assert.Equal(a.SpawnLocation, b.SpawnLocation)
+  Assert.Equal(a.StairwayLocation, b.StairwayLocation)
+
+[<Fact>]
+let ``tower floors 2 through 6 field more than ten roaming mobs`` () =
+  // The fixed six-plaza layout could only ever place six grinding mobs per floor.
+  for floorNum in 2 .. 6 do
+    let floor = TowerGenerator.generateFloor 77 floorNum
+    let mobs = grindMobCount floor
+    Assert.True(mobs > 10, sprintf "floor %d had only %d grind mobs" floorNum mobs)
+
+[<Fact>]
+let ``the tutorial floor stays gentle with at most thirty roaming mobs`` () =
+  for seed in [ 1; 42; 4242; 999 ] do
+    let floor = TowerGenerator.generateFloorWithMode seed 1 true
+    let mobs = grindMobCount floor
+    Assert.True(mobs >= 12, sprintf "seed %d tutorial had only %d mobs" seed mobs)
+    Assert.True(mobs <= 30, sprintf "seed %d tutorial flooded the floor with %d mobs" seed mobs)
+
+[<Fact>]
+let ``consecutive floors on one seed are laid out differently`` () =
+  let mutable distinct = 0
+  for floorNum in 1 .. 7 do
+    let a = TowerGenerator.generateFloor 31337 floorNum
+    let b = TowerGenerator.generateFloor 31337 (floorNum + 1)
+    if a.SpawnLocation <> b.SpawnLocation || a.Tiles <> b.Tiles then
+      distinct <- distinct + 1
+
+  Assert.Equal(7, distinct)
+
+[<Fact>]
+let ``a newly entered floor is seen in full circle, then narrows as you walk`` () =
+  let player = TierFactory.createClassLevel CharacterClass.Fighter 36
+  let state = TowerSession.initSession player 42 1
+
+  let arcOf s =
+    (VisionResolver.resolve s.Player s.PlayerPosition s.Facing s.Locomotion EnvironmentalFactors.Default).ArcDegrees
+
+  Assert.Equal(360.0, arcOf state)
+  // One step narrows one focus step, so the shrink is gradual rather than a snap back to the cone.
+  let afterOneStep = arcOf { state with Locomotion = TowerSession.focusOnMove state.Locomotion }
+
+  let walkingArc =
+    arcOf { state with Locomotion = LocomotionState.Walking }
+
+  Assert.True(afterOneStep < 360.0)
+  Assert.True(afterOneStep > walkingArc)
+  Assert.Equal(walkingArc, arcOf { state with Locomotion = TowerSession.focusOnMove (TowerSession.focusOnMove (TowerSession.focusOnMove state.Locomotion)) })
+
+[<Fact>]
+let ``waiting on the map actually reveals more than the walking cone`` () =
+  let player = TierFactory.createClassLevel CharacterClass.Fighter 36
+  // A floor starts with the full circle in view, so the walking cone has to be built explicitly.
+  let state =
+    { TowerSession.initSession player 42 1 with Locomotion = LocomotionState.Walking }
+
+  let walking = TowerSession.updateFov state
+
+  let widened =
+    { walking with
+        Locomotion = TowerSession.focusOnWait (TowerSession.focusOnWait (TowerSession.focusOnWait LocomotionState.Walking)) }
+    |> TowerSession.updateFov
+
+  let fullCircle = TowerSession.focusOnWait (TowerSession.focusOnWait (TowerSession.focusOnWait LocomotionState.Walking))
+  let arc = VisionResolver.resolve widened.Player widened.PlayerPosition widened.Facing fullCircle EnvironmentalFactors.Default
+
+  Assert.Equal(360.0, arc.ArcDegrees)
+  Assert.True(widened.CurrentFloor.Visible.Count > walking.CurrentFloor.Visible.Count)
+  Assert.True(Set.isSubset walking.CurrentFloor.Visible widened.CurrentFloor.Visible)

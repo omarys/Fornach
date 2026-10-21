@@ -26,6 +26,14 @@
     <Compile Include="GroupEngagementTests.fs" />
     <Compile Include="DebugToolingTests.fs" />
     <Compile Include="CombatTacticsTests.fs" />
+    <Compile Include="RepairTests.fs" />
+    <Compile Include="VeteranSwarmTests.fs" />
+    <Compile Include="MentalDefenseTests.fs" />
+    <Compile Include="PursuitPaceTests.fs" />
+    <Compile Include="ChokepointTests.fs" />
+    <Compile Include="StalemateTests.fs" />
+    <Compile Include="BleedRecoveryTests.fs" />
+    <Compile Include="LootConsumableTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

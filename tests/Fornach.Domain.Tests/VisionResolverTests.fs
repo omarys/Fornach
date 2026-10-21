@@ -9,7 +9,7 @@ let private createFighter (stats: (StatId * int) list) =
   Combatant.create (CombatantId.New()) "TestFighter" 100 100 statBlock
 
 [<Fact>]
-let ``Stationary master with high Poise dilates vision to 360 faster than novice``
+let ``Every combatant widens ninety degrees per turn and reaches a full circle after three waits``
   ()
   =
   let master = createFighter [ Poise, 150; Prowess, 100 ]
@@ -18,29 +18,27 @@ let ``Stationary master with high Poise dilates vision to 360 faster than novice
   let facing = Some Direction.East
   let env = EnvironmentalFactors.Default
 
-  // Turn 1 resting:
-  let masterCone1 =
-    VisionResolver.resolve master pos facing (LocomotionState.Stationary 1) env
+  let arcOf combatant locomotion =
+    (VisionResolver.resolve combatant pos facing locomotion env).ArcDegrees
 
-  let noviceCone1 =
-    VisionResolver.resolve novice pos facing (LocomotionState.Stationary 1) env
+  // Narrowed to the walking base before any waiting.
+  let masterWalking = arcOf master LocomotionState.Walking
+  let noviceWalking = arcOf novice LocomotionState.Walking
 
-  Assert.True(masterCone1.ArcDegrees > noviceCone1.ArcDegrees)
+  // The rate is flat: Poise no longer speeds the dilation up, so both widen by exactly 90.
+  Assert.Equal(90.0, arcOf master (LocomotionState.Stationary 1) - masterWalking)
+  Assert.Equal(90.0, arcOf novice (LocomotionState.Stationary 1) - noviceWalking)
+  Assert.Equal(180.0, arcOf master (LocomotionState.Stationary 2) - masterWalking)
 
-  // Turn 2 resting:
-  let masterCone2 =
-    VisionResolver.resolve master pos facing (LocomotionState.Stationary 2) env
+  // Two waits still leave a gap, however disciplined the watcher.
+  Assert.True(arcOf master (LocomotionState.Stationary 2) < 360.0)
+  Assert.True(arcOf novice (LocomotionState.Stationary 2) < 360.0)
 
-  let noviceCone2 =
-    VisionResolver.resolve novice pos facing (LocomotionState.Stationary 2) env
-
-  // Master reaches 360 full awareness in 2 turns and facing becomes None
-  Assert.Equal(360.0, masterCone2.ArcDegrees)
-  Assert.Equal(None, masterCone2.Facing)
-
-  // Novice is still directional
-  Assert.True(noviceCone2.ArcDegrees < 360.0)
-  Assert.Equal(facing, noviceCone2.Facing)
+  // Three waits is a full circle for everyone, and facing stops mattering.
+  let masterFull = VisionResolver.resolve master pos facing (LocomotionState.Stationary 3) env
+  Assert.Equal(360.0, masterFull.ArcDegrees)
+  Assert.Equal(None, masterFull.Facing)
+  Assert.Equal(360.0, arcOf novice (LocomotionState.Stationary 3))
 
 [<Fact>]
 let ``Agile combatant retains wider peripheral vision during sprinting`` () =

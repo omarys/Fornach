@@ -18,9 +18,9 @@ module TacticalAssessmentTests =
     Assert.Equal(StatId.Reflex, assess.PrimaryStat)
     Assert.Equal(240, assess.PrimaryStatValue)
     Assert.Equal("Agility Defense", assess.PrimaryStatRole)
-    // Level-1 Acumen 19 + Intuition 15/4 (3) = 22 vs Composure 150 -> Obscured
+    // Level-1 Acumen 19 + Intuition 34/4 (8) = 27 vs Composure 150 -> Obscured
     Assert.Equal(TacticalInsightLevel.Obscured, assess.InsightLevel)
-    Assert.Equal(19 + 15 / 4, assess.EffectiveAcumen)
+    Assert.Equal(19 + 34 / 4, assess.EffectiveAcumen)
     Assert.Equal(150, assess.TargetComposure)
     Assert.True(assess.Ratio < 0.40)
     Assert.Equal((StatId.Poise, 200), assess.WeakestDefense)
@@ -76,18 +76,18 @@ module TacticalAssessmentTests =
 
   [<Fact>]
   let ``Study Stacks sharpen tactical insight from Obscured to Discerning`` () =
-    let player = StoryBosses.createProloguePlayer "berserker" // Acumen 19 + Intuition 15/4 (3) = 22
+    let player = StoryBosses.createProloguePlayer "berserker" // Acumen 19 + Intuition 34/4 (8) = 27
     let gargoyle = Bestiary.stoneGargoyle.ToCombatant (CombatantId.New())
 
     let initialAssess = TacticalAssessment.assess player gargoyle
     Assert.Equal(TacticalInsightLevel.Obscured, initialAssess.InsightLevel)
 
-    // Add 3 study stacks (+45 effective Acumen: 22 + 45 = 67 / 150 = 0.44 -> Discerning)
+    // Add 3 study stacks (+45 effective Acumen: 27 + 45 = 72 / 150 = 0.48 -> Discerning)
     let studiedPlayer = { player with StudyStacks = 3 }
     let studiedAssess = TacticalAssessment.assess studiedPlayer gargoyle
 
     Assert.Equal(TacticalInsightLevel.Discerning, studiedAssess.InsightLevel)
-    Assert.Equal(67, studiedAssess.EffectiveAcumen)
+    Assert.Equal(72, studiedAssess.EffectiveAcumen)
     Assert.Equal("DISCERNING READ", studiedAssess.Headline)
 
   [<Fact>]

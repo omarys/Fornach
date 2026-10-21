@@ -136,7 +136,7 @@ module StoryTutorialTests =
     Assert.True(boss.Value.Combatant.Level >= 30 && boss.Value.Combatant.Level <= 35, sprintf "Bandit Leader should sit in the level 30-35 band, got %d" boss.Value.Combatant.Level)
 
   [<Fact>]
-  let ``Clearing every floor 1 enemy levels the protagonist into the thirties`` () =
+  let ``Clearing every floor 1 enemy levels the protagonist for floor 2`` () =
     let player = StoryBosses.createProloguePlayer "berserker"
     let state = TowerSession.initSessionWithMode player 42 1 true
     Assert.Equal(1, state.Player.Level)
@@ -150,9 +150,12 @@ module StoryTutorialTests =
 
     let cleared = enemyIds |> List.fold (fun s id -> TowerSession.resolveEnemyDefeat id s) state
 
+    // The tutorial floor carries 2 roaming mobs per chamber (16-24 across seeds), each paying the
+    // flat tutorial bonus, so a completionist clears it in the low forties. The band stays tight
+    // around that so a later density or XP inflation cannot slip through unnoticed.
     Assert.True(
-      cleared.Player.Level >= 30 && cleared.Player.Level <= 40,
-      sprintf "Clearing the tutorial floor should land the protagonist in levels 30-40, got %d" cleared.Player.Level)
+      cleared.Player.Level >= 30 && cleared.Player.Level <= 48,
+      sprintf "Clearing the tutorial floor should land the protagonist in levels 30-48, got %d" cleared.Player.Level)
 
     Assert.Contains("keystone_stage_1", cleared.CollectedKeys)
 

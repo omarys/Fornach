@@ -38,8 +38,14 @@ type TowerRunState =
     Seed: int
     Souls: int
     Trophies: (AlchemicalTrophy * int) list
+    /// Single-use items carried, by kind and count.
+    Consumables: (ConsumableKind * int) list
+    /// Kinds found but not yet revealed by a shrine. Unidentified kinds cannot be used.
+    UnidentifiedConsumables: Set<ConsumableKind>
     DiscoveredEchoes: Set<string>
-    IsStoryMode: bool }
+    IsStoryMode: bool
+    /// Safe steps taken since the last hone; travel hones a weapon every fourth step.
+    SafeStepsSinceHone: int }
 
 module TowerSession =
 
@@ -65,6 +71,145 @@ module TowerSession =
 
   /// Chebyshev radius within which a living enemy takes notice of the player and gives chase
   let aggroRadius = 8
+
+  /// Resting and waiting top out here. Only a shrine restores Health, Morale, Armor or a weapon
+  /// to full, so a long rest can never substitute for finding one.
+  let restRecoveryFraction = 0.80
+
+  /// Number of consecutive waits/steps taken as the player's current focus depth.
+  let private focusDepth (locomotion: LocomotionState) =
+    match locomotion with
+    | LocomotionState.Stationary turns -> Math.Max(0, turns)
+    | _ -> 0
+
+  /// Waiting widens the view one step (VisionResolver dilates the arc per Stationary turn).
+  /// Entering a floor with the whole floor in view: 3 focus turns is 120 + 3*90, i.e. the full circle.
+  let private entryLocomotion = LocomotionState.Stationary 3
+
+  let focusOnWait (locomotion: LocomotionState) : LocomotionState =
+    LocomotionState.Stationary(focusDepth locomotion + 1)
+
+  /// Walking it back narrows the arc a step at a time, at the same rate it widened.
+  let focusOnMove (locomotion: LocomotionState) : LocomotionState =
+    match focusDepth locomotion with
+    | depth when depth > 1 -> LocomotionState.Stationary(depth - 1)
+    | _ -> LocomotionState.Walking
+
+  let private restCap (maximum: int) = max 1 (int (float maximum * restRecoveryFraction))
+
+  /// Heals toward the rest cap, never past it, and never downward.
+  let restRecoverPool (pool: Pool) (amount: int) =
+    let cap = restCap pool.Maximum
+    if pool.Current >= cap then pool else pool.ApplyDelta(min amount (cap - pool.Current))
+
+  /// Repairs toward the rest cap, never past it.
+  let restRepairArmor (armor: ArmorIntegrity) (amount: int) =
+    let cap = restCap armor.Max
+
+    if armor.Current >= cap then armor
+    else { armor with Current = min cap (armor.Current + amount) }
+
+  /// A turn of movement closes one bleed stack, a turn of waiting five.
+  let bleedClosedPerStep = 1
+  let bleedClosedPerRest = 5
+
+  /// Closes this turn's worth of bleeding, floored at zero.
+  let closeBleed (bleedStacks: int) (closed: int) = Math.Max(0, bleedStacks - closed)
+
+  /// Health and Morale cannot regenerate while the wound is open; the pool comes back untouched so
+  /// the caller can say why.
+  let restRecoverPoolWhenWoundClosed (bleedStacks: int) (pool: Pool) (amount: int) =
+    if bleedStacks > 0 then pool else restRecoverPool pool amount
+
+  /// One turn of out-of-combat recovery. Bleeding closes first, and Health and Morale only
+  /// regenerate once that has stopped the wound. Armor is tended either way — gear is maintained
+  /// regardless of what is bleeding.
+  let recoverOutOfCombat (player: Combatant) (bleedClosed: int) (heal: int) (morale: int) (armorRepair: int) =
+    let bleed = closeBleed player.BleedStacks bleedClosed
+
+    { player with
+        BleedStacks = bleed
+        Health = restRecoverPoolWhenWoundClosed bleed player.Health heal
+        Morale = restRecoverPoolWhenWoundClosed bleed player.Morale morale
+        Armor = restRepairArmor player.Armor armorRepair }
+
+  /// One step short of Pristine: resting hones a ruined weapon but cannot restore it.
+  let restHoneWeapon (weapon: WeaponCondition) =
+    match WeaponCondition.repair weapon with
+    | WeaponCondition.Pristine -> weapon
+    | honed -> honed
+
+  /// Recovery on the move: every fourth safe step (the same condition armor repair uses) hones a
+  /// weapon one notch, and never past Notched. The counter keeps counting while the weapon is at the
+  /// cap — the fourth step is spent, not banked.
+  let honeOnSafeStep (state: TowerRunState) : TowerRunState =
+    let steps = state.SafeStepsSinceHone + 1
+
+    if steps < 4 then
+      { state with SafeStepsSinceHone = steps }
+    else
+      { state with
+          SafeStepsSinceHone = 0
+          Player = { state.Player with WeaponCondition = restHoneWeapon state.Player.WeaponCondition } }
+
+  /// Uses one identified consumable. An unread pack cannot be used — only a shrine reveals it — and
+  /// an empty row is refused rather than silently ignored.
+  let useConsumable (kind: ConsumableKind) (state: TowerRunState) : Result<TowerRunState, string> =
+    if state.UnidentifiedConsumables.Contains kind then
+      Error(sprintf "The %s is still unidentified. A shrine can reveal what it is." kind.Name)
+    elif Consumables.count kind state.Consumables = 0 then
+      Error(sprintf "No %s in the pack." kind.Name)
+    else
+      Ok
+        { state with
+            Player = Consumables.apply kind state.Player
+            Consumables = Consumables.remove kind state.Consumables }
+
+  /// A shrine's blessing, in order: the full repair, then every carried kind is revealed, then every
+  /// carried rare material is worked into the player and spent. Repeat visits are harmless: the pack
+  /// is already revealed and the materials are already gone. Returns the lines the caller chronicles.
+  let shrineBlessing (state: TowerRunState) : TowerRunState * string list =
+    let repaired =
+      { state.Player with
+          Health = Pool.Create state.Player.Health.Maximum
+          Morale = Pool.Create state.Player.Morale.Maximum
+          Armor = ArmorIntegrity.Create state.Player.Armor.Max
+          WeaponCondition = WeaponCondition.Pristine
+          BleedStacks = 0
+          LimbDebuff = 0
+          Meters = StatusMeters.Zero }
+
+    let revealed = state.UnidentifiedConsumables
+
+    let mutable player = repaired
+    let mutable bag = state.Consumables
+    let mutable spent = []
+
+    for kind in [ WeaponMaterial; MentalMaterial ] do
+      let carried = Consumables.count kind bag
+
+      if carried > 0 then
+        for _ in 1..carried do
+          player <- Consumables.apply kind player
+
+        bag <- Consumables.clear kind bag
+        spent <- (kind, carried) :: spent
+
+    let summary =
+      [ if not revealed.IsEmpty then
+          sprintf "The shrine reveals: %s." (revealed |> Seq.map (fun k -> k.Name) |> String.concat ", ")
+        for (kind, carried) in List.rev spent do
+          let stat = Consumables.materialStat kind player.Class
+
+          match stat with
+          | Some s -> sprintf "The shrine works %d %s into your gear (+%d %A each)." carried kind.Name Consumables.materialUpgrade s
+          | None -> sprintf "The shrine spends %d %s." carried kind.Name ]
+
+    { state with
+        Player = player
+        Consumables = bag
+        UnidentifiedConsumables = Set.empty },
+    summary
 
   /// Foes scale to the player the moment they engage, so a guardian authored for tower floor 6
   /// (level 185) is not fielded against a level 36 player. The authored state is untouched;
@@ -118,7 +263,7 @@ module TowerSession =
   let combatCondition (c: Combatant) : ArmorIntegrity * WeaponCondition =
     c.Armor, c.WeaponCondition
 
-  /// Restore a combatant's pre-fight armor and weapon condition, clearing any in-combat wear.
+  /// Puts a combatant's armor and weapon condition back to a captured pair.
   let restoreCombatCondition (armor: ArmorIntegrity) (weapon: WeaponCondition) (c: Combatant) : Combatant =
     { c with Armor = armor; WeaponCondition = weapon }
 
@@ -132,10 +277,19 @@ module TowerSession =
         | other -> other)
     { state with CurrentFloor = { state.CurrentFloor with Entities = updatedEntities } }
 
-  /// The enemy phase of a turn: aggroed living enemies pursue the player one tile at a time in
-  /// deterministic order (nearest first, ties by Id), then any enemies adjacent to the player
-  /// raise a group engagement. Bosses and defeated enemies never move; enemies never stack or
-  /// step onto the player's tile.
+  /// A pursuer's tiles per turn relative to the player, from the Finesse gap: at parity the chase
+  /// keeps its historical one tile per turn, a nimbler player outpaces it, a slower one is run down.
+  let paceOf (playerFinesse: int) (enemyFinesse: int) =
+    Math.Clamp(1.0 + float (enemyFinesse - playerFinesse) / 200.0, 0.4, 1.6)
+
+  /// A pursuer may bank up to two steps' worth, so a fast one can close with two tiles in a turn
+  /// while a long spell with nowhere to step still cannot buy more than that.
+  let private maxChaseCharge = 2.0
+
+  /// The enemy phase of a turn: aggroed living enemies pursue the player at the pace their Finesse
+  /// gap buys in deterministic order (nearest first, ties by Id), then any enemies adjacent to the
+  /// player raise a group engagement. Bosses and defeated enemies never move; enemies never stack
+  /// or step onto the player's tile.
   let stepEnemies (state: TowerRunState) : TowerRunState * TowerEvent list =
     let orderedAggro =
       state.CurrentFloor.Entities
@@ -149,6 +303,8 @@ module TowerSession =
         && Los.check state.CurrentFloor.IsOpaque pt state.PlayerPosition)
       |> List.sortBy (fun (pt, e) -> Distance.chebyshev pt state.PlayerPosition, e.Id)
 
+    let playerFinesse = state.Player.Stats.Get StatId.Finesse
+
     let mutable workingState = state
 
     for (_, enemy) in orderedAggro do
@@ -159,29 +315,58 @@ module TowerSession =
         |> List.tryPick (fun (p, ent) -> match ent with EntityEnemy e when e.Id = enemy.Id -> Some p | _ -> None)
 
       match currentPt with
-      | Some pt when Distance.chebyshev pt workingState.PlayerPosition > 1 && not (enemy.Id.StartsWith("boss_")) ->
-        let isPassable (p: Point) =
-          p = workingState.PlayerPosition
-          || ((match Map.tryFind p workingState.CurrentFloor.Tiles with
-               | Some t -> t.IsWalkable
-               | None -> false)
-              && (match Map.tryFind p workingState.CurrentFloor.Entities with
-                  | Some ent -> not ent.BlocksMovement
-                  | None -> true))
-
-        match Pathfinding.aStar isPassable pt workingState.PlayerPosition with
-        | Some (_ :: step :: _) when
-            (match Map.tryFind step workingState.CurrentFloor.Entities with
-             | Some ent -> not ent.BlocksMovement
-             | None -> true) ->
-          let vacated = { workingState.CurrentFloor with Entities = Map.remove pt workingState.CurrentFloor.Entities }
-          let movedFloor = { vacated with Entities = Map.add step (EntityEnemy enemy) vacated.Entities }
-          workingState <- { workingState with CurrentFloor = movedFloor }
-          RuntimeLog.write (sprintf "enemy %s: %A -> %A (pursuit)" enemy.Id pt step)
-        | _ ->
-          RuntimeLog.write (sprintf "enemy %s: holds at %A (no path)" enemy.Id pt)
       | Some pt ->
-        RuntimeLog.write (sprintf "enemy %s: holds at %A (adjacent or boss)" enemy.Id pt)
+        let pace = paceOf playerFinesse (enemy.Combatant.Stats.Get StatId.Finesse)
+        let mutable charge = min maxChaseCharge (enemy.ChaseCharge + pace)
+        let mutable here = pt
+        let mutable blocked = false
+
+        if enemy.Id.StartsWith("boss_") then
+          RuntimeLog.write (sprintf "enemy %s: holds at %A (boss)" enemy.Id pt)
+        elif Distance.chebyshev pt workingState.PlayerPosition = 1 then
+          // Pinned against the player it is already engaged: the chase is over, so the charge it
+          // arrived with is spent rather than banked for a burst the moment the player breaks away.
+          workingState <- updateEnemy { enemy with ChaseCharge = 0.0 } workingState
+          RuntimeLog.write (sprintf "enemy %s: holds at %A (adjacent)" enemy.Id pt)
+        else
+          // Spend the banked charge one tile at a time. Two steps is the most a turn can hold, so a
+          // pace above 1.0 buys real ground instead of being flattened to one tile by the bank cap.
+          let mutable stepsLeft = 2
+
+          while not blocked
+                && stepsLeft > 0
+                && charge >= 1.0
+                && Distance.chebyshev here workingState.PlayerPosition > 1 do
+            let isPassable (p: Point) =
+              p = workingState.PlayerPosition
+              || ((match Map.tryFind p workingState.CurrentFloor.Tiles with
+                   | Some t -> t.IsWalkable
+                   | None -> false)
+                  && (match Map.tryFind p workingState.CurrentFloor.Entities with
+                      | Some ent -> not ent.BlocksMovement
+                      | None -> true))
+
+            match Pathfinding.aStar isPassable here workingState.PlayerPosition with
+            | Some (_ :: step :: _) when
+                (match Map.tryFind step workingState.CurrentFloor.Entities with
+                 | Some ent -> not ent.BlocksMovement
+                 | None -> true) ->
+              let moved = { enemy with ChaseCharge = charge - 1.0 }
+              let vacated = { workingState.CurrentFloor with Entities = Map.remove here workingState.CurrentFloor.Entities }
+              workingState <- { workingState with CurrentFloor = { vacated with Entities = Map.add step (EntityEnemy moved) vacated.Entities } }
+              RuntimeLog.write (sprintf "enemy %s: %A -> %A (pursuit)" enemy.Id here step)
+              charge <- charge - 1.0
+              stepsLeft <- stepsLeft - 1
+              here <- step
+            | _ ->
+              blocked <- true
+              RuntimeLog.write (sprintf "enemy %s: holds at %A (no path)" enemy.Id here)
+
+          if here = pt then
+            // Nowhere to step: keep what it has banked for the turn the way clears.
+            workingState <- updateEnemy { enemy with ChaseCharge = charge } workingState
+            if not blocked then
+              RuntimeLog.write (sprintf "enemy %s: holds at %A (charging %.2f)" enemy.Id pt charge)
       | None ->
         RuntimeLog.write (sprintf "enemy %s: position not found" enemy.Id)
 
@@ -192,6 +377,20 @@ module TowerSession =
       else [ TowerEvent.GroupCombatTriggered adjacent ]
 
     workingState, events
+
+  /// One enemy phase taken from inside an ongoing group fight: pursuers keep closing and whoever
+  /// ends up adjacent joins that fight. The events are discarded on purpose -- a
+  /// GroupCombatTriggered raised here would re-enter the fight handler from within itself. Ids in
+  /// alreadyEngaged are already in the fight and are not reported twice; the returned enemies are
+  /// level-clamped by adjacentEnemies, exactly like the opening engagement.
+  let reinforceFromPursuit (state: TowerRunState) (alreadyEngaged: string list) : TowerRunState * TowerEnemy list =
+    let advanced, _ = stepEnemies state
+
+    let joined =
+      adjacentEnemies advanced
+      |> List.filter (fun e -> not (List.contains e.Id alreadyEngaged))
+
+    advanced, joined
 
   /// Completes an active quest on the floor and awards its reward
   let completeQuest (questId: string) (state: TowerRunState) : TowerRunState =
@@ -217,7 +416,7 @@ module TowerSession =
         CurrentFloor = floor
         PlayerPosition = floor.SpawnLocation
         Facing = Some Direction.North
-        Locomotion = LocomotionState.Walking
+        Locomotion = entryLocomotion
         CollectedKeys = Set.empty
         CompletedQuests = Set.empty
         InventoryItems = player.EquippedItems
@@ -225,8 +424,11 @@ module TowerSession =
         Seed = seed
         Souls = 0
         Trophies = []
+        Consumables = []
+        UnidentifiedConsumables = Set.empty
         DiscoveredEchoes = Set.empty
-        IsStoryMode = isStory }
+        IsStoryMode = isStory
+        SafeStepsSinceHone = 0 }
 
     updateFov initial
 
@@ -244,7 +446,7 @@ module TowerSession =
           CurrentFloor = nextFloor
           PlayerPosition = nextFloor.SpawnLocation
           Facing = Some Direction.North
-          Locomotion = LocomotionState.Walking
+          Locomotion = entryLocomotion
           MessageLog = sprintf "Ascended to Floor %d: %s!" nextFloorNum nextFloor.Theme.Name :: state.MessageLog }
 
     RuntimeLog.section (sprintf "FLOOR %d" nextFloorNum)
@@ -259,7 +461,10 @@ module TowerSession =
   let stepPlayer (dir: Direction) (state: TowerRunState) : TowerRunState * TowerEvent list =
     let targetPt = state.PlayerPosition + Direction.toDelta dir
     let mutable events = []
-    let mutable nextState = { state with Facing = Some dir }
+    let mutable nextState =
+      { state with
+          Facing = Some dir
+          Locomotion = focusOnMove state.Locomotion }
 
     match Map.tryFind targetPt state.CurrentFloor.Tiles with
     | None ->
@@ -354,31 +559,17 @@ module TowerSession =
 
         updatedState, events
 
-      | Some (EntityShrine shrine) when not shrine.IsUsed ->
-        let updatedShrine = { shrine with IsUsed = true }
-        let updatedEntities = Map.add targetPt (EntityShrine updatedShrine) state.CurrentFloor.Entities
-        let updatedFloor = { state.CurrentFloor with Entities = updatedEntities }
-
-        // Blessing: fully restore health and morale, repair armor, restore weapon, purge debuffs, reset recklessness to 0
-        let blessedPlayer =
-          { state.Player with
-              Health = Pool.Create state.Player.Health.Maximum
-              Morale = Pool.Create state.Player.Morale.Maximum
-              Armor = ArmorIntegrity.Create state.Player.Armor.Max
-              WeaponCondition = WeaponCondition.Pristine
-              BleedStacks = 0
-              LimbDebuff = 0
-              Meters = StatusMeters.Zero }
+      // A shrine is never consumed: the tile stays on the map and blesses every visit, reveal and
+      // rare-material work included.
+      | Some (EntityShrine shrine) ->
+        let blessedState, blessingSummary = shrineBlessing nextState
+        let logMsg = sprintf "Communed with %s: %s" shrine.Name shrine.BlessingDescription
 
         events <- [ TowerEvent.ShrineActivated shrine ]
-        let logMsg = sprintf "Communed with %s: %s" shrine.Name shrine.BlessingDescription
-        let updatedState =
-          { nextState with
-              Player = blessedPlayer
-              CurrentFloor = updatedFloor
-              MessageLog = logMsg :: nextState.MessageLog }
 
-        updatedState, events
+        { blessedState with
+            MessageLog = blessingSummary @ (logMsg :: nextState.MessageLog) },
+        events
 
       // --- Dynamic Encounters (ADR 0004 Phase 3) ---
       | Some (EntityEncounter enc) ->
@@ -436,7 +627,8 @@ module TowerSession =
               Name = ambush.Pack.Leader.Name
               Combatant = leaderCombatant
               DropsKeyId = None
-              IsDefeated = false }
+              IsDefeated = false
+              ChaseCharge = 0.0 }
           match spawnCandidates with
           | spawnPos :: rest ->
             updatedEntities <- Map.add spawnPos (EntityEnemy leaderEnemy) updatedEntities
@@ -456,7 +648,8 @@ module TowerSession =
                   Name = minionTemplate.Name
                   Combatant = minionCombatant
                   DropsKeyId = None
-                  IsDefeated = false }
+                  IsDefeated = false
+                  ChaseCharge = 0.0 }
               updatedEntities <- Map.add spawnPos (EntityEnemy minionEnemy) updatedEntities
               spawnedEnemies <- minionEnemy :: spawnedEnemies
               spawnCandidates <- rest
@@ -624,15 +817,27 @@ module TowerSession =
   let applyAltarSacrifice (altarPt: Point) (state: TowerRunState) : Result<TowerRunState, string> =
     match Map.tryFind altarPt state.CurrentFloor.Entities with
     | Some (EntityEncounter (SacrificialAltar altar)) when not altar.IsUsed ->
-      // 1. Check & Apply Cost
+      // 1. Check & Apply Cost. The amount is a percentage of the maximum, read off the player at
+      // interaction time: a flat toll against thousand-point pools was free, and could never bite past
+      // the eighty percent rest cap.
+      let percentOf (maximum: int) (pct: int) =
+        int (Math.Round(float maximum * float pct / 100.0, MidpointRounding.AwayFromZero))
+
       let costPlayer =
         match altar.Cost with
-        | SacrificeHealth amt ->
-          { state.Player with Health = state.Player.Health.ApplyDelta -amt }
-        | SacrificeMorale amt ->
-          { state.Player with Morale = state.Player.Morale.ApplyDelta -amt }
-        | ShredArmor amt ->
-          { state.Player with Armor = state.Player.Armor.Shred amt }
+        | SacrificeHealth pct ->
+          let cost = percentOf state.Player.Health.Maximum pct
+          // A sacrifice wounds but never kills: at least one point of Health is left standing.
+          { state.Player with
+              Health =
+                { state.Player.Health with
+                    Current = Math.Max(1, state.Player.Health.Current - cost) } }
+        | SacrificeMorale pct ->
+          { state.Player with
+              Morale = state.Player.Morale.ApplyDelta -(percentOf state.Player.Morale.Maximum pct) }
+        | ShredArmor pct ->
+          { state.Player with
+              Armor = state.Player.Armor.Shred(percentOf state.Player.Armor.Max pct) }
 
       // 2. Apply Reward
       let mutable rewardedPlayer = costPlayer
@@ -805,6 +1010,8 @@ module TowerSession =
     let mutable newKeys = state.CollectedKeys
     let mutable newSouls = state.Souls
     let mutable newTrophies = state.Trophies
+    let mutable newConsumables = state.Consumables
+    let mutable newUnidentified = state.UnidentifiedConsumables
     let mutable newXp = 0
     let mutable logMessages = state.MessageLog
 
@@ -850,7 +1057,8 @@ module TowerSession =
       match monsterTemplateOpt with
       | Some template ->
         let rng = Random(state.Seed + state.CurrentFloor.FloorNumber * 31 + newSouls)
-        let soulGain = rng.Next(template.Loot.MinSouls, template.Loot.MaxSouls + 1)
+        let roll = rng.Next(template.Loot.MinSouls, template.Loot.MaxSouls + 1)
+        let soulGain = template.Loot.SoulsFor roll
         newSouls <- newSouls + soulGain
         let soulMsg = sprintf "Harvested %d Souls from %s!" soulGain e.Name
 
@@ -867,11 +1075,31 @@ module TowerSession =
             sprintf " Acquired rare trophy: [%s]!" trophy.Name
           | _ -> ""
 
-        logMessages <- (soulMsg + trophyMsg) :: logMessages
+        let consumableMsg =
+          match Consumables.rollDrop (rng.Next 100) template.Loot.Category with
+          | Some kind ->
+            newConsumables <- Consumables.add kind newConsumables
+            newUnidentified <- newUnidentified.Add kind
+            sprintf " Salvaged a %s." kind.Name
+          | None -> ""
+
+        logMessages <- (soulMsg + trophyMsg + consumableMsg) :: logMessages
       | None ->
+        // Humanoid opposition built from a class (bandits, scouts) carries no bestiary entry, so its
+        // loot category is not authored anywhere: it is always Humanoid.
+        let rng = Random(state.Seed + state.CurrentFloor.FloorNumber * 31 + newSouls)
         let standardSouls = e.Combatant.Level * 15
         newSouls <- newSouls + standardSouls
-        logMessages <- sprintf "Acquired %d Souls from the fallen foe." standardSouls :: logMessages
+
+        let consumableMsg =
+          match Consumables.rollDrop (rng.Next 100) LootCategory.Humanoid with
+          | Some kind ->
+            newConsumables <- Consumables.add kind newConsumables
+            newUnidentified <- newUnidentified.Add kind
+            sprintf " Salvaged a %s." kind.Name
+          | None -> ""
+
+        logMessages <- sprintf "Acquired %d Souls from the fallen foe.%s" standardSouls consumableMsg :: logMessages
     | None -> ()
 
     match droppedKeyOpt with
@@ -907,4 +1135,6 @@ module TowerSession =
         CollectedKeys = newKeys
         Souls = newSouls
         Trophies = newTrophies
+        Consumables = newConsumables
+        UnidentifiedConsumables = newUnidentified
         MessageLog = xpMessages @ logMessages }

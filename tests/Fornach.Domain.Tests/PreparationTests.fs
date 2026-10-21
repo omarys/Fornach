@@ -480,8 +480,10 @@ module PreparationTests =
     Assert.True(margin >= 2)
 
   [<Fact>]
-  let ``Duel: Master Inquisitor triggers Synaptic Brand for double Morale damage against Master Warrior`` () =
-    let inquisitor = TierFactory.createClassTier CharacterClass.Mage Master
+  let ``Duel: GrandMaster Inquisitor triggers Synaptic Brand for double Morale damage against Master Warrior`` () =
+    // GrandMaster attacker: a same-tier mental attack now whiffs against a Master Warrior's raised
+    // mental defence, and Synaptic Brand can only detonate off a strike that actually lands.
+    let inquisitor = TierFactory.createClassTier CharacterClass.Mage GrandMaster
     let warrior = TierFactory.createClassTier CharacterClass.Warrior Master
     let roller = fixedRoller 6 // ensures critical hit
 

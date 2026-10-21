@@ -83,7 +83,7 @@ module CombatLogger =
     | CombatEvent.FormStabilized (_, drained, gained) ->
       sprintf "Form Stabilized: drained %d Recklessness, gained %d Study Stacks" drained gained
     | CombatEvent.BreathStabilized (_, summary, morale) ->
-      sprintf "Steady Breathing: %s (+%d Morale)" summary morale
+      sprintf "Steady Form: %s (+%d Morale)" summary morale
     | CombatEvent.CollapseRecovered _ ->
       "Collapse Recovered: All strain meters vented below critical thresholds; collapsed state cleared."
     | CombatEvent.ComboReset (_, reason) ->

@@ -51,12 +51,9 @@ module VisionResolver =
         let agilityBonus = float (reflex + finesse) / 6.0
         Math.Min(110.0, 60.0 + agilityBonus)
       | LocomotionState.Stationary turnsResting ->
-        // Base stationary starts at 120° and dilates outward with each turn resting.
-        // Discipline (Poise) is the primary governor: high Poise expands awareness rapidly.
-        // (e.g. Poise 20 -> +55°/turn; Poise 100 -> +95°/turn; Poise 150 -> +120°/turn)
-        let dilationRate = 45.0 + (float poise / 2.0)
-        let expanded = 120.0 + (float turnsResting * dilationRate)
-        Math.Min(360.0, expanded)
+        // Every turn spent waiting widens the arc by 45 degrees to each side -- 90 total -- until the
+        // full circle. The rate is flat: waiting is worth the same to everyone regardless of Poise.
+        Math.Min(360.0, 120.0 + (float turnsResting * 90.0))
 
     // 2. Discipline Vector Combat Tunnel-Vision Resistance
     // High Poise and Prowess maintain a wider viewing angle under pressure

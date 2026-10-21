@@ -152,6 +152,22 @@ module ActionResolver =
             Health = updatedPool
             Armor = updatedArmor }
 
+      // Stalemate breaker: a blow that soak (armor, enrage, carapace) leaves at the 1-damage floor
+      // still opens a wound, so a wear-vs-wear grind resolves through the bleed tick instead of
+      // turn count. A target already bleeding is not stacked again by the same floor.
+      let floored =
+        postEnrageAmount > 0
+        && postEnrageAmount - absorbed <= 1
+        && updatedTarget.BleedStacks = 0
+
+      let bledTarget = if floored then Combatant.addBleed 1 updatedTarget else updatedTarget
+
+      let floorEvts =
+        if floored then
+          [ CombatEvent.BleedApplied(target.Id, 1, bledTarget.BleedStacks) ]
+        else
+          []
+
       let evt =
         { TargetId = target.Id
           Plane = Physical
@@ -161,7 +177,7 @@ module ActionResolver =
           IsCritical = isCrit
           IsArmorCompromised = updatedArmor.IsShredded || isCrit }
 
-      updatedTarget, evt, (wardEvts @ shrugEvts)
+      bledTarget, evt, (wardEvts @ floorEvts @ shrugEvts)
 
     | Mental ->
       // Berserk Tincture Enrage: unyielding blood frenzy deadens psychological trauma, shrugging off mental shocks
@@ -419,8 +435,13 @@ module ActionResolver =
           )
           :: events
 
-        // Critical vital opening inflicts stacking bleed and targets ligaments
-        let bleedStacksToAdd = 2
+        // Critical vital opening inflicts stacking bleed and targets ligaments. A wider opening cuts
+        // deeper, and armor shredded to nothing no longer holds the wound closed: a standard cut is a
+        // couple of stacks, an arterial one is several at once.
+        let slash = 2 + openingBonus / 50
+
+        let bleedStacksToAdd =
+          if currentTarget.Armor.IsShredded then slash * 2 else slash
         currentTarget <- currentTarget |> Combatant.addBleed bleedStacksToAdd
         events <- CombatEvent.BleedApplied(currentTarget.Id, bleedStacksToAdd, currentTarget.BleedStacks) :: events
 
@@ -487,12 +508,18 @@ module ActionResolver =
 
     match reset with
     | SteadyForm ->
+      // Merged reset: bleeds all seven strain meters, restores Morale, and banks Study stacks.
       let poise = resetActor.GetStat Poise
+      let composure = resetActor.GetStat Composure
       let prowess = resetActor.GetStat Prowess
-      let reckDrain = poise + 10
-      let exhaustDrain = 15 + (poise / 4)
-      let overwhelmDrain = 15 + (poise / 4)
-      let frustrateDrain = 15 + (poise / 4)
+      let reckDrain = 20 + (poise + composure) / 6
+      let exhaustDrain = 20 + (poise / 4)
+      let overwhelmDrain = 20 + (poise / 4)
+      let frustrateDrain = 25 + (poise + composure) / 5
+      let fatigueDrain = 20 + (composure / 4)
+      let confusionDrain = 25 + (composure / 3)
+      let provokeDrain = 20 + (composure / 4)
+      let moraleRestore = 15 + (composure / 4)
       let studyGain = Math.Clamp(Math.Max(1, prowess / 4), 1, 6)
 
       let updatedActor =
@@ -502,7 +529,11 @@ module ActionResolver =
               Recklessness = m.Recklessness - reckDrain
               Exhaustion = m.Exhaustion - exhaustDrain
               Overwhelm = m.Overwhelm - overwhelmDrain
-              Frustration = m.Frustration - frustrateDrain })
+              Frustration = m.Frustration - frustrateDrain
+              CognitiveFatigue = m.CognitiveFatigue - fatigueDrain
+              Confusion = m.Confusion - confusionDrain
+              Provoke = m.Provoke - provokeDrain })
+        |> fun a -> { a with Morale = a.Morale.ApplyDelta moraleRestore }
         |> Combatant.addStudyStacks studyGain
         |> Combatant.stabilizeCollapse
 
@@ -511,9 +542,17 @@ module ActionResolver =
           [ CombatEvent.CollapseRecovered actor.Id ]
         else []
 
+      let summary =
+        sprintf "Vented %d Recklessness, %d Exhaustion, %d Overwhelm, %d Frustration, %d Fatigue, %d Confusion, %d Provoke"
+          reckDrain exhaustDrain overwhelmDrain frustrateDrain fatigueDrain confusionDrain provokeDrain
+
       { Actor = updatedActor
         Target = target
-        Events = [ resetEvt; CombatEvent.FormStabilized(actor.Id, reckDrain, studyGain) ] @ collapseEvts
+        Events =
+          [ resetEvt
+            CombatEvent.FormStabilized(actor.Id, reckDrain, studyGain)
+            CombatEvent.BreathStabilized(actor.Id, summary, moraleRestore) ]
+          @ collapseEvts
         Contest = None }
 
     | RaiseShield ->
@@ -586,46 +625,6 @@ module ActionResolver =
       { Actor = updatedActor
         Target = target
         Events = [ resetEvt; CombatEvent.FormStabilized(actor.Id, reckDrain, studyGain) ] @ wardEvts @ collapseEvts
-        Contest = None }
-
-    | SteadyBreathing ->
-      let poise = resetActor.GetStat Poise
-      let composure = resetActor.GetStat Composure
-      let reckDrain = 20 + (poise + composure) / 6
-      let exhaustDrain = 20 + (poise / 4)
-      let overwhelmDrain = 20 + (poise / 4)
-      let frustrateDrain = 25 + (poise + composure) / 5
-      let fatigueDrain = 20 + (composure / 4)
-      let confusionDrain = 25 + (composure / 3)
-      let provokeDrain = 20 + (composure / 4)
-      let moraleRestore = 15 + (composure / 4)
-
-      let updatedActor =
-        resetActor
-        |> Combatant.updateMeters (fun m ->
-          { m with
-              Recklessness = m.Recklessness - reckDrain
-              Exhaustion = m.Exhaustion - exhaustDrain
-              Overwhelm = m.Overwhelm - overwhelmDrain
-              Frustration = m.Frustration - frustrateDrain
-              CognitiveFatigue = m.CognitiveFatigue - fatigueDrain
-              Confusion = m.Confusion - confusionDrain
-              Provoke = m.Provoke - provokeDrain })
-        |> fun a -> { a with Morale = a.Morale.ApplyDelta moraleRestore }
-        |> Combatant.stabilizeCollapse
-
-      let collapseEvts =
-        if CollapseState.isCollapsed resetActor.Collapse && not (CollapseState.isCollapsed updatedActor.Collapse) then
-          [ CombatEvent.CollapseRecovered actor.Id ]
-        else []
-
-      let summary =
-        sprintf "Vented %d Recklessness, %d Exhaustion, %d Overwhelm, %d Frustration, %d Fatigue, %d Confusion, %d Provoke"
-          reckDrain exhaustDrain overwhelmDrain frustrateDrain fatigueDrain confusionDrain provokeDrain
-
-      { Actor = updatedActor
-        Target = target
-        Events = [ resetEvt; CombatEvent.BreathStabilized(actor.Id, summary, moraleRestore) ] @ collapseEvts
         Contest = None }
 
   let private resolveShiftStance (newStance: CombatStance) (actor: Combatant) (target: Combatant) : ActionResult =
@@ -2234,9 +2233,13 @@ module ActionResolver =
       let hasAbjurerWard =
         currentTarget.Class = CharacterClass.Mage
         && (wardEvts |> List.exists (function CombatEvent.ArcaneWardAbsorbed _ -> true | _ -> false))
-      if (hasRetributionAegis || hasAegisLattice || hasAbjurerWard) && baseRawDmg > 0 then
+      if (hasRetributionAegis || hasAegisLattice || hasAbjurerWard) && dmgEvt.Amount > 0 then
+        // Reflect what the ward actually stopped at the pool, not the attacker's pre-mitigation raw
+        // output: a champion striking a far weaker abjurer was reflecting its own overwhelming power
+        // back at itself as unmitigated Mental damage, which drained a GrandMaster's Morale in three
+        // rounds against level-one mages.
         let reflectRatio = if hasRetributionAegis || hasAegisLattice then 0.50 else 0.25
-        let reflectDmg = Math.Max(12, int (Math.Round(float baseRawDmg * reflectRatio)))
+        let reflectDmg = Math.Max(12, int (Math.Round(float dmgEvt.Amount * reflectRatio)))
         let frustSpike = if hasRetributionAegis || hasAegisLattice then 15 else 10
         let actorAfterReflect, reflectDmgEvt, reflectWardEvts = applyDamage Mental reflectDmg false currentActor
         currentActor <-

@@ -168,27 +168,31 @@ let ``Grandmaster Mage fends off Novice Warrior with zero fatigue drain`` () =
   Assert.Equal(0, result.Target.Meters.CognitiveFatigue.Value)
 
 [<Fact>]
-let ``Physical archetypes receive thematic mental boosts and mages receive poise`` () =
+let ``Physical archetypes all carry real mental defence and keep only their offence off-plane`` () =
   let level = 200 // GrandMaster tier
   let gmRogue = TierFactory.createClassLevel CharacterClass.Rogue level
   let gmWarrior = TierFactory.createClassLevel CharacterClass.Warrior level
   let gmSoldier = TierFactory.createClassLevel CharacterClass.Soldier level
   let gmMage = TierFactory.createClassLevel CharacterClass.Mage level
 
-  // Agility archetype: boosted Intuition (offDef = 420) and Acuity (offOff = 317)
-  Assert.Equal(420, gmRogue.GetStat Intuition)
+  // Mental defence is no longer a dump stat for physical archetypes: Resolve, Intuition and Composure
+  // all sit at the secondary tier (631 at GrandMaster) for every one of them. Only the off-plane
+  // *offence* stays deliberately low, which is the trade-off that survived the class reduction.
+  for fighter in [ gmRogue; gmWarrior; gmSoldier ] do
+    Assert.Equal(631, fighter.GetStat Resolve)
+    Assert.Equal(631, fighter.GetStat Intuition)
+    Assert.Equal(631, fighter.GetStat Composure)
+    Assert.Equal(214, fighter.GetStat Intellect)
+
+  // Agility archetype: Acuity is its off-plane offence (offOff = 317)
   Assert.Equal(317, gmRogue.GetStat Acuity)
-  Assert.Equal(214, gmRogue.GetStat Composure)
 
-  // Power archetype: boosted Composure (offDef = 420) and Acumen (offOff = 317)
-  Assert.Equal(420, gmWarrior.GetStat Composure)
+  // Power archetype: Acumen is its off-plane offence
   Assert.Equal(317, gmWarrior.GetStat Acumen)
-  Assert.Equal(214, gmWarrior.GetStat Intuition)
 
-  // Discipline archetype: boosted Intuition (offDef = 420) and Resolve (offDef = 420)
-  Assert.Equal(420, gmSoldier.GetStat Intuition)
-  Assert.Equal(420, gmSoldier.GetStat Resolve)
+  // Discipline archetype: neither mental offence is developed
   Assert.Equal(214, gmSoldier.GetStat Acuity)
+  Assert.Equal(214, gmSoldier.GetStat Acumen)
 
   // Magic user: physical stat growth stopped developing after level 49; physical defense boosted by spell armor (80% at GM tier)
   Assert.Equal(63, gmMage.GetStat Force) // Physical offense stopped developing after level 49

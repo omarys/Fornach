@@ -17,8 +17,8 @@ let private mage () =
 
 [<Fact>]
 let ``mental pressure sends a physical fighter to a recovery that can actually drain it`` () =
-  // SteadyForm drains neither CognitiveFatigue nor Confusion nor Provoke, so choosing it here
-  // would re-trip the gate forever and the fighter would never attack again.
+  // SteadyForm now vents all seven strain meters, so this gate can no longer strand a fighter;
+  // CenterMind still routes mental pressure because it also banks Insight and restores the ward.
   let pressured =
     fighter ()
     |> Combatant.updateMeters (fun m ->
@@ -64,8 +64,8 @@ let ``centering the mind clears the fatigue that steady form cannot touch`` () =
   )
 
 [<Fact>]
-let ``steady form genuinely cannot drain cognitive fatigue`` () =
-  // Pins the premise of the fix: if this ever starts draining, the AI branch can be simplified.
+let ``steady form drains cognitive fatigue since the two resets were merged`` () =
+  // Pins the merged contract: the single recovery action vents every strain meter, mental included.
   let roller: DiceRoller = fun lo hi -> (lo + hi) / 2
 
   let pressured =
@@ -77,4 +77,7 @@ let ``steady form genuinely cannot drain cognitive fatigue`` () =
   let before = pressured.Meters.CognitiveFatigue.Value
   let after = ActionResolver.resolve roller (ActionIntent.RecoveryAction DefensiveReset.SteadyForm) pressured (mage ())
 
-  Assert.Equal(before, after.Actor.Meters.CognitiveFatigue.Value)
+  Assert.True(
+    after.Actor.Meters.CognitiveFatigue.Value < before,
+    sprintf "fatigue stayed at %d" after.Actor.Meters.CognitiveFatigue.Value
+  )

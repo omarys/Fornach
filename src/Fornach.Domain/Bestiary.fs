@@ -9,12 +9,41 @@ type AlchemicalTrophy =
     Description: string
     EssenceValue: int }
 
+/// What a corpse is made of. Kept apart from MonsterFamily on purpose: family drives traits and
+/// balance, while this axis alone decides which consumable a kill can drop.
+[<RequireQualifiedAccess>]
+type LootCategory =
+  | Humanoid
+  | Beast
+  | Plant
+  | Construct
+  | Spirit
+
+  member this.Name : string =
+    match this with
+    | Humanoid -> "Humanoid"
+    | Beast -> "Beast"
+    | Plant -> "Plant"
+    | Construct -> "Construct"
+    | Spirit -> "Spirit"
+
 /// Reward table entry for defeating a monster adversary
 type MonsterLootEntry =
   { MinSouls: int
     MaxSouls: int
     Trophy: AlchemicalTrophy option
-    TrophyDropChancePct: int }
+    TrophyDropChancePct: int
+    Category: LootCategory }
+
+  /// Souls paid for one kill at a raw roll of `roll`. Spirits leave half again of themselves behind,
+  /// so their kind is measurably worth hunting.
+  member this.SoulsFor(roll: int) : int =
+    let multiplier =
+      match this.Category with
+      | LootCategory.Spirit -> 1.5
+      | _ -> 1.0
+
+    int (Math.Round(float roll * multiplier, MidpointRounding.AwayFromZero))
 
 /// Declarative template defining a non-humanoid monster adversary
 type MonsterTemplate =
@@ -215,7 +244,7 @@ module Bestiary =
       PreferredStance = CombatStance.PowerStance
       PreferredComplexForm = None
       Traits = [ PackTactics 2; MoltenAura 8 ]
-      Loot = { MinSouls = 15; MaxSouls = 30; Trophy = Some slagHoundCore; TrophyDropChancePct = 40 }
+      Loot = { MinSouls = 15; MaxSouls = 30; Trophy = Some slagHoundCore; TrophyDropChancePct = 40; Category = LootCategory.Beast }
       Glyph = 'h'
       ColorHex = "#ff5555"
       Description = "Feral quadruped hound formed from cooled iron slag and pulsing core magma. Hunts in packs." }
@@ -238,7 +267,7 @@ module Bestiary =
       PreferredStance = CombatStance.AgilityStance
       PreferredComplexForm = None
       Traits = [ EtherealCarapace 0.20; AcidicBlood 10 ]
-      Loot = { MinSouls = 40; MaxSouls = 75; Trophy = Some gargoyleTalisman; TrophyDropChancePct = 35 }
+      Loot = { MinSouls = 40; MaxSouls = 75; Trophy = Some gargoyleTalisman; TrophyDropChancePct = 35; Category = LootCategory.Construct }
       Glyph = 'g'
       ColorHex = "#6272a4"
       Description = "Petrified stone sentinel perched upon quarry colonnades. Flanks rapidly and sheds sharp granite shards." }
@@ -261,7 +290,7 @@ module Bestiary =
       PreferredStance = CombatStance.DisciplineStance
       PreferredComplexForm = None
       Traits = [ RelentlessFerocity 25; AcidicBlood 15 ]
-      Loot = { MinSouls = 120; MaxSouls = 220; Trophy = Some overseerSeal; TrophyDropChancePct = 50 }
+      Loot = { MinSouls = 120; MaxSouls = 220; Trophy = Some overseerSeal; TrophyDropChancePct = 50; Category = LootCategory.Construct }
       Glyph = 'O'
       ColorHex = "#f1fa8c"
       Description = "Colossal iron automaton forged to supervise excavation. Wields crushing industrial hammers." }
@@ -285,7 +314,8 @@ module Bestiary =
       PreferredStance = CombatStance.AgilityStance
       PreferredComplexForm = Some ComplexForm.PhantasmalDiffusion
       Traits = [ VenomousSting 1; PackTactics 2 ]
-      Loot = { MinSouls = 20; MaxSouls = 40; Trophy = Some blightPollen; TrophyDropChancePct = 40 }
+      // shortcut: Aberration family, botanical lore; retag if the Sprite stops reading as flora.
+      Loot = { MinSouls = 20; MaxSouls = 40; Trophy = Some blightPollen; TrophyDropChancePct = 40; Category = LootCategory.Plant }
       Glyph = 's'
       ColorHex = "#50fa7b"
       Description = "Ephemeral woodland wisp flickering between ancient trunks. Stings with rotting blight spores." }
@@ -308,7 +338,8 @@ module Bestiary =
       PreferredStance = CombatStance.AgilityStance
       PreferredComplexForm = None
       Traits = [ VenomousSting 2; PackTactics 3 ]
-      Loot = { MinSouls = 50; MaxSouls = 90; Trophy = Some weaverSilk; TrophyDropChancePct = 45 }
+      // shortcut: Beast family, botanical lore; retag if the Weaver stops reading as flora.
+      Loot = { MinSouls = 50; MaxSouls = 90; Trophy = Some weaverSilk; TrophyDropChancePct = 45; Category = LootCategory.Plant }
       Glyph = 'w'
       ColorHex = "#8be9fd"
       Description = "Giant predatory arachnid that weaves barbed silk barriers across forest colonnades." }
@@ -331,7 +362,7 @@ module Bestiary =
       PreferredStance = CombatStance.AgilityStance
       PreferredComplexForm = None
       Traits = [ RelentlessFerocity 30; PetrifyingGaze 20 ]
-      Loot = { MinSouls = 140; MaxSouls = 240; Trophy = Some mistStalkerPelt; TrophyDropChancePct = 40 }
+      Loot = { MinSouls = 140; MaxSouls = 240; Trophy = Some mistStalkerPelt; TrophyDropChancePct = 40; Category = LootCategory.Beast }
       Glyph = 'S'
       ColorHex = "#bd93f9"
       Description = "Vaporous apex feline that stalks the periphery of vision, lunging from fog with surgical precision." }
@@ -355,7 +386,7 @@ module Bestiary =
       PreferredStance = CombatStance.PowerStance
       PreferredComplexForm = None
       Traits = [ MoltenAura 15; PackTactics 2 ]
-      Loot = { MinSouls = 45; MaxSouls = 80; Trophy = Some calderaCarapace; TrophyDropChancePct = 45 }
+      Loot = { MinSouls = 45; MaxSouls = 80; Trophy = Some calderaCarapace; TrophyDropChancePct = 45; Category = LootCategory.Beast }
       Glyph = 'c'
       ColorHex = "#ff5555"
       Description = "Heavy crustacean scuttling along basalt causeways, radiating waves of blistering lava heat." }
@@ -378,7 +409,7 @@ module Bestiary =
       PreferredStance = CombatStance.DisciplineStance
       PreferredComplexForm = None
       Traits = [ EtherealCarapace 0.25; AcidicBlood 20 ]
-      Loot = { MinSouls = 160; MaxSouls = 280; Trophy = Some basaltCore; TrophyDropChancePct = 60 }
+      Loot = { MinSouls = 160; MaxSouls = 280; Trophy = Some basaltCore; TrophyDropChancePct = 60; Category = LootCategory.Construct }
       Glyph = 'G'
       ColorHex = "#ffb86c"
       Description = "Imposing monolith of molten obsidian and basalt stone. Shrugs off kinetic shock with ease." }
@@ -401,7 +432,7 @@ module Bestiary =
       PreferredStance = CombatStance.PowerStance
       PreferredComplexForm = Some ComplexForm.ResonanceSpike
       Traits = [ RelentlessFerocity 35; MoltenAura 25 ]
-      Loot = { MinSouls = 300; MaxSouls = 500; Trophy = Some fiendGlassHorn; TrophyDropChancePct = 50 }
+      Loot = { MinSouls = 300; MaxSouls = 500; Trophy = Some fiendGlassHorn; TrophyDropChancePct = 50; Category = LootCategory.Spirit }
       Glyph = 'F'
       ColorHex = "#ff5555"
       Description = "Demonic entity of rage and scorched glass. Unleashes devastating kinetic shockwaves." }
@@ -425,7 +456,7 @@ module Bestiary =
       PreferredStance = CombatStance.AgilityStance
       PreferredComplexForm = None
       Traits = [ PackTactics 3; VenomousSting 1 ]
-      Loot = { MinSouls = 60; MaxSouls = 110; Trophy = Some mantisScythe; TrophyDropChancePct = 40 }
+      Loot = { MinSouls = 60; MaxSouls = 110; Trophy = Some mantisScythe; TrophyDropChancePct = 40; Category = LootCategory.Beast }
       Glyph = 'm'
       ColorHex = "#8be9fd"
       Description = "Agile insectoid predator gliding on terrace downdrafts. Strikes with twin scythes." }
@@ -448,7 +479,8 @@ module Bestiary =
       PreferredStance = CombatStance.AgilityStance
       PreferredComplexForm = Some ComplexForm.PhantasmalDiffusion
       Traits = [ PsychicDoldrums 15; PetrifyingGaze 25 ]
-      Loot = { MinSouls = 180; MaxSouls = 300; Trophy = Some tempestFeather; TrophyDropChancePct = 45 }
+      // shortcut: reads as Humanoid at a glance; kept Spirit with its Aberration family.
+      Loot = { MinSouls = 180; MaxSouls = 300; Trophy = Some tempestFeather; TrophyDropChancePct = 45; Category = LootCategory.Spirit }
       Glyph = 'H'
       ColorHex = "#50fa7b"
       Description = "Winged screeching phantom riding hurricane updrafts. Disorients prey with psychic shrieks." }
@@ -471,7 +503,7 @@ module Bestiary =
       PreferredStance = CombatStance.DisciplineStance
       PreferredComplexForm = None
       Traits = [ EtherealCarapace 0.30; RelentlessFerocity 30 ]
-      Loot = { MinSouls = 350; MaxSouls = 600; Trophy = Some drakeScale; TrophyDropChancePct = 65 }
+      Loot = { MinSouls = 350; MaxSouls = 600; Trophy = Some drakeScale; TrophyDropChancePct = 65; Category = LootCategory.Beast }
       Glyph = 'D'
       ColorHex = "#8be9fd"
       Description = "Apex dragon presiding over storm terraces. Deflects kinetic impacts with gale barrier scales." }
@@ -495,7 +527,7 @@ module Bestiary =
       PreferredStance = CombatStance.PowerStance
       PreferredComplexForm = None
       Traits = [ VenomousSting 2; PackTactics 3 ]
-      Loot = { MinSouls = 65; MaxSouls = 120; Trophy = Some leechMandible; TrophyDropChancePct = 45 }
+      Loot = { MinSouls = 65; MaxSouls = 120; Trophy = Some leechMandible; TrophyDropChancePct = 45; Category = LootCategory.Beast }
       Glyph = 'l'
       ColorHex = "#bd93f9"
       Description = "Bloated amphibious parasite lurking beneath flooded flagstones. Latches onto unarmored flesh." }
@@ -518,7 +550,7 @@ module Bestiary =
       PreferredStance = CombatStance.DisciplineStance
       PreferredComplexForm = None
       Traits = [ ChillingPresence 15; EtherealCarapace 0.20 ]
-      Loot = { MinSouls = 190; MaxSouls = 320; Trophy = Some barnacleHeart; TrophyDropChancePct = 50 }
+      Loot = { MinSouls = 190; MaxSouls = 320; Trophy = Some barnacleHeart; TrophyDropChancePct = 50; Category = LootCategory.Spirit }
       Glyph = 'U'
       ColorHex = "#6272a4"
       Description = "Sodden corpse animated by lingering depression. Marches forward with relentless, cold weight." }
@@ -541,7 +573,7 @@ module Bestiary =
       PreferredStance = CombatStance.AgilityStance
       PreferredComplexForm = Some ComplexForm.PhantasmalDiffusion
       Traits = [ PsychicDoldrums 20; ChillingPresence 20 ]
-      Loot = { MinSouls = 380; MaxSouls = 650; Trophy = Some specterDust; TrophyDropChancePct = 60 }
+      Loot = { MinSouls = 380; MaxSouls = 650; Trophy = Some specterDust; TrophyDropChancePct = 60; Category = LootCategory.Spirit }
       Glyph = 'W'
       ColorHex = "#bd93f9"
       Description = "Luminescent sorrowful apparition singing melancholic melodies across drowned boulevards." }
@@ -565,7 +597,7 @@ module Bestiary =
       PreferredStance = CombatStance.DisciplineStance
       PreferredComplexForm = Some ComplexForm.AegisLattice
       Traits = [ RelentlessFerocity 25; PackTactics 2 ]
-      Loot = { MinSouls = 200; MaxSouls = 350; Trophy = Some dawnBellFragment; TrophyDropChancePct = 50 }
+      Loot = { MinSouls = 200; MaxSouls = 350; Trophy = Some dawnBellFragment; TrophyDropChancePct = 50; Category = LootCategory.Spirit }
       Glyph = 'd'
       ColorHex = "#f1fa8c"
       Description = "Radiant winged avatar of acceptance. Rings sacred chimes that dismantle hostile aggression." }
@@ -588,7 +620,7 @@ module Bestiary =
       PreferredStance = CombatStance.DisciplineStance
       PreferredComplexForm = Some ComplexForm.ResonanceSpike
       Traits = [ PetrifyingGaze 30; PsychicDoldrums 20 ]
-      Loot = { MinSouls = 400; MaxSouls = 700; Trophy = Some sphinxRiddleTablet; TrophyDropChancePct = 65 }
+      Loot = { MinSouls = 400; MaxSouls = 700; Trophy = Some sphinxRiddleTablet; TrophyDropChancePct = 65; Category = LootCategory.Spirit }
       Glyph = 'X'
       ColorHex = "#f1fa8c"
       Description = "Golden guardian testing travelers with dialectical interrogations of purpose and surrender." }
@@ -611,7 +643,8 @@ module Bestiary =
       PreferredStance = CombatStance.DisciplineStance
       PreferredComplexForm = Some ComplexForm.AegisLattice
       Traits = [ EtherealCarapace 0.35; RelentlessFerocity 30 ]
-      Loot = { MinSouls = 450; MaxSouls = 800; Trophy = Some seraphicPlume; TrophyDropChancePct = 70 }
+      // shortcut: reads as Spirit (an angel); kept Construct with its family for the material drop.
+      Loot = { MinSouls = 450; MaxSouls = 800; Trophy = Some seraphicPlume; TrophyDropChancePct = 70; Category = LootCategory.Construct }
       Glyph = 'W'
       ColorHex = "#50fa7b"
       Description = "Towering celestial sentinel clad in gilded filigree plate. Its impenetrable bastion deflects all harm." }
@@ -635,7 +668,7 @@ module Bestiary =
       PreferredStance = CombatStance.AgilityStance
       PreferredComplexForm = Some ComplexForm.PhantasmalDiffusion
       Traits = [ EtherealCarapace 0.25; PackTactics 2 ]
-      Loot = { MinSouls = 420; MaxSouls = 720; Trophy = Some starlightShard; TrophyDropChancePct = 60 }
+      Loot = { MinSouls = 420; MaxSouls = 720; Trophy = Some starlightShard; TrophyDropChancePct = 60; Category = LootCategory.Spirit }
       Glyph = 'e'
       ColorHex = "#ff79c6"
       Description = "Geometric phantom shimmering with starlight. Teleports across the void with flawless evasion." }
@@ -658,7 +691,7 @@ module Bestiary =
       PreferredStance = CombatStance.PowerStance
       PreferredComplexForm = None
       Traits = [ RelentlessFerocity 40; AcidicBlood 25 ]
-      Loot = { MinSouls = 480; MaxSouls = 820; Trophy = Some voidChitin; TrophyDropChancePct = 65 }
+      Loot = { MinSouls = 480; MaxSouls = 820; Trophy = Some voidChitin; TrophyDropChancePct = 65; Category = LootCategory.Spirit }
       Glyph = 'R'
       ColorHex = "#ff5555"
       Description = "Extraplanar apex carnivore that tears open holes in spatial fabric to ambush prey." }
@@ -681,7 +714,7 @@ module Bestiary =
       PreferredStance = CombatStance.DisciplineStance
       PreferredComplexForm = Some ComplexForm.ResonanceSpike
       Traits = [ PsychicDoldrums 25; PetrifyingGaze 35; EtherealCarapace 0.30 ]
-      Loot = { MinSouls = 550; MaxSouls = 950; Trophy = Some tesseractFragment; TrophyDropChancePct = 80 }
+      Loot = { MinSouls = 550; MaxSouls = 950; Trophy = Some tesseractFragment; TrophyDropChancePct = 80; Category = LootCategory.Spirit }
       Glyph = 'A'
       ColorHex = "#ff79c6"
       Description = "Living fracture in spacetime hovering above the highest spires. Warps turn cadence and focus." }

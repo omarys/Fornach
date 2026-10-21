@@ -4,6 +4,7 @@ open System
 open System.Text
 open System.Threading
 open Spectre.Console
+open Spectre.Console.Rendering
 open Fornach.Domain
 open Fornach.Spatial
 open Fornach.Engine
@@ -24,6 +25,11 @@ module TowerDisplay =
     { Outcome: GroupDuelOutcome
       Player: Combatant
       Enemies: TowerEnemy list }
+
+  /// Mid-fight reinforcement hook for a group duel: given the player's live combatant and the
+  /// enemies currently in the fight, returns the updated player and the active enemy list with any
+  /// joiners appended. Supplied by whoever owns the run state; simulators pass None.
+  type GroupDuelReinforce = Combatant -> TowerEnemy list -> Combatant * TowerEnemy list
 
   let private themeColor (theme: FloorTheme) : Color =
     match theme with
@@ -393,7 +399,7 @@ module TowerDisplay =
             elif Set.contains pt state.CurrentFloor.Explored then
               match Map.tryFind pt state.CurrentFloor.Entities with
               | Some (EntityChest c) when not c.IsOpen -> "⌹"
-              | Some (EntityShrine s) when not s.IsUsed -> "†"
+              | Some (EntityShrine _) -> "†"
               | Some (EntityEncounter enc) ->
                 match enc with
                 | SacrificialAltar a when not a.IsUsed -> "♨"
@@ -461,7 +467,7 @@ module TowerDisplay =
           match Map.tryFind pt state.CurrentFloor.Entities with
           | Some (EntityChest c) when not c.IsOpen ->
             sb.Append(sprintf "[%s]⌹[/]" Theme.Comment) |> ignore
-          | Some (EntityShrine s) when not s.IsUsed ->
+          | Some (EntityShrine _) ->
             sb.Append(sprintf "[%s]†[/]" Theme.Comment) |> ignore
           | Some (EntityEncounter enc) ->
             match enc with
@@ -502,6 +508,16 @@ module TowerDisplay =
       .Expand()
 
   /// Backward-compatible viewport renderer centered on player position
+  /// Redraw at the frame origin instead of clearing the screen: a full clear makes the whole
+  /// terminal blank and repaint, which reads as a flash on every keypress.
+  let private beginFrame () =
+    if Console.IsOutputRedirected then AnsiConsole.Clear()
+    else Console.Out.Write("\u001b[H")
+
+  /// Erase anything left below the frame, so a shorter frame cannot leave stale rows behind.
+  let private endFrame () =
+    if not Console.IsOutputRedirected then Console.Out.Write("\u001b[0J")
+
   let renderViewport (state: TowerRunState) (viewW: int) (viewH: int) : Panel =
     renderViewportWithCursor state None viewW viewH
 
@@ -614,6 +630,20 @@ module TowerDisplay =
         |> String.concat ", "
     row (sprintf "󰮯 Souls: [bold gold1]%d[/]  |  💎 Trophies: %s" state.Souls trophiesDisplay) |> ignore
 
+    // Consumables, with kinds the shrines have not revealed yet shown as `?`.
+    let consumablesDisplay =
+      if state.Consumables.IsEmpty then
+        sprintf "[%s]None[/]" Theme.Comment
+      else
+        state.Consumables
+        |> List.map (fun (kind, cnt) ->
+          let label =
+            if state.UnidentifiedConsumables.Contains kind then "?"
+            else kind.Name
+          sprintf "[bold %s]%s (x%d)[/]" Theme.Green label cnt)
+        |> String.concat ", "
+    row (sprintf "󰆧 Consumables: %s" consumablesDisplay) |> ignore
+
     // Active Quests
     if not state.CurrentFloor.ActiveQuests.IsEmpty then
       row (sprintf "[bold %s]─── 󱁕 ACTIVE TRIALS ───[/]" Theme.Purple) |> ignore
@@ -627,7 +657,7 @@ module TowerDisplay =
     row (sprintf "[bold %s]─── 󰋜 ARCHITECTURAL LEGEND ───[/]" Theme.Comment) |> ignore
     grid.AddRow(Markup(sprintf "[bold %s]@[/] You  [bold %s]![/] Enemy  [bold %s]?[/] NPC  [bold %s]⌹[/] Chest/Vault  [bold %s]†[/] Shrine  [bold #bd93f9]♨[/] Altar  [bold #8be9fd]$[/] Trader  [bold #50fa7b]✦[/] Echo  [bold #ff5555]✕[/] Trap"
       Theme.Yellow Theme.Red Theme.Cyan Theme.Yellow Theme.Green)) |> ignore
-    row (sprintf "[%s]󰌌 Keys: Arrows/Vim: Move | x/; : Inspect | C: Character | V: Chronicle Log | Space: Wait | ? / F1: Symbol & Glyph Legend | Q: Quit%s[/]" Theme.Comment (if debug then " | F12: Debug Menu" else "")) |> ignore
+    row (sprintf "[%s]󰌌 Keys: Arrows/Vim: Move | x/; : Inspect | C: Character | I: Consumables | V: Chronicle Log | Space: Wait | ? / F1: Symbol & Glyph Legend | Q: Quit%s[/]" Theme.Comment (if debug then " | F12: Debug Menu" else "")) |> ignore
 
     Panel(grid)
       .Header(Display.stripNerdGlyphs (sprintf "[bold %s]󰍹 CHAMBER OBSERVATIONS[/]" Theme.Yellow))
@@ -962,7 +992,7 @@ module TowerDisplay =
     (initialPlayer: Combatant)
     (startFloor: int)
     (onCombatDuel: int -> Combatant -> Combatant -> (CombatOutcome * Combatant))
-    (onGroupCombat: int -> Combatant -> TowerEnemy list -> bool -> GroupDuelResult)
+    (onGroupCombat: int -> Combatant -> TowerEnemy list -> bool -> GroupDuelReinforce option -> GroupDuelResult)
     (onDefeatAnimation: unit -> unit)
     (debug: bool)
     (forcedSeed: int option)
@@ -1003,23 +1033,25 @@ module TowerDisplay =
 
       if not engaged.IsEmpty then
         let canFlee = TowerSession.canEscape state
-        // Armor/weapon wear during the fight is a debuff: snapshot, then restore when it ends.
-        let playerConditionBefore = TowerSession.combatCondition state.Player
-        let enemyConditionsBefore =
-          engaged |> List.map (fun e -> e.Id, TowerSession.combatCondition e.Combatant)
-        let result = onGroupCombat floorNum state.Player engaged canFlee
-        let armorBefore, weaponBefore = playerConditionBefore
-        state <- { state with Player = TowerSession.restoreCombatCondition armorBefore weaponBefore result.Player }
-        // Persist every updated enemy with its pre-fight condition, then award each one the group put down.
-        let restoredEnemies =
-          result.Enemies
-          |> List.map (fun e ->
-            match enemyConditionsBefore |> List.tryFind (fun (id, _) -> id = e.Id) with
-            | Some (_, (armor, weapon)) -> { e with Combatant = TowerSession.restoreCombatCondition armor weapon e.Combatant }
-            | None -> e)
-        for e in restoredEnemies do
+
+        // Between rounds the duel calls this: pursuers close in and whoever reaches the player joins
+        // the fight in progress. A joiner has no entry in enemyConditionsBefore, so its wear at the
+        // end of the fight is kept rather than reverted -- see handleGroup's restore loop below.
+        let reinforce (midFightPlayer: Combatant) (active: TowerEnemy list) =
+          let advanced, joined =
+            TowerSession.reinforceFromPursuit state (active |> List.map (fun e -> e.Id))
+
+          state <- advanced
+          midFightPlayer, active @ joined
+
+        let result = onGroupCombat floorNum state.Player engaged canFlee (Some reinforce)
+        // Armour and weapon wear outlasts the fight: it is repaired by resting, by walking, or at a
+        // shrine, never for free when the last foe drops. Applies to both sides.
+        state <- { state with Player = result.Player }
+        let resolvedEnemies = result.Enemies
+        for e in resolvedEnemies do
           state <- TowerSession.updateEnemy e state
-        for e in restoredEnemies do
+        for e in resolvedEnemies do
           if e.IsDefeated then
             let levelBefore = state.Player.Level
             state <- TowerSession.resolveEnemyDefeat e.Id state
@@ -1156,7 +1188,8 @@ module TowerDisplay =
             Name = combatant.Name
             Combatant = combatant
             DropsKeyId = None
-            IsDefeated = false }
+            IsDefeated = false
+            ChaseCharge = 0.0 }
         state <- { state with CurrentFloor = { state.CurrentFloor with Entities = Map.add pt (EntityEnemy enemy) state.CurrentFloor.Entities } }
         RuntimeLog.write (sprintf "debug: spawned %s (level %d) at %A" enemy.Name enemy.Combatant.Level pt)
         AnsiConsole.MarkupLine(sprintf "[bold green]Spawned %s at (%d, %d).[/]" enemy.Name pt.X pt.Y)
@@ -1215,7 +1248,7 @@ module TowerDisplay =
       else ()
 
     while sessionActive do
-      AnsiConsole.Clear()
+      beginFrame ()
 
       // God mode re-applies before each rendered frame so the player can never
       // be depleted or degraded by the previous turn's combat/pursuit.
@@ -1295,8 +1328,14 @@ module TowerDisplay =
       grid.AddRow(viewportPanel, hudPanel) |> ignore
       grid.Expand <- true
 
-      AnsiConsole.Write(grid)
-      AnsiConsole.Write(bottomPanel)
+      let frame =
+        Rows([| grid :> IRenderable; bottomPanel :> IRenderable |])
+
+      // AutoClear(false) leaves the frame in place when the display stops, so the next frame is
+      // overwritten rather than re-cleared. The session is closed per frame on purpose: combat and
+      // dialog output is written inline inside this loop, which a long-lived Live region cannot track.
+      AnsiConsole.Live(frame).AutoClear(false).Start(fun ctx -> ctx.Refresh())
+      endFrame ()
 
       // Read player command
       let key = Console.ReadKey(true)
@@ -1400,8 +1439,6 @@ module TowerDisplay =
 
               if choice.Contains("Engage in Tactical") then
                 let levelBefore = state.Player.Level
-                // Armor/weapon wear is a combat debuff: snapshot, then restore when the fight ends.
-                let armorBefore, weaponBefore = TowerSession.combatCondition state.Player
                 // Snapshot the pools too: the duel's own console output is lost the moment the map
                 // redraws, so its cost is summarized into the chronicle below.
                 let playerBeforeDuel = state.Player
@@ -1451,9 +1488,9 @@ module TowerDisplay =
                     AnsiConsole.MarkupLine(sprintf "[%s]Press any key to resume exploration...[/]" Theme.Comment)
                     Console.ReadKey(true) |> ignore
                   else
-                    // No post-encounter healing: recover by moving (10%/step) or waiting (33%) instead.
-                    // Armor/weapon debuffs clear now the fight is over; trap damage taken before it is kept.
-                    state <- { state with Player = TowerSession.restoreCombatCondition armorBefore weaponBefore updatedPlayer }
+                    // No post-encounter healing: recover by moving (10%/step, 5% armour) or waiting.
+                    // Armour and weapon wear earned in the fight stays with you.
+                    state <- { state with Player = updatedPlayer }
                     AnsiConsole.MarkupLine(sprintf "\n[bold %s]Adversary vanquished![/]" Theme.Green)
                     Thread.Sleep(900)
 
@@ -1681,12 +1718,33 @@ module TowerDisplay =
           if state.PlayerPosition <> posBefore && TowerSession.isSafe state then
             let heal = Math.Max(1, int (float state.Player.Health.Maximum * 0.10))
             let morale = Math.Max(1, int (float state.Player.Morale.Maximum * 0.10))
+            let tendedArmor = Math.Max(1, int (float state.Player.Armor.Max * 0.05))
+            let weaponBefore = state.Player.WeaponCondition
             state <-
               { state with
                   Player =
-                    { state.Player with
-                        Health = state.Player.Health.ApplyDelta heal
-                        Morale = state.Player.Morale.ApplyDelta morale } }
+                    TowerSession.recoverOutOfCombat
+                      state.Player
+                      TowerSession.bleedClosedPerStep
+                      heal
+                      morale
+                      tendedArmor }
+
+            state <- TowerSession.honeOnSafeStep state
+
+            if state.Player.WeaponCondition <> weaponBefore then
+              state <-
+                { state with
+                    MessageLog =
+                      sprintf "You hone your weapon as you advance (%s)." (WeaponCondition.displayName state.Player.WeaponCondition)
+                      :: state.MessageLog }
+
+            if state.Player.BleedStacks > 0 then
+              state <-
+                { state with
+                    MessageLog =
+                      sprintf "Walking keeps the wound open (%d bleed stacks) — no Health or Morale recovered." state.Player.BleedStacks
+                      :: state.MessageLog }
 
           runEnemyPhase ()
 
@@ -1696,25 +1754,45 @@ module TowerDisplay =
             let safe = TowerSession.isSafe state
             let heal = if safe then Math.Max(1, int (float state.Player.Health.Maximum * 0.33)) else 0
             let morale = if safe then Math.Max(1, int (float state.Player.Morale.Maximum * 0.33)) else 0
-            let armorRepair = Math.Max(1, int (float state.Player.Armor.Max * 0.25))
-            let honedWeapon = WeaponCondition.repair state.Player.WeaponCondition
+            let armorRepair = Math.Max(1, int (float state.Player.Armor.Max * 0.33))
+            let honedWeapon = TowerSession.restHoneWeapon state.Player.WeaponCondition
+            let recovered =
+              TowerSession.recoverOutOfCombat state.Player TowerSession.bleedClosedPerRest heal morale armorRepair
             let restedPlayer =
-              { state.Player with
-                  Health = state.Player.Health.ApplyDelta heal
-                  Morale = state.Player.Morale.ApplyDelta morale
+              { recovered with
                   Meters = StatusMeters.Zero
-                  Armor = { state.Player.Armor with Current = Math.Min(state.Player.Armor.Max, state.Player.Armor.Current + armorRepair) }
                   WeaponCondition = honedWeapon }
             let weaponMsg =
               if honedWeapon <> state.Player.WeaponCondition then
                 sprintf ", weapon honed to %A" honedWeapon
               else ""
             let logMsg =
-              if safe then
-                sprintf "You rest, breathe, and tend your gear (+%d HP, +%d Morale, armor repaired%s, strain vented)." heal morale weaponMsg
-              else
+              if not safe then
                 sprintf "You tend your gear, but cannot recover while enemies are near (armor repaired%s, strain vented)." weaponMsg
-            state <- { state with Player = restedPlayer; MessageLog = logMsg :: state.MessageLog }
+              elif restedPlayer.BleedStacks > 0 then
+                sprintf "You wait and stanch the wound (%d bleed stacks left) — no Health or Morale recovered until the bleeding stops (armor repaired%s, strain vented)." restedPlayer.BleedStacks weaponMsg
+              else
+                sprintf "You rest, breathe, and tend your gear (+%d HP, +%d Morale, armor repaired%s, strain vented)." heal morale weaponMsg
+            state <-
+              { state with
+                  Player = restedPlayer
+                  Locomotion = TowerSession.focusOnWait state.Locomotion
+                  MessageLog = logMsg :: state.MessageLog }
+
+            state <- TowerSession.updateFov state
+
+            let arcDegrees =
+              (VisionResolver.resolve
+                state.Player
+                state.PlayerPosition
+                state.Facing
+                state.Locomotion
+                EnvironmentalFactors.Default)
+                .ArcDegrees
+
+            state <-
+              { state with
+                  MessageLog = sprintf "Sight widens to %d°." (int arcDegrees) :: state.MessageLog }
             RuntimeLog.write (sprintf "action: rest (%s)" (if safe then "safe" else "contested"))
             runEnemyPhase ()
 
@@ -1736,6 +1814,35 @@ module TowerDisplay =
           | _ when key.KeyChar = 'c' || key.KeyChar = 'C' ->
             showCharacterSheet state
 
+          // Minimum wiring: use one unit of a carried kind. The full inventory panel is a later pass.
+          | _ when key.KeyChar = 'i' || key.KeyChar = 'I' ->
+            let labels =
+              state.Consumables
+              |> List.map (fun (kind, cnt) ->
+                let label =
+                  if state.UnidentifiedConsumables.Contains kind then sprintf "? (%s)" kind.Name
+                  else kind.Name
+
+                sprintf "%s x%d" label cnt)
+
+            if labels.IsEmpty then
+              AnsiConsole.MarkupLine(sprintf "\n[%s]No consumables carried.[/]" Theme.Comment) |> ignore
+            else
+              let choice = Display.promptSelectionWithHelp "Use which consumable?" labels None (fun () -> ())
+
+              match labels |> List.tryFindIndex ((=) choice) with
+              | Some i ->
+                let kind, _ = state.Consumables.[i]
+
+                match TowerSession.useConsumable kind state with
+                | Ok updated ->
+                  state <- updated
+                  AnsiConsole.MarkupLine(sprintf "\n[bold %s]Used %s.[/]" Theme.Green kind.Name)
+                | Error msg -> AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s[/]" Theme.Red msg)
+
+                Thread.Sleep(700)
+              | None -> ()
+
           | _ when key.KeyChar = 'x' || key.KeyChar = 'X' || key.KeyChar = ';' ->
             // Enter Inspect Mode centered on player position
             inspectCursor <- Some state.PlayerPosition
@@ -1750,7 +1857,7 @@ module TowerDisplay =
     (initialPlayer: Combatant)
     (startFloor: int)
     (onCombatDuel: int -> Combatant -> Combatant -> (CombatOutcome * Combatant))
-    (onGroupCombat: int -> Combatant -> TowerEnemy list -> bool -> GroupDuelResult)
+    (onGroupCombat: int -> Combatant -> TowerEnemy list -> bool -> GroupDuelReinforce option -> GroupDuelResult)
     (onDefeatAnimation: unit -> unit)
     (debug: bool)
     (forcedSeed: int option) : unit =
@@ -1761,7 +1868,7 @@ module TowerDisplay =
     (initialPlayer: Combatant)
     (startFloor: int)
     (onCombatDuel: int -> Combatant -> Combatant -> (CombatOutcome * Combatant))
-    (onGroupCombat: int -> Combatant -> TowerEnemy list -> bool -> GroupDuelResult)
+    (onGroupCombat: int -> Combatant -> TowerEnemy list -> bool -> GroupDuelReinforce option -> GroupDuelResult)
     (onDefeatAnimation: unit -> unit)
     (debug: bool)
     (forcedSeed: int option) : unit =

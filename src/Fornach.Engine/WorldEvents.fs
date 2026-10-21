@@ -50,7 +50,9 @@ module WorldEvents =
       TriggerDescription = triggerDesc
       IsTriggered = false }
 
-  /// Creates an ancient sacrificial altar presenting risk vs reward dilemmas
+  /// Creates an ancient sacrificial altar presenting risk vs reward dilemmas.
+  /// Each cost is a percentage of the player's maximum (25% health, 30% morale, 30% armor below);
+  /// the per-theme numbers keep their relative severity.
   let createAltar (theme: FloorTheme) (floorNum: int) : AltarChoice =
     match theme with
     | QuarryPlazas ->
@@ -362,6 +364,16 @@ module WorldEvents =
         // 2. Sacrificial Altar
         let altarPos = { X = p2.X + 3; Y = p2.Y + 2 }
         altarPos, FloorEncounter.SacrificialAltar (createAltar theme floorNum)
+
+        // 2b. A second altar elsewhere in the stage: one sacrifice site per floor was too thin
+        // now that floors run 9 to 12 rooms. Same pact, unique id.
+        let secondAltar = createAltar theme floorNum
+        let secondAltarPos = { X = p5.X + 3; Y = p5.Y - 2 }
+        secondAltarPos,
+        FloorEncounter.SacrificialAltar
+          { secondAltar with
+              Id = secondAltar.Id + "_b"
+              Name = secondAltar.Name + " (Weathered)" }
 
         // 3. Biome/Floor varied dynamic encounters (1 to 2 additional, guaranteeing 3 to 4 total)
         match floorNum % 3 with

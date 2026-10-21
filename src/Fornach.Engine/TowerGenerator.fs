@@ -71,8 +71,8 @@ module TowerGenerator =
     let surface = surfaceForTheme theme
     let hazard = hazardForTheme theme
 
-    let mapWidth = 64
-    let mapHeight = 44
+    let mapWidth = 88
+    let mapHeight = 56
 
     // Default: Entire floor begins as boundless open Chasm/Void
     let mutable tiles = Map.empty<Point, TowerTile>
@@ -80,25 +80,57 @@ module TowerGenerator =
       for x in 0 .. mapWidth - 1 do
         tiles <- Map.add { X = x; Y = y } Chasm tiles
 
-    // 2. Generate 4 to 6 Expansive Plazas distributed across quadrants
-    let plazaPositions =
-      [ (4, 4, 14, 12)
-        (26, 4, 14, 12)
-        (44, 4, 16, 12)
-        (6, 24, 14, 14)
-        (26, 24, 14, 14)
-        (44, 24, 16, 14) ]
+    // 2. Rejection-sample 9 to 12 chambers, each kept at least 2 tiles of chasm clear of the last
+    let roomCount = 9 + rng.Next(0, 4)
 
-    let plazas =
-      plazaPositions
+    let inflated (r: Plaza) =
+      { r with
+          X = r.X - 2
+          Y = r.Y - 2
+          Width = r.Width + 4
+          Height = r.Height + 4 }
+
+    let overlaps (a: Plaza) (b: Plaza) =
+      a.X < b.X + b.Width && b.X < a.X + a.Width && a.Y < b.Y + b.Height && b.Y < a.Y + a.Height
+
+    let mutable rooms : Plaza list = []
+    let mutable attempts = 0
+
+    while rooms.Length < roomCount && attempts < 300 do
+      attempts <- attempts + 1
+      let w = rng.Next(10, 17)
+      let h = rng.Next(8, 13)
+
+      let candidate =
+        { Id = rooms.Length
+          X = rng.Next(2, mapWidth - w - 2)
+          Y = rng.Next(2, mapHeight - h - 2)
+          Width = w
+          Height = h }
+
+      if not (rooms |> List.exists (fun r -> overlaps (inflated candidate) (inflated r))) then
+        rooms <- rooms @ [ candidate ]
+
+    // A starved sample would leave the six encounter anchors without rooms to sit in
+    let fallbackRooms =
+      [ 4, 4, 14, 12
+        26, 4, 14, 12
+        44, 4, 16, 12
+        6, 24, 14, 14
+        26, 24, 14, 14
+        44, 24, 16, 14 ]
       |> List.mapi (fun i (px, py, pw, ph) ->
-        let jitterX = rng.Next(-2, 3)
-        let jitterY = rng.Next(-2, 3)
         { Id = i
-          X = Math.Clamp(px + jitterX, 2, mapWidth - 18)
-          Y = Math.Clamp(py + jitterY, 2, mapHeight - 18)
+          X = px
+          Y = py
           Width = pw
           Height = ph })
+
+    let plazas = if rooms.Length >= 6 then rooms else fallbackRooms
+
+    // Room roles are index-based (1 NPC, 2 shrine, 3 chest, 4 guardian); clamp so a short
+    // sample can never throw before the fallback above applies.
+    let plazaAt (index: int) : Plaza = plazas.[Math.Min(index, plazas.Length - 1)]
 
     // 3. Carve Plaza Floors and Colonnade Pillars
     for plaza in plazas do
@@ -144,19 +176,74 @@ module TowerGenerator =
       tiles <- Map.add p1 Archway tiles
       tiles <- Map.add p2 Archway tiles
 
-    // Connect sequential plazas to form a connected transit network
-    for i in 0 .. plazas.Length - 2 do
-      carveCauseway plazas.[i].Center plazas.[i + 1].Center
+    let chebyshev (a: Point) (b: Point) =
+      Math.Max(Math.Abs(a.X - b.X), Math.Abs(a.Y - b.Y))
 
-    // Cross-connect for loop exploration
-    carveCauseway plazas.[0].Center plazas.[3].Center
-    carveCauseway plazas.[2].Center plazas.[5].Center
+    let mutable links = Set.empty<int * int>
 
-    // 5. Establish Spawn and Stairway Portal
-    let spawnPlaza = plazas.[0]
-    let stairwayPlaza = plazas.[plazas.Length - 1]
+    let connect (i: int) (j: int) =
+      let a, b = plazas.[i].Center, plazas.[j].Center
+      carveCauseway a b
+
+      // 2 endpoint archways plus up to 2 more along the run, so no two causeways look alike
+      for _ in 1 .. rng.Next(0, 3) do
+        let x = rng.Next(Math.Min(a.X, b.X), Math.Max(a.X, b.X) + 1)
+        tiles <- Map.add { X = x; Y = a.Y } Archway tiles
+
+      links <- links.Add((Math.Min(i, j), Math.Max(i, j)))
+
+    // Spanning tree: every chamber opens one causeway to its nearest already-placed chamber
+    for i in 1 .. plazas.Length - 1 do
+      let nearest =
+        [ 0 .. i - 1 ] |> List.minBy (fun j -> chebyshev plazas.[j].Center plazas.[i].Center)
+
+      connect i nearest
+
+    // Loops: ~20% of the remaining near pairs get a second path, capped at 3
+    let mutable loopCount = 0
+
+    for i in 0 .. plazas.Length - 1 do
+      for j in i + 1 .. plazas.Length - 1 do
+        if loopCount < 3
+           && not (links.Contains((i, j)))
+           && chebyshev plazas.[i].Center plazas.[j].Center < 30
+           && rng.Next(5) = 0 then
+          connect i j
+          loopCount <- loopCount + 1
+
+    // Dead ends: 2-wide spurs run off a chamber edge and stop in the chasm
+    let carveStub (room: Plaza) (horizontal: bool) (sign: int) (length: int) =
+      let startX, startY =
+        if horizontal then
+          (if sign > 0 then room.X + room.Width else room.X - 1),
+          rng.Next(room.Y, room.Y + room.Height - 1)
+        else
+          rng.Next(room.X, room.X + room.Width - 1),
+          (if sign > 0 then room.Y + room.Height else room.Y - 1)
+
+      for step in 0 .. length - 1 do
+        for spread in 0 .. 1 do
+          let x = if horizontal then startX + sign * step else startX + spread
+          let y = if horizontal then startY + spread else startY + sign * step
+
+          if x >= 1 && x <= mapWidth - 2 && y >= 1 && y <= mapHeight - 2 then
+            tiles <- Map.add { X = x; Y = y } (Floor surface) tiles
+
+    for _ in 1 .. rng.Next(2, 5) do
+      let room = plazas.[rng.Next(plazas.Length)]
+      carveStub room (rng.Next(2) = 0) (if rng.Next(2) = 0 then -1 else 1) (rng.Next(4, 9))
+
+    // 5. Spawn in the chamber nearest the top-left corner; stairway in the farthest one
+    let origin = { X = 0; Y = 0 }
+    let spawnPlaza = plazas |> List.minBy (fun p -> chebyshev p.Center origin)
 
     let spawn = spawnPlaza.Center
+
+    let stairwayPlaza =
+      plazas
+      |> List.filter (fun p -> p.Center <> spawn)
+      |> List.maxBy (fun p -> chebyshev p.Center spawn)
+
     let stairway = stairwayPlaza.Center
 
     // Make spawn and stairway tiles guaranteed walkable
@@ -222,7 +309,7 @@ module TowerGenerator =
       entities <- Map.add batteredChestPos (EntityChest batteredChest) entities
 
     // B. Floor NPC & Story Quests
-    let npcPlaza = plazas.[1]
+    let npcPlaza = plazaAt 1
     let npcPos = { X = npcPlaza.Center.X + 2; Y = npcPlaza.Center.Y }
     tiles <- Map.add npcPos (Floor surface) tiles
 
@@ -401,7 +488,7 @@ module TowerGenerator =
     // B2. Story Stage 1 places the captive sister beside the Bandit Leader's den. Her
     // quest only resolves once the leader falls, so the payoff reads as a reunion.
     if isStory && floorNumber = 1 then
-      let lyraPlaza = plazas.[4]
+      let lyraPlaza = plazaAt 4
       let lyraPos = { X = lyraPlaza.Center.X + 2; Y = lyraPlaza.Center.Y }
       tiles <- Map.add lyraPos (Floor surface) tiles
       let lyra =
@@ -423,20 +510,29 @@ module TowerGenerator =
             }
           HasGivenReward = false }
       entities <- Map.add lyraPos (EntityNpc lyra) entities
-    let shrinePlaza = plazas.[2]
-    let shrinePos = { X = shrinePlaza.Center.X - 2; Y = shrinePlaza.Center.Y }
-    tiles <- Map.add shrinePos (Floor surface) tiles
+    // Two shrines per stage, a third on deeper floors, so the ascent can be sustained.
+    let shrineSites =
+      [ 2, sprintf "shrine_floor_%d" floorNumber
+        5, sprintf "shrine_floor_%d_prime" floorNumber ]
+      @ (if plazas.Length > 8 then [ 8, sprintf "shrine_floor_%d_terce" floorNumber ] else [])
 
-    let shrine =
-      { Id = sprintf "shrine_floor_%d" floorNumber
-        Name = sprintf "Monolith of %s" theme.Name
-        BlessingDescription = "Fully restores Health and Morale, repairs damaged Armor, restores Weapon to Pristine, and calms accumulated Recklessness."
-        IsUsed = false }
+    for shrineIndex, shrineId in shrineSites do
+      let shrinePlaza = plazaAt shrineIndex
+      let shrinePos = { X = shrinePlaza.Center.X - 2; Y = shrinePlaza.Center.Y }
 
-    entities <- Map.add shrinePos (EntityShrine shrine) entities
+      if not (entities |> Map.exists (fun pt _ -> pt = shrinePos)) then
+        tiles <- Map.add shrinePos (Floor surface) tiles
+
+        let shrine =
+          { Id = shrineId
+            Name = sprintf "Monolith of %s" theme.Name
+            BlessingDescription = "Fully restores Health and Morale, repairs damaged Armor, restores Weapon to Pristine, and calms accumulated Recklessness."
+            IsUsed = false }
+
+        entities <- Map.add shrinePos (EntityShrine shrine) entities
 
     // D. Treasure Chests
-    let chestPlaza = plazas.[3]
+    let chestPlaza = plazaAt 3
     let chestPos = { X = chestPlaza.Center.X; Y = chestPlaza.Center.Y + 3 }
     tiles <- Map.add chestPos (Floor surface) tiles
 
@@ -460,7 +556,7 @@ module TowerGenerator =
     entities <- Map.add chestPos (EntityChest chest) entities
 
     // E. Floor Enemies & Guardians (or Story Bosses)
-    let guardianPlaza = plazas.[4]
+    let guardianPlaza = plazaAt 4
     let guardianPos = guardianPlaza.Center
     tiles <- Map.add guardianPos (Floor surface) tiles
 
@@ -495,7 +591,8 @@ module TowerGenerator =
           Name = bossName
           Combatant = bossCombatant
           DropsKeyId = requiredKey
-          IsDefeated = false }
+          IsDefeated = false
+          ChaseCharge = 0.0 }
       else
         let monsterTemplate =
           match biomeMonsters with
@@ -517,66 +614,100 @@ module TowerGenerator =
           Name = monsterTemplate.Name
           Combatant = guardianCombatant
           DropsKeyId = requiredKey
-          IsDefeated = false }
+          IsDefeated = false
+          ChaseCharge = 0.0 }
 
     entities <- Map.add guardianPos (EntityEnemy guardianEnemy) entities
 
-    // F. Grinding Mob Encounters across other plazas
-    let grindPlazaIndices = [ 0; 1; 2; 3; 4; 5 ]
-    for i, pIdx in List.indexed grindPlazaIndices do
-      if pIdx < plazas.Length then
-        let p = plazas.[pIdx]
-        let mobPos = { X = p.Center.X - 2; Y = p.Center.Y + 2 }
-        tiles <- Map.add mobPos (Floor surface) tiles
-        if not (Map.containsKey mobPos entities) && mobPos <> spawn && mobPos <> stairway then
-          let mobName, mobCombatant =
-            if isStory && floorNumber = 1 then
-              // Tutorial floor: alternate low-level bandits (Warrior / Rogue) with equally
-              // low-level woodland creatures so a level-1 protagonist always has survivable
-              // fights. The PineCloisters Novice template (Blight Sprite) is level 20 and would
-              // one-shot a level-1 player, so creatures are generated at the tutorial level.
-              if i % 2 = 0 then
-                let cls = if (i / 2) % 2 = 0 then CharacterClass.Warrior else CharacterClass.Rogue
-                let lvl = Math.Min(8, 1 + i * 2)
-                let name = if cls = CharacterClass.Warrior then "Bandit" else "Bandit Scout"
-                let combatant = TierFactory.createClassLevel cls lvl
-                name, { combatant with Name = name }
+    // F. Roaming mob packs: 3 to 5 enemies per chamber, 2 per chamber on the tutorial floor
+    let isFreeTile (pos: Point) =
+      pos <> spawn
+      && pos <> stairway
+      && (match Map.tryFind pos tiles with
+          | Some t -> t.IsWalkable
+          | None -> false)
+      && not (Map.containsKey pos entities)
+
+    let mobOffsets =
+      [ 2, 2
+        -2, 2
+        2, -2
+        -2, -2
+        3, 0
+        -3, 0
+        0, 3
+        0, -3
+        3, 3
+        -3, -3 ]
+
+    let mobSpecies (i: int) =
+      if isStory && floorNumber = 1 then
+        // Tutorial floor: alternate low-level bandits (Warrior / Rogue) with equally
+        // low-level woodland creatures so a level-1 protagonist always has survivable
+        // fights. The PineCloisters Novice template (Blight Sprite) is level 20 and would
+        // one-shot a level-1 player, so creatures are generated at the tutorial level.
+        if i % 2 = 0 then
+          let cls = if (i / 2) % 2 = 0 then CharacterClass.Warrior else CharacterClass.Rogue
+          let lvl = Math.Min(8, 1 + i * 2)
+          let name = if cls = CharacterClass.Warrior then "Bandit" else "Bandit Scout"
+          let combatant = TierFactory.createClassLevel cls lvl
+          name, { combatant with Name = name }
+        else
+          let cls = if (i / 2) % 2 = 0 then CharacterClass.Rogue else CharacterClass.Warrior
+          let lvl = Math.Min(8, 2 + i * 2)
+          let name = if cls = CharacterClass.Rogue then "Forest Wolf" else "Bramble Boar"
+          let combatant = TierFactory.createClassLevel cls lvl
+          name, { combatant with Name = name }
+      else
+        let mobTemplate =
+          if biomeMonsters.IsEmpty then Bestiary.slagHound
+          else
+            let available =
+              if isStory && floorNumber <= 3 then
+                // Story stages 2-3 are narrative tutorial tiers: keep encounters to the
+                // Novice-tier biome mob so a Veteran (e.g. Thorn Weaver) never opens on
+                // the protagonist.
+                [ biomeMonsters.[0] ]
+              elif floorNumber <= 1 then
+                // Floor 1: First plazas have Novice mobs (e.g. Slag Hound), later plazas have Veteran mobs (e.g. Stone Gargoyle)
+                if i < 2 then [ biomeMonsters.[0] ]
+                else [ biomeMonsters.[Math.Min(1, biomeMonsters.Length - 1)] ]
+              elif floorNumber <= 3 then
+                // Floors 2-3: Novice and Veteran mobs
+                biomeMonsters |> List.truncate 2
               else
-                let cls = if (i / 2) % 2 = 0 then CharacterClass.Rogue else CharacterClass.Warrior
-                let lvl = Math.Min(8, 2 + i * 2)
-                let name = if cls = CharacterClass.Rogue then "Forest Wolf" else "Bramble Boar"
-                let combatant = TierFactory.createClassLevel cls lvl
-                name, { combatant with Name = name }
-            else
-              let mobTemplate =
-                if biomeMonsters.IsEmpty then Bestiary.slagHound
-                else
-                  let available =
-                    if isStory && floorNumber <= 3 then
-                      // Story stages 2-3 are narrative tutorial tiers: keep encounters to the
-                      // Novice-tier biome mob so a Veteran (e.g. Thorn Weaver) never opens on
-                      // the protagonist.
-                      [ biomeMonsters.[0] ]
-                    elif floorNumber <= 1 then
-                      // Floor 1: First plazas have Novice mobs (e.g. Slag Hound), later plazas have Veteran mobs (e.g. Stone Gargoyle)
-                      if i < 2 then [ biomeMonsters.[0] ]
-                      else [ biomeMonsters.[Math.Min(1, biomeMonsters.Length - 1)] ]
-                    elif floorNumber <= 3 then
-                      // Floors 2-3: Novice and Veteran mobs
-                      biomeMonsters |> List.truncate 2
-                    else
-                      // Floors 4+: Full spectrum of biome mobs
-                      biomeMonsters
-                  let mIdx = (floorNumber + i) % available.Length
-                  available.[mIdx]
-              mobTemplate.Name, Bestiary.createMonster mobTemplate
+                // Floors 4+: Full spectrum of biome mobs
+                biomeMonsters
+            let mIdx = (floorNumber + i) % available.Length
+            available.[mIdx]
+        mobTemplate.Name, Bestiary.createMonster mobTemplate
+
+    let mutable mobIndex = 0
+
+    for roomIndex in 0 .. plazas.Length - 1 do
+      let room = plazas.[roomIndex]
+      let targetCount = if isStory && floorNumber = 1 then 2 else 3 + rng.Next(0, 3)
+      let mutable placedCount = 0
+      let mutable offsetIndex = 0
+
+      while placedCount < targetCount && offsetIndex < mobOffsets.Length do
+        let ox, oy = mobOffsets.[offsetIndex]
+        offsetIndex <- offsetIndex + 1
+        let mobPos = { X = room.Center.X + ox; Y = room.Center.Y + oy }
+
+        if isFreeTile mobPos then
+          let mobName, mobCombatant = mobSpecies mobIndex
           let mobEnemy =
-            { Id = sprintf "grind_mob_%d_%d" floorNumber i
+            { Id = sprintf "grind_mob_%d_%d" floorNumber mobIndex
               Name = mobName
               Combatant = mobCombatant
               DropsKeyId = None
-              IsDefeated = false }
+              IsDefeated = false
+              ChaseCharge = 0.0 }
+          tiles <- Map.add mobPos (Floor surface) tiles
           entities <- Map.add mobPos (EntityEnemy mobEnemy) entities
+          placedCount <- placedCount + 1
+          mobIndex <- mobIndex + 1
 
     // G. Dynamic World & Tower Floor Encounters (ADR 0004 Phase 3)
     let plazaCenters = plazas |> List.map (fun p -> p.Center)

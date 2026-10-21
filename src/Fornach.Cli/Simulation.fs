@@ -819,10 +819,16 @@ module Simulation =
       CombatTier.GrandMaster
     ]
 
-    let rng = Random(42)
-    let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
     let maxMobCount = 100
-    let iterations = 10
+    let iterations = 100
+
+    // Every cell gets its own seeded roller, so a cell's number depends only on that matchup and is
+    // reproducible on its own. A single shared Random made each result depend on how many dice every
+    // earlier cell had consumed, which is why the table used to shift whenever an unrelated balance
+    // change altered a fight's length.
+    let cellRoller (cellSeed: int) : DiceRoller =
+      let rng = Random(cellSeed)
+      fun min max -> rng.Next(min, max + 1)
 
     let matrixTable = Table().Border(TableBorder.Rounded).BorderColor(Theme.ColorCurrentLine)
     matrixTable.AddColumn(TableColumn(sprintf "[bold %s]Champion Archetype[/]" Theme.Foreground)) |> ignore
@@ -842,15 +848,16 @@ module Simulation =
         RemainingTimeColumn() :> ProgressColumn
       |])
       .Start(fun ctx ->
-        let task = ctx.AddTask(sprintf "[bold %s]Sweeping 24 Archetype Tiers across 4 Base Classes (96 Matchups)...[/]" Theme.Cyan, maxValue = 24.0)
+        let task = ctx.AddTask(sprintf "[bold %s]Sweeping 24 Archetype Tiers across 4 Base Classes (96 Matchups x 100 Trials)...[/]" Theme.Cyan, maxValue = 24.0)
 
-        for cls in championClasses do
-          for tier in tiers do
+        for (clsIndex, cls) in List.indexed championClasses do
+          for (tierIndex, tier) in List.indexed tiers do
             let champFactory () = TierFactory.createClassTier cls tier
-            let warriorTP = findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Warrior Novice) maxMobCount iterations roller
-            let rogueTP = findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Rogue Novice) maxMobCount iterations roller
-            let soldierTP = findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Soldier Novice) maxMobCount iterations roller
-            let mageTP = findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Mage Novice) maxMobCount iterations roller
+            let cellSeed (mobIndex: int) = 1000 + clsIndex * 400 + tierIndex * 100 + mobIndex * 10
+            let warriorTP = findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Warrior Novice) maxMobCount iterations (cellRoller (cellSeed 0))
+            let rogueTP = findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Rogue Novice) maxMobCount iterations (cellRoller (cellSeed 1))
+            let soldierTP = findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Soldier Novice) maxMobCount iterations (cellRoller (cellSeed 2))
+            let mageTP = findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Mage Novice) maxMobCount iterations (cellRoller (cellSeed 3))
 
             let displayName =
               match cls with

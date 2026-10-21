@@ -496,7 +496,7 @@ module Display =
         "Discipline"
     | RecoveryAction SteadyForm ->
       sprintf "🛡️ [%s]Steady Form (Recovery)[/]" Theme.Yellow,
-      "Lowering weapon to bleed Recklessness and restore physical posture.",
+      "Settling posture to vent all strain and restore composure.",
       "Seize the opening with an aggressive strike!",
       "Defensive"
     | RecoveryAction RaiseShield ->
@@ -508,11 +508,6 @@ module Display =
       sprintf "🧠 [%s]Center Mind (Recovery)[/]" Theme.Cyan,
       "Recentering mental focus to bleed fatigue and restore wards.",
       "Strike while somatic guard is resetting!",
-      "Defensive"
-    | RecoveryAction SteadyBreathing ->
-      sprintf "🌬️ [%s]Steady Breathing (Recovery)[/]" Theme.Cyan,
-      "Drawing deep breath to vent strain meters and recover Morale.",
-      "Press the attack before meters reset!",
       "Defensive"
     | ExecuteStrike plane ->
       sprintf "☠️ [bold blink %s]FATAL EXECUTION ATTEMPT (%A)[/]" Theme.Red plane,

@@ -63,7 +63,10 @@ type TowerEnemy =
     Name: string
     Combatant: Combatant
     DropsKeyId: string option
-    IsDefeated: bool }
+    IsDefeated: bool
+    /// Fraction of a pursuit step banked from earlier turns. Carries the Finesse-gap pace across
+    /// turns so a slower pursuer closes over several turns; see TowerSession.paceOf.
+    ChaseCharge: float }
 
 /// Loot caches and treasure chests
 type TowerChest =
@@ -80,7 +83,8 @@ type TowerShrine =
     BlessingDescription: string
     IsUsed: bool }
 
-/// Cost required to receive an altar's blessing
+/// Cost required to receive an altar's blessing. The amount is a PERCENTAGE of the player's
+/// maximum, applied when the altar is accepted, so the toll still bites once pools run to thousands.
 type AltarCost =
   | SacrificeHealth of amount: int
   | SacrificeMorale of amount: int
@@ -88,9 +92,9 @@ type AltarCost =
 
   member this.Description : string =
     match this with
-    | SacrificeHealth amt -> sprintf "Sacrifice %d Health" amt
-    | SacrificeMorale amt -> sprintf "Sacrifice %d Morale" amt
-    | ShredArmor amt -> sprintf "Shred %d Armor durability" amt
+    | SacrificeHealth amt -> sprintf "Sacrifice %d%% Health" amt
+    | SacrificeMorale amt -> sprintf "Sacrifice %d%% Morale" amt
+    | ShredArmor amt -> sprintf "Shred %d%% Armor durability" amt
 
 /// Reward granted upon fulfilling an altar's sacrifice
 type AltarReward =

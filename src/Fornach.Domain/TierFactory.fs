@@ -54,8 +54,10 @@ module ProgressionScale =
     let sec = int (Math.Round(float prim * 0.75))
     let tert = int (Math.Round(float prim * 0.50))
     let min = 15 + int (Math.Round(float delta * 1.0))
-    // Defensive off-plane stat gets solid boost (tert) to prevent severe roll blowouts
-    let offDef = tert
+    // Off-plane mental defence is no longer a trade-off stat: the low-intelligence physical classes
+    // (Berserker and kin) are gone, so a Fighter is not assumed to be dull. Sits at the secondary
+    // tier rather than the tertiary one it used to share with mental offence.
+    let offDef = sec
     // Offensive off-plane stat gets modest growth (halfway between min and tert)
     let offOff = min + int (Math.Round(float (tert - min) * 0.50))
     (prim, sec, tert, min, offDef, offOff)
@@ -138,14 +140,14 @@ module TierFactory =
             Force, sec; Fortitude, sec
             Intellect, min; Resolve, offDef
             Acuity, offOff; Intuition, offDef
-            Acumen, min; Composure, min ]
+            Acumen, min; Composure, offDef ]
         | CharacterClass.Warrior ->
           // Generic Power NPC
           [ Force, prim; Fortitude, prim
             Prowess, sec; Poise, sec
             Finesse, sec; Reflex, sec
             Intellect, min; Resolve, offDef
-            Acuity, min; Intuition, min
+            Acuity, min; Intuition, offDef
             Acumen, offOff; Composure, offDef ]
         | CharacterClass.Soldier ->
           // Generic Discipline NPC

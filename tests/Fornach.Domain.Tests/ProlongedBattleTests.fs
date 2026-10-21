@@ -785,7 +785,7 @@ module ProlongedBattleTests =
     Assert.Equal(15, flooded.StudyStacks)
 
   [<Fact>]
-  let ``SteadyBreathing vents all dynamic status meters and restores Morale`` () =
+  let ``SteadyForm vents all dynamic status meters and restores Morale`` () =
     let roller = fixedRoller 1
     let strainedFighter =
       createFighter 100 100 100 100 100 100
@@ -800,7 +800,7 @@ module ProlongedBattleTests =
       |> fun c -> { c with Morale = c.Morale.ApplyDelta -50 }
     let opponent = createFighter 100 100 100 100 100 100
 
-    let res = ActionResolver.resolve roller (RecoveryAction SteadyBreathing) strainedFighter opponent
+    let res = ActionResolver.resolve roller (RecoveryAction SteadyForm) strainedFighter opponent
     let m = res.Actor.Meters
 
     // All 7 meters must be substantially reduced
@@ -824,7 +824,7 @@ module ProlongedBattleTests =
     Assert.True(breathEvt.IsSome, "BreathStabilized event must be emitted")
 
   [<Fact>]
-  let ``SteadyBreathing and recovery resets stabilize a Collapsed combatant when strain drops below 100`` () =
+  let ``SteadyForm and recovery resets stabilize a Collapsed combatant when strain drops below 100`` () =
     let roller = fixedRoller 1
     // Fighter collapsed from 100 Frustration
     let collapsedFighter =
@@ -837,7 +837,7 @@ module ProlongedBattleTests =
     Assert.True(CollapseState.isCollapsed collapsedFighter.Collapse)
     Assert.True(collapsedFighter.IsExecuteEligible)
 
-    let res = ActionResolver.resolve roller (RecoveryAction SteadyBreathing) collapsedFighter opponent
+    let res = ActionResolver.resolve roller (RecoveryAction SteadyForm) collapsedFighter opponent
 
     // Frustration dropped below 100, so collapse state must be cleared back to Stable!
     Assert.True(res.Actor.Meters.Frustration.Value < 100)

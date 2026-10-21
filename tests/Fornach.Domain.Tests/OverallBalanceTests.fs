@@ -192,16 +192,21 @@ module OverallBalanceTests =
       Assert.True(tpGMRogue.Value >= 25, sprintf "GrandMaster Duelist should withstand at least 25 Rogues (Actual: %d)" tpGMRogue.Value)
 
     [<Fact>]
-    let ``Mage: Mental plane dominance with Dread Warhorn endures far more mental attackers than the Fighter`` () =
+    let ``Mage: mental-plane resilience is now in line with the physical classes`` () =
+      // Was "Mage dominates the mental plane 5x over the Fighter". The class reduction removed the
+      // low-intelligence trade-off, so physical classes now carry real mental defence (offDef = sec)
+      // and the mage's mental-plane edge is a lean, not a chasm. Measured at Master, where the swarm
+      // sizes still discriminate (GrandMaster saturates the harness ceiling for every archetype).
       let rng = Random(101)
       let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
-      let gmMage = fun () -> TierFactory.createClassTier CharacterClass.Mage CombatTier.GrandMaster
-      let gmFighter = fun () -> TierFactory.createClassTier CharacterClass.Fighter CombatTier.GrandMaster
+      let masterMage = fun () -> TierFactory.createClassTier CharacterClass.Mage CombatTier.Master
+      let masterFighter = fun () -> TierFactory.createClassTier CharacterClass.Fighter CombatTier.Master
       let mageMob = fun () -> TierFactory.createClassTier CharacterClass.Mage CombatTier.Novice
 
-      let tpGMMage = Simulation.findSwarmTippingPoint gmMage mageMob 50 10 roller
-      let tpGMFighter = Simulation.findSwarmTippingPoint gmFighter mageMob 50 10 roller
+      let tpMage = Simulation.findSwarmTippingPoint masterMage mageMob 100 10 roller
+      let tpFighter = Simulation.findSwarmTippingPoint masterFighter mageMob 100 10 roller
 
-      Assert.True(tpGMMage.Value >= 20, sprintf "GrandMaster Mage should withstand 20+ Mages (Actual: %d)" tpGMMage.Value)
-      Assert.True(tpGMMage.Value >= tpGMFighter.Value * 5,
-        sprintf "Mage should dominate the mental plane the physical Fighter cannot hold (Mage: %d, Fighter: %d)" tpGMMage.Value tpGMFighter.Value)
+      Assert.True(tpMage.Value >= 10, sprintf "Master Mage should withstand 10+ Mages (Actual: %d)" tpMage.Value)
+      Assert.True(tpFighter.Value >= 10, sprintf "Master Fighter should withstand 10+ Mages (Actual: %d)" tpFighter.Value)
+      Assert.True(tpMage.Value <= tpFighter.Value * 2,
+        sprintf "Mage must stay in line with the Fighter, not dominate (Mage: %d, Fighter: %d)" tpMage.Value tpFighter.Value)

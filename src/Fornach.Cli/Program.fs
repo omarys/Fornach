@@ -152,8 +152,6 @@ module Program =
       RecoveryAction SteadyForm
     elif choice.Contains("Center Mind") then
       RecoveryAction CenterMind
-    elif choice.Contains("Steady Breathing") then
-      RecoveryAction SteadyBreathing
     else
       RecoveryAction SteadyForm
 
@@ -303,8 +301,8 @@ module Program =
 
         // Active Armament Recovery: Shield Bastion Guard
         sprintf "🛡️  [bold %s]Raise Shield[/] (Bastion Posture: Fortify Armor +20, Gain 2 Study Stacks, Bleed Recklessness)%s" Theme.Green raiseShieldTag
-        // Physical Defensive Reset
-        sprintf "🛡️  [%s]Steady Form[/] (Physical Reset: Drain Recklessness via Poise, build Study)" Theme.Green
+        // Steady Form: the single recovery action, available to every discipline
+        sprintf "🛡️  [%s]Steady Form[/] (Recovery: vent all strain via Poise & Composure, restore Morale, build Study)" Theme.Green
 
       else
         // Arcane Spellcraft (Mental Characters)
@@ -402,8 +400,6 @@ module Program =
         // Mental Defensive Reset
         sprintf "🧠 [%s]Center Mind[/] (Mental Reset: Drain Recklessness, clear Confusion, restore Arcane Ward)" Theme.Cyan
 
-      // Universal Respiratory Regulation Reset (always available across all disciplines)
-      sprintf "🌬️  [%s]Steady Breathing[/] (Universal Reset: Deep breath vents Confusion, Frustration, Exhaustion & Overwhelm, restores Morale)" Theme.Cyan
     ]
 
   let buildActionChoices (player: Combatant) (enemy: Combatant) : string list =
@@ -898,7 +894,7 @@ module Program =
   /// Interactive duel against a pack of enemies, modelled on runStoryDuel. The lone player resolves
   /// actions through the group-turn resolver (cleaves/splashes) while each surviving enemy strikes
   /// back in turn. When canFlee, the player may disengage at the cost of one parting strike per foe.
-  let private runStoryGroupDuel (floorNumber: int) (player: Combatant) (enemies: TowerEnemy list) (canFlee: bool) : TowerDisplay.GroupDuelResult =
+  let private runStoryGroupDuel (floorNumber: int) (player: Combatant) (enemies: TowerEnemy list) (canFlee: bool) (reinforce: TowerDisplay.GroupDuelReinforce option) : TowerDisplay.GroupDuelResult =
     let rng = Random()
     let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
 
@@ -1060,6 +1056,19 @@ module Program =
                 )
 
       if not combatOver then
+        // Between rounds the pack may grow: pursuers keep closing and whoever reaches the player joins.
+        match reinforce with
+        | Some join ->
+          let before = currentEnemies.Length
+          let playerAfterJoin, enemiesAfterJoin = join currentPlayer currentEnemies
+          currentPlayer <- playerAfterJoin
+          currentEnemies <- enemiesAfterJoin
+          let joined = currentEnemies.Length - before
+          if joined > 0 then
+            RuntimeLog.write (sprintf "group combat round %d: %d reinforcement(s) joined" round joined)
+            AnsiConsole.MarkupLine(sprintf "\n[bold %s]%d more foe(s) close in and join the fight![/]" Theme.Pink joined)
+        | None -> ()
+
         AnsiConsole.WriteLine()
         AnsiConsole.Markup(sprintf "[%s]Press any key to proceed to next round...[/]" Theme.Comment)
         Console.ReadKey(true) |> ignore
