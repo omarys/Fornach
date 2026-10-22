@@ -848,8 +848,9 @@ module Program =
 
     outcome, currentCombatant
 
-  /// Renders the multi-enemy engagement HUD: the full player panel on the left, compact enemy
-  /// panels stacked on the right, and a combat-log pane spanning the bottom.
+  /// Renders the multi-enemy engagement HUD: the full player panel on the left, a one-row-per-foe pack
+  /// table on the right, and a combat-log pane spanning the bottom. The pack used to be one bordered
+  /// panel per enemy, so a large pack pushed the player card off the top of the screen.
   let private renderGroupHud (player: Combatant) (enemies: TowerEnemy list) (round: int) (logLines: string list) =
     AnsiConsole.Clear()
     AnsiConsole.Write(
@@ -858,18 +859,90 @@ module Program =
         .RuleStyle(Theme.StyleYellow)
     )
 
-    let enemyColumn = Grid()
-    enemyColumn.AddColumn(GridColumn()) |> ignore
-    for e in enemies do
-      let defeated = e.IsDefeated || e.Combatant.Health.IsDepleted || e.Combatant.Morale.IsDepleted
-      let borderColor, headerColor =
-        if defeated then Theme.ColorRed, Theme.Red else Theme.ColorPink, Theme.Pink
-      enemyColumn.AddRow(Display.createCompactCombatantPanel e.Combatant borderColor headerColor (Some player)) |> ignore
+    let isStanding (e: TowerEnemy) =
+      not e.IsDefeated && not e.Combatant.Health.IsDepleted && not e.Combatant.Morale.IsDepleted
 
+    // Deadliest first, so the foes that fall off the bottom are the ones that matter least: standing
+    // before down, then level, then sheer bulk.
+    let ordered =
+      enemies
+      |> List.sortBy (fun e ->
+        (if isStanding e then 0 else 1),
+        -e.Combatant.Level,
+        -(e.Combatant.Health.Maximum + e.Combatant.Morale.Maximum),
+        e.Name)
+
+    // Seven rows keep the pack panel inside the height of the player card beside it.
+    let maxRows = 7
+    let shown = ordered |> List.truncate maxRows
+    let hidden = ordered.Length - shown.Length
+
+    let pack = Grid()
+    pack.AddColumn(GridColumn().PadRight(3)) |> ignore
+    pack.AddColumn(GridColumn().PadRight(2)) |> ignore
+    pack.AddColumn(GridColumn().PadRight(2)) |> ignore
+    pack.AddColumn(GridColumn().PadRight(2)) |> ignore
+    pack.AddColumn(GridColumn()) |> ignore
+
+    for e in shown do
+      let c = e.Combatant
+      let standing = isStanding e
+      let armorText =
+        if c.Armor.IsShredded then sprintf "[%s]SHREDDED[/]" Theme.Red
+        else sprintf "[%s]%d%%[/]" Theme.Yellow (int (c.Armor.AbsorptionRatio * 100.0))
+      let weaponTag =
+        match c.WeaponCondition with
+        | WeaponCondition.Pristine -> ""
+        | WeaponCondition.Notched -> sprintf "[%s]WPN-NOTCHED[/]" Theme.Yellow
+        | WeaponCondition.Damaged -> sprintf "[%s]WPN-DAMAGED[/]" Theme.Orange
+        | WeaponCondition.Broken -> sprintf "[%s]WPN-BROKEN[/]" Theme.Red
+      let assessment = TacticalAssessment.assess player c
+      let threat =
+        match assessment.ThreatWarning, assessment.VulnerabilitySummary with
+        | Some _, Some _ -> sprintf "[bold %s]⚠ 🎯[/]" Theme.Red
+        | Some _, None -> sprintf "[bold %s]⚠[/]" Theme.Red
+        | None, Some _ -> sprintf "[%s]🎯[/]" Theme.Green
+        | None, None -> ""
+      let status =
+        [ if not standing then sprintf "[bold %s]DOWN[/]" Theme.Red
+          threat
+          weaponTag
+          if c.BleedStacks > 0 then sprintf "[%s]BLEED %d[/]" Theme.Red c.BleedStacks ]
+        |> List.filter (fun s -> s <> "")
+        |> String.concat " "
+
+      pack.AddRow(
+        Markup(sprintf "[bold %s]%s[/]" (if standing then Theme.Pink else Theme.Comment) (Markup.Escape e.Name)),
+        Markup(sprintf "[%s]%d/%d[/]" (if standing then Theme.Red else Theme.Comment) c.Health.Current c.Health.Maximum),
+        Markup(sprintf "[%s]%d/%d[/]" (if standing then Theme.Cyan else Theme.Comment) c.Morale.Current c.Morale.Maximum),
+        Markup(armorText),
+        Markup(status)
+      )
+      |> ignore
+
+    if hidden > 0 then
+      pack.AddRow(
+        Markup(sprintf "[%s]… +%d more[/]" Theme.Comment hidden),
+        Markup(""),
+        Markup(""),
+        Markup(""),
+        Markup(sprintf "[%s]below the fold[/]" Theme.Comment)
+      )
+      |> ignore
+
+    let standing = enemies |> List.filter isStanding |> List.length
     let body = Grid()
+    body.AddColumn(GridColumn().PadRight(3)) |> ignore
     body.AddColumn(GridColumn()) |> ignore
-    body.AddColumn(GridColumn()) |> ignore
-    body.AddRow(Display.createCombatantPanel player Theme.ColorGreen Theme.Green None, enemyColumn) |> ignore
+    body.AddRow(
+      Display.createCombatantPanel player Theme.ColorGreen Theme.Green None,
+      Panel(pack)
+        .Header(sprintf "[bold %s] THE PACK — %d STANDING [/]" Theme.Pink standing)
+        .Border(BoxBorder.Rounded)
+        .BorderColor(Theme.ColorPink)
+        .Expand()
+    )
+    |> ignore
     body.Expand <- true
     AnsiConsole.Write(body)
 
@@ -914,10 +987,23 @@ module Program =
         currentPlayer
         (currentEnemies |> List.tryHead |> Option.map (fun e -> e.Combatant) |> Option.defaultValue currentPlayer)
 
+    // Every damage line names the combatant it landed on: an unattributed "Damage Dealt: 42" is
+    // unreadable in a pack, where the reader has to know whose pool moved.
+    let nameOf (id: CombatantId) =
+      if id = currentPlayer.Id then currentPlayer.Name
+      else
+        currentEnemies
+        |> List.tryFind (fun e -> e.Combatant.Id = id)
+        |> Option.map (fun e -> e.Name)
+        |> Option.defaultValue "Unknown"
+
     let appendTurn (header: string) (events: CombatEvent list) =
       combatLog.Add(sprintf "[bold %s]%s[/]" Theme.Yellow (Markup.Escape header))
       for evt in events do
-        combatLog.Add(sprintf "  [grey]• %s[/]" (Markup.Escape (CombatLogger.formatCombatEvent evt)))
+        match evt with
+        | CombatEvent.DamageApplied d ->
+          combatLog.Add(Display.formatDamageLogLine nameOf (d.TargetId = currentPlayer.Id) d)
+        | other -> combatLog.Add(sprintf "  [grey]• %s[/]" (Markup.Escape (CombatLogger.formatCombatEvent other)))
 
     let logLines () = combatLog |> List.ofSeq
 

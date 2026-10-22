@@ -585,6 +585,10 @@ module TowerGenerator =
             | 5 -> StoryBosses.createBargainingAspect ()
             | 6 -> StoryBosses.createDepressionAspect ()
             | _ -> StoryBosses.createAcceptanceAspect ()
+
+        // Authored at Veteran magnitude; lift the Aspect to the tier its stage assumes. The tutorial
+        // chieftain is already levelled, so the call leaves it untouched.
+        let bossCombatant = StoryBosses.scaleToStage floorNumber bossCombatant
         let bossName =
           if floorNumber = 1 then "Bandit Leader"
           else
@@ -694,7 +698,11 @@ module TowerGenerator =
 
     for roomIndex in 0 .. plazas.Length - 1 do
       let room = plazas.[roomIndex]
-      let targetCount = if isStory && floorNumber = 1 then 2 else 3 + rng.Next(0, 3)
+      // Roaming density climbs with depth: 4-6 mobs per chamber on the shallow floors, saturating
+      // the ten mobOffsets by the deep ones. The authored tutorial pair on story floor 1 stands.
+      let targetCount =
+        if isStory && floorNumber = 1 then 2
+        else Math.Min(mobOffsets.Length, 3 + floorNumber / 2 + rng.Next(0, 3))
       let mutable placedCount = 0
       let mutable offsetIndex = 0
 

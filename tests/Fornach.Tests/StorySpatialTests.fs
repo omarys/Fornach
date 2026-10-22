@@ -236,8 +236,10 @@ module StorySpatialTests =
 
     // The rescue is gated: speaking to Lyra before the leader dies does nothing.
     let adjacentState = { state with PlayerPosition = { X = lyraPos.X - 1; Y = lyraPos.Y } }
-    let blockedState, _ = TowerSession.stepPlayer Direction.East adjacentState
+    let blockedState, blockedEvents = TowerSession.stepPlayer Direction.East adjacentState
     Assert.DoesNotContain("quest_save_lyra", blockedState.CompletedQuests)
+    // No completion signal before the gate opens, so the CLI shows no completion card.
+    Assert.DoesNotContain(blockedEvents, (function TowerEvent.NpcInteracted(_, true) -> true | _ -> false))
 
     // Defeat the Bandit Leader, then reunite Lyra with her brother.
     let afterLeader = TowerSession.resolveEnemyDefeat "boss_stage_1" blockedState

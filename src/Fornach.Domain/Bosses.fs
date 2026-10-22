@@ -1,5 +1,7 @@
 namespace Fornach.Domain
 
+open System
+
 module StoryBosses =
   /// Creates the manifestation of Guilt and Hesitation encountered in the quarry pit.
   let createGuiltAspect () : Combatant =
@@ -314,6 +316,42 @@ module StoryBosses =
         EquippedItems = [ staff; linen; relic ]
         Stance = CombatStance.DisciplineStance
         Meters = StatusMeters.Zero }
+
+  /// The stat magnitude the manifestations are authored at. Their blocks sit on the level-40
+  /// (Veteran) curve: Guilt's Force 210 against the curve's 201, Acceptance's Resolve 310.
+  let private authoredLevel = 40
+
+  /// Rescales an authored manifestation to the level its stage assumes, so the Aspect of
+  /// Acceptance arrives at level 185 instead of Level 1 beside level-185 mobs. Multiplies the whole
+  /// block and its pools by one factor, so every Aspect keeps the authored stat ratios, stance, kit
+  /// and starting meters. Anything already levelled (TierFactory-built archetypes, the tutorial
+  /// Bandit Leader) is returned untouched.
+  let scaleToStage (floorNumber: int) (boss: Combatant) : Combatant =
+    if boss.Level > 1 then
+      boss
+    else
+      let level = ProgressionScale.storyGuardianLevel floorNumber
+
+      let primAt lvl =
+        let prim, _, _, _, _, _ = ProgressionScale.physicalStatsForLevel lvl
+        float prim
+
+      let scale = primAt level / primAt authoredLevel
+      // A stage boss is a duel against one protagonist, so it outlasts a same-tier mob rather than
+      // matching it. Stats are left on the curve; only the pools and armor take this multiplier.
+      let toughness = 2.0
+      let scaled value = max 1 (int (Math.Round(float value * scale)))
+      let pooled value = max 1 (int (Math.Round(float value * scale * toughness)))
+
+      { boss with
+          Stats =
+            boss.Stats.All
+            |> Seq.map (fun (stat, value) -> stat, scaled value)
+            |> StatBlock.Create
+          Health = Pool.Create(pooled boss.Health.Maximum)
+          Morale = Pool.Create(pooled boss.Morale.Maximum)
+          Armor = ArmorIntegrity.Create(scaled boss.Armor.Max)
+          Progression = { boss.Progression with Level = level } }
 
   /// Factory to resolve any story encounter by id
   let createEnemy (enemyId: string) : Combatant =

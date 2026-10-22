@@ -104,8 +104,10 @@ let ``SacrificialAltar applies costs and rewards correctly and prevents double-u
   // Assert Cost applied: 25% of the maximum, read off the player
   let healthToll = int (System.Math.Round(float testState.Player.Health.Maximum * 0.25))
   Assert.Equal(initialHp - healthToll, updatedState.Player.Health.Current)
-  // Assert Reward applied: +15 Force
-  Assert.Equal(initialForce + 15, updatedState.Player.Stats.Get StatId.Force)
+  // Assert Reward applied: +15% of the Force the protagonist brought
+  let expectedBonus =
+    int (System.Math.Round(float initialForce * 0.15, System.MidpointRounding.AwayFromZero))
+  Assert.Equal(initialForce + expectedBonus, updatedState.Player.Stats.Get StatId.Force)
 
   // Assert Altar marked used
   match Map.tryFind altarPos updatedState.CurrentFloor.Entities with
@@ -115,6 +117,40 @@ let ``SacrificialAltar applies costs and rewards correctly and prevents double-u
   // Re-attempting sacrifice returns Error
   let secondAttempt = TowerSession.applyAltarSacrifice altarPos updatedState
   Assert.True(secondAttempt.IsError)
+
+[<Fact>]
+let ``Altar blessing grows with the protagonist instead of staying a flat sum`` () =
+  // The whole point: +15 Force was a rounding error beside level-185 attributes, so the same altar
+  // has to pay a Veteran far more than a fresh Explorer.
+  let veteran = TierFactory.createClassLevel CharacterClass.Warrior 185
+  let state = TowerSession.initSession veteran 42 1
+  let altarPos = { X = 15; Y = 15 }
+
+  let altar =
+    { Id = "altar_scale_test"
+      Name = "Altar of the Iron Quarryman"
+      Description = "A dark granite crucible."
+      Cost = AltarCost.SacrificeHealth 25
+      Reward = AltarReward.StatBuff(StatId.Force, 15)
+      IsUsed = false }
+
+  let seededState =
+    { state with
+        CurrentFloor =
+          { state.CurrentFloor with
+              Tiles = state.CurrentFloor.Tiles |> Map.add altarPos (Floor SurfaceType.PavedStone)
+              Entities =
+                state.CurrentFloor.Entities
+                |> Map.add altarPos (EntityEncounter (FloorEncounter.SacrificialAltar altar)) } }
+
+  let force = seededState.Player.Stats.Get StatId.Force
+  Assert.True(force > 100, sprintf "a level-185 Warrior should carry far more than 100 Force, got %d" force)
+
+  let blessed = TowerSession.applyAltarSacrifice altarPos seededState |> getOk
+  let gained = blessed.Player.Stats.Get StatId.Force - force
+
+  Assert.Equal(int (Math.Round(float force * 0.15, MidpointRounding.AwayFromZero)), gained)
+  Assert.True(gained > 15, sprintf "veteran altar gain %d should outgrow the old flat +15" gained)
 
 [<Fact>]
 let ``WanderingTrader handles purchasing wares with Souls and Alchemical Trophies`` () =

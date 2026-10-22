@@ -92,3 +92,72 @@ module BalanceRegressionTests =
 
     Assert.True(leveled.Stats.Get Force > forceBefore, sprintf "Force regressed: %d -> %d" forceBefore (leveled.Stats.Get Force))
     Assert.True(leveled.Health.Maximum >= protagonist.Health.Maximum)
+
+  [<Fact>]
+  let ``every story stage boss arrives at the tier its stage assumes`` () =
+    // The Aspects were authored at Veteran magnitude and built with Combatant.create, so all six
+    // used to enter their stage at Level 1 next to level-185 mobs. scaleToStage lifts each one to
+    // the level the floor's progression hands the protagonist.
+    for floorNumber in 2..7 do
+      let floor = TowerGenerator.generateFloorWithMode 4242 floorNumber true
+
+      let boss =
+        floor.Entities
+        |> Map.toList
+        |> List.pick (function
+          | _, EntityEnemy e when e.Id.StartsWith("boss_stage_") -> Some e
+          | _ -> None)
+
+      let expected = ProgressionScale.storyGuardianLevel floorNumber
+      Assert.Equal(expected, boss.Combatant.Level)
+
+      let mob =
+        floor.Entities
+        |> Map.toList
+        |> List.pick (function
+          | _, EntityEnemy e when e.Id.StartsWith("grind_mob_") -> Some e.Combatant
+          | _ -> None)
+
+      Assert.True(
+        boss.Combatant.Health.Maximum > mob.Health.Maximum,
+        sprintf
+          "stage %d boss %s has %d HP, no tougher than a %s at %d"
+          floorNumber
+          boss.Name
+          boss.Combatant.Health.Maximum
+          mob.Name
+          mob.Health.Maximum
+      )
+
+  [<Fact>]
+  let ``the tutorial bandit leader is not rescaled`` () =
+    let floor = TowerGenerator.generateFloorWithMode 4242 1 true
+
+    let boss =
+      floor.Entities
+      |> Map.toList
+      |> List.pick (function
+        | _, EntityEnemy e when e.Id.StartsWith("boss_stage_") -> Some e
+        | _ -> None)
+
+    Assert.Equal("Bandit Leader", boss.Name)
+    Assert.Equal(32, boss.Combatant.Level)
+
+  [<Fact>]
+  let ``roaming mob density climbs with depth and never leaves the chamber offsets`` () =
+    let mobs floorNumber =
+      let floor = TowerGenerator.generateFloorWithMode 4242 floorNumber false
+      floor.Entities
+      |> Map.toList
+      |> List.filter (fun (_, ent) ->
+        match ent with
+        | EntityEnemy e -> e.Id.StartsWith "grind_mob_"
+        | _ -> false)
+      |> List.length
+
+    let shallow, mid, deep = mobs 2, mobs 5, mobs 8
+    Assert.True(shallow < mid, sprintf "floor 2 had %d mobs, floor 5 had %d" shallow mid)
+    Assert.True(mid < deep, sprintf "floor 5 had %d mobs, floor 8 had %d" mid deep)
+
+    // Twelve plazas is the generator's ceiling and ten mobOffsets is the per-chamber cap.
+    Assert.True(mobs 30 <= 120, sprintf "floor 30 fielded %d mobs" (mobs 30))

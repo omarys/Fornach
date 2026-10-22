@@ -51,8 +51,9 @@ module WorldEvents =
       IsTriggered = false }
 
   /// Creates an ancient sacrificial altar presenting risk vs reward dilemmas.
-  /// Each cost is a percentage of the player's maximum (25% health, 30% morale, 30% armor below);
-  /// the per-theme numbers keep their relative severity.
+  /// Every number here is a percentage, not a flat sum: costs take a slice of the protagonist's maximum
+  /// and rewards are read back off their own attributes at commune time, so neither side fades as they
+  /// climb. The per-theme numbers keep their relative severity.
   let createAltar (theme: FloorTheme) (floorNum: int) : AltarChoice =
     match theme with
     | QuarryPlazas ->

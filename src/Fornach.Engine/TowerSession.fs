@@ -11,7 +11,7 @@ type TowerEvent =
   | StairwayAscended of nextFloor: int
   | DoorLockedMessage of message: string
   | CombatTriggered of enemy: TowerEnemy
-  | NpcInteracted of npc: TowerNpc * questAccepted: bool
+  | NpcInteracted of npc: TowerNpc * questCompleted: bool
   | ChestOpened of chest: TowerChest * item: EquipmentItem option * key: string option
   | ShrineActivated of shrine: TowerShrine
   | HazardStepped of hazard: HazardType * message: string
@@ -394,6 +394,12 @@ module TowerSession =
 
   /// Completes an active quest on the floor and awards its reward
   let completeQuest (questId: string) (state: TowerRunState) : TowerRunState =
+    let questTitle =
+      state.CurrentFloor.ActiveQuests
+      |> List.tryFind (fun q -> q.Id = questId)
+      |> Option.map (fun q -> q.Title)
+      |> Option.defaultValue questId
+
     let updatedQuests =
       state.CurrentFloor.ActiveQuests
       |> List.map (fun q -> if q.Id = questId then { q with IsCompleted = true } else q)
@@ -406,7 +412,7 @@ module TowerSession =
     { state with
         CurrentFloor = updatedFloor
         CompletedQuests = state.CompletedQuests.Add questId
-        MessageLog = sprintf "Quest '%s' completed! The Ascension Portal is unlocked." questId :: state.MessageLog }
+        MessageLog = sprintf "Quest complete: %s — the Ascension Portal is unlocked." questTitle :: state.MessageLog }
 
   /// Initializes a new Tower run session starting at a given floor with specified story mode
   let initSessionWithMode (player: Combatant) (seed: int) (startFloor: int) (isStory: bool) : TowerRunState =
@@ -487,7 +493,6 @@ module TowerSession =
         { nextState with MessageLog = logMsg :: nextState.MessageLog }, events
 
       | Some (EntityNpc npc) ->
-        let questAccepted = npc.Quest.IsSome
         // Check if quest can be completed (e.g. at least one enemy was defeated on this floor)
         let defeatedEnemies =
           state.CurrentFloor.Entities
@@ -521,7 +526,7 @@ module TowerSession =
           events <- [ TowerEvent.NpcInteracted(updatedNpc, true) ]
           rewardedState, events
         else
-          events <- [ TowerEvent.NpcInteracted(npc, questAccepted) ]
+          events <- [ TowerEvent.NpcInteracted(npc, false) ]
           let logMsg = sprintf "Spoke with %s: \"%s\"" npc.Name (List.head npc.Dialogue)
           { nextState with MessageLog = logMsg :: nextState.MessageLog }, events
 
@@ -839,22 +844,37 @@ module TowerSession =
           { state.Player with
               Armor = state.Player.Armor.Shred(percentOf state.Player.Armor.Max pct) }
 
-      // 2. Apply Reward
+      // 2. Apply Reward. Every blessing is a percentage of the protagonist's own values, read here
+      // for the same reason the toll is: it has to keep pace as attributes and pools run to thousands.
+      let pctOf (value: int) (pct: int) =
+        max 1 (int (Math.Round(float value * float pct / 100.0, MidpointRounding.AwayFromZero)))
+
       let mutable rewardedPlayer = costPlayer
       let mutable newKeys = state.CollectedKeys
       let mutable newItems = state.InventoryItems
 
       match altar.Reward with
-      | StatBuff (stat, bonus) ->
-        let updatedStats = costPlayer.Stats.Modify(stat, bonus)
+      | StatBuff (stat, pct) ->
+        let updatedStats = costPlayer.Stats.Modify(stat, pctOf (costPlayer.Stats.Get stat) pct)
         rewardedPlayer <- { costPlayer with Stats = updatedStats }
-      | VitalitySurge (hp, mor) ->
-        rewardedPlayer <- { costPlayer with Health = costPlayer.Health.ApplyDelta hp; Morale = costPlayer.Morale.ApplyDelta mor }
+      | VitalitySurge (hpPct, morPct) ->
+        // ApplyDelta clamps at the pool maximum, so a surge gifted at full health is not banked.
+        rewardedPlayer <-
+          { costPlayer with
+              Health = costPlayer.Health.ApplyDelta (percentOf costPlayer.Health.Maximum hpPct)
+              Morale = costPlayer.Morale.ApplyDelta (percentOf costPlayer.Morale.Maximum morPct) }
       | KeyReward (kId, _) ->
         newKeys <- newKeys.Add kId
       | RelicReward item ->
-        newItems <- item :: newItems
-        rewardedPlayer <- Combatant.applyItemBonus item rewardedPlayer
+        // A relic bears authored percentages rather than flat points, resolved against the bearer at
+        // the moment of the bargain; the stored item keeps the values it was struck at.
+        let scaled =
+          { item with
+              StatModifiers =
+                item.StatModifiers
+                |> List.map (fun (stat, pct) -> stat, pctOf (costPlayer.Stats.Get stat) pct) }
+        newItems <- scaled :: newItems
+        rewardedPlayer <- Combatant.applyItemBonus scaled rewardedPlayer
 
       let updatedAltar = { altar with IsUsed = true }
       let updatedEntities = Map.add altarPt (EntityEncounter (SacrificialAltar updatedAltar)) state.CurrentFloor.Entities

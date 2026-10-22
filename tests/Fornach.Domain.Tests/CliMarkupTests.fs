@@ -27,6 +27,24 @@ module CliMarkupTests =
       Assert.NotNull(m)
 
   [<Fact>]
+  let ``combat log damage lines parse cleanly in Spectre markup`` () =
+    // A single-bracketed [CRITICAL] is read as a style tag and throws; this guards the pack log.
+    let id = CombatantId.New()
+    let names (_: CombatantId) = "Aspect of Guilt"
+    let damage crit compromised =
+      { TargetId = id
+        Plane = Physical
+        Amount = 42
+        IsCritical = crit
+        IsArmorCompromised = compromised }
+
+    for (crit, compromised) in [ false, false; true, false; false, true; true, true ] do
+      let line = Display.formatDamageLogLine names true (damage crit compromised)
+      Assert.NotNull(Markup(line))
+      Assert.Contains("42", line)
+      Assert.Contains("Aspect of Guilt", line)
+
+  [<Fact>]
   let ``Message log items containing square brackets are escaped cleanly`` () =
     let rawLogMessages = [
       "The Ascension Portal is sealed. Requires: [Golden Key]. (Find in Vault)"

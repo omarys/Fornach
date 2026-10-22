@@ -663,6 +663,16 @@ module Display =
   /// DamageApplied events filtered to this target (each event caps at what the pool lost, so
   /// a finisher does not report four-digit overkill); the vitals swing beside them is the
   /// pool-applied truth.
+  /// Formats one damage event for the multi-enemy combat log. The target is always named, because an
+  /// unattributed "42 Physical" is unreadable in a pack. Bracket literals are doubled: Spectre reads
+  /// a single-bracketed word as a style tag and throws on it.
+  let formatDamageLogLine (nameOf: CombatantId -> string) (targetIsPlayer: bool) (d: DamageEvent) : string =
+    let crit = if d.IsCritical then sprintf " [bold %s][[CRITICAL]][/]" Theme.Yellow else ""
+    let comp = if d.IsArmorCompromised then sprintf " [%s][[ARMOR COMPROMISED]][/]" Theme.Orange else ""
+    let nameColor = if targetIsPlayer then Theme.Red else Theme.Pink
+    sprintf "  [grey]•[/] [bold %s]%s[/] takes [bold %s]%d %A[/]%s%s"
+      nameColor (Markup.Escape (nameOf d.TargetId)) Theme.Red d.Amount d.Plane crit comp
+
   let logDamageSummary (events: CombatEvent list) (targetBefore: Combatant) (targetAfter: Combatant) =
     let applied =
       events

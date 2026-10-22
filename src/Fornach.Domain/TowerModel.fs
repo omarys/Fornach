@@ -96,17 +96,19 @@ type AltarCost =
     | SacrificeMorale amt -> sprintf "Sacrifice %d%% Morale" amt
     | ShredArmor amt -> sprintf "Shred %d%% Armor durability" amt
 
-/// Reward granted upon fulfilling an altar's sacrifice
+/// Reward granted upon fulfilling an altar's sacrifice. The amounts are PERCENTAGES of the
+/// protagonist's own values, read when the altar is accepted: a flat +15 Force was a rounding error
+/// beside level-185 attributes, so the blessing grows with the one who earns it.
 type AltarReward =
-  | StatBuff of stat: StatId * bonus: int
-  | VitalitySurge of health: int * morale: int
+  | StatBuff of stat: StatId * bonusPct: int
+  | VitalitySurge of healthPct: int * moralePct: int
   | KeyReward of keyId: string * keyName: string
   | RelicReward of EquipmentItem
 
   member this.Description : string =
     match this with
-    | StatBuff (stat, bonus) -> sprintf "+%d %A" bonus stat
-    | VitalitySurge (hp, mor) -> sprintf "+%d HP and +%d Morale" hp mor
+    | StatBuff (stat, bonusPct) -> sprintf "+%d%% %A" bonusPct stat
+    | VitalitySurge (hpPct, morPct) -> sprintf "+%d%% HP and +%d%% Morale" hpPct morPct
     | KeyReward (_, keyName) -> sprintf "Keystone: %s" keyName
     | RelicReward item -> sprintf "Relic: %s" item.Name
 

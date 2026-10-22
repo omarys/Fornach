@@ -839,10 +839,13 @@ module TowerDisplay =
 
     match npc.Quest with
     | Some q ->
-      grid.AddRow(Rule(sprintf "[bold %s]TRIAL OFFERED[/]" Theme.Yellow).RuleStyle(Theme.StyleYellow)) |> ignore
+      let header, rewardLead =
+        if q.IsCompleted then "TRIAL FULFILLED", "Reward granted:"
+        else "TRIAL OFFERED", "Reward:"
+      grid.AddRow(Rule(sprintf "[bold %s]%s[/]" Theme.Yellow header).RuleStyle(Theme.StyleYellow)) |> ignore
       grid.AddRow(Markup(sprintf "[bold %s]%s[/]" Theme.Yellow q.Title)) |> ignore
       grid.AddRow(Markup(sprintf "[%s]%s[/]" Theme.Foreground q.Description)) |> ignore
-      grid.AddRow(Markup(sprintf "[bold %s]Reward:[/] [italic %s]%s[/]" Theme.Green Theme.Foreground q.RewardDescription)) |> ignore
+      grid.AddRow(Markup(sprintf "[bold %s]%s[/] [italic %s]%s[/]" Theme.Green rewardLead Theme.Foreground q.RewardDescription)) |> ignore
     | None -> ()
 
     grid.AddRow(Markup(sprintf "\n[%s]Press any key to close dialogue...[/]" Theme.Comment)) |> ignore
@@ -851,6 +854,29 @@ module TowerDisplay =
       Panel(grid)
         .Border(BoxBorder.Heavy)
         .BorderStyle(Style(foreground = Nullable Theme.ColorCyan))
+
+    AnsiConsole.Clear()
+    AnsiConsole.Write(panel)
+    Console.ReadKey(true) |> ignore
+
+  /// Confirms a finished trial. Without this the quest resolved silently: the only trace was a line
+  /// in a message log the modal dialogue had just cleared off the screen. The reward text comes from
+  /// the quest itself, so the card cannot drift from what was authored.
+  let showQuestCompleteDialog (quest: TowerQuest) =
+    let grid = Grid()
+    grid.AddColumn(GridColumn()) |> ignore
+
+    grid.AddRow(Markup(sprintf "[bold %s]󰄬 QUEST COMPLETE[/]" Theme.Green)) |> ignore
+    grid.AddRow(Rule().RuleStyle(Theme.StyleGreen)) |> ignore
+    grid.AddRow(Markup(sprintf "[bold %s]%s[/]" Theme.Yellow quest.Title)) |> ignore
+    grid.AddRow(Markup(sprintf "[bold %s]Reward:[/] [italic %s]%s[/]\n" Theme.Green Theme.Foreground quest.RewardDescription)) |> ignore
+    grid.AddRow(Markup(sprintf "[bold %s]The Ascension Portal is unlocked.[/]" Theme.Purple)) |> ignore
+    grid.AddRow(Markup(sprintf "\n[%s]Press any key to continue...[/]" Theme.Comment)) |> ignore
+
+    let panel =
+      Panel(grid)
+        .Border(BoxBorder.Heavy)
+        .BorderStyle(Style(foreground = Nullable Theme.ColorGreen))
 
     AnsiConsole.Clear()
     AnsiConsole.Write(panel)
@@ -1617,9 +1643,11 @@ module TowerDisplay =
               AnsiConsole.MarkupLine(sprintf "\n[bold %s]⌹ %s[/]\n%s" Theme.Yellow chest.Description rewardText)
               Thread.Sleep(900)
 
-            | TowerEvent.NpcInteracted(npc, _) ->
+            | TowerEvent.NpcInteracted(npc, questCompleted) ->
               // The engine already chronicles the conversation itself (and quotes the dialogue).
               showNpcDialog npc
+              if questCompleted then
+                npc.Quest |> Option.iter showQuestCompleteDialog
 
             | TowerEvent.AltarEncountered(altar, pt) ->
               AnsiConsole.WriteLine()
