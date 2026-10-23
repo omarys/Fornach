@@ -329,9 +329,9 @@ type Combatant =
     | Vector.Power -> { c with Momentum = Math.Max(0, c.Momentum - count) }
     | Vector.Discipline -> { c with Focus = Math.Max(0, c.Focus - count) }
 
-  /// Permanent growth on a won encounter, replacing the old Study Stack ramp: Prowess and Poise
-  /// always rise, plus an off-type tick — Fighters sharpen the mind, Mages the body. Weighted by the
-  /// strongest foe's level (Novice/Veteran +1, Master +2, GrandMaster +3) so hard fights teach more.
+  /// Permanent growth on a won encounter, replacing the old Study Stack ramp. A Fighter grows the
+  /// martial pair and reads the room; a Mage grows the scholarly pair and a caster's body. Weighted by
+  /// the strongest foe's level (Novice/Veteran +1, Master +2, GrandMaster +3) so hard fights teach more.
   static member growFromEncounter (foes: Combatant list) (c: Combatant) =
     let gain =
       match foes |> List.map (fun f -> f.Progression.Level) with
@@ -340,12 +340,16 @@ type Combatant =
       | levels when List.max levels >= 100 -> 2
       | _ -> 1
 
-    let offType =
+    let gains =
       match c.Class with
-      | Fighter -> [ StatId.Acumen, 1; StatId.Intuition, 1 ]
-      | _ -> [ StatId.Force, 1; StatId.Finesse, 1 ]
+      | Fighter ->
+        [ StatId.Prowess, gain; StatId.Poise, gain; StatId.Intuition, 1; StatId.Composure, 1 ]
+      | Mage ->
+        // No Prowess: the body a caster builds is Reflex and Poise, the mind Acumen and Composure.
+        [ StatId.Acumen, gain; StatId.Composure, gain; StatId.Reflex, 1; StatId.Poise, 1 ]
+      | _ -> [ StatId.Prowess, gain; StatId.Poise, gain; StatId.Force, 1; StatId.Finesse, 1 ]
 
-    { c with Stats = c.Stats.ApplyModifiers ([ StatId.Prowess, gain; StatId.Poise, gain ] @ offType) }
+    { c with Stats = c.Stats.ApplyModifiers gains }
 
   /// Modifies active Arcane Ward barrier absorption pool
   static member addWard delta (c: Combatant) =
