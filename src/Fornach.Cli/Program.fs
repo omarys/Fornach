@@ -24,11 +24,9 @@ module Program =
     telemetryGrid.AddColumn(GridColumn().Centered()) |> ignore
     telemetryGrid.AddColumn(GridColumn().Centered()) |> ignore
     telemetryGrid.AddColumn(GridColumn().Centered()) |> ignore
-    telemetryGrid.AddColumn(GridColumn().Centered()) |> ignore
     telemetryGrid.AddRow(
       Markup(sprintf "[grey]󰍹 Screen:[/] [bold %s]%dx%d[/]" Theme.Cyan termWidth termHeight),
       Markup(sprintf "[grey]󰘚 Engine:[/] [bold %s]v0.3.0 Turbo[/]" Theme.Green),
-      Markup(sprintf "[grey]󰀝 Roster:[/] [bold %s]%d Archetypes[/]" Theme.Yellow Archetypes.allArchetypes.Length),
       Markup(sprintf "[grey]󰌌 Input:[/] [bold %s]Vim (j/k/h/l) + Pad[/]" Theme.Pink)
     ) |> ignore
     telemetryGrid.Expand <- true
