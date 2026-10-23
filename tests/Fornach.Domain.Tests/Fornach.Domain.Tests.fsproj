@@ -12,6 +12,7 @@
     <Compile Include="AttributeMappingTests.fs" />
     <Compile Include="DicePoolTests.fs" />
     <Compile Include="ProlongedBattleTests.fs" />
+    <Compile Include="StudyStackSpendTests.fs" />
     <Compile Include="PreparationTests.fs" />
     <Compile Include="MonteCarloSwarmTests.fs" />
     <Compile Include="OverallBalanceTests.fs" />
