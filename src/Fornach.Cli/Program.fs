@@ -191,9 +191,10 @@ module Program =
         | Some (StandardAttack atk) ->
           let isHeavyGambit = isInterruptibleWindup enemyIntentOpt
 
+          // Only an interruptible wind-up earns interrupt wording: a plain Power strike has nothing to
+          // break, and advertising an opportunity the menu cannot honour is noise.
           let interruptBadge =
             if isHeavyGambit then sprintf " [bold %s]★ SHIELD INTERRUPT (Disrupts Windup!)[/]" Theme.Yellow
-            elif atk.Vector = Vector.Power then sprintf " [bold %s]★ INTERRUPT OPPORTUNITY[/]" Theme.Cyan
             else ""
 
           let powTag = if atk.Vector = Vector.Discipline then sprintf " [bold %s]★ Guard Break[/]" Theme.Red else ""
@@ -221,15 +222,18 @@ module Program =
           elif fst assess.BestDefense = defenseStat then sprintf " - [bold %s]%s ⚠ Apex Guard[/]" Theme.Red deltaText
           else sprintf " - [%s]%s[/]" Theme.Comment deltaText
 
-      // Orders attack groups by estimated effectiveness against what the player has scouted.
-      // Obscured insight means nothing is known, so the archetype's own priority order stands.
+      // Orders attack groups by overall contest margin: attack-minus-defence on the strike itself, plus
+      // how well the player's own guard holds on that same vector. Estimated damage breaks ties, so a
+      // gambit that lands harder still wins between two equal margins. Obscured insight means nothing is
+      // known, so the archetype's own priority order stands.
       let rankStrikes (groups: (AttackClassification * string list) list) : string list =
         if assess.InsightLevel = Obscured then
           groups |> List.collect snd
         else
           groups
-          |> List.map (fun (attack, labels) -> AttackEstimator.estimate player enemy attack, labels)
-          |> List.sortBy (fun (score, _) -> -score)
+          |> List.map (fun (attack, labels) ->
+            (AttackEstimator.contestMargin player enemy attack, AttackEstimator.estimate player enemy attack), labels)
+          |> List.sortBy (fun ((margin, damage), _) -> -float margin, -damage)
           |> List.collect snd
 
       if player.Plane = Physical then

@@ -362,14 +362,15 @@ module WorldEvents =
         let echoPos = { X = p0.X - 3; Y = p0.Y + 2 }
         echoPos, FloorEncounter.MemoryEchoFragment (createMemoryEcho theme floorNum)
 
-        // 2. Sacrificial Altar
-        let altarPos = { X = p2.X + 3; Y = p2.Y + 2 }
+        // 2. Sacrificial Altar — deliberately kept out of the shrine rooms (plaza indices 2, 5 and 8 in
+        // `TowerGenerator`), so a stage never offers a free blessing and a costly pact side by side.
+        let altarPos = { X = p1.X + 3; Y = p1.Y + 2 }
         altarPos, FloorEncounter.SacrificialAltar (createAltar theme floorNum)
 
         // 2b. A second altar elsewhere in the stage: one sacrifice site per floor was too thin
         // now that floors run 9 to 12 rooms. Same pact, unique id.
         let secondAltar = createAltar theme floorNum
-        let secondAltarPos = { X = p5.X + 3; Y = p5.Y - 2 }
+        let secondAltarPos = { X = p4.X + 3; Y = p4.Y - 2 }
         secondAltarPos,
         FloorEncounter.SacrificialAltar
           { secondAltar with

@@ -171,3 +171,25 @@ module CombatTacticsTests =
     let hasParryTag = agilityChoices |> List.exists (fun c -> c.Contains("Parry Opening"))
     Assert.True(hasBastionTag, "Discipline options should highlight bastion counter vs Agility")
     Assert.True(hasParryTag, "Raise shield should highlight parry opening vs Agility")
+
+  [<Fact>]
+  let ``no interrupt option or badge appears for a wind-up that cannot be interrupted`` () =
+    let player = TierFactory.createClassLevel CharacterClass.Fighter 30
+    let enemy = TierFactory.createClassLevel CharacterClass.Warrior 30
+
+    for intent in
+      [ ActionIntent.StandardAttack(AttackClassification.ForceStrike false)
+        ActionIntent.StandardAttack(AttackClassification.FinesseCadence false)
+        ActionIntent.StandardAttack(AttackClassification.ProwessStrike false) ] do
+      let choices = Program.buildActionChoicesWithTelegraph player enemy (Some intent)
+      Assert.DoesNotContain(choices, (fun c -> c.Contains("Shield Bash")))
+      Assert.DoesNotContain(choices, (fun c -> c.Contains("INTERRUPT")))
+
+    // And the one that can be interrupted still offers exactly one bash.
+    let heavy = ActionIntent.StandardAttack(AttackClassification.ForceStrike true)
+
+    let bashes =
+      Program.buildActionChoicesWithTelegraph player enemy (Some heavy)
+      |> List.filter (fun c -> c.Contains("Shield Bash"))
+
+    Assert.Equal(1, List.length bashes)

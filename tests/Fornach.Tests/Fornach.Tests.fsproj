@@ -37,6 +37,7 @@
     <Compile Include="BleedRecoveryTests.fs" />
     <Compile Include="LootConsumableTests.fs" />
     <Compile Include="ShrineBlessingTests.fs" />
+    <Compile Include="EnemyDensityTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -44,23 +44,40 @@ module AttackEstimator =
     let rerollGain = if vector = Discipline then float (Math.Min(studyStacks, pool)) / 12.0 else 0.0
     float (DicePool.computeFloorHits stat) + float pool * 0.5 + rerollGain
 
+  /// The defence an attack is actually contested against, mirroring ActionResolver's selection: a
+  /// DisciplineStance guard blends Poise and Composure at 1.5x, other pairs average, and the mental
+  /// plane passes through the caster's defence conversion.
+  let defenseValue (defender: Combatant) (attack: AttackClassification) : int =
+    let _, defenseStats = statPair attack
+
+    let raw =
+      match defenseStats with
+      | [ single ] -> defender.GetCombatStat single
+      | [ first; second ] when first = Poise && second = Composure -> defender.GetGuard(attack.Plane, true)
+      | [ first; second ] -> (defender.GetCombatStat first + defender.GetCombatStat second) / 2
+      | _ -> defender.GetCombatStat (List.head defenseStats)
+
+    if attack.Plane = Mental then
+      ActionResolver.resolveMentalDefenseFor defender raw
+    else
+      raw
+
+  /// The whole contest in one number, and both halves are read on the attack's own vector: how far the
+  /// actor's attack outclasses the defence it faces, plus how far the actor's guard against that same
+  /// vector outclasses the counter-threat the target's matching attribute represents. Ranking on offence
+  /// alone recommends the strike that hits hardest and loses the exchange; the second term is what makes
+  /// "best overall outcome" mean survive-and-hit rather than hit-hardest.
+  let contestMargin (actor: Combatant) (target: Combatant) (attack: AttackClassification) : int =
+    let offenseStat, _ = statPair attack
+    let offense = actor.GetCombatStat offenseStat - defenseValue target attack
+    let guard = defenseValue actor attack - target.GetCombatStat offenseStat
+    offense + guard
+
   /// Estimated damage of an attack against a target; 0.0 when the strike is expected to whiff.
   let estimate (actor: Combatant) (target: Combatant) (attack: AttackClassification) : float =
-    let offenseStat, defenseStats = statPair attack
+    let offenseStat, _ = statPair attack
     let offValue = int (Math.Round(offenseValue actor offenseStat))
-    let defValue =
-      let raw =
-        match defenseStats with
-        | [ single ] -> target.GetCombatStat single
-        // A DisciplineStance defender's guard is 1.5x Poise, not the Poise/Composure blend.
-        | [ first; second ] when first = Poise && second = Composure -> target.GetGuard(attack.Plane, true)
-        | [ first; second ] -> (target.GetCombatStat first + target.GetCombatStat second) / 2
-        | _ -> target.GetCombatStat (List.head defenseStats)
-
-      if attack.Plane = Mental then
-        ActionResolver.resolveMentalDefenseFor target raw
-      else
-        raw
+    let defValue = defenseValue target attack
 
     // Study-Stack strikes pay more for spending, so the estimate has to weigh the stacks the
     // strike would actually burn — same helper the resolver uses, so the two cannot drift.

@@ -723,11 +723,11 @@ module TowerGenerator =
 
     for roomIndex in 0 .. plazas.Length - 1 do
       let room = plazas.[roomIndex]
-      // Roaming density climbs with depth: 4-6 mobs per chamber on the shallow floors, saturating
-      // the ten mobOffsets by the deep ones. The authored tutorial pair on story floor 1 stands.
+      // Roaming density climbs with depth: 4-6 mobs per chamber on the shallow floors, saturating the
+      // ten mobOffsets by the deep ones. The authored tutorial pair on story floor 1 stands.
       let targetCount =
         if isStory && floorNumber = 1 then 2
-        else Math.Min(mobOffsets.Length, 3 + floorNumber / 2 + rng.Next(0, 3))
+        else Math.Min(mobOffsets.Length, 4 + floorNumber / 2 + rng.Next(0, 2))
       let mutable placedCount = 0
       let mutable offsetIndex = 0
 
