@@ -1011,7 +1011,7 @@ module ProlongedBattleTests =
     Assert.True(ratio > 1.90 && ratio < 2.10, sprintf "10 free stacks should scale damage ~2.0x, got %.3f" ratio)
 
   [<Fact>]
-  let ``Calculated flaw strike pays 0.7 multiplier per stack and follows the spent amount`` () =
+  let ``Calculated flaw strike pays 0.44 multiplier per stack and follows the spent amount`` () =
     let target = punchingBag ()
     let mk stacks = { createFighter 50 50 50 50 120 50 with StudyStacks = stacks }
 
@@ -1019,11 +1019,12 @@ module ProlongedBattleTests =
     let d2, d4, d6 = dmgWith 2, dmgWith 4, dmgWith 6
 
     // Damage is multiplicative in the class multiplier, so the slope/intercept of the spend curve
-    // recovers the per-stack factor relative to the 2.2 base multiplier.
+    // recovers the per-stack factor relative to the 1.2 base multiplier (§5 item 12 reverted the
+    // exported 2.2 / 0.7 pair back to the pre-existing curve).
     let slope = float (d6 - d2) / 4.0
     let intercept = float d2 - 2.0 * slope
-    let perStack = 2.2 * slope / intercept
-    Assert.True(perStack > 0.68 && perStack < 0.72, sprintf "Expected 0.7 per stack, fitted %.3f" perStack)
+    let perStack = 1.2 * slope / intercept
+    Assert.True(perStack > 0.42 && perStack < 0.46, sprintf "Expected 0.44 per stack, fitted %.3f" perStack)
 
     // Nothing is left behind: the pile is spent, not trimmed to the payload.
     let _, res = damageTaken (mk 6) CalculatedFlawStrike target

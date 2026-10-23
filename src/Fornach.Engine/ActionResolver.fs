@@ -19,9 +19,13 @@ module ActionResolver =
   let studyPerStack = 0.05
   /// The two Prowess vectors are the study-school's own weapons and read the stacks twice as hard.
   let studyPerStackProwess = 0.10
-  /// What one spent stack is worth on a spender. Only pays from the second stack on.
-  let spendBase = 2.2
-  let spendPerStack = 0.7
+  /// What one spent stack is worth on a spender. Only pays from the second stack on. The martial
+  /// spender pays more per stack than the insight pair — kept split so neither school's tempo moves
+  /// when the other is tuned (§5 item 12).
+  let flawSpendBase = 1.2
+  let flawSpendPerStack = 0.44
+  let insightSpendBase = 1.1
+  let insightSpendPerStack = 0.30
 
   let strikeMultiplier
     (attack: AttackClassification)
@@ -47,9 +51,9 @@ module ActionResolver =
       sharpened
       * (if isHeavySlam then 1.30 else 1.0)
       * (if stance = CombatStance.DisciplineStance then 1.20 else 1.0)
-    | CalculatedFlawStrike -> spend spendBase spendPerStack
+    | CalculatedFlawStrike -> spend flawSpendBase flawSpendPerStack
     | ForceInsightStrike
-    | FinesseInsightStrike -> spend spendBase spendPerStack
+    | FinesseInsightStrike -> spend insightSpendBase insightSpendPerStack
     | AuthorityDecree isImperiousDemand -> held * (if isImperiousDemand then 1.3 else 1.0)
     | SynapticGlamour isMindFracture -> held * (if isMindFracture then 1.35 else 1.0)
     | RunicWardTrap isAnomalousGlyph -> held * (if isAnomalousGlyph then 1.25 else 1.0)

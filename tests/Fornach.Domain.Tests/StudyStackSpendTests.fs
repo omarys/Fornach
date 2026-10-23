@@ -15,11 +15,26 @@ module StudyStackSpendTests =
     { TierFactory.createClassTier CharacterClass.Fighter CombatTier.Master with StudyStacks = stacks }
 
   [<Fact>]
-  let ``a spender pays 2.2 + 0.7n and nothing at one stack`` () =
+  let ``a spender pays 1.2 + 0.44n and nothing at one stack`` () =
     let mult n = ActionResolver.strikeMultiplier CalculatedFlawStrike 0 n CombatStance.PowerStance
     Assert.Equal(1.0, mult 1, 6)
-    Assert.Equal(3.6, mult 2, 6)
-    Assert.Equal(10.6, mult 12, 6)
+    Assert.Equal(2.08, mult 2, 6)
+    Assert.Equal(6.48, mult 12, 6)
+
+  [<Fact>]
+  let ``the finisher threshold sits at five stacks at Master, not two`` () =
+    let pool = (TierFactory.createClassTier CharacterClass.Fighter CombatTier.Master).Health.Maximum
+    let single =
+      let target = TierFactory.createClassTier CharacterClass.Fighter CombatTier.Master
+      let res = ActionResolver.resolve topRoll (StandardAttack CalculatedFlawStrike) (flawStrike 1) target
+      target.Health.Current - res.Target.Health.Current
+
+    // Multiplier needed to delete an equal-tier pool at a top roll, and where the ladder crosses it.
+    let needed = float pool / float single
+    let mult n = ActionResolver.strikeMultiplier CalculatedFlawStrike 0 n CombatStance.PowerStance
+
+    Assert.True(mult 4 < needed, sprintf "four stacks must not already delete a same-tier pool (%f vs %f)" (mult 4) needed)
+    Assert.True(mult 5 >= needed, sprintf "five stacks should reach the one-shot threshold (%f vs %f)" (mult 5) needed)
 
   [<Fact>]
   let ``one stack is a normal hit, a full pile is a finisher`` () =
@@ -33,6 +48,5 @@ module StudyStackSpendTests =
     let pile = dealt 12
 
     Assert.True(single < pool, sprintf "a one-stack spend must not delete a same-tier pool: %d of %d" single pool)
-    // Deliberate: a banked pile is a finisher. If this ever needs to stop being one, change the
-    // magnitudes in `ActionResolver.strikeMultiplier` — not this assertion.
+    // A banked pile is a finisher (§1 G permits it from five stacks on — see the threshold test).
     Assert.True(pile >= pool, sprintf "a twelve-stack pile should delete a same-tier pool: %d of %d" pile pool)
