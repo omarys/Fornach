@@ -11,14 +11,14 @@ module AttackEstimator =
   let statPair (attack: AttackClassification) : StatId * StatId list =
     match attack with
     | ForceStrike _
-    | ForceInsightStrike _
+    | ForceInsightStrike
     | TraumaAttack BasaltEruption -> Force, [ Fortitude; Resolve ]
     | FinesseCadence _
-    | FinesseInsightStrike _
+    | FinesseInsightStrike
     | TraumaAttack DenialPhaseShift -> Finesse, [ Reflex; Intuition ]
     | ProwessStrike _
     | ShieldBash _
-    | CalculatedFlawStrike _
+    | CalculatedFlawStrike
     | MasterfulDisarm _ -> Prowess, [ Poise; Composure ]
     | AuthorityDecree _
     | ArcaneCataclysm _ -> Intellect, [ Fortitude; Resolve ]
@@ -64,15 +64,15 @@ module AttackEstimator =
 
     // Study-Stack strikes pay more for spending, so the estimate has to weigh the stacks the
     // strike would actually burn — same helper the resolver uses, so the two cannot drift.
-    let requestedSpend =
+    // The spender attacks cash in every stack held (see ActionResolver step A), and MasterfulDisarm
+    // pays a requirement rather than the pile — mirror both so the estimate cannot drift.
+    let stackSpend =
       match attack with
-      | CalculatedFlawStrike spend
-      | ForceInsightStrike spend
-      | FinesseInsightStrike spend
-      | MasterfulDisarm spend -> spend
+      | CalculatedFlawStrike
+      | ForceInsightStrike
+      | FinesseInsightStrike -> actor.StudyStacks
+      | MasterfulDisarm spend -> Math.Min(actor.StudyStacks, Math.Max(3, spend))
       | _ -> 0
-
-    let stackSpend = Math.Min(actor.StudyStacks, Math.Max(2, requestedSpend))
 
     let netHits =
       // The attacker's pool has no floor in DicePool.resolveContestEx; only the defender's does (4).

@@ -1,6 +1,6 @@
 # Fornach Balance, Combat Mechanics & Class Progression Handoff
 
-## Status: 437 Tests Passing (258 `Fornach.Tests` + 179 `Fornach.Domain.Tests`, 0 Warnings)
+## Status: 486 Tests Passing (274 `Fornach.Tests` + 189 `Fornach.Domain.Tests` + 23 `Fornach.Spatial.Tests`, 0 Warnings)
 
 This document provides a comprehensive handoff of the recent combat balance tuning, archetype progression overhauls, tactical preparation enhancements, swarm simulation refinements, and a solution-wide performance profile (see §4) completed in the `Fornach` codebase.
 
@@ -116,6 +116,7 @@ This document provides a comprehensive handoff of the recent combat balance tuni
 - Altar costs were flat integers (`SacrificeHealth 25`, `SacrificeMorale 30`, `ShredArmor 30` in [`WorldEvents.fs`](file:///home/omary/Dev/fornach/src/Fornach.Engine/WorldEvents.fs)). Against pools that scale into the thousands at high tier those became free, so an altar could never bite.
 - `applyAltarSacrifice` (`TowerSession.fs:823+`) now reads every cost through `percentOf <pool.Maximum> <pct>`: **health 25%, morale 25–30%, armor 30%**. Health cost is clamped to leave **at least 1 HP**, so an altar can never end a run.
 - Consequence to preserve: accepting a health-cost altar from full always lands strictly below the 80% rest cap, which is the point — the dip is now unavoidable rather than level-dependent.
+- **The reward side went the same way in the same commit.** `applyAltarSacrifice` (`TowerSession.fs:844+`) resolves it through a local `pctOf <current> <pct>`: `StatBuff (stat, pct)` raises the current value, `VitalitySurge (hpPct, morPct)` adds a share of the pool maximum (`ApplyDelta` clamps, so a surge accepted at full health is not banked), and `RelicReward` scales the item's `StatModifiers` against the bearer at the moment of the bargain — the stored relic keeps the resolved points, not the percentages.
 
 ### O. Shrines — Repeatable Consolidation Point
 - A shrine is no longer consumed: the `when not shrine.IsUsed` guards are gone from the engine step branch and from both TUI sites, and `IsUsed` is never written. Stepping onto it re-triggers every time.
@@ -134,6 +135,7 @@ This document provides a comprehensive handoff of the recent combat balance tuni
 - Ambush waypoints in `WorldEvents.generateFloorEncounters` previously launched a **stale survivor** of the encounter rather than the member the player had not fought — roughly 72% / 42% / 21% of ambushes on the affected floors. Fixed; the ambusher is now drawn from the undefeated members.
 - Floors 3 and 6 (`| 0 ->` branches) now also emit an ambush waypoint; optional fights went 43 → 63 and encounters per floor are 2–5 (test bound widened accordingly).
 - Resolved actions print applied damage plus the vitals swing (`Display.logDamageSummary`); duel, boss, pack and quick-resolve outcomes append a chronicle entry to the map log, and `V` opens `TowerDisplay.showLogViewer`.
+- Multi-enemy damage lines now name the struck combatant via `Display.formatDamageLogLine` (`Display.fs:669`) — an unattributed "42 Physical" is unreadable in a pack. Spectre reads a single-bracketed word as a style tag, so the `[[CRITICAL]]` / `[[ARMOR COMPROMISED]]` literals are doubled; keep that if you add tags here.
 
 ### R. Rendering Path and What Actually Costs Time
 - Measured with a throwaway off-screen Spectre console (StringWriter, no TTY): engine `stepPlayer` **0.12–0.47 ms**, `updateFov` **0.17–0.24 ms**, whole frame render **8.2 ms**, and a per-frame `AnsiConsole.Live(...).AutoClear(false)` cycle **26.3 ms**. The map's 1485-cell markup building is only **0.2 ms** — it was never the problem.
@@ -142,27 +144,78 @@ This document provides a comprehensive handoff of the recent combat balance tuni
 - HUD rows were therefore trimmed to the **54-cell usable column** (58 minus border and padding): labels `%-10s`, bars 7 cells, static glyph/key legends removed from the panel and left only in the `?`/F1 overlay (`Display.showSymbolAndGlyphLegend`). Anything added to `renderHudWithDebug` must respect that budget — the worst remaining row is 42 cells, plus an 11-cell `⚠ CRITICAL` tag.
 - Still on the table if the floor ever feels slow: hand-built ANSI for viewport + HUD, measured at **0.70 ms** for the same per-cell drawing that costs 2.16 ms through Spectre (and 0.125 ms for a whole styled frame). It requires splitting the public `renderHud`/`renderViewport` renderable API that tests assert on.
 
-### S. Working Notes for the Next Agent
+### S. Enemy Density and Stage-Boss Levelling
+- **Roaming density climbs with depth.** `TowerGenerator.fs:703` places `Math.Min(mobOffsets.Length, 3 + floorNumber / 2 + rng.Next(0, 3))` mobs per plaza (was a flat `3 + rng.Next(0, 3)`), so shallow floors hold 4–6 and deep floors saturate all ten `mobOffsets`. Story floor 1 keeps its authored pair.
+- **Story Aspects were never levelled.** They were authored at Veteran magnitude (level-40 curve — Guilt's Force 210 against the curve's 201) and arrived at **Level 1 beside level-185 mobs**. `StoryBosses.scaleToStage` (`Bosses.fs:329`, called from `TowerGenerator.fs:589`) multiplies the whole stat block by `primAt (storyGuardianLevel floor) / primAt 40`, applies a separate `toughness = 2.0` multiplier to **Health, Morale and Armor only** (a stage boss duels one protagonist, so it outlasts a same-tier mob without disturbing the authored stat ratios, stance, kit or starting meters), and writes `Progression.Level`.
+- **The guard on that function is `boss.Level > 1`** — anything already levelled returns untouched. That is what keeps the tutorial Bandit Leader and the `TierFactory`-built archetypes stable. Do not "simplify" it away.
+- Verified against `BalanceRegressionTests.fs`; deltas are documented there rather than here.
+
+### T. Quest Completion Confirmation
+- `TowerEvent.NpcInteracted(npc, questAccepted)` was fed `npc.Quest.IsSome` on the **ordinary** branch, so every quest-bearing NPC looked identical to a completion — and no caller read the flag at all. A finished trial therefore left one `MessageLog` line, which the NPC's own modal had just cleared off the screen. Renamed to `questCompleted`; `true` only on the completion branch (`TowerSession.fs:529`).
+- `TowerDisplay.showQuestCompleteDialog` shows the card after the dialogue closes, and `showNpcDialog` switches to `TRIAL FULFILLED` / `Reward granted:` once `q.IsCompleted`, so a finished trial is not re-offered. The reward text is `quest.RewardDescription` verbatim — the card cannot drift from what was authored.
+- `completeQuest` now logs the quest **title** (`Quest complete: Save Lyra — the Ascension Portal is unlocked.`) instead of the raw id.
+- Guard: `StorySpatialTests.fs` asserts a still-gated quest emits no `NpcInteracted(_, true)`.
+- **Known mismatch, not fixed:** the engine pays a flat **+50 Souls / +40 Morale** on every completion, while `TowerGenerator.fs:352-442` authored rewards promising 60/75/90/100 Souls, `+50 Health`, "full vitality restoration", and keys/keepsakes via `RewardKeyId` — which is never granted anywhere. That is why the card prints the authored text rather than computed deltas. See §5 item 8.
+
+### U. Stance Growth — Kills Sharpen, Blows Harden
+- `Combatant.StanceAttributes` (`Combatant.fs:332`) maps plane + stance to an `(offense, defense)` pair. Physical: `PowerStance` → Force/Fortitude, `AgilityStance` → Finesse/Reflex, `DisciplineStance` → Prowess/Poise. Mental reads the mental triad instead: Intellect/Resolve, Acuity/Intuition, Acumen/Composure.
+- `Combatant.sharpenStance` (**+5** to the stance's offensive attribute) and `Combatant.fortifyStance` (**+2** to its defensive one) write into canonical `Stats`, so growth survives the stance shift that follows a strike.
+- `ActionResolver.applyStanceGrowth` (`ActionResolver.fs:2392`) runs once at the `resolveEx` funnel and **infers** growth by diffing Health/Morale before vs after the turn — so ripostes, bleed ticks, opportunity attacks and cleave all count with no per-site instrumentation, and a turn where nothing lands changes nothing. Both sides grow; every resolution path (duel, boss, pack, parting blow, quick-resolve) reaches it because they all funnel through `resolveEx`.
+- **Opportunity attacks scale on the stat margin, not only the trigger chance.** `aooDmg = max 10 (base + delta * 0.5)` at `ActionResolver.fs:1686`, where `base` is `defFinesse * 0.65` / `defProwess * 0.75` and `delta` is the interceptor's vector stat minus the flanker's matching guard — the same `delta` that already drove the trigger chance. Interceptor Finesse 400 against Reflex 300 goes 260 → 310; against Reflex 100, 260 → 410.
+- Guards: `tests/Fornach.Domain.Tests/StanceGrowthTests.fs` (6 tests) — the attribute map on both planes, +5/+2 in isolation with neighbours untouched, a real `resolveEx` exchange crediting both sides, a no-contact turn leaving stats byte-identical, and AoO monotonicity (wide gap strictly harder, both non-zero).
+- **Unbounded on purpose.** No cap was requested and none was added: twenty PowerStance kills is +100 Force stacking on the buff layer. A clamp inside `sharpenStance` is the one-line brake if a long run sags — see §5 item 9.
+
+### V. Percentages Replace Flat Bonuses
+- **The problem was scale, not generosity.** A flat `+30 Fortitude` is `+67%` on a level-1 primary of 45 and `+3%` at level 200 (primary 841 — `ProgressionScale.physicalStatsForLevel`), so every authored item silently stopped mattering as the character grew. The same held for the rare-material drip and Raise Shield's armor repair.
+- **`StatBonus.percentOf` (`Attributes.fs`) is the one rule**: `max 1 (round value * pct / 100)`, rounded half away from zero, floored at 1 so a small bonus on a small value still lands. `StatBlock.ApplyPercentBonuses` applies a batch of them against each stat's *current* value — the same basis altars already used, so altars, equipment and materials now share one rule instead of three.
+- **`EquipmentItem.StatModifiers` is now `StatPercentBonuses`** and holds percentages, not points. 33 authored sites were converted mechanically at `points * 100 / StatBonus.authoredBaseline` (baseline = 45, the level-1 primary), so a level-1 character feels the same as before and a level-200 one keeps the bonus relevant. Examples: `30 → 67`, `20 → 44`, `15 → 33`, `40 → 89`, `10 → 22`.
+- **`Combatant.applyItemBonus` is the single equip step** and calls `ApplyPercentBonuses`. The altar's `RelicReward` branch no longer pre-resolves anything — it used to convert the relic's percentages into points and then apply them, which would now double-convert. It just hands the item to `applyItemBonus`.
+- **`Consumables.materialUpgrade` is `18` (a percentage)**, the old `+8` on the level-1 scale; the shrine message prints `+18%` rather than `+18`.
+- **Raise Shield's armor repair is a percentage of the pool**: `armorPct = clamp 1 100 (25 + fortitude / 4)` then `StatBonus.percentOf Armor.Max`. The old `min (Max - Current) (25 + fortitude / 4)` repaired 36 points on a level-1 armor pool of 30, i.e. a full repair; it now repairs ~36% of the pool at any tier. The CLI line was corrected from the long-stale `Fortify Armor +20`.
+- **Deliberately still flat**, because these sit on 0–100 meters or are damage, not defense: `StartingRecklessnessDelta`, preparation effects (`+25 Cognitive Fatigue`, `+20 Confusion`), study stacks, the meter drains in `BeginRecovery`/`RaiseShield`, and stance growth's `+5`/`+2` (§1 U) which was specified as a per-kill drip.
+- Guards: `tests/Fornach.Domain.Tests/StatBonusTests.fs` (3 tests) — same proportion at both tiers, never rounds away to nothing, and `applyItemBonus` granting more points to a stronger bearer. Updated in the same change: `StorySpatialTests` (prologue fold-in totals, now 70/45/85/65/62) and `LootConsumableTests` (materials compound, so the second use is a percentage of the first result).
+
+### W. Working Notes for the Next Agent
 - [`TowerDisplay.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/TowerDisplay.fs) is ~1875 lines. Edit it with the `edit` tool, surgically. Do **not** rewrite it from a script: a scripted rewrite read the wrong path back and overwrote the file with `Display.fs` during this session. It was recovered from `HEAD` (`1857fd6`, which already contained the session's work) with only that turn's edits re-applied — but the recovery was luck, not process.
 - Suite counts drift fast. Verify with `dotnet test tests/Fornach.Tests/Fornach.Tests.fsproj` and `dotnet test tests/Fornach.Domain.Tests/Fornach.Domain.Tests.fsproj` rather than trusting the number in this header.
 - `git status` is the source of truth for what is committed: `HEAD` is ahead of several handoff sections, so check `git log --oneline -3` before assuming a described change is uncommitted.
+- **At the time of this handoff, §1 U was uncommitted**: `git status` showed `src/Fornach.Domain/Combatant.fs`, `src/Fornach.Engine/ActionResolver.fs` and `tests/Fornach.Domain.Tests/Fornach.Domain.Tests.fsproj` modified, plus the new `tests/Fornach.Domain.Tests/StanceGrowthTests.fs`. Everything else described above is in `cecf51a` / `5308c71`.
+- §1 S/T were committed without a balance pass of their own; they are structural (`Math.Min` bound, `Level > 1` guard) and guarded by tests, but the *magnitudes* (floor `+ floorNumber / 2`, boss `toughness = 2.0`) were chosen by reasoning, not measurement.
+- **At the time of this handoff, §1 T (quest payouts), §1 V (percentages) and the whole working tree were uncommitted.** `git status` also shows staged-but-uncommitted stance-growth work (`Combatant.fs`, `ActionResolver.fs`, `StanceGrowthTests.fs`). Nothing has been committed since `cecf51a` / `5308c71`.
+- **§1 V has had no balance pass.** The suite is green, but the balance guards that would notice are the ones that stayed *inside* their tolerances — no Monte-Carlo or matrix sweep was re-baselined, and the change makes equipment strictly stronger at high tier by design (`+30 Fortitude` becomes `+67%`, which is `+563` at level 200). Run `--balance-matrix` before trusting the tipping-point tables in §2.
+- **`EquipmentItem.HealthBonus` / `MoraleBonus` are dead fields.** They are declared on every item (25 sites in `Bosses.fs` alone, values 100–600) and **read nowhere** — neither `applyItemBonus` nor anything else consumes them, so a boss's `HealthBonus = 500` grants nothing. Left in place rather than wired up (wiring would hand every boss +500 health mid-run) and rather than deleted (40-site churn nobody asked for). Delete or convert to percentages before anyone trusts them.
+
+### X. Study Stacks — Gambits Burn the Whole Pile
+- **One scale, in `ActionResolver.strikeMultiplier` (`ActionResolver.fs:14`)**, replacing the per-attack magic numbers (0.05, 0.15, 0.25, and the spend bases 1.2/0.44, 1.1/0.30): holding a read is worth `1.0 + 0.05 × stacks` on every attack, `1.0 + 0.10 × stacks` on the Discipline school's own vectors (`ProwessStrike`, `ShieldBash`) — twice the flat rate, so the study school earns most from what it studied.
+- **Spending pays far more than holding**: `2.2 + 0.7 × stacksSpent`, only from the second stack on (`spendBase = 2.2`, `spendPerStack = 0.7`). Ten stacks is ×9.2 on a spender against ×1.5 for merely holding them.
+- **The three spenders now burn every stack held**, and the payoff follows the pile: `ForceInsightStrike`, `FinesseInsightStrike`, `CalculatedFlawStrike`. Their `stacksToSpend: int` payload was removed from `AttackClassification` (`Actions.fs:32-36`) — it had become a lie once the count stopped mattering; `Program.parseActionChoice`, `AI.fs`, `Display.fs` and `ClassBalanceTests` were updated with it. `MasterfulDisarm` keeps its payload: that one is a *requirement* (target Poise vs. Prowess), not a spend.
+- **Calculated Flaw no longer refunds half.** It used to retain `spent / 2` in Discipline Stance for a Fighter (same-school master): burning the whole pile is the point of a spender, and the `DisciplineGambitExecuted` event still reports what was actually spent.
+- **`AttackEstimator` mirrors the spend** (`AttackEstimator.fs:66`) — spenders estimate with `actor.StudyStacks`, disarm with its own requirement — so the menu's percentage cannot drift from what resolution pays. Both call the same `strikeMultiplier`.
+- Unchanged, applied *after* the study rate: Wild Blow 1.35, Invitational Bait 1.25 (×1.25 Discipline Stance), Heavy Slam 1.30 (×1.20 Discipline Stance), Imperious Demand 1.3, Mind Fracture 1.35, Anomalous Glyph 1.25, Staggering Pulse 1.35, Staff Siphon ×1.25 Discipline Stance. The old ×3 rarity was never in the resolver.
+- Guards: `tests/Fornach.Domain.Tests/ProlongedBattleTests.fs` — the 0.10 free-read rate fitted from damage (10 stacks ×2.0), the 0.7 spend rate fitted from the spend curve, all three spenders burning the whole pile, and the zero-Recklessness cost. `damageTaken` now hits a `punchingBag ()` (`Pool.Create 400000`) so a 50-Force target stops saturating its health pool and hiding the multiplier.
+- **Balance pass done — see §2.** `--balance-matrix` before/after (baseline = the `cecf51a` worktree, i.e. the whole uncommitted §1 U/V/X set): Fighter Veteran 12/13/14/11 → 14/14/15/11, Fighter Master 41/24/33/19 → 48/30/37/29, Mage Veteran 11/9/10/11 → 12/9/10/11, Mage Master 20/18/17/23 → 19/18/17/23. Novice and GrandMaster rows unmoved; no category flipped. The martial climb is the 10% read plus `2.2 + 0.7n`, i.e. the intended direction at a magnitude that does not reorder the tiers. What the sweep cannot see is a single long fight — a spender cashing a 12-stack pile for ×10.6 is still unexercised by a matrix that counts mobs, not rounds.
 
 ---
 
 ## 2. Archetype Tipping-Point Matrix (Novice mobs vs. Fighter & Mage)
 
-Results from `dotnet run --project src/Fornach.Cli -- --balance-matrix`: `CharacterClass.PlayerClasses` × 4 tiers swept against the 4 Novice base classes (8 champion rows, 32 matchups, `Random(42)`, 10 iterations, cap 100 mobs). Each cell is the largest number of simultaneous Novice mobs of that base class the champion survives; `100+` is the sweep cap, reported as `Impenetrable`.
+Results from `dotnet run --project src/Fornach.Cli -- --balance-matrix` (re-run after §1 X, magnitudes unchanged by it beyond the cells below): `CharacterClass.PlayerClasses` × 4 tiers swept against the 4 Novice base classes (8 champion rows, 32 matchups, 100 iterations per cell, cap 100 mobs, one seeded roller per cell — `seed = 1000 + classIndex * 400 + tierIndex * 100 + mobIndex * 10`, so a cell is reproducible on its own). Each cell is the largest number of simultaneous Novice mobs of that base class the champion survives; `100+` is the sweep cap, reported as `Impenetrable`.
 
 | Champion Archetype | Tier | vs. Warrior (Power) | vs. Rogue (Finesse) | vs. Soldier (Discipline) | vs. Mage (Arcane) | Tactical Dynamics & Observations |
 | :--- | :--- | :---: | :---: | :---: | :---: | :--- |
 | **Fighter** | Novice | 2 | 2 | 1 | 1 | Bastion frontage and stance-shifted parries resist early encirclement; compounding flank penalties still erode it in prolonged swarms |
-| | Veteran | 19 | 17 | 17 | 5 | Same profile, wider frontage |
-| | Master | 43 | 30 | 36 | 4 | Same profile; Mages remain the standing check |
-| | GrandMaster | **100+** | **100+** | **100+** | **4** | Fluid stances keep every vector available; `BastionZoneControl` holds the frontline to 3 while Prowess disparity drives massed AoO counters |
+| | Veteran | 14 | 14 | 15 | 11 | Same profile, wider frontage |
+| | Master | 48 | 30 | 37 | 29 | Same profile |
+| | GrandMaster | **100+** | **100+** | **100+** | **100+** | Fluid stances keep every vector available; `BastionZoneControl` holds the frontline to 3 while Prowess disparity drives massed AoO counters |
 | **Mage** | Novice | 2 | 2 | 2 | 2 | Complex Forms disrupt and shed attackers; an unspecialised form is still punished by physical swarms |
-| | Veteran | 12 | 9 | 10 | 9 | Same profile |
-| | Master | 20 | 18 | 18 | 20 | Same profile |
-| | GrandMaster | **100+** | **100+** | **100+** | **26** | Threaded Complex Forms: Resonance Spikes burn, Phantasmal Diffusion sheds decoys, Aegis Lattices ward and reflect the swarm |
+| | Veteran | 12 | 9 | 10 | 11 | Same profile |
+| | Master | 19 | 18 | 17 | 23 | Same profile |
+| | GrandMaster | **100+** | **100+** | **100+** | **100+** | Threaded Complex Forms: Resonance Spikes burn, Phantasmal Diffusion sheds decoys, Aegis Lattices ward and reflect the swarm |
+
+- **The `26 → 1` Arcane collapse in §5 item 11 does not reproduce**, and the harness is why. Both columns above were measured on the current `--balance-matrix` (per-cell seeded roller, 100 iterations); the old `26` (Mage GM vs. Arcane) and its `1` successor were taken with the retired shared `Random(42)` / 10-iteration sweep, where each cell inherited however many dice earlier cells had burned and one unlucky low-count death flips the search. Re-measured: GM vs. Arcane is `100+` (sweep cap) **both** at `cecf51a` and with the uncommitted §1 U/V/X set, and Veteran/Master sit at 11–29. Item 11 is closed as measurement noise from the old sweep, not a regression — and the old §2 values (`5 / 4 / 4`, `9 / 20 / 26`) are superseded by this table.
+- **§1 X moved the martial rows up and left the rest alone.** Fighter Veteran 12/13/14/**11** → 14/14/15/**11**, Fighter Master 41/24/33/**19** → 48/30/37/**29**, Mage Veteran 11/**9**/10/11 → 12/**9**/10/11, Mage Master 20/18/17/**23** → 19/18/17/**23**. No floor moved (Novice 2/2/1/1 and 2/2/2/2 unchanged), no cap unseated, no column reordered. The climb is the Discipline school reading Study Stacks at 10% instead of 5% plus the spenders paying `2.2 + 0.7n` — the direction the change was meant to push, at a magnitude that does not reorder the tiers. Arcane moved only where it was not already capped (+10 for Fighter Master) — Novice Mage mobs are still the weakest swarm in the sweep at Novice/Veteran, so the matrix does not confirm DreadWarhorn- or ward-style pressure at mob scale.
+
+**Re-measured after §1 U + §1 V (uncommitted tree), same seed and iteration count.** Physical columns held or improved — Fighter Master `43 → 48` vs Warrior, `36 → 37` vs Soldier — but the Arcane column collapsed for both archetypes: Fighter `4 → 1` at GrandMaster, Master `4 → 2`, Mage `26 → 1` at GrandMaster, `20 → 2` at Master, `9 → 1` at Veteran; Fighter Veteran vs Rogue/Soldier fell `17/17 → 14/15`. Two changes in that tree are candidates and neither is separated out here: Raise Shield's armor repair went from a full repair at Novice to ~36% of the pool (§1 V), and stance growth is uncapped (§1 U), so a long swarm run feeds the champion's defence without limit while mental attackers ignore it. Do not treat either row set as authoritative until the two are measured apart — see §5 item 11.
 
 ---
 
@@ -184,6 +237,7 @@ Results from `dotnet run --project src/Fornach.Cli -- --balance-matrix`: `Charac
   - [`tests/Fornach.Domain.Tests/PreparationTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Domain.Tests/PreparationTests.fs): Unit tests for `AegisOfRetribution`, `BerserkTincture`, and cleave scaling.
   - [`tests/Fornach.Domain.Tests/OverallBalanceTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Domain.Tests/OverallBalanceTests.fs): Macro balance suite verifying tier scaling and plane vulnerabilities.
   - [`tests/Fornach.Domain.Tests/MonteCarloSwarmTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Domain.Tests/MonteCarloSwarmTests.fs): Swarm Monte-Carlo tests.
+  - [`tests/Fornach.Domain.Tests/StanceGrowthTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Domain.Tests/StanceGrowthTests.fs): Stance attribute map, `sharpenStance` / `fortifyStance`, growth through a real `resolveEx` exchange, and opportunity-attack damage monotonicity (§1 U).
 
 ---
 
@@ -307,6 +361,10 @@ This also fully explains the `createGrandMasterBerserker` row of §4.2 (43 µs /
 - [ ] **5. Shrine balance brake**: repeatable shrines are an unlimited full restore (§1 O). If the caps are meant to bite, add a per-visit soul cost that scales with floor.
 - [ ] **6. Shrine-gated identification risk**: unidentified consumables cannot be used until a shrine, so a long floor can strand the player's loot. Measure shrines-per-floor on floors 5+ before deciding whether that is a reward or a trap (§1 P).
 - [ ] **7. Bestiary unlock on repeated kills** was raised by the user but never scoped or implemented — do not assume it exists.
+- [ ] **8. Quest reward payout — implemented, awaiting a play-check.** `TowerQuest` now carries a `Reward: QuestReward` record (`Souls`, `Health`, `Morale`, `FullVitality`, `KeyId`), declared through `questReward souls morale keyId` (`TowerGenerator.fs`) with the two odd ones written out in full. `TowerSession.completeQuest` grants it and the per-visit hardcoded `+50 Souls / +40 Morale` is gone. Suite green; nobody has read the resulting numbers in play.
+- [ ] **9. Stance growth is uncapped** (§1 U): +5 per kill, +2 per hit taken, with no ceiling, stacking on the buff layer. Play a long run before deciding whether it needs diminishing returns or a per-run cap.
+- [ ] **10. `HealthBonus` / `MoraleBonus` on `EquipmentItem` are never read** (§1 W). Either delete them or convert them to percentages of the pool maximum and apply them in `applyItemBonus` — but know that wiring them up hands every boss in `Bosses.fs` several hundred extra health.
+- [x] **11. The Arcane matchup in §2 does not reproduce — closed as harness noise.** An earlier note here claimed Mage-vs-Mage fell `26 → 1` at GrandMaster and `9 → 1` at Veteran on the §1 U + §1 V tree. Re-running the *current* `--balance-matrix` (per-cell seeded roller, 100 iterations) gives `100+` (sweep cap) for GM-vs-Arcane at both `cecf51a` and with §1 X applied, and 11–23 at Veteran/Master. The `26 → 1` figure came from the retired shared `Random(42)` / 10-iteration sweep, where each cell inherited the dice the earlier cells had burned and a single unlucky low-count death flips the search. Suspects named then (Raise Shield armor repair, uncapped stance growth) were never implicated by a run that could separate them. §2 is re-baselined; re-open only if a *fixed* harness reproduces it.
 
 ---
 
@@ -329,7 +387,8 @@ Recommended specifically for the performance work in §4:
 Recommended for content expansion:
 - **`domain-modeling` & `roguelike`**: The architecture for the Monster Bestiary, ecological traits, dynamic Tower encounters, and main story memory fragments is specified in [`docs/adr/0004-monster-bestiary-and-world-encounters.md`](file:///home/omary/Dev/fornach/docs/adr/0004-monster-bestiary-and-world-encounters.md) and tracked in [`TODO.md`](file:///home/omary/Dev/fornach/TODO.md).
 
-Recommended for the work described in §1 K–R:
+Recommended for the work described in §1 K–W:
+- **`fsharp-testing`**: §1 U is the freshest example of the house shape — a pure `Combatant` transform tested in isolation, then the same behaviour re-asserted through a real `resolveEx` exchange so the wiring cannot silently rot. Balance magnitudes (§1 S) belong in `BalanceRegressionTests.fs`, not in a new suite.
 - **`roguelike`**: FOV dilation, safe-step traversal economy, shrine/altar placement and the loot loop are roguelike systems; read it before touching [`Vision.fs`](file:///home/omary/Dev/fornach/src/Fornach.Domain/Vision.fs), `TowerSession` recovery helpers, or floor generation.
 - **`diagnosing-bugs`**: The measure-first loop behind §1 R (and the reverted `Live` experiment) is exactly its structure. Measure with an off-screen `StringWriter` console before changing the render path.
 - **`fsharp-testing`**: Every change here is guarded by xUnit tests in `tests/Fornach.Tests`; the balance-sensitive ones (`AttackEstimatorTests`, `RepairTests`, `BleedRecoveryTests`, `LootConsumableTests`, `EngageScalingTests`) show the expected shape.

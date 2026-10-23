@@ -326,12 +326,34 @@ type Combatant =
   static member setComplexForm form (c: Combatant) =
     { c with ComplexForm = form }
 
+  /// The offensive and defensive attributes a stance governs on this combatant's plane. Landing a kill
+  /// sharpens the first; taking a blow hardens the second. Physical stances read the physical triad,
+  /// mental ones the mental triad.
+  member this.StanceAttributes : StatId * StatId =
+    match this.Plane, this.Stance with
+    | Physical, CombatStance.PowerStance -> Force, Fortitude
+    | Physical, CombatStance.AgilityStance -> Finesse, Reflex
+    | Physical, CombatStance.DisciplineStance -> Prowess, Poise
+    | Mental, CombatStance.PowerStance -> Intellect, Resolve
+    | Mental, CombatStance.AgilityStance -> Acuity, Intuition
+    | Mental, CombatStance.DisciplineStance -> Acumen, Composure
+
+  /// A kill teaches the stance that won it: +5 to that stance's offensive attribute.
+  static member sharpenStance (c: Combatant) : Combatant =
+    let offense, _ = c.StanceAttributes
+    { c with Stats = c.Stats.Modify(offense, 5) }
+
+  /// A blow taken hardens the stance that absorbed it: +2 to that stance's defensive attribute.
+  static member fortifyStance (c: Combatant) : Combatant =
+    let _, defense = c.StanceAttributes
+    { c with Stats = c.Stats.Modify(defense, 2) }
+
   /// Permanently folds an item's stat modifiers into a combatant's base Stats
   /// (each stat clamped to a minimum of 1). Story pickups use this so that an
-  /// EquipmentItem's StatModifiers are reflected by GetStat without an equip step.
+  /// EquipmentItem's StatPercentBonuses are reflected by GetStat without an equip step.
   static member applyItemBonus (item: EquipmentItem) (c: Combatant) : Combatant =
-    if List.isEmpty item.StatModifiers then c
-    else { c with Stats = c.Stats.ApplyModifiers item.StatModifiers }
+    if List.isEmpty item.StatPercentBonuses then c
+    else { c with Stats = c.Stats.ApplyPercentBonuses item.StatPercentBonuses }
 
   /// Degrades weapon condition down one progressive stage
   static member degradeWeapon (c: Combatant) =

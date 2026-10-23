@@ -1,5 +1,20 @@
 namespace Fornach.Domain
 
+/// A bonus expressed as a percentage of the bearer's own current value. Flat points were the old
+/// rule and they went stale: +30 Fortitude is +67% at level 1 and +3% at level 200, so an authored
+/// item quietly stopped mattering. Every grant on stats, armor and pools reads this instead.
+module StatBonus =
+
+  /// Percentage of a current value, rounded half away from zero, never below 1 so a small bonus on
+  /// a small value still lands.
+  let percentOf (value: int) (pct: int) =
+    max 1 (int (System.Math.Round(float value * float pct / 100.0, System.MidpointRounding.AwayFromZero)))
+
+  /// The level-1 primary stat. The authored equipment values were written in points on this scale,
+  /// so `points * 100 / authoredBaseline` is the percentage that keeps a level-1 character feeling
+  /// the same as it did. Kept as the record of where the percentages in Bosses.fs came from.
+  let authoredBaseline = 45
+
 type Orientation =
   | Offense
   | Defense
@@ -235,7 +250,7 @@ type StatBlock =
   /// Returns a new StatBlock with an offset delta applied to an existing stat (clamped to minimum 1)
   member this.Modify(stat: StatId, delta: int) = this.With(stat, this.Get stat + delta)
 
-  /// Applies a batch of additive modifiers (e.g. from Equipment or Buffs)
+  /// Applies a batch of additive modifiers (e.g. from a tier-up template)
   member this.ApplyModifiers(modifiers: (StatId * int) seq) =
     match this with
     | StatBlock (arr, mask) ->
@@ -244,6 +259,20 @@ type StatBlock =
       for (stat, delta) in modifiers do
         let idx = Attributes.statIndex stat
         copy[idx] <- System.Math.Max(1, copy[idx] + delta)
+        newMask <- newMask ||| (1 <<< idx)
+      StatBlock(copy, newMask)
+
+  /// Applies a batch of percentage bonuses, each resolved against that stat's current value. This is
+  /// the equip step for `EquipmentItem.StatPercentBonuses`; altars and rare materials use the same
+  /// rule so a bonus keeps pace as attributes run to thousands.
+  member this.ApplyPercentBonuses(bonuses: (StatId * int) seq) =
+    match this with
+    | StatBlock (arr, mask) ->
+      let copy = Array.copy arr
+      let mutable newMask = mask
+      for (stat, pct) in bonuses do
+        let idx = Attributes.statIndex stat
+        copy[idx] <- System.Math.Max(1, copy[idx] + StatBonus.percentOf copy[idx] pct)
         newMask <- newMask ||| (1 <<< idx)
       StatBlock(copy, newMask)
 

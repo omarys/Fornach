@@ -284,7 +284,10 @@ let ``materials apply permanently and the bag decrements on each use`` () =
     | Ok s -> s
     | Error e -> failwith e
 
-  Assert.Equal(forceBefore + Consumables.materialUpgrade, once.Player.Stats.Get StatId.Force)
+  // Each material adds a percentage of the stat it lands on, so a second use compounds on the first.
+  let materialGain (stat: int) = StatBonus.percentOf stat Consumables.materialUpgrade
+
+  Assert.Equal(forceBefore + materialGain forceBefore, once.Player.Stats.Get StatId.Force)
 
   Assert.Equal<(ConsumableKind * int) list>(
     [ ConsumableKind.WeaponMaterial, 1; ConsumableKind.MentalMaterial, 1 ],
@@ -296,7 +299,8 @@ let ``materials apply permanently and the bag decrements on each use`` () =
     | Ok s -> s
     | Error e -> failwith e
 
-  Assert.Equal(forceBefore + 2 * Consumables.materialUpgrade, twice.Player.Stats.Get StatId.Force)
+  let forceAfterOnce = forceBefore + materialGain forceBefore
+  Assert.Equal(forceAfterOnce + materialGain forceAfterOnce, twice.Player.Stats.Get StatId.Force)
   Assert.Equal<(ConsumableKind * int) list>([ ConsumableKind.MentalMaterial, 1 ], twice.Consumables)
 
   let mental =
@@ -390,7 +394,11 @@ let ``a shrine blesses on every visit and never re-applies a material or a revea
   Assert.Contains(firstEvents, isShrineEvent)
   Assert.Equal(200, first.Player.Health.Current)
   Assert.Equal(200, first.Player.Morale.Current)
-  Assert.Equal(forceBefore + 2 * Consumables.materialUpgrade, first.Player.Stats.Get StatId.Force)
+  let blessedForce =
+    [ 1 .. 2 ]
+    |> List.fold (fun (f: int) _ -> f + StatBonus.percentOf f Consumables.materialUpgrade) forceBefore
+
+  Assert.Equal(blessedForce, first.Player.Stats.Get StatId.Force)
   Assert.Equal<(ConsumableKind * int) list>([ ConsumableKind.Ration, 1 ], first.Consumables)
   Assert.True(first.UnidentifiedConsumables.IsEmpty)
 
@@ -410,7 +418,7 @@ let ``a shrine blesses on every visit and never re-applies a material or a revea
 
   Assert.Contains(secondEvents, isShrineEvent)
   Assert.Equal(200, second.Player.Health.Current)
-  Assert.Equal(forceBefore + 2 * Consumables.materialUpgrade, second.Player.Stats.Get StatId.Force)
+  Assert.Equal(blessedForce, second.Player.Stats.Get StatId.Force)
   Assert.Equal<(ConsumableKind * int) list>([ ConsumableKind.Ration, 1 ], second.Consumables)
   Assert.True(second.UnidentifiedConsumables.IsEmpty)
 

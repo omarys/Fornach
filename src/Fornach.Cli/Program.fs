@@ -71,13 +71,13 @@ module Program =
     elif choice.Contains("Force Strike: Wild Blow") then
       StandardAttack (ForceStrike true)
     elif choice.Contains("Force Strike: Insight Cleave") then
-      StandardAttack (ForceInsightStrike 3)
+      StandardAttack ForceInsightStrike
     elif choice.Contains("Finesse Cadence: Rapid Probing") then
       StandardAttack (FinesseCadence false)
     elif choice.Contains("Finesse Cadence: Relentless Blitz") then
       StandardAttack (FinesseCadence true)
     elif choice.Contains("Finesse Cadence: Threaded Opening") then
-      StandardAttack (FinesseInsightStrike 3)
+      StandardAttack FinesseInsightStrike
     elif choice.Contains("Prowess Strike: Stance Pressure") then
       StandardAttack (ProwessStrike false)
     elif choice.Contains("Prowess Strike: Invitational Bait") then
@@ -127,7 +127,7 @@ module Program =
     elif choice.Contains("Shift Stance: Discipline Stance") then
       ShiftStance CombatStance.DisciplineStance
     elif choice.Contains("Calculated Flaw Strike") then
-      StandardAttack (CalculatedFlawStrike 3)
+      StandardAttack CalculatedFlawStrike
     elif choice.Contains("Masterful Disarm") then
       StandardAttack (MasterfulDisarm 3)
     elif choice.Contains("Trauma: Denial Phase Shift") then
@@ -257,7 +257,7 @@ module Program =
           sprintf "⚡ [bold %s]Force Strike: Wild Blow[/] (Power Stance Gambit: +30 Recklessness, 1.5x Dmg)" Theme.Red
           // Dedicated Power Gambit (costs Study Stacks with 0 Recklessness!)
           if player.StudyStacks >= 2 then
-            sprintf "🎯 [bold %s]Force Strike: Insight Cleave[/] (Power Stance Gambit: Spend Study Stacks for a Read Opening, 0 Recklessness)" Theme.Red
+            sprintf "🎯 [bold %s]Force Strike: Insight Cleave[/] (Power Stance Gambit: Burn every Study Stack for a Read Opening, 0 Recklessness)" Theme.Red
         ]
 
         let agilityStrikes = [
@@ -265,7 +265,7 @@ module Program =
           sprintf "⚡ [bold %s]Finesse Cadence: Relentless Blitz[/] (Agility Stance Gambit: +25 Recklessness)" Theme.Green
           // Dedicated Agility Gambit (costs Study Stacks with 0 Recklessness!)
           if player.StudyStacks >= 2 then
-            sprintf "🎯 [bold %s]Finesse Cadence: Threaded Opening[/] (Agility Stance Gambit: Spend Study Stacks to Thread a Vital Opening, 0 Recklessness)" Theme.Green
+            sprintf "🎯 [bold %s]Finesse Cadence: Threaded Opening[/] (Agility Stance Gambit: Burn every Study Stack to Thread a Vital Opening, 0 Recklessness)" Theme.Green
         ]
 
         let disciplineStrikes = [
@@ -276,7 +276,7 @@ module Program =
           sprintf "⚡ [bold %s]Shield Bash: Heavy Slam[/] (Discipline Stance Gambit: +25 Recklessness, Stagger & Interrupt)%s" Theme.Cyan shieldInterruptTag
           // Dedicated Discipline Gambits (cost Study Stacks with 0 Recklessness!)
           if player.StudyStacks >= 2 then
-            sprintf "🎯 [bold %s]Calculated Flaw Strike[/] (Discipline Stance Gambit: Spend Study Stacks for Vital Opening, 0 Recklessness)" Theme.Purple
+            sprintf "🎯 [bold %s]Calculated Flaw Strike[/] (Discipline Stance Gambit: Burn every Study Stack for a Vital Opening, 0 Recklessness)" Theme.Purple
           if player.StudyStacks >= 3 then
             sprintf "⚔️  [bold %s]Masterful Disarm[/] (Discipline Stance Gambit: Spend Study Stacks to Degrade Opponent Weapon, 0 Recklessness)" Theme.Purple
         ]
@@ -300,7 +300,7 @@ module Program =
         yield! rankStrikes martialGroups
 
         // Active Armament Recovery: Shield Bastion Guard
-        sprintf "🛡️  [bold %s]Raise Shield[/] (Bastion Posture: Fortify Armor +20, Gain 2 Study Stacks, Bleed Recklessness)%s" Theme.Green raiseShieldTag
+        sprintf "🛡️  [bold %s]Raise Shield[/] (Bastion Posture: Repair Armor ~36%% of max, Gain 2 Study Stacks, Bleed Recklessness)%s" Theme.Green raiseShieldTag
         // Steady Form: the single recovery action, available to every discipline
         sprintf "🛡️  [%s]Steady Form[/] (Recovery: vent all strain via Poise & Composure, restore Morale, build Study)" Theme.Green
 

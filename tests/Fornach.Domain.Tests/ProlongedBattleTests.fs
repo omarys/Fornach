@@ -235,11 +235,10 @@ module ProlongedBattleTests =
     let target = createFighter 50 50 50 50 50 80
 
     let startReck = duelist.Meters.Recklessness.Value
-    let res = ActionResolver.resolve roller (StandardAttack (CalculatedFlawStrike 3)) duelist target
+    let res = ActionResolver.resolve roller (StandardAttack CalculatedFlawStrike) duelist target
 
-    // Stacks: 6 started - 3 spent + 2 generated on hit = 5
-    Assert.Equal(5, res.Actor.StudyStacks)
-    // Recklessness should NOT have spiked from the gambit
+    // Stacks: the whole pile of 6 is spent, +2 generated on hit
+    Assert.Equal(2, res.Actor.StudyStacks)    // Recklessness should NOT have spiked from the gambit
     Assert.Equal(startReck, res.Actor.Meters.Recklessness.Value)
 
   [<Fact>]
@@ -945,6 +944,11 @@ module ProlongedBattleTests =
     let res = ActionResolver.resolve (fixedRoller 6) (StandardAttack atk) attacker defender
     defender.Health.Current - res.Target.Health.Current, res
 
+  /// A defender that will not die to the top of the stack curve, so damage stays measurable instead
+  /// of saturating at its pool.
+  let private punchingBag () =
+    { createFighter 50 50 50 50 50 50 with Health = Pool.Create 400000 }
+
   let private studyStacksOf (res: ActionResult) =
     res.Events
     |> List.pick (function
@@ -956,32 +960,30 @@ module ProlongedBattleTests =
     let attacker = { createFighter 120 50 50 50 50 50 with StudyStacks = 6 }
     let target = createFighter 50 50 50 50 50 50
 
-    let _, res = damageTaken attacker (ForceInsightStrike 3) target
+    let _, res = damageTaken attacker ForceInsightStrike target
 
-    Assert.Equal(3, studyStacksOf res)
+    // The whole pile is spent, whatever the payload asked for.
+    Assert.Equal(6, studyStacksOf res)
     Assert.Equal(attacker.Meters.Recklessness.Value, res.Actor.Meters.Recklessness.Value)
 
   [<Fact>]
   let ``Force insight cleave scales with the stacks actually spent`` () =
-    let target = createFighter 50 50 50 50 50 50
+    let target = punchingBag ()
     let mk stacks = { createFighter 120 50 50 50 50 50 with StudyStacks = stacks }
 
-    // Same spend, different leftovers: the payoff must follow the spend, not what step A left behind
-    let dmgFew, _ = damageTaken (mk 4) (ForceInsightStrike 2) target
-    let dmgMany, _ = damageTaken (mk 8) (ForceInsightStrike 2) target
-    Assert.Equal(dmgFew, dmgMany)
-
-    let dmgMore, _ = damageTaken (mk 8) (ForceInsightStrike 4) target
-    Assert.True(dmgMore > dmgFew, sprintf "Spending 4 stacks (%d) must outdamage 2 stacks (%d)" dmgMore dmgFew)
+    // The payoff follows the pile, so a bigger investment must land harder.
+    let dmgFew, _ = damageTaken (mk 4) ForceInsightStrike target
+    let dmgMany, _ = damageTaken (mk 8) ForceInsightStrike target
+    Assert.True(dmgMany > dmgFew, sprintf "Holding 8 (%d) must outdamage holding 4 (%d)" dmgMany dmgFew)
 
   [<Fact>]
   let ``Finesse threaded opening spends Study Stacks with zero Recklessness cost`` () =
     let attacker = { createFighter 50 50 120 50 50 50 with StudyStacks = 6 }
     let target = createFighter 50 50 50 50 50 50
 
-    let _, res = damageTaken attacker (FinesseInsightStrike 3) target
+    let _, res = damageTaken attacker FinesseInsightStrike target
 
-    Assert.Equal(3, studyStacksOf res)
+    Assert.Equal(6, studyStacksOf res)
     Assert.Equal(attacker.Meters.Recklessness.Value, res.Actor.Meters.Recklessness.Value)
     Assert.True(
       res.Target.Meters.Confusion.Value > target.Meters.Confusion.Value,
@@ -989,45 +991,43 @@ module ProlongedBattleTests =
 
   [<Fact>]
   let ``Finesse threaded opening scales with the stacks actually spent`` () =
-    let target = createFighter 50 50 50 50 50 50
+    let target = punchingBag ()
     let mk stacks = { createFighter 50 50 120 50 50 50 with StudyStacks = stacks }
 
-    let dmgFew, _ = damageTaken (mk 4) (FinesseInsightStrike 2) target
-    let dmgMany, _ = damageTaken (mk 8) (FinesseInsightStrike 2) target
-    Assert.Equal(dmgFew, dmgMany)
-
-    let dmgMore, _ = damageTaken (mk 8) (FinesseInsightStrike 4) target
-    Assert.True(dmgMore > dmgFew, sprintf "Spending 4 stacks (%d) must outdamage 2 stacks (%d)" dmgMore dmgFew)
+    let dmgFew, _ = damageTaken (mk 4) FinesseInsightStrike target
+    let dmgMany, _ = damageTaken (mk 8) FinesseInsightStrike target
+    Assert.True(dmgMany > dmgFew, sprintf "Holding 8 (%d) must outdamage holding 4 (%d)" dmgMany dmgFew)
 
   [<Fact>]
-  let ``Free Prowess read is worth only 0.05 damage multiplier per Study Stack`` () =
+  let ``Free Prowess read is worth 0.10 damage multiplier per Study Stack`` () =
     let target = createFighter 50 50 50 50 50 50
     let mk stacks = { createFighter 50 50 50 50 120 50 with StudyStacks = stacks }
 
     let dmgZero, _ = damageTaken (mk 0) (ProwessStrike false) target
     let dmgTen, _ = damageTaken (mk 10) (ProwessStrike false) target
 
-    // 1.0 -> 1.5 multiplier: riding the read stays a small edge (0.15 would nearly double it)
+    // 1.0 -> 2.0 multiplier: the study school's own vector reads stacks twice as hard as the flat rate.
     let ratio = float dmgTen / float dmgZero
-    Assert.True(ratio > 1.40 && ratio < 1.60, sprintf "10 free stacks should scale damage ~1.5x, got %.3f" ratio)
+    Assert.True(ratio > 1.90 && ratio < 2.10, sprintf "10 free stacks should scale damage ~2.0x, got %.3f" ratio)
 
   [<Fact>]
-  let ``Calculated flaw strike pays 0.44 multiplier per stack and follows the spent amount`` () =
-    let target = createFighter 50 50 50 50 50 50
+  let ``Calculated flaw strike pays 0.7 multiplier per stack and follows the spent amount`` () =
+    let target = punchingBag ()
     let mk stacks = { createFighter 50 50 50 50 120 50 with StudyStacks = stacks }
 
-    let dmgFor stacks spend = fst (damageTaken (mk stacks) (CalculatedFlawStrike spend) target)
-    let d2, d4, d6 = dmgFor 8 2, dmgFor 8 4, dmgFor 8 6
+    let dmgWith stacks = fst (damageTaken (mk stacks) CalculatedFlawStrike target)
+    let d2, d4, d6 = dmgWith 2, dmgWith 4, dmgWith 6
 
     // Damage is multiplicative in the class multiplier, so the slope/intercept of the spend curve
-    // recovers the per-stack factor relative to the 1.2 base multiplier.
+    // recovers the per-stack factor relative to the 2.2 base multiplier.
     let slope = float (d6 - d2) / 4.0
     let intercept = float d2 - 2.0 * slope
-    let perStack = 1.2 * slope / intercept
-    Assert.True(perStack > 0.42 && perStack < 0.46, sprintf "Expected 0.44 per stack, fitted %.3f" perStack)
+    let perStack = 2.2 * slope / intercept
+    Assert.True(perStack > 0.68 && perStack < 0.72, sprintf "Expected 0.7 per stack, fitted %.3f" perStack)
 
-    // Step A drains the stacks first, so a bigger leftover pile must not inflate the payoff
-    Assert.Equal(dmgFor 4 2, dmgFor 12 2)
+    // Nothing is left behind: the pile is spent, not trimmed to the payload.
+    let _, res = damageTaken (mk 6) CalculatedFlawStrike target
+    Assert.Equal(6, studyStacksOf res)
 
   [<Fact>]
   let ``Discipline stance guard anchors on Poise alone`` () =

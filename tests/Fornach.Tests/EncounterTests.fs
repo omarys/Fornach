@@ -162,7 +162,7 @@ let ``WanderingTrader handles purchasing wares with Souls and Alchemical Trophie
     { Name = "Cinder Mantle"
       Slot = EquipmentSlot.Armor
       Description = "Volcanic scale armor."
-      StatModifiers = [ StatId.Fortitude, 10 ]
+      StatPercentBonuses = [ StatId.Fortitude, 22 ]
       HealthBonus = 10
       MoraleBonus = 0
       StartingRecklessnessDelta = 0
@@ -224,7 +224,7 @@ let ``TreasureVault puzzle mechanics: key check and stat check`` () =
     { Name = "Vault Amulet"
       Slot = EquipmentSlot.MentalRelic
       Description = "Ancient amulet."
-      StatModifiers = [ StatId.Resolve, 15 ]
+      StatPercentBonuses = [ StatId.Resolve, 33 ]
       HealthBonus = 0
       MoraleBonus = 30
       StartingRecklessnessDelta = 0

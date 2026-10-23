@@ -392,7 +392,7 @@ module Display =
         "Advancing behind a raised guard to batter posture.",
         sprintf "Out-range or strike through with [bold %s]Power Cleave[/]." Theme.Red,
         "Discipline"
-      | CalculatedFlawStrike _ ->
+      | CalculatedFlawStrike ->
         sprintf "🎯 [bold %s]DISCIPLINE GAMBIT: Calculated Flaw Strike[/]" Theme.Purple,
         "Exploiting a studied vital opening with pinpoint precision!",
         "Deflect or mitigate by recovering posture.",
@@ -402,12 +402,12 @@ module Display =
         "Twisting weapon leverage to wrest your weapon away!",
         "Maintain distance or reset stance balance.",
         "Discipline"
-      | ForceInsightStrike _ ->
+      | ForceInsightStrike ->
         sprintf "🎯 [bold %s]POWER GAMBIT: Insight Cleave[/]" Theme.Red,
         "Unleashing accumulated study into a read opening!",
         "Evasive maneuvers or emergency recovery.",
         "Power"
-      | FinesseInsightStrike _ ->
+      | FinesseInsightStrike ->
         sprintf "🎯 [bold %s]AGILITY GAMBIT: Threaded Opening[/]" Theme.Green,
         "Threading a lethal strike through an exposed seam!",
         "Brace guard and close vital openings.",

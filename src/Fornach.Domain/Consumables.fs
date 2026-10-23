@@ -40,8 +40,10 @@ type ConsumableKind =
 
 module Consumables =
 
-  /// Permanent stat points one rare material puts into the player.
-  let materialUpgrade = 8
+  /// Permanent stat growth one rare material puts into the player, as a percentage of the stat it
+  /// lands on — 18% is the old flat +8 on the level-1 primary scale, so a material still matters at
+  /// level 200 instead of fading to nothing.
+  let materialUpgrade = 18
 
   /// What a kill in a category can salvage, with each kind's percentage. The match is total over the
   /// category, so a new category cannot ship without a drop table.
@@ -135,5 +137,5 @@ module Consumables =
     | WeaponMaterial
     | MentalMaterial ->
       match materialStat kind player.Class with
-      | Some stat -> { player with Stats = player.Stats.Modify(stat, materialUpgrade) }
+      | Some stat -> { player with Stats = player.Stats.ApplyPercentBonuses [ stat, materialUpgrade ] }
       | None -> player

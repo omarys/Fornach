@@ -508,13 +508,11 @@ let ``Study Stack gambit labels parse to their intended intents`` () =
       choices |> List.find (fun (c: string) -> c.Contains anchor) |> Program.parseActionChoice
 
     match intentOf "Force Strike: Insight Cleave" with
-    | ActionIntent.StandardAttack (ForceInsightStrike minted) ->
-      Assert.True(minted >= 2, sprintf "Force insight cleave must spend at least 2 stacks, minted %d" minted)
+    | ActionIntent.StandardAttack ForceInsightStrike -> ()
     | other -> Assert.True(false, sprintf "Force insight cleave parsed to %A" other)
 
     match intentOf "Finesse Cadence: Threaded Opening" with
-    | ActionIntent.StandardAttack (FinesseInsightStrike minted) ->
-      Assert.True(minted >= 2, sprintf "Finesse threaded opening must spend at least 2 stacks, minted %d" minted)
+    | ActionIntent.StandardAttack FinesseInsightStrike -> ()
     | other -> Assert.True(false, sprintf "Finesse threaded opening parsed to %A" other)
 
   // The gambits stay hidden below their 2-stack floor

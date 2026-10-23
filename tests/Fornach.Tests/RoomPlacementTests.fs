@@ -65,3 +65,25 @@ let ``the entrance room and the stairway are different rooms`` () =
         (floor.SpawnLocation <> floor.StairwayLocation),
         $"seed {seed} floor {floorNumber}: stairway shares the entrance room"
       )
+
+/// The guardian path has always clamped its template to the level this stage's progression assumes.
+/// The roaming mobs did not, so story floor 5 placed a level-175 Storm Drake three tiles from a level
+/// 105 spawn — a GrandMaster template with `EtherealCarapace 0.30` in the entrance chamber.
+[<Fact>]
+let ``no roaming mob on a story stage is authored above its progression ceiling`` () =
+  for seed in seeds do
+    for floorNumber in 1..7 do
+      let floor = TowerGenerator.generateFloorWithMode seed floorNumber true
+      let ceiling = ProgressionScale.storyGuardianLevel floorNumber
+
+      for (pt, name) in enemies floor do
+        if not (isStoryBoss name) then
+          let level =
+            match Map.tryFind pt floor.Entities with
+            | Some (EntityEnemy e) -> e.Combatant.Level
+            | _ -> 0
+
+          Assert.True(
+            (level <= ceiling),
+            $"seed {seed} floor {floorNumber}: {name} ({level}) exceeds the stage ceiling {ceiling}"
+          )

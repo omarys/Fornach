@@ -9,7 +9,10 @@ type EquipmentItem =
   { Name: string
     Slot: EquipmentSlot
     Description: string
-    StatModifiers: (StatId * int) list
+    /// Percentages, each resolved against the bearer's own current stat when the item is applied —
+    /// not flat points, which went stale as attributes grew. `StatBonus.authoredBaseline` records
+    /// the level-1 scale the numbers were converted from.
+    StatPercentBonuses: (StatId * int) list
     HealthBonus: int
     MoraleBonus: int
     StartingRecklessnessDelta: int

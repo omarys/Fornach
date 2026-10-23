@@ -22,6 +22,8 @@
     <Compile Include="BestiarySwarmTests.fs" />
     <Compile Include="CliMarkupTests.fs" />
     <Compile Include="TacticalAssessmentTests.fs" />
+    <Compile Include="StanceGrowthTests.fs" />
+    <Compile Include="StatBonusTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

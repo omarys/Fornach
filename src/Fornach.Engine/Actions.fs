@@ -28,12 +28,12 @@ type AttackClassification =
   | ProwessStrike of isInvitationalBait: bool
   /// Martial Discipline (Prowess vs. Poise): Shield bash that bludgeons target, inflicts Frustration, and interrupts telegraphed Gambits
   | ShieldBash of isHeavySlam: bool
-  /// Power Gambit: Studied cleave through a read opening, consuming Study Stacks to strike Fortitude (0 Recklessness)
-  | ForceInsightStrike of stacksToSpend: int
-  /// Agility Gambit: Studied thrust into a read opening, consuming Study Stacks to strike Reflex (0 Recklessness)
-  | FinesseInsightStrike of stacksToSpend: int
-  /// Dedicated Discipline Gambit: Precision flaw exploitation consuming Study Stacks (0 Recklessness)
-  | CalculatedFlawStrike of stacksToSpend: int
+  /// Power Gambit: Studied cleave through a read opening, burning every Study Stack to strike Fortitude (0 Recklessness)
+  | ForceInsightStrike
+  /// Agility Gambit: Studied thrust into a read opening, burning every Study Stack to strike Reflex (0 Recklessness)
+  | FinesseInsightStrike
+  /// Dedicated Discipline Gambit: Precision flaw exploitation burning every Study Stack (0 Recklessness)
+  | CalculatedFlawStrike
   /// Dedicated Discipline Gambit: Tactical disarm requiring Study Stacks scaled by target Poise vs. Prowess
   | MasterfulDisarm of stacksToSpend: int
 
@@ -74,11 +74,11 @@ type AttackClassification =
     match this with
     | ForceStrike _
     | FinesseCadence _
-    | ForceInsightStrike _
-    | FinesseInsightStrike _
+    | ForceInsightStrike
+    | FinesseInsightStrike
     | ProwessStrike _
     | ShieldBash _
-    | CalculatedFlawStrike _
+    | CalculatedFlawStrike
     | MasterfulDisarm _ -> CombatMode.Physical
     | AuthorityDecree _
     | GuileDeception _
@@ -97,19 +97,19 @@ type AttackClassification =
   member this.Vector : Vector =
     match this with
     | ForceStrike _
-    | ForceInsightStrike _
+    | ForceInsightStrike
     | AuthorityDecree _
     | ArcaneCataclysm _
     | TraumaAttack BasaltEruption -> Power
     | FinesseCadence _
-    | FinesseInsightStrike _
+    | FinesseInsightStrike
     | GuileDeception _
     | SynapticGlamour _
     | MirrorIllusion _
     | TraumaAttack DenialPhaseShift -> Agility
     | ProwessStrike _
     | ShieldBash _
-    | CalculatedFlawStrike _
+    | CalculatedFlawStrike
     | MasterfulDisarm _
     | AcumenInterrogation _
     | RunicWardTrap _
@@ -122,11 +122,11 @@ type AttackClassification =
     match this with
     | ForceStrike _
     | FinesseCadence _
-    | ForceInsightStrike _
-    | FinesseInsightStrike _
+    | ForceInsightStrike
+    | FinesseInsightStrike
     | ProwessStrike _
     | ShieldBash _
-    | CalculatedFlawStrike _
+    | CalculatedFlawStrike
     | MasterfulDisarm _
     | TraumaAttack BasaltEruption -> Physical
     | AuthorityDecree _

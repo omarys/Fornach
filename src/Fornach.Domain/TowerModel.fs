@@ -39,12 +39,32 @@ type TowerTile =
 /// Quests offered by floor NPCs.
 /// When `RequiredEnemyName` is set, the quest cannot be completed until the named
 /// enemy on the current floor has been defeated.
+/// What a finished quest actually pays out.
+///
+/// It exists because the payout used to be a hardcoded +50 Souls / +40 Morale in `TowerSession`
+/// while the authored `RewardDescription` promised 60/75/90/100 Souls, health restores and
+/// keepsakes. Two sources of truth, and only the prose was ever read. Granting reads this record,
+/// so the completion card and the actual reward cannot drift.
+type QuestReward =
+  { Souls: int
+    /// Flat points restored to the pool, clamped at its maximum by `Pool.ApplyDelta`.
+    Health: int
+    Morale: int
+    /// Fills Health and Morale before the flat amounts above are added.
+    FullVitality: bool
+    /// Key added to the keyring — this is what a later chest or door tests for.
+    KeyId: string option }
+
+  static member Empty = { Souls = 0; Health = 0; Morale = 0; FullVitality = false; KeyId = None }
+
+/// Quests found on NPCs. The reward is machine-readable (`QuestReward`); `RewardDescription` is the
+/// card's prose and is expected to say the same thing in words.
 type TowerQuest =
   { Id: string
     Title: string
     Description: string
     IsCompleted: bool
-    RewardKeyId: string option
+    Reward: QuestReward
     RewardDescription: string
     RequiredEnemyName: string option }
 

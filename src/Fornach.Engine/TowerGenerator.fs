@@ -293,7 +293,7 @@ module TowerGenerator =
         { Name = "Sharpened Caltrops"
           Slot = EquipmentSlot.MentalRelic
           Description = "A pouch of jagged iron spikes scavenged from the battered chest."
-          StatModifiers = [ StatId.Reflex, 5 ]
+          StatPercentBonuses = [ StatId.Reflex, 11 ]
           HealthBonus = 0
           MoraleBonus = 0
           StartingRecklessnessDelta = 0
@@ -309,6 +309,14 @@ module TowerGenerator =
       entities <- Map.add batteredChestPos (EntityChest batteredChest) entities
 
     // B. Floor NPC & Story Quests
+    // Souls + Morale + key is the shape of six of the seven authored rewards; the odd two (a health
+    // grant, a full restore) are written out where they are declared.
+    let questReward souls morale keyId : QuestReward =
+      { QuestReward.Empty with
+          Souls = souls
+          Morale = morale
+          KeyId = keyId }
+
     let npcPlaza = plazaAt 1
     let npcPos = { X = npcPlaza.Center.X + 2; Y = npcPlaza.Center.Y }
     tiles <- Map.add npcPos (Floor surface) tiles
@@ -330,7 +338,7 @@ module TowerGenerator =
                 Title = "The Boy's Plea: Rescue Lyra"
                 Description = "Cut through the bandit warband and defeat their leader to save the boy's twin sister."
                 IsCompleted = false
-                RewardKeyId = Some "lyra_keepsake"
+                Reward = questReward 50 40 (Some "lyra_keepsake")
                 RewardDescription = "Awards +40 Morale, 50 Souls, and a keepsake from Lyra."
                 RequiredEnemyName = Some "Bandit Leader"
               }
@@ -348,7 +356,7 @@ module TowerGenerator =
                 Title = "Trial of Guilt: Cull the Feral Slag Hounds"
                 Description = "Defeat the feral beasts prowling the quarry colonnades."
                 IsCompleted = false
-                RewardKeyId = Some "quarry_talisman"
+                Reward = questReward 50 40 (Some "quarry_talisman")
                 RewardDescription = "Awards +40 Morale, 50 Souls, and the Talisman of Poise."
                 RequiredEnemyName = None
               }
@@ -366,7 +374,7 @@ module TowerGenerator =
                 Title = "Trial of Denial: Dispel the Mist Weavers"
                 Description = "Defeat the arachnid blight weavers infesting the sacred cloister."
                 IsCompleted = false
-                RewardKeyId = Some "cloak_clarity"
+                Reward = questReward 60 40 (Some "cloak_clarity")
                 RewardDescription = "Awards +40 Morale, 60 Souls, and the Cloak of Clarity."
                 RequiredEnemyName = None
               }
@@ -384,7 +392,11 @@ module TowerGenerator =
                 Title = "Trial of Anger: Subdue the Magma Wurms"
                 Description = "Quell the burning beasts feeding the caldera's rage."
                 IsCompleted = false
-                RewardKeyId = Some "cinder_sigil"
+                Reward =
+                  { QuestReward.Empty with
+                      Souls = 75
+                      Health = 50
+                      KeyId = Some "cinder_sigil" }
                 RewardDescription = "Awards +50 Health, 75 Souls, and the Cinder-Forged Sigil."
                 RequiredEnemyName = None
               }
@@ -402,7 +414,7 @@ module TowerGenerator =
                 Title = "Trial of Bargaining: Silence the Gale Harpies"
                 Description = "Overcome the howling wind harpies shrieking false promises above the abyss."
                 IsCompleted = false
-                RewardKeyId = Some "gale_pendant"
+                Reward = questReward 90 40 (Some "gale_pendant")
                 RewardDescription = "Awards +40 Morale, 90 Souls, and the Gale-Wind Pendant."
                 RequiredEnemyName = None
               }
@@ -420,7 +432,7 @@ module TowerGenerator =
                 Title = "Trial of Depression: Dredge the Abyssal Leeches"
                 Description = "Clear the abyssal leeches draining the light from the flooded causeway."
                 IsCompleted = false
-                RewardKeyId = Some "anchor_resolve"
+                Reward = questReward 100 50 (Some "anchor_resolve")
                 RewardDescription = "Awards +50 Morale, 100 Souls, and the Anchor of Resolve."
                 RequiredEnemyName = None
               }
@@ -438,7 +450,10 @@ module TowerGenerator =
                 Title = "Trial of Acceptance: Harmony with the Meadow Seraphs"
                 Description = "Commune with the serene guardians of the white meadow."
                 IsCompleted = false
-                RewardKeyId = Some "keepsake_pendant"
+                Reward =
+                  { QuestReward.Empty with
+                      FullVitality = true
+                      KeyId = Some "keepsake_pendant" }
                 RewardDescription = "Awards full vitality restoration and the Keepsake Pendant."
                 RequiredEnemyName = None
               }
@@ -459,7 +474,7 @@ module TowerGenerator =
               Title = sprintf "Trial of Floor %d" floorNumber
               Description = "The ascension gates remain barred by ancient decree. Prove your resolve."
               IsCompleted = false
-              RewardKeyId = None
+              Reward = QuestReward.Empty
               RewardDescription = "Unlocks the stairway portal to the next floor."
               RequiredEnemyName = None
             }
@@ -504,7 +519,7 @@ module TowerGenerator =
               Title = "The Boy's Plea: Rescue Lyra"
               Description = "Cut through the bandit warband and defeat their leader to save the boy's twin sister."
               IsCompleted = false
-              RewardKeyId = Some "lyra_keepsake"
+              Reward = questReward 50 40 (Some "lyra_keepsake")
               RewardDescription = "Awards +40 Morale, 50 Souls, and a keepsake from Lyra."
               RequiredEnemyName = Some "Bandit Leader"
             }
@@ -540,7 +555,7 @@ module TowerGenerator =
       { Name = sprintf "Relic of %s" theme.Name
         Slot = EquipmentSlot.MentalRelic
         Description = sprintf "An ancient heirloom resonant with %s." theme.Name
-        StatModifiers = [ StatId.Resolve, 15; StatId.Poise, 10 ]
+        StatPercentBonuses = [ StatId.Resolve, 33; StatId.Poise, 22 ]
         HealthBonus = 0
         MoraleBonus = 30
         StartingRecklessnessDelta = 0
@@ -688,8 +703,18 @@ module TowerGenerator =
                 // Floors 2-3: Novice and Veteran mobs
                 biomeMonsters |> List.truncate 2
               else
-                // Floors 4+: Full spectrum of biome mobs
-                biomeMonsters
+                // Floors 4+: Full spectrum of biome mobs, clamped to what this stage's progression
+                // assumes. The clamp existed for the guardian only, so story floor 5 happily placed a
+                // level-175 Storm Drake three tiles from the player's spawn while the protagonist was
+                // level 105. Same ceiling, same lowest-legal fallback.
+                let ceiling = ProgressionScale.storyGuardianLevel floorNumber
+
+                if not isStory then
+                  biomeMonsters
+                else
+                  match biomeMonsters |> List.filter (fun m -> m.Level <= ceiling) with
+                  | [] -> [ biomeMonsters |> List.minBy (fun m -> m.Level) ]
+                  | legal -> legal
             let mIdx = (floorNumber + i) % available.Length
             available.[mIdx]
         mobTemplate.Name, Bestiary.createMonster mobTemplate

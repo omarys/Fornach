@@ -117,7 +117,7 @@ module AI =
           ShiftStance CombatStance.PowerStance
         elif self.Stance = CombatStance.DisciplineStance then
           if self.StudyStacks >= 3 then
-            StandardAttack (CalculatedFlawStrike self.StudyStacks)
+            StandardAttack CalculatedFlawStrike
           else
             StandardAttack (ProwessStrike isGambit)
         elif self.Stance = CombatStance.PowerStance then
@@ -156,7 +156,7 @@ module AI =
           if surroundingOpponents < 2 && canDisarm && self.StudyStacks >= reqDisarmStacks && opponent.WeaponCondition <> WeaponCondition.Broken then
             StandardAttack (MasterfulDisarm reqDisarmStacks)
           elif self.StudyStacks >= 3 then
-            StandardAttack (CalculatedFlawStrike self.StudyStacks)
+            StandardAttack CalculatedFlawStrike
           else
             StandardAttack (ProwessStrike isGambit)
     else
