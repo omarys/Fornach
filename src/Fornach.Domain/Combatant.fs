@@ -330,8 +330,9 @@ type Combatant =
     | Vector.Discipline -> { c with Focus = Math.Max(0, c.Focus - count) }
 
   /// Permanent growth on a won encounter, replacing the old Study Stack ramp. A Fighter grows the
-  /// martial pair and reads the room; a Mage grows the scholarly pair and a caster's body. Weighted by
-  /// the strongest foe's level (Novice/Veteran +1, Master +2, GrandMaster +3) so hard fights teach more.
+  /// martial pair and hardens the three mental defences; a Mage grows the scholarly pair and the two
+  /// mental defences that were not already in it. Weighted by the strongest foe's level
+  /// (Novice/Veteran +1, Master +2, GrandMaster +3) so hard fights teach more.
   static member growFromEncounter (foes: Combatant list) (c: Combatant) =
     let gain =
       match foes |> List.map (fun f -> f.Progression.Level) with
@@ -343,10 +344,12 @@ type Combatant =
     let gains =
       match c.Class with
       | Fighter ->
-        [ StatId.Prowess, gain; StatId.Poise, gain; StatId.Intuition, 1; StatId.Composure, 1 ]
+        [ StatId.Prowess, gain; StatId.Poise, gain
+          StatId.Resolve, 1; StatId.Intuition, 1; StatId.Composure, 1 ]
       | Mage ->
-        // No Prowess: the body a caster builds is Reflex and Poise, the mind Acumen and Composure.
-        [ StatId.Acumen, gain; StatId.Composure, gain; StatId.Reflex, 1; StatId.Poise, 1 ]
+        // The three mental defences are what scale spell armour, so a caster grows those instead of
+        // a physical stat; Acumen and Composure still carry the tier weight.
+        [ StatId.Acumen, gain; StatId.Composure, gain; StatId.Resolve, 1; StatId.Intuition, 1 ]
       | _ -> [ StatId.Prowess, gain; StatId.Poise, gain; StatId.Force, 1; StatId.Finesse, 1 ]
 
     { c with Stats = c.Stats.ApplyModifiers gains }

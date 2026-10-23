@@ -43,12 +43,13 @@ module EncounterGrowthTests =
     Assert.Equal(statOf StatId.Prowess before + 3, statOf StatId.Prowess grown)
 
   [<Fact>]
-  let ``a Fighter sharpens Intuition and Composure, a Mage Acumen and Composure`` () =
+  let ``both player classes harden Resolve, Intuition and Composure, and neither grows the other's tick`` () =
     let fighter = TierFactory.createClassTier CharacterClass.Fighter CombatTier.Master
     let mage = TierFactory.createClassTier CharacterClass.Mage CombatTier.Master
     let novices = [ foe CharacterClass.Warrior CombatTier.Novice ]
 
     let grownFighter = Combatant.growFromEncounter novices fighter
+    Assert.Equal(statOf StatId.Resolve fighter + 1, statOf StatId.Resolve grownFighter)
     Assert.Equal(statOf StatId.Intuition fighter + 1, statOf StatId.Intuition grownFighter)
     Assert.Equal(statOf StatId.Composure fighter + 1, statOf StatId.Composure grownFighter)
     Assert.Equal(statOf StatId.Acumen fighter, statOf StatId.Acumen grownFighter)
@@ -57,25 +58,26 @@ module EncounterGrowthTests =
 
     let grownMage = Combatant.growFromEncounter novices mage
     Assert.Equal(statOf StatId.Acumen mage + 1, statOf StatId.Acumen grownMage)
+    Assert.Equal(statOf StatId.Resolve mage + 1, statOf StatId.Resolve grownMage)
+    Assert.Equal(statOf StatId.Intuition mage + 1, statOf StatId.Intuition grownMage)
+    // Composure rides the weighted pair, so it gets the tier gain rather than a second +1.
     Assert.Equal(statOf StatId.Composure mage + 1, statOf StatId.Composure grownMage)
-    Assert.Equal(statOf StatId.Intuition mage, statOf StatId.Intuition grownMage)
+    // A caster gains no physical stat at all.
+    Assert.Equal(statOf StatId.Reflex mage, statOf StatId.Reflex grownMage)
+    Assert.Equal(statOf StatId.Prowess mage, statOf StatId.Prowess grownMage)
+    Assert.Equal(statOf StatId.Poise mage, statOf StatId.Poise grownMage)
 
   [<Fact>]
-  let ``a Mage grows Reflex and Poise instead of Prowess, and at no tier grows Prowess`` () =
+  let ``a Mage's weighted pair is Acumen and Composure, and no tier touches Prowess`` () =
     let mage = TierFactory.createClassTier CharacterClass.Mage CombatTier.Master
-    let novices = [ foe CharacterClass.Warrior CombatTier.Novice ]
     let grandMasters = [ foe CharacterClass.Warrior CombatTier.GrandMaster ]
 
-    let noviceWin = Combatant.growFromEncounter novices mage
-    Assert.Equal(statOf StatId.Reflex mage + 1, statOf StatId.Reflex noviceWin)
-    Assert.Equal(statOf StatId.Poise mage + 1, statOf StatId.Poise noviceWin)
-    Assert.Equal(statOf StatId.Prowess mage, statOf StatId.Prowess noviceWin)
-
-    // The scholarly pair carries the tier weight; Reflex and Poise stay a flat tick.
     let hardWin = Combatant.growFromEncounter grandMasters mage
     Assert.Equal(statOf StatId.Acumen mage + 3, statOf StatId.Acumen hardWin)
     Assert.Equal(statOf StatId.Composure mage + 3, statOf StatId.Composure hardWin)
-    Assert.Equal(statOf StatId.Reflex mage + 1, statOf StatId.Reflex hardWin)
+    // The mental defences stay a flat tick regardless of foe tier.
+    Assert.Equal(statOf StatId.Resolve mage + 1, statOf StatId.Resolve hardWin)
+    Assert.Equal(statOf StatId.Intuition mage + 1, statOf StatId.Intuition hardWin)
     Assert.Equal(statOf StatId.Prowess mage, statOf StatId.Prowess hardWin)
 
   [<Fact>]
@@ -85,4 +87,4 @@ module EncounterGrowthTests =
 
     Assert.True(grown.GetStat StatId.Prowess > before.GetStat StatId.Prowess, "Prowess must rise on the returned combatant")
     Assert.True(grown.GetStat StatId.Poise > before.GetStat StatId.Poise, "Poise must rise on the returned combatant")
-    Assert.True(grown.GetStat StatId.Intuition > before.GetStat StatId.Intuition, "A Fighter's Intuition must rise on the returned combatant")
+    Assert.True(grown.GetStat StatId.Resolve > before.GetStat StatId.Resolve, "A Fighter's Resolve must rise on the returned combatant")

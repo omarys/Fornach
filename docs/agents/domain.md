@@ -204,8 +204,8 @@ This document provides a comprehensive handoff of the recent combat balance tuni
 - **Decay** is `Combatant.decayStacks`: one stack off all three at the end of any turn with no live engaged enemy (exploration, rest, the turn a fight ends). Nothing decays inside a fight, which is what makes the meters a within-fight ramp rather than a bankable resource.
 - **Focus also sharpens reading.** `TacticalAssessment.calculateEffectiveScrutiny` counts `observer.Focus * 15` on top of Acumen and Intuition — the old study→scrutiny read, now riding the Discipline meter (the `+15` per stack kept its original magnitude).
 - **Post-encounter growth replaces the study economy.** `Combatant.growFromEncounter (foes) (c)`, weighted by the strongest foe's `Progression.Level` — `+1` under 100, `+2` at 100+, `+3` at 200+. The weighting rides the *primary* pair and the secondary pair is a flat `+1`, per class:
-  - **Fighter** — `Prowess`/`Poise` at the weighted gain, plus `Intuition`/`Composure` (reads the room).
-  - **Mage** — `Acumen`/`Composure` at the weighted gain, plus `Reflex`/`Poise` (a caster's body). **No `Prowess` at any tier** — a mage's growth never feeds the martial offense.
+  - **Fighter** — `Prowess`/`Poise` at the weighted gain, plus `Resolve`/`Intuition`/`Composure` (the three mental defences).
+  - **Mage** — `Acumen`/`Composure` at the weighted gain, plus `Resolve`/`Intuition`. **No physical stat and no `Prowess` at any tier**; the mental defences are what scale spell armour (see the `ProgressionScale` spell-armour pass in `TierFactory.createClassLevel`), so a caster grows defence through the mind.
   - **every other class** — `Prowess`/`Poise` at the weighted gain, plus `Force`/`Finesse`.
 
   Applied to `Stats` with `StatBlock.ApplyModifiers`. Wired at the two victory sites that carry a persistent player: the boss duel (`Program.fs`, which already returns `outcome, currentCombatant`) and the group duel (grows `currentPlayer`). The arena sparring loop `runInteractiveDuel` is deliberately *not* wired — its combatants are throwaway locals.
