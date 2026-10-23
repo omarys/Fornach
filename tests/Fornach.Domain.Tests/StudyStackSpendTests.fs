@@ -23,18 +23,32 @@ module StudyStackSpendTests =
 
   [<Fact>]
   let ``the finisher threshold sits at five stacks at Master, not two`` () =
+    // Measured crossing points (top roll, same-tier Fighter champion, damage linear in the multiplier
+    // and clamped by the pool): four stacks GrandMaster, five Master, six Veteran. GrandMaster being
+    // earliest is the direction §1 G fought against, so if this ever needs flattening the dial is a
+    // per-tier rate — fitting one flat constant to three points is guesswork without a duel sim.
+    let firstKill stacks tier =
+      let pool = (TierFactory.createClassTier CharacterClass.Fighter tier).Health.Maximum
+      let dealt n =
+        let target = TierFactory.createClassTier CharacterClass.Fighter tier
+        let actor = { TierFactory.createClassTier CharacterClass.Fighter tier with StudyStacks = n }
+        let res = ActionResolver.resolve topRoll (StandardAttack CalculatedFlawStrike) actor target
+        target.Health.Current - res.Target.Health.Current
+      Assert.True(stacks < 2 || dealt (stacks - 1) < pool, sprintf "%A: %d stacks should not already delete the pool" tier (stacks - 1))
+      Assert.True(dealt stacks >= pool, sprintf "%A: %d stacks should reach the one-shot threshold" tier stacks)
+      stacks
+
+    Assert.Equal(4, firstKill 4 CombatTier.GrandMaster)
+    Assert.Equal(5, firstKill 5 CombatTier.Master)
+    Assert.Equal(6, firstKill 6 CombatTier.Veteran)
+
+  [<Fact>]
+  let ``a two-stack spend is not a finisher`` () =
     let pool = (TierFactory.createClassTier CharacterClass.Fighter CombatTier.Master).Health.Maximum
-    let single =
-      let target = TierFactory.createClassTier CharacterClass.Fighter CombatTier.Master
-      let res = ActionResolver.resolve topRoll (StandardAttack CalculatedFlawStrike) (flawStrike 1) target
-      target.Health.Current - res.Target.Health.Current
-
-    // Multiplier needed to delete an equal-tier pool at a top roll, and where the ladder crosses it.
-    let needed = float pool / float single
-    let mult n = ActionResolver.strikeMultiplier CalculatedFlawStrike 0 n CombatStance.PowerStance
-
-    Assert.True(mult 4 < needed, sprintf "four stacks must not already delete a same-tier pool (%f vs %f)" (mult 4) needed)
-    Assert.True(mult 5 >= needed, sprintf "five stacks should reach the one-shot threshold (%f vs %f)" (mult 5) needed)
+    let target = TierFactory.createClassTier CharacterClass.Fighter CombatTier.Master
+    let res = ActionResolver.resolve topRoll (StandardAttack CalculatedFlawStrike) (flawStrike 2) target
+    let dealt = target.Health.Current - res.Target.Health.Current
+    Assert.True(dealt < pool, sprintf "two stacks must leave the target standing: %d of %d" dealt pool)
 
   [<Fact>]
   let ``one stack is a normal hit, a full pile is a finisher`` () =
