@@ -165,14 +165,9 @@ module TowerSession =
             Player = Consumables.apply kind state.Player
             Consumables = Consumables.remove kind state.Consumables }
 
-  /// The pair a shrine sharpens for a given plane. Fighters may only ever receive physical blessings
-  /// and Mages only ever mental ones, so the pair follows the plane rather than the shrine's flavour.
-  let shrineBoonPair (plane: Plane) (boon: ShrineBoon) : StatId * StatId =
-    match plane, boon with
-    | Physical, PrimaryBoon -> Force, Fortitude
-    | Physical, SecondaryBoon -> Finesse, Reflex
-    | Mental, PrimaryBoon -> Intellect, Resolve
-    | Mental, SecondaryBoon -> Acuity, Intuition
+  /// The pair a shrine sharpens for a given plane — `StatBoon.pairOf`, kept here so session callers
+  /// read the same class lock the altars use.
+  let shrineBoonPair (plane: Plane) (boon: StatBoon) : StatId * StatId = StatBoon.pairOf plane boon
 
   /// Percentage each stat of the pair gains on a shrine's first commune.
   let shrineBoonPct = 10
@@ -945,9 +940,14 @@ module TowerSession =
       let reward = altar.Reward.ResolvedFor state.Player.Plane
 
       match reward with
-      | StatBuff (stat, pct) ->
-        let updatedStats = costPlayer.Stats.Modify(stat, StatBonus.percentOf (costPlayer.Stats.Get stat) pct)
+      | StatBuff (stats, bonus) ->
+        // Flat points, not a percentage: the pair is resolved against the bearer's plane, so the
+        // number has to mean the same thing for a level-1 delver and a level-185 guardian.
+        let updatedStats = stats |> List.fold (fun (s: StatBlock) stat -> s.Modify(stat, bonus)) costPlayer.Stats
         rewardedPlayer <- { costPlayer with Stats = updatedStats }
+      | PairBuff _ ->
+        // Unreachable: `ResolvedFor` above turns every authored pair buff into concrete stats.
+        rewardedPlayer <- costPlayer
       | VitalitySurge (hpPct, morPct) ->
         // ApplyDelta clamps at the pool maximum, so a surge gifted at full health is not banked.
         rewardedPlayer <-

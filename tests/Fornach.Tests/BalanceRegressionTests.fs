@@ -159,5 +159,9 @@ module BalanceRegressionTests =
     Assert.True(shallow < mid, sprintf "floor 2 had %d mobs, floor 5 had %d" shallow mid)
     Assert.True(mid < deep, sprintf "floor 5 had %d mobs, floor 8 had %d" mid deep)
 
-    // Twelve plazas is the generator's ceiling and ten mobOffsets is the per-chamber cap.
-    Assert.True(mobs 30 <= 120, sprintf "floor 30 fielded %d mobs" (mobs 30))
+    // Twelve plazas is the generator's ceiling and eighteen mobOffsets is the per-chamber cap.
+    Assert.True(mobs 30 <= 216, sprintf "floor 30 fielded %d mobs" (mobs 30))
+    // The density ask: three more bodies a room than the old 4 + floor/2 curve, on every floor.
+    for floorNumber in [ 2; 4; 8 ] do
+      let ceiling = 4 + floorNumber / 2 + 1
+      Assert.True(mobs floorNumber >= ceiling + 3, sprintf "floor %d fielded %d mobs, expected at least %d" floorNumber (mobs floorNumber) (ceiling + 3))

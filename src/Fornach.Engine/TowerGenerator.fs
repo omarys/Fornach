@@ -528,8 +528,8 @@ module TowerGenerator =
     // Two shrines per stage, one per class-appropriate stat pair, so a run can sharpen both halves of
     // its plane. Shrines never sit in the altar rooms (plaza indices 1 and 4 in `WorldEvents`).
     let shrineSites =
-      [ 2, PrimaryBoon, sprintf "shrine_floor_%d" floorNumber
-        5, SecondaryBoon, sprintf "shrine_floor_%d_prime" floorNumber ]
+      [ 2, PrimaryPair, sprintf "shrine_floor_%d" floorNumber
+        5, SecondaryPair, sprintf "shrine_floor_%d_prime" floorNumber ]
 
     for shrineIndex, boon, shrineId in shrineSites do
       let shrinePlaza = plazaAt shrineIndex
@@ -667,7 +667,17 @@ module TowerGenerator =
         0, 3
         0, -3
         3, 3
-        -3, -3 ]
+        -3, -3
+        // The mid ring, inside the same envelope as the corners: a room needs somewhere to put the
+        // extra three mobs the density curve now asks for.
+        3, 2
+        -3, 2
+        3, -2
+        -3, -2
+        2, 3
+        -2, 3
+        2, -3
+        -2, -3 ]
 
     let mobSpecies (i: int) =
       if isStory && floorNumber = 1 then

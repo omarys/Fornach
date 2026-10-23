@@ -54,26 +54,35 @@ module WorldEvents =
   /// Every number here is a percentage, not a flat sum: costs take a slice of the protagonist's maximum
   /// and rewards are read back off their own attributes at commune time, so neither side fades as they
   /// climb. The per-theme numbers keep their relative severity.
-  let createAltar (theme: FloorTheme) (floorNum: int) : AltarChoice =
+  /// Flat points each attribute of the pair gains. Flat, not a percentage: the pair is resolved
+  /// against the bearer's plane, so the number has to mean the same thing for every class.
+  let altarStatBonus = 40
+
+  let createAltar (theme: FloorTheme) (floorNum: int) (boon: StatBoon) : AltarChoice =
+    let boonIdSuffix =
+      match boon with
+      | PrimaryPair -> ""
+      | SecondaryPair -> "_prime"
+
     match theme with
     | QuarryPlazas ->
-      { Id = sprintf "altar_quarry_%d" floorNum
+      { Id = sprintf "altar_quarry_%d%s" floorNum boonIdSuffix
         Name = "Altar of the Iron Quarryman"
         Description = "A dark granite crucible bearing the scorched handprints of broken miners."
         Cost = AltarCost.SacrificeHealth 25
-        Reward = AltarReward.StatBuff(StatId.Force, 15)
+        Reward = AltarReward.PairBuff(boon, altarStatBonus)
         IsUsed = false }
 
     | PineCloisters ->
-      { Id = sprintf "altar_pine_%d" floorNum
+      { Id = sprintf "altar_pine_%d%s" floorNum boonIdSuffix
         Name = "Shrine of the Weeping Willow"
         Description = "An ancient, moss-hung pine stump weeping sap that smells of sorrow."
         Cost = AltarCost.SacrificeMorale 30
-        Reward = AltarReward.StatBuff(StatId.Resolve, 15)
+        Reward = AltarReward.PairBuff(boon, altarStatBonus)
         IsUsed = false }
 
     | BasaltCalderas ->
-      { Id = sprintf "altar_basalt_%d" floorNum
+      { Id = sprintf "altar_basalt_%d%s" floorNum boonIdSuffix
         Name = "Crucible of the Slag Martyr"
         Description = "A glowing basalt forge demanding the sacrificial tempering of armor."
         Cost = AltarCost.ShredArmor 30
@@ -91,7 +100,7 @@ module WorldEvents =
         IsUsed = false }
 
     | TempestTerraces ->
-      { Id = sprintf "altar_tempest_%d" floorNum
+      { Id = sprintf "altar_tempest_%d%s" floorNum boonIdSuffix
         Name = "Gale-Worn Monolith of the Abyss"
         Description = "A wind-carved spire poised above the roaring ocean spray."
         Cost = AltarCost.SacrificeHealth 20
@@ -99,27 +108,27 @@ module WorldEvents =
         IsUsed = false }
 
     | SunkenBoulevards ->
-      { Id = sprintf "altar_sunken_%d" floorNum
+      { Id = sprintf "altar_sunken_%d%s" floorNum boonIdSuffix
         Name = "Font of the Drowned King"
         Description = "A flooded marble baptismal font reflecting undisturbed abyssal waters."
         Cost = AltarCost.SacrificeMorale 25
-        Reward = AltarReward.StatBuff(StatId.Intuition, 15)
+        Reward = AltarReward.PairBuff(boon, altarStatBonus)
         IsUsed = false }
 
     | ElysianSanctuaries ->
-      { Id = sprintf "altar_elysian_%d" floorNum
+      { Id = sprintf "altar_elysian_%d%s" floorNum boonIdSuffix
         Name = "Seraphic Mirror of White Lilies"
         Description = "A crystal mirror surrounded by blossoming white lilies that hum with serene quiet."
         Cost = AltarCost.SacrificeHealth 15
-        Reward = AltarReward.StatBuff(StatId.Composure, 15)
+        Reward = AltarReward.PairBuff(boon, altarStatBonus)
         IsUsed = false }
 
     | CelestialSpires ->
-      { Id = sprintf "altar_celestial_%d" floorNum
+      { Id = sprintf "altar_celestial_%d%s" floorNum boonIdSuffix
         Name = "Astral Pyre of Transcendence"
         Description = "A pillar of quiet starlight suspended over the cosmic abyss."
         Cost = AltarCost.SacrificeHealth 30
-        Reward = AltarReward.StatBuff(StatId.Intellect, 20)
+        Reward = AltarReward.PairBuff(boon, altarStatBonus)
         IsUsed = false }
 
   let private themeMonstersForTrophy (theme: FloorTheme) : AlchemicalTrophy option =
@@ -365,11 +374,11 @@ module WorldEvents =
         // 2. Sacrificial Altar — deliberately kept out of the shrine rooms (plaza indices 2, 5 and 8 in
         // `TowerGenerator`), so a stage never offers a free blessing and a costly pact side by side.
         let altarPos = { X = p1.X + 3; Y = p1.Y + 2 }
-        altarPos, FloorEncounter.SacrificialAltar (createAltar theme floorNum)
+        altarPos, FloorEncounter.SacrificialAltar (createAltar theme floorNum PrimaryPair)
 
-        // 2b. A second altar elsewhere in the stage: one sacrifice site per floor was too thin
-        // now that floors run 9 to 12 rooms. Same pact, unique id.
-        let secondAltar = createAltar theme floorNum
+        // 2b. The stage's second altar sharpens the other pair, so a run can raise both halves of its
+        // plane from pacts alone. It keeps its own id (`..._prime`) and its own weathered name.
+        let secondAltar = createAltar theme floorNum SecondaryPair
         let secondAltarPos = { X = p4.X + 3; Y = p4.Y - 2 }
         secondAltarPos,
         FloorEncounter.SacrificialAltar

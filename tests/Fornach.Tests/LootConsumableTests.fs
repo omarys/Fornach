@@ -345,7 +345,7 @@ let ``an unidentified consumable cannot be used until a shrine reveals it`` () =
     { Id = "sanctuary_reveal_test"
       Name = "Sanctuary of Clarity"
       BlessingDescription = "Reveals carried kinds"
-      Boon = PrimaryBoon
+      Boon = PrimaryPair
       IsBlessed = false
       IsUsed = false }
 
@@ -379,7 +379,7 @@ let ``a shrine blesses on every visit and never re-applies a material or a revea
       Id = "sanctuary_loot_test"
       Name = "Sanctuary of the Assemblage"
       BlessingDescription = "Restores all vitals and works carried materials"
-      Boon = PrimaryBoon
+      Boon = PrimaryPair
       IsBlessed = false
       IsUsed = false
     }
@@ -473,7 +473,7 @@ let private stateWithAltar (cost: AltarCost) (player: Combatant) =
       Name = "Altar of the Iron Quarryman"
       Description = "A dark granite crucible."
       Cost = cost
-      Reward = AltarReward.StatBuff(StatId.Force, 15)
+      Reward = AltarReward.StatBuff([ StatId.Force ], 15)
       IsUsed = false
     }
 

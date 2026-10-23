@@ -25,7 +25,7 @@ let private bonusesOf (item: EquipmentItem) = item.StatPercentBonuses |> List.ma
 
 /// Every equipment item the world events can hand out for one theme and floor.
 let private grantedItems (theme: FloorTheme) (floorNum: int) : (string * EquipmentItem) list =
-  let altar = WorldEvents.createAltar theme floorNum
+  let altar = WorldEvents.createAltar theme floorNum PrimaryPair
   let trader = WorldEvents.createTrader theme floorNum
   let vault = WorldEvents.createVault theme floorNum
 

@@ -99,24 +99,35 @@ type TowerChest =
     ItemReward: EquipmentItem option
     IsOpen: bool }
 
-/// Which of the two class-appropriate stat pairs a shrine sharpens. Floors are laid out without
-/// knowing the protagonist, so the slot is stored and resolved against their plane when communing:
-/// a Fighter only ever receives physical blessings, a Mage only ever mental ones.
-type ShrineBoon =
-  | PrimaryBoon
-  | SecondaryBoon
+/// Which of the two class-appropriate stat pairs a boon sharpens: the plane's first pair (a Fighter's
+/// Force/Fortitude, a Mage's Intellect/Resolve) or its second (Finesse/Reflex, Acuity/Intuition).
+/// Floors — shrines and altars alike — are laid out without knowing the protagonist, so the slot is
+/// stored and resolved against their plane when the boon is claimed.
+type StatBoon =
+  | PrimaryPair
+  | SecondaryPair
 
   member this.Description =
     match this with
-    | PrimaryBoon -> "first"
-    | SecondaryBoon -> "second"
+    | PrimaryPair -> "first"
+    | SecondaryPair -> "second"
+
+/// The two attributes a slot names on a given plane. A Fighter is only ever sharpened on physical
+/// attributes and a Mage only on mental ones, so this is the single place the class lock lives.
+module StatBoon =
+  let pairOf (plane: Plane) (boon: StatBoon) : StatId * StatId =
+    match plane, boon with
+    | Physical, PrimaryPair -> StatId.Force, StatId.Fortitude
+    | Physical, SecondaryPair -> StatId.Finesse, StatId.Reflex
+    | Mental, PrimaryPair -> StatId.Intellect, StatId.Resolve
+    | Mental, SecondaryPair -> StatId.Acuity, StatId.Intuition
 
 /// Ancient shrines providing blessings or relief
 type TowerShrine =
   { Id: string
     Name: string
     BlessingDescription: string
-    Boon: ShrineBoon
+    Boon: StatBoon
     /// The stat blessing is one-time; the restorative blessing repeats on every visit.
     IsBlessed: bool
     IsUsed: bool }
@@ -134,31 +145,42 @@ type AltarCost =
     | SacrificeMorale amt -> sprintf "Sacrifice %d%% Morale" amt
     | ShredArmor amt -> sprintf "Shred %d%% Armor durability" amt
 
-/// Reward granted upon fulfilling an altar's sacrifice. The amounts are PERCENTAGES of the
-/// protagonist's own values, read when the altar is accepted: a flat +15 Force was a rounding error
-/// beside level-185 attributes, so the blessing grows with the one who earns it.
+/// Reward granted upon fulfilling an altar's sacrifice.
 type AltarReward =
-  | StatBuff of stat: StatId * bonusPct: int
+  /// Authored form: sharpens one of the bearer's two class pairs by a flat `bonus` points each.
+  | PairBuff of boon: StatBoon * bonus: int
+  /// Resolved form of `PairBuff`: carries the concrete attributes so the grant can be described.
+  | StatBuff of stats: StatId list * bonus: int
   | VitalitySurge of healthPct: int * moralePct: int
   | KeyReward of keyId: string * keyName: string
   | RelicReward of EquipmentItem
 
   member this.Description : string =
     match this with
-    | StatBuff (stat, bonusPct) -> sprintf "+%d%% %A" bonusPct stat
+    | PairBuff (boon, bonus) -> sprintf "+%d %s pair" bonus boon.Description
+    | StatBuff (stats, bonus) ->
+      sprintf "+%d %s" bonus (stats |> List.map (sprintf "%A") |> String.concat " and ")
     | VitalitySurge (hpPct, morPct) -> sprintf "+%d%% HP and +%d%% Morale" hpPct morPct
     | KeyReward (_, keyName) -> sprintf "Keystone: %s" keyName
     | RelicReward item -> sprintf "Relic: %s" item.Name
 
   /// The reward as a given plane can actually receive it. A Fighter may only be granted physical
-  /// attributes and a Mage only mental ones, so a stat reward authored on the wrong side of the veil
-  /// lands on its counterpart (`Attributes.counterparts`) instead of on the bearer's weak flank.
-  /// Everything else is plane-neutral. Callers must describe and apply the resolved reward, so the
-  /// offer a player reads is the boon they are handed.
+  /// attributes and a Mage only mental ones, so a pair buff is resolved against the bearer's plane
+  /// here and nothing authored can name a stat on the other side of the veil. Surges, keystones and
+  /// relics are plane-neutral. Callers must describe and apply the resolved reward, so the offer a
+  /// player reads is the boon they are handed.
   member this.ResolvedFor(plane: Plane) : AltarReward =
     match this with
-    | StatBuff (stat, bonusPct) when (Attributes.descriptorOf stat).Plane <> plane ->
-      StatBuff(Attributes.counterparts stat, bonusPct)
+    | PairBuff (boon, bonus) ->
+      let first, second = StatBoon.pairOf plane boon
+      StatBuff([ first; second ], bonus)
+    | StatBuff (stats, bonus) ->
+      // A hand-authored single stat still cannot cross the veil: it lands on its counterpart.
+      StatBuff(
+        stats
+        |> List.map (fun stat -> if (Attributes.descriptorOf stat).Plane = plane then stat else Attributes.counterparts stat),
+        bonus
+      )
     | other -> other
 
 /// Ancient sacrificial altar offering dangerous risk/reward dilemmas

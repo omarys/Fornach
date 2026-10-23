@@ -82,7 +82,7 @@ let ``SacrificialAltar applies costs and rewards correctly and prevents double-u
       Name = "Test Altar of Blood"
       Description = "A dark stone demanding blood for strength."
       Cost = AltarCost.SacrificeHealth 25
-      Reward = AltarReward.StatBuff(StatId.Force, 15)
+      Reward = AltarReward.StatBuff([ StatId.Force ], 15)
       IsUsed = false }
 
   let floorWithAltar =
@@ -104,10 +104,8 @@ let ``SacrificialAltar applies costs and rewards correctly and prevents double-u
   // Assert Cost applied: 25% of the maximum, read off the player
   let healthToll = int (System.Math.Round(float testState.Player.Health.Maximum * 0.25))
   Assert.Equal(initialHp - healthToll, updatedState.Player.Health.Current)
-  // Assert Reward applied: +15% of the Force the protagonist brought
-  let expectedBonus =
-    int (System.Math.Round(float initialForce * 0.15, System.MidpointRounding.AwayFromZero))
-  Assert.Equal(initialForce + expectedBonus, updatedState.Player.Stats.Get StatId.Force)
+  // Assert Reward applied: the flat points the altar names, added to the Force brought in
+  Assert.Equal(initialForce + 15, updatedState.Player.Stats.Get StatId.Force)
 
   // Assert Altar marked used
   match Map.tryFind altarPos updatedState.CurrentFloor.Entities with
@@ -119,9 +117,9 @@ let ``SacrificialAltar applies costs and rewards correctly and prevents double-u
   Assert.True(secondAttempt.IsError)
 
 [<Fact>]
-let ``Altar blessing grows with the protagonist instead of staying a flat sum`` () =
-  // The whole point: +15 Force was a rounding error beside level-185 attributes, so the same altar
-  // has to pay a Veteran far more than a fresh Explorer.
+let ``Altar blessing pays the flat sum it names, whatever the bearer's scale`` () =
+  // Deliberate reversal: pair rewards are flat points now, because the pair itself is resolved
+  // against the bearer's plane and has to mean the same thing for every class and level.
   let veteran = TierFactory.createClassLevel CharacterClass.Warrior 185
   let state = TowerSession.initSession veteran 42 1
   let altarPos = { X = 15; Y = 15 }
@@ -131,7 +129,7 @@ let ``Altar blessing grows with the protagonist instead of staying a flat sum`` 
       Name = "Altar of the Iron Quarryman"
       Description = "A dark granite crucible."
       Cost = AltarCost.SacrificeHealth 25
-      Reward = AltarReward.StatBuff(StatId.Force, 15)
+      Reward = AltarReward.StatBuff([ StatId.Force ], 15)
       IsUsed = false }
 
   let seededState =
@@ -149,8 +147,8 @@ let ``Altar blessing grows with the protagonist instead of staying a flat sum`` 
   let blessed = TowerSession.applyAltarSacrifice altarPos seededState |> getOk
   let gained = blessed.Player.Stats.Get StatId.Force - force
 
-  Assert.Equal(int (Math.Round(float force * 0.15, MidpointRounding.AwayFromZero)), gained)
-  Assert.True(gained > 15, sprintf "veteran altar gain %d should outgrow the old flat +15" gained)
+  // Flat, not scaled: a level-185 Warrior gains the same 15 the altar names.
+  Assert.Equal(15, gained)
 
 [<Fact>]
 let ``WanderingTrader handles purchasing wares with Souls and Alchemical Trophies`` () =
@@ -441,7 +439,7 @@ let ``TowerDisplay inspectTile formats inspection detail for encounters`` () =
       Name = "Altar of the Iron Quarryman"
       Description = "Granite crucible"
       Cost = AltarCost.SacrificeHealth 25
-      Reward = AltarReward.StatBuff(StatId.Force, 15)
+      Reward = AltarReward.StatBuff([ StatId.Force ], 15)
       IsUsed = false }
 
   let state =
@@ -507,7 +505,7 @@ let ``Shrine communion resets player combat strain meters to zero`` () =
     { Id = "sanctuary_test"
       Name = "Sanctuary of Clarity"
       BlessingDescription = "Purges all strain"
-      Boon = PrimaryBoon
+      Boon = PrimaryPair
       IsBlessed = false
       IsUsed = false }
   let stateWithShrine =
