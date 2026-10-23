@@ -329,30 +329,21 @@ type Combatant =
     | Vector.Power -> { c with Momentum = Math.Max(0, c.Momentum - count) }
     | Vector.Discipline -> { c with Focus = Math.Max(0, c.Focus - count) }
 
-  /// Permanent growth on a won encounter, replacing the old Study Stack ramp. A Fighter grows the
-  /// martial pair and hardens the three mental defences; a Mage grows the scholarly pair and the two
-  /// mental defences that were not already in it. Weighted by the strongest foe's level
-  /// (Novice/Veteran +1, Master +2, GrandMaster +3) so hard fights teach more.
-  static member growFromEncounter (foes: Combatant list) (c: Combatant) =
-    let gain =
-      match foes |> List.map (fun f -> f.Progression.Level) with
-      | [] -> 1
-      | levels when List.max levels >= 200 -> 3
-      | levels when List.max levels >= 100 -> 2
-      | _ -> 1
+  /// Permanent growth on a won encounter, replacing the old Study Stack ramp: +2 to the Discipline pair
+  /// (Prowess/Poise for everyone but a Mage, which takes Acumen/Composure) and +1 to each of the three
+  /// mental defences. Foe tier no longer matters.
+  static member growFromEncounter (_foes: Combatant list) (c: Combatant) =
+    // Flat, foe-independent: the difficulty of a win is already paid in the fight, and a tier-weighted
+    // gain made late-game fights worth several early ones on top of their experience.
+    let mentalDefences =
+      [ StatId.Resolve, 1; StatId.Intuition, 1; StatId.Composure, 1 ]
 
-    let gains =
+    let disciplinePair =
       match c.Class with
-      | Fighter ->
-        [ StatId.Prowess, gain; StatId.Poise, gain
-          StatId.Resolve, 1; StatId.Intuition, 1; StatId.Composure, 1 ]
-      | Mage ->
-        // The three mental defences are what scale spell armour, so a caster grows those instead of
-        // a physical stat; Acumen and Composure still carry the tier weight.
-        [ StatId.Acumen, gain; StatId.Composure, gain; StatId.Resolve, 1; StatId.Intuition, 1 ]
-      | _ -> [ StatId.Prowess, gain; StatId.Poise, gain; StatId.Force, 1; StatId.Finesse, 1 ]
+      | Mage -> [ StatId.Acumen, 2; StatId.Composure, 2 ]
+      | _ -> [ StatId.Prowess, 2; StatId.Poise, 2 ]
 
-    { c with Stats = c.Stats.ApplyModifiers gains }
+    { c with Stats = c.Stats.ApplyModifiers(disciplinePair @ mentalDefences) }
 
   /// Modifies active Arcane Ward barrier absorption pool
   static member addWard delta (c: Combatant) =

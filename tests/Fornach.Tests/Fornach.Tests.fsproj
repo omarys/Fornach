@@ -36,6 +36,7 @@
     <Compile Include="StalemateTests.fs" />
     <Compile Include="BleedRecoveryTests.fs" />
     <Compile Include="LootConsumableTests.fs" />
+    <Compile Include="ShrineBlessingTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
