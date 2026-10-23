@@ -20,5 +20,3 @@ A spender converts an entire buildup into one strike, so pacing shifts for anyon
 
 > Recorded by openlore decisions on 2026-10-23
 > Decision ID: 89d606ce
-
-
