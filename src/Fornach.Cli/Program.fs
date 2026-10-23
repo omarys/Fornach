@@ -82,10 +82,9 @@ module Program =
       StandardAttack (ProwessStrike false)
     elif choice.Contains("Prowess Strike: Invitational Bait") then
       StandardAttack (ProwessStrike true)
-    elif choice.Contains("Shield Bash: Heavy Slam") then
-      StandardAttack (ShieldBash true)
     elif choice.Contains("Shield Bash") then
-      StandardAttack (ShieldBash false)
+      // The menu only offers this during a telegraphed wind-up, so it is always the committed slam.
+      StandardAttack (ShieldBash true)
     elif choice.Contains("Authority Decree: Imperious Command") then
       StandardAttack (AuthorityDecree false)
     elif choice.Contains("Authority Decree: Overwhelming Demand") then
@@ -155,6 +154,16 @@ module Program =
     else
       RecoveryAction SteadyForm
 
+  /// True when the telegraphed intent is a heavy wind-up that a Shield Bash can break. Shield Bash is
+  /// gated on this: there is nothing to interrupt otherwise.
+  let isInterruptibleWindup (enemyIntentOpt: ActionIntent option) : bool =
+    match enemyIntentOpt with
+    | Some (StandardAttack atk) ->
+      match atk with
+      | ForceStrike true | FinesseCadence true | ProwessStrike true | ArcaneCataclysm true | TraumaAttack _ -> true
+      | _ -> false
+    | _ -> false
+
   let buildActionChoicesWithTelegraph (player: Combatant) (enemy: Combatant) (enemyIntentOpt: ActionIntent option) : string list =
     [
       // Finisher (only for the player's operative discipline)
@@ -182,10 +191,7 @@ module Program =
       let powerCounterTag, agilityCounterTag, disciplineCounterTag, shieldInterruptTag, raiseShieldTag =
         match enemyIntentOpt with
         | Some (StandardAttack atk) ->
-          let isHeavyGambit =
-            match atk with
-            | ForceStrike true | FinesseCadence true | ProwessStrike true | ArcaneCataclysm true | TraumaAttack _ -> true
-            | _ -> false
+          let isHeavyGambit = isInterruptibleWindup enemyIntentOpt
 
           let interruptBadge =
             if isHeavyGambit then sprintf " [bold %s]★ SHIELD INTERRUPT (Disrupts Windup!)[/]" Theme.Yellow
@@ -255,30 +261,30 @@ module Program =
         let powerStrikes = [
           sprintf "⚔️  [%s]Force Strike: Standard Cleave[/] (Power Stance • Cleave vs. Fortitude%s)%s" Theme.Red fortSuffix powerCounterTag
           sprintf "⚡ [bold %s]Force Strike: Wild Blow[/] (Power Stance Gambit: +30 Recklessness, 1.5x Dmg)" Theme.Red
-          // Dedicated Power Gambit (costs Study Stacks with 0 Recklessness!)
-          if player.StudyStacks >= 2 then
-            sprintf "🎯 [bold %s]Force Strike: Insight Cleave[/] (Power Stance Gambit: Burn every Study Stack for a Read Opening, 0 Recklessness)" Theme.Red
+          // Dedicated Power Gambit (costs Momentum with 0 Recklessness!)
+          if player.Momentum >= 2 then
+            sprintf "🎯 [bold %s]Force Strike: Insight Cleave[/] (Power Stance Gambit: Burn every Momentum stack for a Read Opening, 0 Recklessness)" Theme.Red
         ]
 
         let agilityStrikes = [
           sprintf "⚔️  [%s]Finesse Cadence: Rapid Probing[/] (Agility Stance • Probing Cadence vs. Reflex%s)%s" Theme.Green refSuffix agilityCounterTag
           sprintf "⚡ [bold %s]Finesse Cadence: Relentless Blitz[/] (Agility Stance Gambit: +25 Recklessness)" Theme.Green
-          // Dedicated Agility Gambit (costs Study Stacks with 0 Recklessness!)
-          if player.StudyStacks >= 2 then
-            sprintf "🎯 [bold %s]Finesse Cadence: Threaded Opening[/] (Agility Stance Gambit: Burn every Study Stack to Thread a Vital Opening, 0 Recklessness)" Theme.Green
+          // Dedicated Agility Gambit (costs Flow with 0 Recklessness!)
+          if player.Flow >= 2 then
+            sprintf "🎯 [bold %s]Finesse Cadence: Threaded Opening[/] (Agility Stance Gambit: Burn every Flow stack to Thread a Vital Opening, 0 Recklessness)" Theme.Green
         ]
 
         let disciplineStrikes = [
-          sprintf "⚔️  [%s]Prowess Strike: Stance Pressure[/] (Discipline Stance • Study Stacks vs. Poise%s)%s" Theme.Purple poiseSuffix disciplineCounterTag
+          sprintf "⚔️  [%s]Prowess Strike: Stance Pressure[/] (Discipline Stance • Focus vs. Poise%s)%s" Theme.Purple poiseSuffix disciplineCounterTag
           sprintf "⚡ [bold %s]Prowess Strike: Invitational Bait[/] (Discipline Stance Gambit: +35 Recklessness)" Theme.Purple
-          // Active Armament Technique: Fighter Sword & Shield Bash
-          sprintf "🛡️  [bold %s]Shield Bash: Standard Slam[/] (Discipline Stance • Prowess vs. Poise, Frustration & Stagger)%s" Theme.Cyan shieldInterruptTag
-          sprintf "⚡ [bold %s]Shield Bash: Heavy Slam[/] (Discipline Stance Gambit: +25 Recklessness, Stagger & Interrupt)%s" Theme.Cyan shieldInterruptTag
-          // Dedicated Discipline Gambits (cost Study Stacks with 0 Recklessness!)
-          if player.StudyStacks >= 2 then
-            sprintf "🎯 [bold %s]Calculated Flaw Strike[/] (Discipline Stance Gambit: Burn every Study Stack for a Vital Opening, 0 Recklessness)" Theme.Purple
-          if player.StudyStacks >= 3 then
-            sprintf "⚔️  [bold %s]Masterful Disarm[/] (Discipline Stance Gambit: Spend Study Stacks to Degrade Opponent Weapon, 0 Recklessness)" Theme.Purple
+          // Shield Bash: one action, stance-keyed, offered only while there is a wind-up to break.
+          if isInterruptibleWindup enemyIntentOpt then
+            sprintf "🛡️  [bold %s]Shield Bash[/] (Interrupt the windup — Power: knockdown, Agility: parry + counter window, Discipline: weapon break)%s" Theme.Cyan shieldInterruptTag
+          // Dedicated Discipline Gambits (cost Focus with 0 Recklessness!)
+          if player.Focus >= 2 then
+            sprintf "🎯 [bold %s]Calculated Flaw Strike[/] (Discipline Stance Gambit: Burn every Focus stack for a Vital Opening, 0 Recklessness)" Theme.Purple
+          if player.Focus >= 3 then
+            sprintf "⚔️  [bold %s]Masterful Disarm[/] (Discipline Stance Gambit: Spend Focus to Degrade Opponent Weapon, 0 Recklessness)" Theme.Purple
         ]
 
         // Archetype vector leads the list and breaks ties between equally effective strikes
@@ -300,9 +306,9 @@ module Program =
         yield! rankStrikes martialGroups
 
         // Active Armament Recovery: Shield Bastion Guard
-        sprintf "🛡️  [bold %s]Raise Shield[/] (Bastion Posture: Repair Armor ~36%% of max, Gain 2 Study Stacks, Bleed Recklessness)%s" Theme.Green raiseShieldTag
+        sprintf "🛡️  [bold %s]Raise Shield[/] (Bastion Posture: Repair Armor ~36%% of max, Gain 2 Combat Ramp, Bleed Recklessness)%s" Theme.Green raiseShieldTag
         // Steady Form: the single recovery action, available to every discipline
-        sprintf "🛡️  [%s]Steady Form[/] (Recovery: vent all strain via Poise & Composure, restore Morale, build Study)" Theme.Green
+        sprintf "🛡️  [%s]Steady Form[/] (Recovery: vent all strain via Poise & Composure, restore Morale, build Combat Ramp)" Theme.Green
 
       else
         // Arcane Spellcraft (Mental Characters)
@@ -783,6 +789,7 @@ module Program =
       if playerExecutedEnemy || currentBoss.Health.IsDepleted || currentBoss.Morale.IsDepleted then
         combatOver <- true
         outcome <- CombatOutcome.PlayerVictorious
+        currentCombatant <- Combatant.growFromEncounter [ currentBoss ] currentCombatant
         AnsiConsole.WriteLine()
         AnsiConsole.Write(
           Rule(sprintf "[bold %s]★★★ MANIFESTATION RESOLVED: %s PREVAILED! ★★★[/]" Theme.Green currentCombatant.Name)
@@ -1099,6 +1106,7 @@ module Program =
 
         if (living ()).IsEmpty then
           outcome <- TowerDisplay.GroupDuelOutcome.Victorious
+          currentPlayer <- Combatant.growFromEncounter (currentEnemies |> List.map (fun e -> e.Combatant)) currentPlayer
           combatOver <- true
           AnsiConsole.WriteLine()
           AnsiConsole.Write(

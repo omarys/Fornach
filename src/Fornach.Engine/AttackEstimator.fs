@@ -70,19 +70,19 @@ module AttackEstimator =
       match attack with
       | CalculatedFlawStrike
       | ForceInsightStrike
-      | FinesseInsightStrike -> actor.StudyStacks
-      | MasterfulDisarm spend -> Math.Min(actor.StudyStacks, Math.Max(3, spend))
+      | FinesseInsightStrike -> Combatant.stacksIn attack.Vector actor
+      | MasterfulDisarm _ -> Math.Min(Combatant.StackCap, Combatant.stacksIn attack.Vector actor)
       | _ -> 0
 
     let netHits =
       // The attacker's pool has no floor in DicePool.resolveContestEx; only the defender's does (4).
-      expectedHits attack.Vector actor.StudyStacks offValue defValue 0
-      - expectedHits attack.Vector target.StudyStacks defValue offValue 4
+      expectedHits attack.Vector (Combatant.stacksIn attack.Vector actor) offValue defValue 0
+      - expectedHits attack.Vector (Combatant.stacksIn attack.Vector target) defValue offValue 4
 
     let tierMult = ActionResolver.computeTierMultiplier (int (Math.Round netHits))
     let planeFactor = match attack.Plane with Physical -> 1.50 | Mental -> 1.15
     float offValue
     * planeFactor
     * tierMult
-    * ActionResolver.strikeMultiplier attack actor.StudyStacks stackSpend actor.Stance
+    * ActionResolver.strikeMultiplier attack stackSpend actor.Stance
     * ActionResolver.masteryMultiplier actor target

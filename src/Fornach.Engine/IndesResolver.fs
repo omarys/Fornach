@@ -105,7 +105,7 @@ module IndesResolver =
     : Combatant * Combatant * CombatEvent list * bool =
     let eval = Indes.evaluateIndes defender contest.Defender.TotalHits contest.Attacker.TotalHits
     if eval.CanSeizeVor then
-      let updatedDef = defender |> Combatant.addStudyStacks 1
+      let updatedDef = defender |> Combatant.addStacks 1
       let updatedAtk =
         attacker
         |> Combatant.updateMeters (fun m -> { m with Frustration = m.Frustration + 10 })

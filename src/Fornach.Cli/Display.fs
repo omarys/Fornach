@@ -225,6 +225,20 @@ module Display =
         sprintf "[%s]%d / %d[/] [%s](%d%% soak)[/]" Theme.Comment c.Armor.Current c.Armor.Max Theme.Yellow armorPct
     grid.AddRow(Markup(sprintf "%-22s %s" " Armor Integrity" armorText)) |> ignore
 
+    // Combat ramp: rises on every attack, cashed by a same-vector special.
+    if c.Flow > 0 || c.Momentum > 0 || c.Focus > 0 then
+      let rampText =
+        sprintf
+          "[bold %s]Flow %d[/] [%s]/ Momentum %d / Focus %d[/] [grey](+%d%% Finesse/Reflex)[/]"
+          Theme.Green
+          c.Flow
+          Theme.Comment
+          c.Momentum
+          c.Focus
+          (c.Flow * 10)
+
+      grid.AddRow(Markup(sprintf "%-22s %s" " Combat Ramp" rampText)) |> ignore
+
     if c.BleedStacks > 0 || c.LimbDebuff > 0 || c.ArcaneWard > 0 || c.MirrorClones > 0 then
       let bleedText = if c.BleedStacks > 0 then sprintf "[bold %s]%d Bleed Stacks[/] " Theme.Red c.BleedStacks else ""
       let limbText = if c.LimbDebuff > 0 then sprintf "[%s]-%d Reflex (Crippled)[/] " Theme.Orange c.LimbDebuff else ""
@@ -262,7 +276,9 @@ module Display =
 
     // Shared Entropy & Momentum
     grid.AddRow(Markup(renderMeter "󰈸 Recklessness" c.Meters.Recklessness Theme.Orange)) |> ignore
-    let comboText = sprintf "[%s]%d study stacks[/] | [%s]%d combo[/]" Theme.Purple c.StudyStacks Theme.Pink c.ComboTracker.ConsecutiveHits
+    // The three ramp meters, in the shorthand players see in the strike menu: Flow / Momentum / Focus.
+    let comboText =
+      sprintf "[%s]F%d · M%d · C%d ramp[/] | [%s]%d combo[/]" Theme.Purple c.Flow c.Momentum c.Focus Theme.Pink c.ComboTracker.ConsecutiveHits
     grid.AddRow(Markup(sprintf "%-22s %s" "󰓥 Tactical Combo" comboText)) |> ignore
     grid.AddRow(Rule().RuleStyle(Theme.StyleCurrentLine)) |> ignore
 
@@ -370,7 +386,7 @@ module Display =
       | FinesseCadence false ->
         sprintf "⚔️ [%s]Finesse Cadence[/]" Theme.Green,
         "Testing distance with rapid probing thrusts against Reflex.",
-        sprintf "Intercept with [bold %s]Discipline Guard[/] to build Study Stacks." Theme.Purple,
+        sprintf "Intercept with [bold %s]Discipline Guard[/] to build the combat ramp." Theme.Purple,
         "Agility"
       | ProwessStrike true ->
         sprintf "⚡ [bold %s]MARTIAL TRAP: Invitational Bait[/]" Theme.Purple,
@@ -379,7 +395,7 @@ module Display =
         "Discipline"
       | ProwessStrike false ->
         sprintf "⚔️ [%s]Prowess Pressure[/]" Theme.Purple,
-        "Circling with measured poise to probe flaws and build tactical study.",
+        "Circling with measured poise to probe flaws and build the combat ramp.",
         sprintf "Overwhelm defensive poise with [bold %s]Power Guard-Break[/]." Theme.Red,
         "Discipline"
       | ShieldBash true ->
@@ -738,8 +754,6 @@ module Display =
       | VitalOpeningTriggered (bonusDmg, isPhys) ->
         let plStr = if isPhys then "Physical" else "Mental"
         AnsiConsole.MarkupLine(sprintf "  [bold %s]>> PASSIVE:[/] Vital Opening! Dealt [bold %s]+%d %s bonus damage[/]!" Theme.Yellow Theme.Yellow bonusDmg plStr)
-      | StudyStackGenerated total ->
-        AnsiConsole.MarkupLine(sprintf "  [bold %s]>> PASSIVE:[/] Defensive Study! Total stacks: [bold %s]%d[/]" Theme.Purple Theme.Purple total)
 
     | CombatEvent.GambitDeclared (_, name, cost) ->
       AnsiConsole.MarkupLine(sprintf "  [bold %s]⚡ GAMBIT DECLARED:[/] [bold underline %s]%s[/] (+%d Recklessness)" Theme.Orange Theme.Orange name cost)
@@ -748,7 +762,7 @@ module Display =
       AnsiConsole.MarkupLine(sprintf "  [bold %s]✖ GAMBIT PUNISHED:[/] %s" Theme.Red reason)
 
     | CombatEvent.FormStabilized (_, drained, gained) ->
-      AnsiConsole.MarkupLine(sprintf "  [bold %s]✓ FORM STABILIZED:[/] Drained [bold %s]%d Recklessness[/], gained [bold %s]%d Study Stacks[/]." Theme.Green Theme.Green drained Theme.Purple gained)
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]✓ FORM STABILIZED:[/] Drained [bold %s]%d Recklessness[/], gained [bold %s]%d ramp stacks[/]." Theme.Green Theme.Green drained Theme.Purple gained)
 
     | CombatEvent.BreathStabilized (_, summary, morale) ->
       AnsiConsole.MarkupLine(sprintf "  [bold %s]🌬 STEADY BREATHING:[/] %s (+[bold %s]%d Morale[/])." Theme.Cyan summary Theme.Green morale)
@@ -790,7 +804,7 @@ module Display =
       AnsiConsole.MarkupLine(sprintf "  [bold %s]🩹 LIMB CRIPPLED:[/] Tendon severed! Target suffered [bold %s]-%d Reflex[/]." Theme.Orange Theme.Orange pen)
 
     | CombatEvent.DisciplineGambitExecuted (_, name, spent) ->
-      AnsiConsole.MarkupLine(sprintf "  [bold %s]🎯 DISCIPLINE GAMBIT:[/] [bold underline %s]%s[/] (Expended %d Study Stacks, 0 Recklessness)." Theme.Purple Theme.Purple name spent)
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🎯 DISCIPLINE GAMBIT:[/] [bold underline %s]%s[/] (Expended %d meter stacks, 0 Recklessness)." Theme.Purple Theme.Purple name spent)
 
     | CombatEvent.EncirclementPenalized (_, priorDefenses, penalty) ->
       AnsiConsole.MarkupLine(sprintf "  [bold %s]🛡️ ENCIRCLED:[/] Flanked by attack #%d! Disparity penalty: [bold %s]-%d Defense Hits[/]!" Theme.Orange (priorDefenses + 1) Theme.Red penalty)
@@ -858,8 +872,8 @@ module Display =
     | CombatEvent.SocraticDossierExecuted (_, _, reckConverted, moraleDmg) ->
       AnsiConsole.MarkupLine(sprintf "  [bold %s]📜 SOCRATIC DOSSIER:[/] Dialectical trap converted %d Recklessness into [bold %s]%d unmitigated Morale damage[/]!" Theme.Purple reckConverted Theme.Pink moraleDmg)
 
-    | CombatEvent.HeraldicTreatiseStudied (_, stacks) ->
-      AnsiConsole.MarkupLine(sprintf "  [bold %s]📖 HERALDIC TREATISE:[/] Tactical dossiers reviewed; granted [bold %s]+%d Study Stacks[/] on all visible foes!" Theme.Purple Theme.Green stacks)
+    | CombatEvent.HeraldicTreatiseRead (_, stacks) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]📖 HERALDIC TREATISE:[/] Tactical dossiers reviewed; granted [bold %s]+%d ramp stacks[/] on all visible foes!" Theme.Purple Theme.Green stacks)
 
     | CombatEvent.PsychicHemorrhageInflicted (_, _, bleedStacks, disparity) ->
       AnsiConsole.MarkupLine(sprintf "  [bold %s]🩸 CRANIAL HEMORRHAGE:[/] Overwhelming cognitive disparity (%+d) ruptured cerebral vessels! Inflicted [bold %s]+%d Bleed Stacks[/]!" Theme.Red disparity Theme.Red bleedStacks)
@@ -922,7 +936,7 @@ module Display =
       AnsiConsole.MarkupLine(sprintf "  [bold %s]✨ STAFF SIPHON:[/] Siphoned mental clarity (-%d Fatigue, -%d Recklessness) and reinforced Arcane Ward (+%d Barrier)!" Theme.Cyan fatigue reck ward)
 
     | CombatEvent.ShieldRaised (_, armor, stacks) ->
-      AnsiConsole.MarkupLine(sprintf "  [bold %s]🛡️ BASTION SHIELD:[/] Fortified armor soak (+%d Armor) and braced stance (+%d Study Stacks)!" Theme.Green armor stacks)
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🛡️ BASTION SHIELD:[/] Fortified armor soak (+%d Armor) and braced stance (+%d ramp stacks)!" Theme.Green armor stacks)
 
   /// Creates the Panel for the comprehensive Symbol & Glyph Reference Guide
   let createSymbolAndGlyphLegendPanel () : Panel =

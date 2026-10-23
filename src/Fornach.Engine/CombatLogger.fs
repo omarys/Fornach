@@ -81,7 +81,7 @@ module CombatLogger =
     | CombatEvent.GambitPunished (_, reason) ->
       sprintf "Gambit Punished: %s" reason
     | CombatEvent.FormStabilized (_, drained, gained) ->
-      sprintf "Form Stabilized: drained %d Recklessness, gained %d Study Stacks" drained gained
+      sprintf "Form Stabilized: drained %d Recklessness, gained %d Combat Ramp" drained gained
     | CombatEvent.BreathStabilized (_, summary, morale) ->
       sprintf "Steady Form: %s (+%d Morale)" summary morale
     | CombatEvent.CollapseRecovered _ ->
@@ -121,7 +121,7 @@ module CombatLogger =
     | CombatEvent.StaffSiphoned (_, _, fatigue, reck, ward) ->
       sprintf "Staff Siphoned: -%d Fatigue, -%d Recklessness, +%d Ward" fatigue reck ward
     | CombatEvent.ShieldRaised (_, armor, stacks) ->
-      sprintf "Shield Raised: +%d Armor fortified, +%d Study Stacks" armor stacks
+      sprintf "Shield Raised: +%d Armor fortified, +%d Combat Ramp" armor stacks
     | other ->
       sprintf "%A" other
 

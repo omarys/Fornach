@@ -769,7 +769,7 @@ module PreparationTests =
       Assert.True(sec.Meters.CognitiveFatigue.Value >= 25, "Each flanker should suffer +25 Cognitive Fatigue from Dread Warhorn.")
 
   [<Fact>]
-  let ``1vsN: GrandMaster Strategist with Heraldic Treatise generates massive Study Stacks across swarm of 5 Novice Soldiers`` () =
+  let ``1vsN: GrandMaster Strategist with Heraldic Treatise tops out the ramp across a swarm of 5 Novice Soldiers`` () =
     let strategist = TierFactory.createClassTier CharacterClass.Mage GrandMaster
     let primaryNovice = TierFactory.createClassTier CharacterClass.Soldier Novice
     let flankers = List.init 4 (fun _ -> TierFactory.createClassTier CharacterClass.Soldier Novice)
@@ -783,8 +783,9 @@ module PreparationTests =
         primaryNovice
         flankers
 
-    // Base deployment grants +2 Study Stacks; group deployment across 4 flankers adds +8 (2 per flanker) = 10 total stacks
-    Assert.True(groupRes.Actor.StudyStacks >= 10, sprintf "Strategist should gain massive Study Stacks across swarm (Actual: %d)" groupRes.Actor.StudyStacks)
+    // Base deployment grants +2 ramp; group deployment across 4 flankers adds +8 (2 per flanker) = 10,
+    // clamped to the meter ceiling — the treatise fills the pile, it does not stack past it.
+    Assert.Equal(Combatant.StackCap, groupRes.Actor.Focus)
 
   [<Fact>]
   let ``1vsN Control: Novice Warrior without preparations suffers escalating encirclement against 4 Novice Rogues`` () =

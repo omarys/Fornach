@@ -18,7 +18,7 @@ type TriggerEffect =
   /// Restores a flat amount to Health (true) or Morale (false)
   | RestorePool of poolIsHealth: bool * amount: int
   /// Grants study / insight stacks to the owner
-  | GainStudyStacks of amount: int
+  | GainStacks of amount: int
   /// Triggers an immediate reactive retaliation strike
   | FreeCounterStrike of plane: Plane * flatDamage: int
   /// Degrades target physical armor durability

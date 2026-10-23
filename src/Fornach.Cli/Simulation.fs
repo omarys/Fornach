@@ -491,8 +491,8 @@ module Simulation =
           let attackerDefeated = newAttacker.Health.IsDepleted || newAttacker.Morale.IsDepleted || CollapseState.isCollapsed newAttacker.Collapse
           if attackerDefeated then
             if solo.Class = CharacterClass.Fighter then
-              // Reading the School: Neutralizing a student of this martial school yields persistent Study Stacks
-              solo <- solo |> Combatant.addStudyStacks 1
+              // Reading the School: neutralizing a student of this martial school feeds the ramp
+              solo <- solo |> Combatant.addStacks 1
             mob <- mob |> List.filter (fun m -> m.Id <> newAttacker.Id)
           else
             mob <- mob |> List.mapi (fun i m -> if i = mobIdx then newAttacker else m)
@@ -725,7 +725,7 @@ module Simulation =
     telemetryTable.AddRow("Average Peak Flank Penalty", sprintf "[bold %s]-%.1f Defense Hits[/]" Theme.Orange summary.AvgPeakPenalty, "Compounding Shadowrun-style defense degradation per round") |> ignore
     telemetryTable.AddRow("Attacks of Opportunity Triggered", sprintf "[bold %s]%.2f / encounter[/]" Theme.Cyan summary.AvgAoOsTriggered, "Preemptive interception of flankers via Agility / Discipline disparity") |> ignore
     telemetryTable.AddRow("Cleave Attacks Executed", sprintf "[bold %s]%.2f / encounter[/]" Theme.Red summary.AvgCleaves, "Power Stance sweeping multi-target cleaves (disparity-scaled recklessness)") |> ignore
-    telemetryTable.AddRow("Cadence Chains Flowed", sprintf "[bold %s]%.2f / encounter[/]" Theme.Purple summary.AvgChains, "Discipline Stance fluid chained strikes (0 recklessness, +1 Study Stack)") |> ignore
+    telemetryTable.AddRow("Cadence Chains Flowed", sprintf "[bold %s]%.2f / encounter[/]" Theme.Purple summary.AvgChains, "Discipline Stance fluid chained strikes (0 recklessness, +1 Combat Ramp)") |> ignore
     telemetryTable.AddRow("Average Rounds to Resolution", sprintf "[bold %s]%.2f rounds[/]" Theme.Cyan summary.AvgRounds, sprintf "Bounded between %d and %d rounds" summary.MinRounds summary.MaxRounds) |> ignore
     telemetryTable.AddRow("Victorious Champion HP", sprintf "[bold %s]%.1f%% remaining[/]" Theme.Green summary.AvgSoloRemainingHP, "Average HP buffer retained upon clearing the swarm") |> ignore
 

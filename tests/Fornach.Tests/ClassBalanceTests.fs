@@ -494,12 +494,13 @@ let ``All built action choices parse successfully to non-fallback ActionIntent``
         | _ -> ()
 
 [<Fact>]
-let ``Study Stack gambit labels parse to their intended intents`` () =
+let ``meter-gated gambit labels parse to their intended intents`` () =
   let dummyEnemy = TierFactory.createClassLevel CharacterClass.Warrior 1
 
   for cls in [ CharacterClass.Warrior; CharacterClass.Rogue ] do
     let player = TierFactory.createClassLevel cls 1
-    let readied = { player with StudyStacks = 3 }
+    // Each cash-out gambit unlocks at two stacks in its own meter.
+    let readied = { player with Momentum = 2; Flow = 2; Focus = 3 }
     let choices = Program.buildActionChoices readied dummyEnemy
     Assert.Contains(choices, fun (c: string) -> c.Contains("Force Strike: Insight Cleave"))
     Assert.Contains(choices, fun (c: string) -> c.Contains("Finesse Cadence: Threaded Opening"))
@@ -516,7 +517,7 @@ let ``Study Stack gambit labels parse to their intended intents`` () =
     | other -> Assert.True(false, sprintf "Finesse threaded opening parsed to %A" other)
 
   // The gambits stay hidden below their 2-stack floor
-  let spent = { TierFactory.createClassLevel CharacterClass.Warrior 1 with StudyStacks = 1 }
+  let spent = { TierFactory.createClassLevel CharacterClass.Warrior 1 with Momentum = 1; Flow = 1; Focus = 2 }
   let spentChoices = Program.buildActionChoices spent dummyEnemy
   Assert.DoesNotContain(spentChoices, fun (c: string) -> c.Contains("Insight Cleave"))
   Assert.DoesNotContain(spentChoices, fun (c: string) -> c.Contains("Threaded Opening"))

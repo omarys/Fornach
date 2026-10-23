@@ -40,7 +40,7 @@ module ProlongedBattleTests =
     let required = Math.Max(3, int (Math.Ceiling((float def / Math.Max(1.0, float off)) * 3.5)))
 
     // The drain happens in step A; the requirement must be checked against the pre-drain count.
-    let armed = actor |> Combatant.addStudyStacks required
+    let armed = actor |> Combatant.addStacks required
     let result = ActionResolver.resolve roller (StandardAttack (MasterfulDisarm required)) armed target
 
     let reportedFailed =
@@ -168,44 +168,45 @@ module ProlongedBattleTests =
         resMaster.Target.Meters.Frustration.Value resNovice.Target.Meters.Frustration.Value)
 
   [<Fact>]
-  let ``Accrued Study Stacks passively trigger Riposte without consuming stacks`` () =
+  let ``Accrued Momentum passively triggers Riposte without consuming stacks`` () =
     // Roller always rolls 1: counter roll <= counterChance
     let roller = fixedRoller 1
     let attacker = createFighter 80 80 80 80 80 80
-    // With 2 study stacks, defender cannot meet disarm requirement (min 3), so triggers Riposte
+    // A Force strike reads the defender's Power meter; with 2 there the disarm requirement (min 3)
+    // is out of reach, so the defence answers with a Riposte instead.
     let defender =
       { (createFighter 80 80 80 80 120 100) with
           Stance = CombatStance.DisciplineStance
-          StudyStacks = 2 }
+          Momentum = 2 }
 
     let res = ActionResolver.resolve roller (StandardAttack (ForceStrike false)) attacker defender
 
-    // Check that defender's study stacks were NOT consumed
-    Assert.Equal(2, res.Target.StudyStacks)
+    // Reacting spends nothing: the meter is still where it started
+    Assert.Equal(2, res.Target.Momentum)
 
     // Check that Riposte event was emitted and attacker suffered counter damage
     let hasRiposte = res.Events |> List.exists (function CombatEvent.RiposteExecuted _ -> true | _ -> false)
-    Assert.True(hasRiposte, "Discipline defender with study stacks should trigger reactive Riposte")
+    Assert.True(hasRiposte, "Discipline defender with a built meter should trigger reactive Riposte")
     Assert.True(res.Actor.Health.Current < attacker.Health.Current, "Attacker should have taken counter damage from Riposte")
 
   [<Fact>]
-  let ``Accrued Study Stacks passively trigger Disarm when conditions and stacks are met`` () =
+  let ``Accrued Momentum passively triggers Disarm when conditions and stacks are met`` () =
     let roller = fixedRoller 1
     let attacker = createFighter 80 80 80 80 80 80
-    // With 5 study stacks and prowess 120 vs poise 80, defender meets disarm requirement
+    // A topped-out Momentum meter and prowess 120 vs poise 80 meets the disarm requirement
     let defender =
       { (createFighter 80 80 80 80 120 100) with
           Stance = CombatStance.DisciplineStance
-          StudyStacks = 5 }
+          Momentum = Combatant.StackCap }
 
     let res = ActionResolver.resolve roller (StandardAttack (ForceStrike false)) attacker defender
 
-    // Study stacks not consumed
-    Assert.Equal(5, res.Target.StudyStacks)
+    // Reacting spends nothing, so a full pile stays full
+    Assert.Equal(Combatant.StackCap, res.Target.Momentum)
 
     // Check that Disarm event was emitted and attacker weapon degraded
     let hasDisarm = res.Events |> List.exists (function CombatEvent.DisarmExecuted _ -> true | _ -> false)
-    Assert.True(hasDisarm, "Discipline defender with high study stacks should trigger reactive Disarm")
+    Assert.True(hasDisarm, "Discipline defender with a full meter should trigger reactive Disarm")
     Assert.Equal(WeaponCondition.Notched, res.Actor.WeaponCondition)
 
   [<Fact>]
@@ -213,7 +214,7 @@ module ProlongedBattleTests =
     let roller = fixedRoller 5
     let weakAttacker =
       { (createFighter 50 50 50 50 30 50) with
-          StudyStacks = 10 }
+          Focus = Combatant.StackCap }
     let strongDefender = createFighter 50 50 50 50 50 120
 
     let res = ActionResolver.resolve roller (StandardAttack (MasterfulDisarm 5)) weakAttacker strongDefender
@@ -227,18 +228,18 @@ module ProlongedBattleTests =
     Assert.True(hasDisarmFail, "Disarm should report failure due to commanding Poise")
 
   [<Fact>]
-  let ``Discipline gambits consume Study Stacks with zero Recklessness cost`` () =
+  let ``Discipline gambits cash the Focus meter with zero Recklessness cost`` () =
     let roller = fixedRoller 5
     let duelist =
       { (createFighter 50 50 50 50 120 100) with
-          StudyStacks = 6 }
+          Focus = Combatant.StackCap }
     let target = createFighter 50 50 50 50 50 80
 
     let startReck = duelist.Meters.Recklessness.Value
     let res = ActionResolver.resolve roller (StandardAttack CalculatedFlawStrike) duelist target
 
-    // Stacks: the whole pile of 6 is spent, +2 generated on hit
-    Assert.Equal(2, res.Actor.StudyStacks)    // Recklessness should NOT have spiked from the gambit
+    // The whole pile of 5 is cashed, then every attack feeds one stack back to every meter
+    Assert.Equal(1, res.Actor.Focus)    // Recklessness should NOT have spiked from the gambit
     Assert.Equal(startReck, res.Actor.Meters.Recklessness.Value)
 
   [<Fact>]
@@ -517,12 +518,12 @@ module ProlongedBattleTests =
         groupResLow.Actor.Meters.Recklessness.Value groupResGM.Actor.Meters.Recklessness.Value)
 
   [<Fact>]
-  let ``Discipline Stance Chaining flows across engaged opponents with zero recklessness and accrues Study Stacks`` () =
+  let ``Discipline Stance Chaining flows across engaged opponents with zero recklessness and feeds the Focus meter`` () =
     let roller = fixedRoller 6 // always lands penetrating hit
     let master =
       { createFighter 180 200 180 200 300 280 with
           Stance = CombatStance.DisciplineStance
-          StudyStacks = 2 } // With 2 study stacks, capacity = 1 + (2/2) = 2 chained targets
+          Focus = 2 } // With 2 Focus, capacity = 1 + (2/2) = 2 chained targets
     let target1 = createFighter 45 40 25 25 30 30
     let target2 = createFighter 45 40 25 25 30 30
     let target3 = createFighter 45 40 25 25 30 30
@@ -542,8 +543,9 @@ module ProlongedBattleTests =
     // Chaining incurred 0 extra Recklessness (disciplined martial economy)
     Assert.Equal(0, groupRes.Actor.Meters.Recklessness.Value)
 
-    // Each chain hit accrued +1 Study Stack (primary +2 from discipline stance + 2 chain hits = 6 total)
-    Assert.True(groupRes.Actor.StudyStacks >= 5, sprintf "Expected >= 5 study stacks, got %d" groupRes.Actor.StudyStacks)
+    // Every swing — primary plus both chains — feeds one stack to all three meters, so the
+    // discipline chain tops the pile out.
+    Assert.Equal(Combatant.StackCap, groupRes.Actor.Focus)
 
   [<Fact>]
   let ``Agility / Finesse Stance strictly duels single target with zero cleave or chain`` () =
@@ -756,15 +758,17 @@ module ProlongedBattleTests =
         resAcumen.Actor.ArcaneWard resIntellect.Actor.ArcaneWard)
 
   [<Fact>]
-  let ``SteadyForm and CenterMind build bounded Study Stacks and never explode into dozens`` () =
+  let ``SteadyForm and CenterMind build a bounded ramp and never explode into dozens`` () =
     let roller = fixedRoller 1
     // Veteran fighter with Prowess 170 (like Stone Gargoyle)
     let gargoyleFighter = createFighter 180 220 230 240 170 200
     let opponent = createFighter 100 100 100 100 100 100
 
     let resSteady = ActionResolver.resolve roller (RecoveryAction SteadyForm) gargoyleFighter opponent
-    // Must gain 6 stacks (clamped from 42!), NOT 42 stacks!
-    Assert.Equal(6, resSteady.Actor.StudyStacks)
+    // The gain is clamped to 6 from 42, and the meters themselves cap at 5 — never 42 stacks!
+    Assert.Equal(Combatant.StackCap, resSteady.Actor.Flow)
+    Assert.Equal(Combatant.StackCap, resSteady.Actor.Momentum)
+    Assert.Equal(Combatant.StackCap, resSteady.Actor.Focus)
 
     let stabilizedEvt =
       resSteady.Events
@@ -777,11 +781,13 @@ module ProlongedBattleTests =
     // CenterMind with Acumen 170
     let mentalFighter = createMage 100 100 100 100 170 140
     let resCenter = ActionResolver.resolve roller (RecoveryAction CenterMind) mentalFighter opponent
-    Assert.Equal(6, resCenter.Actor.StudyStacks)
+    Assert.Equal(Combatant.StackCap, resCenter.Actor.Focus)
 
-    // Combatant.addStudyStacks is clamped at 15
-    let flooded = resSteady.Actor |> Combatant.addStudyStacks 100
-    Assert.Equal(15, flooded.StudyStacks)
+    // Combatant.addStacks is clamped at StackCap
+    let flooded = resSteady.Actor |> Combatant.addStacks 100
+    Assert.Equal(Combatant.StackCap, flooded.Flow)
+    Assert.Equal(Combatant.StackCap, flooded.Momentum)
+    Assert.Equal(Combatant.StackCap, flooded.Focus)
 
   [<Fact>]
   let ``SteadyForm vents all dynamic status meters and restores Morale`` () =
@@ -949,41 +955,41 @@ module ProlongedBattleTests =
   let private punchingBag () =
     { createFighter 50 50 50 50 50 50 with Health = Pool.Create 400000 }
 
-  let private studyStacksOf (res: ActionResult) =
+  let private stacksSpentOf (res: ActionResult) =
     res.Events
     |> List.pick (function
       | CombatEvent.DisciplineGambitExecuted(_, _, spent) -> Some spent
       | _ -> None)
 
   [<Fact>]
-  let ``Force insight cleave spends Study Stacks with zero Recklessness cost`` () =
-    let attacker = { createFighter 120 50 50 50 50 50 with StudyStacks = 6 }
+  let ``Force insight cleave cashes the Momentum meter with zero Recklessness cost`` () =
+    let attacker = { createFighter 120 50 50 50 50 50 with Momentum = Combatant.StackCap }
     let target = createFighter 50 50 50 50 50 50
 
     let _, res = damageTaken attacker ForceInsightStrike target
 
     // The whole pile is spent, whatever the payload asked for.
-    Assert.Equal(6, studyStacksOf res)
+    Assert.Equal(Combatant.StackCap, stacksSpentOf res)
     Assert.Equal(attacker.Meters.Recklessness.Value, res.Actor.Meters.Recklessness.Value)
 
   [<Fact>]
   let ``Force insight cleave scales with the stacks actually spent`` () =
     let target = punchingBag ()
-    let mk stacks = { createFighter 120 50 50 50 50 50 with StudyStacks = stacks }
+    let mk stacks = { createFighter 120 50 50 50 50 50 with Momentum = stacks }
 
     // The payoff follows the pile, so a bigger investment must land harder.
-    let dmgFew, _ = damageTaken (mk 4) ForceInsightStrike target
-    let dmgMany, _ = damageTaken (mk 8) ForceInsightStrike target
-    Assert.True(dmgMany > dmgFew, sprintf "Holding 8 (%d) must outdamage holding 4 (%d)" dmgMany dmgFew)
+    let dmgFew, _ = damageTaken (mk 2) ForceInsightStrike target
+    let dmgMany, _ = damageTaken (mk Combatant.StackCap) ForceInsightStrike target
+    Assert.True(dmgMany > dmgFew, sprintf "Holding %d (%d) must outdamage holding 2 (%d)" Combatant.StackCap dmgMany dmgFew)
 
   [<Fact>]
-  let ``Finesse threaded opening spends Study Stacks with zero Recklessness cost`` () =
-    let attacker = { createFighter 50 50 120 50 50 50 with StudyStacks = 6 }
+  let ``Finesse threaded opening cashes the Flow meter with zero Recklessness cost`` () =
+    let attacker = { createFighter 50 50 120 50 50 50 with Flow = Combatant.StackCap }
     let target = createFighter 50 50 50 50 50 50
 
     let _, res = damageTaken attacker FinesseInsightStrike target
 
-    Assert.Equal(6, studyStacksOf res)
+    Assert.Equal(Combatant.StackCap, stacksSpentOf res)
     Assert.Equal(attacker.Meters.Recklessness.Value, res.Actor.Meters.Recklessness.Value)
     Assert.True(
       res.Target.Meters.Confusion.Value > target.Meters.Confusion.Value,
@@ -992,43 +998,62 @@ module ProlongedBattleTests =
   [<Fact>]
   let ``Finesse threaded opening scales with the stacks actually spent`` () =
     let target = punchingBag ()
-    let mk stacks = { createFighter 50 50 120 50 50 50 with StudyStacks = stacks }
+    let mk stacks = { createFighter 50 50 120 50 50 50 with Flow = stacks }
 
-    let dmgFew, _ = damageTaken (mk 4) FinesseInsightStrike target
-    let dmgMany, _ = damageTaken (mk 8) FinesseInsightStrike target
-    Assert.True(dmgMany > dmgFew, sprintf "Holding 8 (%d) must outdamage holding 4 (%d)" dmgMany dmgFew)
+    let dmgFew, _ = damageTaken (mk 2) FinesseInsightStrike target
+    let dmgMany, _ = damageTaken (mk Combatant.StackCap) FinesseInsightStrike target
+    Assert.True(dmgMany > dmgFew, sprintf "Holding %d (%d) must outdamage holding 2 (%d)" Combatant.StackCap dmgMany dmgFew)
 
   [<Fact>]
-  let ``Free Prowess read is worth 0.10 damage multiplier per Study Stack`` () =
+  let ``a held stack sharpens only the stat pair its own meter feeds`` () =
+    // PowerStance leaves Reflex and Poise at their base values, so each ramp shows undiluted.
+    let armed flow momentum focus =
+      { createFighter 50 50 50 80 120 120 with
+          Flow = flow
+          Momentum = momentum
+          Focus = focus }
+
+    Assert.Equal(120, (armed 0 0 0).GetCombatStat Poise)
+    Assert.Equal(126, (armed 0 0 Combatant.StackCap).GetCombatStat Poise) // 1% Focus per stack
+    Assert.Equal(80, (armed 0 0 0).GetCombatStat Reflex)
+    Assert.Equal(120, (armed Combatant.StackCap 0 0).GetCombatStat Reflex) // 10% Flow per stack
+
+    // The meters do not bleed into each other's stats.
+    Assert.Equal(80, (armed 0 0 Combatant.StackCap).GetCombatStat Reflex)
+    Assert.Equal(120, (armed Combatant.StackCap 0 0).GetCombatStat Poise)
+    Assert.Equal(120, (armed 0 Combatant.StackCap 0).GetCombatStat Poise)
+
+    // A discipline strike reads Prowess, so only Focus moves its damage. (The old pile paid 10% per
+    // stack here — 10 stacks were 2.0x — where Focus now pays 1%, capped at 5 stacks = 1.05x.)
     let target = createFighter 50 50 50 50 50 50
-    let mk stacks = { createFighter 50 50 50 50 120 50 with StudyStacks = stacks }
+    let dmgZero, _ = damageTaken (armed 0 0 0) (ProwessStrike false) target
+    let dmgFocus, _ = damageTaken (armed 0 0 Combatant.StackCap) (ProwessStrike false) target
+    let dmgFlow, _ = damageTaken (armed Combatant.StackCap 0 0) (ProwessStrike false) target
+    let dmgMomentum, _ = damageTaken (armed 0 Combatant.StackCap 0) (ProwessStrike false) target
 
-    let dmgZero, _ = damageTaken (mk 0) (ProwessStrike false) target
-    let dmgTen, _ = damageTaken (mk 10) (ProwessStrike false) target
-
-    // 1.0 -> 2.0 multiplier: the study school's own vector reads stacks twice as hard as the flat rate.
-    let ratio = float dmgTen / float dmgZero
-    Assert.True(ratio > 1.90 && ratio < 2.10, sprintf "10 free stacks should scale damage ~2.0x, got %.3f" ratio)
+    Assert.Equal(dmgZero, dmgFlow)
+    Assert.Equal(dmgZero, dmgMomentum)
+    Assert.True(dmgFocus > dmgZero, sprintf "A full Focus meter (%d) must outhit an empty one (%d)" dmgFocus dmgZero)
 
   [<Fact>]
-  let ``Calculated flaw strike pays 0.44 multiplier per stack and follows the spent amount`` () =
+  let ``Calculated flaw strike pays 0.5 multiplier per stack and follows the spent amount`` () =
     let target = punchingBag ()
-    let mk stacks = { createFighter 50 50 50 50 120 50 with StudyStacks = stacks }
+    let mk stacks = { createFighter 50 50 50 50 120 50 with Focus = stacks }
 
     let dmgWith stacks = fst (damageTaken (mk stacks) CalculatedFlawStrike target)
-    let d2, d4, d6 = dmgWith 2, dmgWith 4, dmgWith 6
+    let d2, d3, d4 = dmgWith 2, dmgWith 3, dmgWith 4
 
-    // Damage is multiplicative in the class multiplier, so the slope/intercept of the spend curve
-    // recovers the per-stack factor relative to the 1.2 base multiplier (§5 item 12 reverted the
-    // exported 2.2 / 0.7 pair back to the pre-existing curve).
-    let slope = float (d6 - d2) / 4.0
+    // Damage is multiplicative in the strike multiplier, so the slope/intercept of the spend curve
+    // recovers the per-stack factor relative to the 1.0 base multiplier.
+    let slope = float (d4 - d2) / 2.0
     let intercept = float d2 - 2.0 * slope
-    let perStack = 1.2 * slope / intercept
-    Assert.True(perStack > 0.42 && perStack < 0.46, sprintf "Expected 0.44 per stack, fitted %.3f" perStack)
+    let perStack = 1.0 * slope / intercept
+    Assert.True(perStack > 0.48 && perStack < 0.52, sprintf "Expected 0.5 per stack, fitted %.3f" perStack)
 
-    // Nothing is left behind: the pile is spent, not trimmed to the payload.
-    let _, res = damageTaken (mk 6) CalculatedFlawStrike target
-    Assert.Equal(6, studyStacksOf res)
+    // Nothing is left behind: the whole pile is cashed, and every attack feeds one stack back.
+    let _, res = damageTaken (mk Combatant.StackCap) CalculatedFlawStrike target
+    Assert.Equal(Combatant.StackCap, stacksSpentOf res)
+    Assert.Equal(1, res.Actor.Focus)
 
   [<Fact>]
   let ``Discipline stance guard anchors on Poise alone`` () =

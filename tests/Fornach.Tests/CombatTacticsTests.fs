@@ -10,7 +10,7 @@ module CombatTacticsTests =
   let private fixedRoller (n: int) : DiceRoller = fun _ _ -> n
 
   [<Fact>]
-  let ``Shield Bash deals bludgeoning damage and fluidly transitions into Discipline Stance`` () =
+  let ``Shield Bash deals bludgeoning damage without shifting the attacker's stance`` () =
     let player = TierFactory.createClassLevel CharacterClass.Fighter 30
     let target = TierFactory.createClassLevel CharacterClass.Warrior 30
     let roller = fixedRoller 5
@@ -18,7 +18,9 @@ module CombatTacticsTests =
     let intent = ActionIntent.StandardAttack (AttackClassification.ShieldBash false)
     let result = ActionResolver.resolve roller intent player target
 
-    Assert.Equal(CombatStance.DisciplineStance, result.Actor.Stance)
+    // A bash is a reactive interrupt, not a school technique, so it leaves the stance alone —
+    // that is what lets the same action floor, parry or disarm depending on the stance held.
+    Assert.Equal(player.Stance, result.Actor.Stance)
     Assert.True(result.Target.Health.Current < target.Health.Current, "Target should have taken physical damage from shield bash")
     Assert.True(result.Target.Meters.Frustration.Value > target.Meters.Frustration.Value, "Target Frustration should increase")
 
@@ -40,8 +42,55 @@ module CombatTacticsTests =
     Assert.True(interruptedEvt.IsSome, "Shield bash should emit ActionInterrupted against reckless windup")
     Assert.Equal("Shield Bash", interruptedEvt.Value)
 
+  /// A bash in a fixed stance, thrown by a real player-class actor so the stance-keyed branch is
+  /// proven reachable from the menu path rather than only for generic opposition.
+  let private heavyBash (stance: CombatStance) =
+    let actor = { TierFactory.createClassLevel CharacterClass.Fighter 100 with Stance = stance }
+    let target = TierFactory.createClassLevel CharacterClass.Fighter 30
+    let intent = ActionIntent.StandardAttack (AttackClassification.ShieldBash true)
+    target, ActionResolver.resolve (fixedRoller 5) intent actor target
+
   [<Fact>]
-  let ``Raise Shield fortifies armor soak and grants study stacks`` () =
+  let ``Heavy Shield Slam in Power Stance knocks the target prone and interrupts its windup`` () =
+    let target, power = heavyBash CombatStance.PowerStance
+    let _, agility = heavyBash CombatStance.AgilityStance
+
+    // Six points of footing is the knockdown; the rest of the limb penalty rides the hit itself.
+    Assert.Equal(agility.Target.LimbDebuff + 6, power.Target.LimbDebuff)
+    let knockedProne =
+      power.Events
+      |> List.exists (function CombatEvent.LimbDisabled(tId, penalty) -> tId = target.Id && penalty = 6 | _ -> false)
+    Assert.True(knockedProne, "a Power Stance slam must emit the six-point LimbDisabled")
+
+    let interrupted =
+      power.Events
+      |> List.exists (function CombatEvent.ActionInterrupted(_, tId, tech, _) -> tId = target.Id && tech = "Shield Bash" | _ -> false)
+    Assert.True(interrupted, "a heavy slam must always interrupt the target's windup")
+
+  [<Fact>]
+  let ``Heavy Shield Slam in Agility Stance parries and opens the counter window instead`` () =
+    let _, power = heavyBash CombatStance.PowerStance
+    let _, agility = heavyBash CombatStance.AgilityStance
+
+    // The parry turns the slam aside: no knockdown on the target, and the counter window opens on
+    // the parrier (one extra combo hit, worth the tracker's flat 15).
+    Assert.Equal(power.Target.LimbDebuff - 6, agility.Target.LimbDebuff)
+    Assert.Equal(power.Actor.ComboTracker.VitalOpeningBonus + 15, agility.Actor.ComboTracker.VitalOpeningBonus)
+
+  [<Fact>]
+  let ``Heavy Shield Slam in Discipline Stance degrades the target's weapon`` () =
+    let target, discipline = heavyBash CombatStance.DisciplineStance
+    let _, power = heavyBash CombatStance.PowerStance
+
+    // Whatever incidental wear the blow carries, the Discipline bite adds one more notch.
+    Assert.Equal(WeaponCondition.degradation power.Target.WeaponCondition, discipline.Target.WeaponCondition)
+    let degraded =
+      discipline.Events
+      |> List.exists (function CombatEvent.WeaponDegraded(tId, _) -> tId = target.Id | _ -> false)
+    Assert.True(degraded, "a Discipline Stance slam should emit WeaponDegraded")
+
+  [<Fact>]
+  let ``Raise Shield fortifies armor soak and feeds the ramp`` () =
     let damagedPlayer =
       let p = TierFactory.createClassLevel CharacterClass.Fighter 30
       { p with Armor = { p.Armor with Current = 10 } }
@@ -54,7 +103,10 @@ module CombatTacticsTests =
     let result = ActionResolver.resolve roller intent damagedPlayer dummyTarget
 
     Assert.True(result.Actor.Armor.Current > damagedPlayer.Armor.Current, "Raise shield should restore armor integrity")
-    Assert.True(result.Actor.StudyStacks >= 2, "Raise shield should grant study stacks")
+    // Every swing raises all three ramps, so a raised shield leaves them level with each other.
+    Assert.True(result.Actor.Flow >= 2, "Raise shield should feed the Flow ramp")
+    Assert.Equal(result.Actor.Flow, result.Actor.Momentum)
+    Assert.Equal(result.Actor.Flow, result.Actor.Focus)
     Assert.True(result.Actor.Meters.Recklessness.Value < damagedPlayer.Meters.Recklessness.Value, "Raise shield should bleed recklessness")
 
     let raisedEvt =

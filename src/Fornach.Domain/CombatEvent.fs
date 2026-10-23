@@ -24,7 +24,6 @@ type PassiveProcOutcome =
   | ArmorSundered of shredAmount: int * remainingArmor: int
   | FocusShattered of focusSpike: int
   | VitalOpeningTriggered of bonusDamage: int * isPhysical: bool
-  | StudyStackGenerated of currentTotal: int
 
 /// Pure Domain Events emitted during action resolution
 [<RequireQualifiedAccess>]
@@ -42,7 +41,7 @@ type CombatEvent =
   | GambitPunished of actorId: CombatantId * reason: string
 
   /// Defensive recovery stabilized posture and drained entropy
-  | FormStabilized of actorId: CombatantId * drainedRecklessness: int * gainedStudyStacks: int
+  | FormStabilized of actorId: CombatantId * drainedRecklessness: int * gainedRampStacks: int
 
   /// Steady breathing vented dynamic status meters and restored composure
   | BreathStabilized of actorId: CombatantId * summary: string * moraleRestored: int
@@ -77,10 +76,10 @@ type CombatEvent =
   /// Magic combatant suffered somatic Fading / drain from channeling high-resonance forms
   | FadingDrainSuffered of combatantId: CombatantId * formName: string * fatigueDrain: int * recklessnessSpike: int
 
-  /// Reactive counter-strike triggered by accumulated Study Stacks in Discipline stance
+  /// Reactive counter-strike triggered by an accumulated Focus meter in Discipline stance
   | RiposteExecuted of defenderId: CombatantId * attackerId: CombatantId * counterDamage: int
 
-  /// Weapon or stance disarmed by a tactical maneuver or Study Stacks counter
+  /// Weapon or stance disarmed by a tactical maneuver or Focus-counter
   | DisarmExecuted of defenderId: CombatantId * attackerId: CombatantId * reason: string
 
   /// Periodic somatic bleed trauma applied at start of turn
@@ -92,7 +91,7 @@ type CombatEvent =
   /// Vital ligament or tendon severed, crippling opponent reflex
   | LimbDisabled of targetId: CombatantId * reflexPenalty: int
 
-  /// Dedicated Discipline gambit executed by consuming Study Stacks without Recklessness spike
+  /// Dedicated Discipline gambit executed by consuming Focus without Recklessness spike
   | DisciplineGambitExecuted of actorId: CombatantId * gambitName: string * stacksSpent: int
 
   /// Defender suffered a compounding successive defense penalty from being surrounded
@@ -155,8 +154,8 @@ type CombatEvent =
   /// Socratic Dossier exposed hypocrisies, converting Recklessness directly to Morale damage
   | SocraticDossierExecuted of actorId: CombatantId * targetId: CombatantId * recklessnessConverted: int * moraleDamage: int
 
-  /// Heraldic Treatise reviewed, granting immediate Study Stacks across all engaged foes
-  | HeraldicTreatiseStudied of actorId: CombatantId * studyStacksGranted: int
+  /// Heraldic Treatise reviewed, granting an immediate combat ramp across all engaged foes
+  | HeraldicTreatiseRead of actorId: CombatantId * rampGained: int
 
   /// Severe mental stat disparity caused cranial hemorrhage (bleeding)
   | PsychicHemorrhageInflicted of casterId: CombatantId * targetId: CombatantId * bleedStacks: int * disparity: int
@@ -213,4 +212,4 @@ type CombatEvent =
   | StaffSiphoned of casterId: CombatantId * targetId: CombatantId * fatigueRestored: int * recklessnessDrained: int * wardRestored: int
 
   /// Fighter braced behind their shield, fortifying armor soak and establishing bastion guard
-  | ShieldRaised of actorId: CombatantId * armorFortified: int * studyStacksGained: int
+  | ShieldRaised of actorId: CombatantId * armorFortified: int * rampStacksGained: int

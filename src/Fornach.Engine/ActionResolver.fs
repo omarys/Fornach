@@ -9,58 +9,33 @@ module ActionResolver =
   // 1. Tiered Multiplier & Damage Application
   // =========================================================================
 
-  /// Damage multiplier a strike lands with, given the stacks held/spent and the actor's stance.
-  /// Defined once so the combat menu's estimate cannot drift from what resolution actually pays.
-  ///
-  /// Study stacks pay twice. Holding them sharpens *every* strike at the flat per-stack rate
-  /// (`studyPerStack`), because stacks are the discipline of having watched the target; spending them
-  /// is the separate, much larger payoff. The held rate reads the stacks left *after* step A drains
-  /// them, which is why a spender never collects the held rate on the stacks it just cashed in.
-  let studyPerStack = 0.05
-  /// The two Prowess vectors are the study-school's own weapons and read the stacks twice as hard.
-  let studyPerStackProwess = 0.10
-  /// What one spent stack is worth on a spender. Only pays from the second stack on. The martial
-  /// spender pays more per stack than the insight pair — kept split so neither school's tempo moves
-  /// when the other is tuned (§5 item 12).
-  let flawSpendBase = 1.2
-  let flawSpendPerStack = 0.44
-  let insightSpendBase = 1.1
-  let insightSpendPerStack = 0.30
+  /// What one cashed stack is worth on the special that spends it. Meters cap at five
+  /// (`Combatant.StackCap`), so a full pile pays 3.5x. That is ABOVE the 3.14 equal-tier one-shot
+  /// threshold measured in docs/agents/domain.md §1 X, so a topped-out meter can still one-shot a
+  /// same-tier opponent; capping or tapering this term is the fix if the sweep confirms it.
+  let spentPerStack = 0.5
 
-  let strikeMultiplier
-    (attack: AttackClassification)
-    (stacksHeld: int)
-    (stackSpend: int)
-    (stance: CombatStance)
-    : float =
-    let study (perStack: float) = 1.0 + perStack * float stacksHeld
+  /// Damage multiplier for a strike's own flag/stance shape. The ramp meters deliberately do not
+  /// appear here: they sharpen the actor's stats instead (`Combatant.GetCombatStat`), so holding them
+  /// pays through the contest rather than through a hidden damage term.
+  let strikeMultiplier (attack: AttackClassification) (stackSpend: int) (stance: CombatStance) : float =
+    let flagMult =
+      match attack with
+      | ForceStrike isWildBlow -> if isWildBlow then 1.35 else 1.0
+      | ProwessStrike isInvitationalBait ->
+        (if isInvitationalBait then 1.25 else 1.0)
+        * (if stance = CombatStance.DisciplineStance then 1.25 else 1.0)
+      // A bash pays the same damage in every stance: the stance chooses the EFFECT (floored,
+      // parried, disarmed) instead of a damage bonus, so the action is worth taking from any of them.
+      | ShieldBash isHeavySlam -> if isHeavySlam then 1.56 else 1.20
+      | AuthorityDecree isImperiousDemand -> if isImperiousDemand then 1.3 else 1.0
+      | SynapticGlamour isMindFracture -> if isMindFracture then 1.35 else 1.0
+      | RunicWardTrap isAnomalousGlyph -> if isAnomalousGlyph then 1.25 else 1.0
+      | DisorientingShockwave isStaggeringPulse -> if isStaggeringPulse then 1.35 else 1.0
+      | StaffSiphon -> if stance = CombatStance.DisciplineStance then 1.25 else 1.0
+      | _ -> 1.0
 
-    let held = study studyPerStack
-    let sharpened = study studyPerStackProwess
-
-    let spend (first: float) (perStack: float) =
-      if stackSpend >= 2 then first + perStack * float stackSpend else 1.0
-
-    match attack with
-    | ForceStrike isWildBlow -> held * (if isWildBlow then 1.35 else 1.0)
-    | ProwessStrike isInvitationalBait ->
-      sharpened
-      * (if isInvitationalBait then 1.25 else 1.0)
-      * (if stance = CombatStance.DisciplineStance then 1.25 else 1.0)
-    | ShieldBash isHeavySlam ->
-      sharpened
-      * (if isHeavySlam then 1.30 else 1.0)
-      * (if stance = CombatStance.DisciplineStance then 1.20 else 1.0)
-    | CalculatedFlawStrike -> spend flawSpendBase flawSpendPerStack
-    | ForceInsightStrike
-    | FinesseInsightStrike -> spend insightSpendBase insightSpendPerStack
-    | AuthorityDecree isImperiousDemand -> held * (if isImperiousDemand then 1.3 else 1.0)
-    | SynapticGlamour isMindFracture -> held * (if isMindFracture then 1.35 else 1.0)
-    | RunicWardTrap isAnomalousGlyph -> held * (if isAnomalousGlyph then 1.25 else 1.0)
-    | DisorientingShockwave isStaggeringPulse -> held * (if isStaggeringPulse then 1.35 else 1.0)
-    | StaffSiphon ->
-      held * (if stance = CombatStance.DisciplineStance then 1.25 else 1.0)
-    | _ -> held
+    flagMult * (1.0 + spentPerStack * float stackSpend)
 
   /// Mental strikes land through the defender's class grounding / resilience. Shared with the menu's
   /// estimate so ranking cannot drift from resolution.
@@ -294,11 +269,11 @@ module ActionResolver =
       let evt = CombatEvent.EquipmentProcTriggered(sourceItemName, owner.Id, desc)
       (updatedOwner, opponent, [ evt ])
 
-    | GainStudyStacks count ->
-      let updatedOwner = owner |> Combatant.addStudyStacks count
+    | GainStacks count ->
+      let updatedOwner = owner |> Combatant.addStacks count
 
       let desc =
-        sprintf "Accumulated +%d Study / Insight Stacks (Total: %d)" count updatedOwner.StudyStacks
+        sprintf "Combat ramp +%d (Flow %d / Momentum %d / Focus %d)" count updatedOwner.Flow updatedOwner.Momentum updatedOwner.Focus
 
       let evt = CombatEvent.EquipmentProcTriggered(sourceItemName, owner.Id, desc)
       (updatedOwner, opponent, [ evt ])
@@ -485,27 +460,8 @@ module ActionResolver =
           )
           :: events
 
-    // 3. Discipline Passive: Study & Prescience Stacks
-    let disciplineStat =
-      match plane with
-      | Physical -> currentActor.GetStat Prowess
-      | Mental -> currentActor.GetStat Acumen
-
-    let studyThreshold = Math.Min(85, 25 + disciplineStat / 3)
-
-    if roller 1 100 <= studyThreshold || vector = Discipline then
-      let generated =
-        if vector = Discipline || currentActor.Stance = CombatStance.DisciplineStance then 2 else 1
-      currentActor <- currentActor |> Combatant.addStudyStacks generated
-
-      events <-
-        CombatEvent.PassiveProcTriggered(
-          currentActor.Id,
-          currentTarget.Id,
-          StudyStackGenerated currentActor.StudyStacks
-        )
-        :: events
-
+    // 3. Discipline Passive now rides the ramp meters: every attack grants one stack of each,
+    // so the old per-hit study-stack roll was duplicate economy.
     currentActor <-
       { currentActor with
           ComboTracker = currentActor.ComboTracker.RegisterHit() }
@@ -538,7 +494,7 @@ module ActionResolver =
       let confusionDrain = 25 + (composure / 3)
       let provokeDrain = 20 + (composure / 4)
       let moraleRestore = 15 + (composure / 4)
-      let studyGain = Math.Clamp(Math.Max(1, prowess / 4), 1, 6)
+      let rampGain = Math.Clamp(Math.Max(1, prowess / 4), 1, 6)
 
       let updatedActor =
         resetActor
@@ -552,7 +508,7 @@ module ActionResolver =
               Confusion = m.Confusion - confusionDrain
               Provoke = m.Provoke - provokeDrain })
         |> fun a -> { a with Morale = a.Morale.ApplyDelta moraleRestore }
-        |> Combatant.addStudyStacks studyGain
+        |> Combatant.addStacks rampGain
         |> Combatant.stabilizeCollapse
 
       let collapseEvts =
@@ -568,7 +524,7 @@ module ActionResolver =
         Target = target
         Events =
           [ resetEvt
-            CombatEvent.FormStabilized(actor.Id, reckDrain, studyGain)
+            CombatEvent.FormStabilized(actor.Id, reckDrain, rampGain)
             CombatEvent.BreathStabilized(actor.Id, summary, moraleRestore) ]
           @ collapseEvts
         Contest = None }
@@ -580,7 +536,7 @@ module ActionResolver =
       let exhaustDrain = 12 + (poise / 5)
       let overwhelmDrain = 12 + (poise / 5)
       let frustrateDrain = 15 + (poise / 4)
-      let studyGain = 2
+      let rampGain = 2
       // A percentage of the pool, not flat points: 36% is what the old `25 + fortitude / 4` repaired
       // on the level-1 armor pool, and it repairs the same proportion at every tier.
       let armorPct = Math.Clamp(25 + (fortitude / 4), 1, 100)
@@ -594,7 +550,7 @@ module ActionResolver =
               Exhaustion = m.Exhaustion - exhaustDrain
               Overwhelm = m.Overwhelm - overwhelmDrain
               Frustration = m.Frustration - frustrateDrain })
-        |> Combatant.addStudyStacks studyGain
+        |> Combatant.addStacks rampGain
         |> Combatant.stabilizeCollapse
       let updatedActorWithArmor = { updatedActor with Armor = newArmor }
 
@@ -605,7 +561,7 @@ module ActionResolver =
 
       { Actor = updatedActorWithArmor
         Target = target
-        Events = [ resetEvt; CombatEvent.ShieldRaised(actor.Id, armorRestore, studyGain) ] @ collapseEvts
+        Events = [ resetEvt; CombatEvent.ShieldRaised(actor.Id, armorRestore, rampGain) ] @ collapseEvts
         Contest = None }
 
     | CenterMind ->
@@ -616,7 +572,7 @@ module ActionResolver =
       let confusionDrain = Math.Max(15, composure / 2)
       let provokeDrain = 15 + (composure / 4)
       let frustrateDrain = 15 + (composure / 4)
-      let studyGain = Math.Clamp(Math.Max(1, acumen / 4), 1, 6)
+      let rampGain = Math.Clamp(Math.Max(1, acumen / 4), 1, 6)
       let profRatio = resetActor.GetArcaneProficiency Discipline
       let wardRestore = int (float acumen * 0.40 * profRatio)
 
@@ -629,7 +585,7 @@ module ActionResolver =
               CognitiveFatigue = m.CognitiveFatigue - fatigueDrain
               Provoke = m.Provoke - provokeDrain
               Frustration = m.Frustration - frustrateDrain })
-        |> Combatant.addStudyStacks studyGain
+        |> Combatant.addStacks rampGain
         |> Combatant.addWard wardRestore
         |> Combatant.stabilizeCollapse
 
@@ -645,7 +601,7 @@ module ActionResolver =
 
       { Actor = updatedActor
         Target = target
-        Events = [ resetEvt; CombatEvent.FormStabilized(actor.Id, reckDrain, studyGain) ] @ wardEvts @ collapseEvts
+        Events = [ resetEvt; CombatEvent.FormStabilized(actor.Id, reckDrain, rampGain) ] @ wardEvts @ collapseEvts
         Contest = None }
 
   let private resolveShiftStance (newStance: CombatStance) (actor: Combatant) (target: Combatant) : ActionResult =
@@ -845,10 +801,10 @@ module ActionResolver =
       | PreparationType.HeraldicTreatise ->
         let updatedActor =
           actorSpent
-          |> Combatant.addStudyStacks 2
+          |> Combatant.addStacks 2
         let evts = [
-          CombatEvent.HeraldicTreatiseStudied(actor.Id, 2)
-          CombatEvent.PreparationDeployed(actor.Id, prepType, None, "Heraldic Treatise reviewed: +2 Study Stacks granted immediately across visible foes.")
+          CombatEvent.HeraldicTreatiseRead(actor.Id, 2)
+          CombatEvent.PreparationDeployed(actor.Id, prepType, None, "Heraldic Treatise reviewed: +2 Combat Ramp granted immediately across visible foes.")
         ]
         { Actor = updatedActor; Target = target; Events = evts; Contest = None }
 
@@ -971,7 +927,10 @@ module ActionResolver =
           match atk with
           | ForceStrike _ | ForceInsightStrike -> Some CombatStance.PowerStance
           | FinesseCadence _ | FinesseInsightStrike -> Some CombatStance.AgilityStance
-          | ProwessStrike _ | ShieldBash _ | CalculatedFlawStrike | MasterfulDisarm _ -> Some CombatStance.DisciplineStance
+          // ShieldBash is deliberately absent: a bash takes on the attacker's current stance (Power
+          // floors, Agility parries, Discipline breaks the weapon), so the transition must not
+          // normalise the actor to Discipline before the bash resolves.
+          | ProwessStrike _ | CalculatedFlawStrike | MasterfulDisarm _ -> Some CombatStance.DisciplineStance
           | TraumaAttack BasaltEruption -> Some CombatStance.PowerStance
           | _ -> None
 
@@ -1007,11 +966,18 @@ module ActionResolver =
     events <- events @ transitionEvents
 
     // --- Step A: Identify Gambit Properties ---
-    // Study Stacks actually spent this strike. Step A drains them, so reading StudyStacks again in
-    // step B would scale the payoff off the leftovers instead of the spend.
+    // Stacks cashed by this strike, read off the meter that gates its vector. Step A drains that
+    // meter, so step B re-reads it through `stacksAtStart` rather than expecting the pre-spend total.
     let mutable stackSpend = 0
-    // Step B re-checks MasterfulDisarm's requirement, so it must see the stacks held before the drain.
-    let stacksAtStart = currentActor.StudyStacks
+    let stacksAtStart = Combatant.stacksIn atk.Vector currentActor
+
+    /// Cash the whole pile in the meter that gates this attack's vector.
+    let cashPile (label: string) =
+      let actualSpend = Combatant.stacksIn atk.Vector currentActor
+      stackSpend <- actualSpend
+      currentActor <- currentActor |> Combatant.drainStacks atk.Vector actualSpend
+      events <- CombatEvent.DisciplineGambitExecuted(currentActor.Id, label, actualSpend) :: events
+      false, "", 0 // Meters pay with 0 Recklessness self-spike!
 
     let isGambit, gambitName, selfReckSpike =
       match atk with
@@ -1019,38 +985,22 @@ module ActionResolver =
       | FinesseCadence true -> true, "Physical Gambit: Relentless Cadence", 25
       | ProwessStrike true -> true, "Martial Gambit: Invitational Bait", 35
       | ShieldBash true -> true, "Martial Gambit: Heavy Shield Slam", 30
-      // The spender attacks cash in the whole pile: `stacks` is only what the caller asked for, and
-      // every stack held is spent so the payoff scales with what the actor actually built up.
-      // shortcut: the AttackClassification payload is now vestigial for these three, kept so the CLI,
-      // AI and estimator call sites do not churn; drop it when the type is next revised.
-      | ForceInsightStrike ->
-        let actualSpend = currentActor.StudyStacks
-        stackSpend <- actualSpend
-        currentActor <- currentActor |> Combatant.addStudyStacks -actualSpend
-        events <- CombatEvent.DisciplineGambitExecuted(currentActor.Id, "Force Insight Cleave", actualSpend) :: events
-        false, "", 0 // Consumes Study Stacks with 0 Recklessness self-spike!
-      | FinesseInsightStrike ->
-        let actualSpend = currentActor.StudyStacks
-        stackSpend <- actualSpend
-        currentActor <- currentActor |> Combatant.addStudyStacks -actualSpend
-        events <- CombatEvent.DisciplineGambitExecuted(currentActor.Id, "Threaded Opening", actualSpend) :: events
-        false, "", 0 // Consumes Study Stacks with 0 Recklessness self-spike!
-      | CalculatedFlawStrike ->
-        let actualSpend = currentActor.StudyStacks
-        stackSpend <- actualSpend
-        currentActor <- currentActor |> Combatant.addStudyStacks -actualSpend
-        events <- CombatEvent.DisciplineGambitExecuted(currentActor.Id, "Calculated Flaw Strike", actualSpend) :: events
-        false, "", 0 // Consumes Study Stacks with 0 Recklessness self-spike!
-      | MasterfulDisarm stacks ->
+      // Each school cashes its own meter: Momentum (Power), Flow (Agility), Focus (Discipline).
+      | ForceInsightStrike -> cashPile "Force Insight Cleave"
+      | FinesseInsightStrike -> cashPile "Threaded Opening"
+      | CalculatedFlawStrike -> cashPile "Calculated Flaw Strike"
+      | MasterfulDisarm _ ->
         let off = currentActor.GetStat Prowess
         let def = currentTarget.GetGuard(atk.Plane, false)
         let isPossible = off >= int (Math.Round(float def * 0.75))
-        let required = Math.Max(3, int (Math.Ceiling((float def / Math.Max(1.0, float off)) * 3.5)))
-        let actualSpend = Math.Min(currentActor.StudyStacks, required)
-        if isPossible && currentActor.StudyStacks >= required then
-          currentActor <- currentActor |> Combatant.addStudyStacks -actualSpend
-          events <- CombatEvent.DisciplineGambitExecuted(currentActor.Id, "Masterful Disarm", actualSpend) :: events
-          false, "", 0 // Consumes Study Stacks with 0 Recklessness self-spike!
+        // Requirement capped by the meter itself; above StackCap the disarm could never fire.
+        let required =
+          Math.Min(Combatant.StackCap, Math.Max(2, int (Math.Ceiling((float def / Math.Max(1.0, float off)) * 3.5))))
+        let held = Combatant.stacksIn atk.Vector currentActor
+        if isPossible && held >= required then
+          currentActor <- currentActor |> Combatant.drainStacks atk.Vector required
+          events <- CombatEvent.DisciplineGambitExecuted(currentActor.Id, "Masterful Disarm", required) :: events
+          false, "", 0 // Consumes Focus with 0 Recklessness self-spike!
         else
           false, "", 0
       | AuthorityDecree true -> true, "Social Gambit: Imperious Demand", 30
@@ -1067,6 +1017,10 @@ module ActionResolver =
       | TraumaAttack ApathyDoldrums -> true, "Trauma Gambit: Apathy Doldrums", 10
       | TraumaAttack SereneResolution -> false, "", 0
       | _ -> false, "", 0
+
+    // Every attack feeds all three ramps. A spender drained its meter above, so it lands back on 1
+    // while everyone else is one stack stronger than before the swing.
+    currentActor <- currentActor |> Combatant.addStacks 1
 
     if isGambit then
       currentActor <-
@@ -1150,7 +1104,7 @@ module ActionResolver =
       | ForceStrike isWild ->
         let off = currentActor.GetCombatStat Force
         let def = (currentTarget.GetCombatStat Fortitude + currentTarget.GetCombatStat Resolve) / 2
-        let wildMult = strikeMultiplier atk currentActor.StudyStacks stackSpend currentActor.Stance
+        let wildMult = strikeMultiplier atk stackSpend currentActor.Stance
         let ratio = float off / Math.Max(1.0, float def)
         let baseExhaust =
           if off >= def then
@@ -1171,7 +1125,7 @@ module ActionResolver =
         let off = currentActor.GetCombatStat Force
         let def = (currentTarget.GetCombatStat Fortitude + currentTarget.GetCombatStat Resolve) / 2
         // Non-CLI callers can ask for the insight strike with no stacks; it must not beat the plain strike then.
-        let mult = strikeMultiplier atk currentActor.StudyStacks stackSpend currentActor.Stance
+        let mult = strikeMultiplier atk stackSpend currentActor.Stance
         let ratio = float off / Math.Max(1.0, float def)
         let baseExhaust =
           if off >= def then
@@ -1214,7 +1168,7 @@ module ActionResolver =
       | FinesseInsightStrike ->
         let off = currentActor.GetCombatStat Finesse
         let def = (currentTarget.GetCombatStat Reflex + currentTarget.GetCombatStat Intuition) / 2
-        let mult = strikeMultiplier atk currentActor.StudyStacks stackSpend currentActor.Stance
+        let mult = strikeMultiplier atk stackSpend currentActor.Stance
         let ratio = float off / Math.Max(1.0, float def)
         let baseConfusion =
           if off >= def then
@@ -1234,7 +1188,7 @@ module ActionResolver =
       | ProwessStrike isInvitational ->
         let off = currentActor.GetCombatStat Prowess
         let def = currentTarget.GetGuard(plane, true)
-        let mult = strikeMultiplier atk currentActor.StudyStacks stackSpend currentActor.Stance
+        let mult = strikeMultiplier atk stackSpend currentActor.Stance
         let ratio = float off / Math.Max(1.0, float def)
         let baseFrustrate =
           if off >= def then
@@ -1252,9 +1206,12 @@ module ActionResolver =
         off, def, mult, disp, upd
 
       | ShieldBash isHeavySlam ->
-        let off = currentActor.GetCombatStat Prowess
+        // A bash swings with whatever stance holds it: Power contuses with Force, Agility turns the
+        // wind-up aside with Finesse, Discipline works the weapon with Prowess. Contesting on Prowess
+        // in every stance would make the Power and Agility bashes miss on a same-tier target.
+        let off = currentActor.GetCombatStat (fst currentActor.StanceAttributes)
         let def = currentTarget.GetGuard(plane, true)
-        let mult = strikeMultiplier atk currentActor.StudyStacks stackSpend currentActor.Stance
+        let mult = strikeMultiplier atk stackSpend currentActor.Stance
         let ratio = float off / Math.Max(1.0, float def)
         let baseFrustrate =
           if off >= def then
@@ -1277,7 +1234,7 @@ module ActionResolver =
         let off = currentActor.GetCombatStat Prowess
         let def = currentTarget.GetGuard(plane, true)
         let disparity = Math.Max(0, off - def)
-        let mult = strikeMultiplier atk currentActor.StudyStacks stackSpend currentActor.Stance
+        let mult = strikeMultiplier atk stackSpend currentActor.Stance
         let disp = fun isCrit -> if isCrit then Some DisarmOrLimbDisable else None
 
         let upd isCrit (m: StatusMeters) =
@@ -1306,7 +1263,7 @@ module ActionResolver =
         let def = resolveMentalDefense rawDef
         let disparity = Math.Max(0, off - def)
         let disparityReck = int (Math.Round(float disparity / 15.0))
-        let imperiousMult = strikeMultiplier atk currentActor.StudyStacks stackSpend currentActor.Stance
+        let imperiousMult = strikeMultiplier atk stackSpend currentActor.Stance
         let exhaust = fun isCrit -> (if isCrit then 40 else 20) + (disparity / 25)
         let disp = fun isCrit -> if isCrit then Some(CognitiveRupture(exhaust true)) else None
 
@@ -1343,7 +1300,7 @@ module ActionResolver =
         let def = resolveMentalDefense rawDef
         let disparity = Math.Max(0, off - def)
         let disparityReck = int (Math.Round(float disparity / 10.0))
-        let mult = strikeMultiplier atk currentActor.StudyStacks stackSpend currentActor.Stance
+        let mult = strikeMultiplier atk stackSpend currentActor.Stance
         let frustrate = fun isCrit -> (if isCrit then 50 else 25) + (disparity / 20)
         let disp = fun isCrit -> if isCrit then Some(StrippedCredibility(frustrate true)) else None
 
@@ -1424,7 +1381,7 @@ module ActionResolver =
         let def = resolveMentalDefense rawDef
         let disparity = Math.Max(0, off - def)
         let disparityReck = int (Math.Round(float disparity / 12.0))
-        let glyphMult = strikeMultiplier atk currentActor.StudyStacks stackSpend currentActor.Stance
+        let glyphMult = strikeMultiplier atk stackSpend currentActor.Stance
         let frustrate = fun isCrit -> int (float (if isCrit then 45 else 20) * profMult) + (disparity / 25)
         let disp = fun isCrit -> if isCrit then Some(StrippedCredibility(frustrate true)) else None
 
@@ -1443,7 +1400,7 @@ module ActionResolver =
         let def = resolveMentalDefense rawDef
         let disparity = Math.Max(0, off - def)
         let disparityReck = int (Math.Round(float disparity / 12.0))
-        let pulseMult = strikeMultiplier atk currentActor.StudyStacks stackSpend currentActor.Stance
+        let pulseMult = strikeMultiplier atk stackSpend currentActor.Stance
         let frustrate = fun isCrit -> int (float (if isCrit then 35 else 18) * profMult) + (disparity / 25)
         let disp = fun isCrit -> if isCrit then Some(StrippedCredibility(frustrate true)) else None
 
@@ -1462,7 +1419,7 @@ module ActionResolver =
         let rawDef = currentTarget.GetGuard(plane, true)
         let def = resolveMentalDefense rawDef
         let disparity = Math.Max(0, off - def)
-        let mult = strikeMultiplier atk currentActor.StudyStacks stackSpend currentActor.Stance
+        let mult = strikeMultiplier atk stackSpend currentActor.Stance
         let dispel = fun isCrit -> (if isCrit then 35 else 20) + (disparity / 25)
         let disp = fun isCrit -> if isCrit then Some(CognitiveRupture(dispel true)) else None
 
@@ -1727,8 +1684,8 @@ module ActionResolver =
             |> Combatant.updateMeters (fun m -> { m with Exhaustion = m.Exhaustion + aooExhaustionDrain; Recklessness = m.Recklessness + aooRecklessnessGain })
 
           if vectorName = "Discipline" then
-            // Discipline masters read their opponent's martial school and gain Study Stacks
-            currentTarget <- currentTarget |> Combatant.addStudyStacks 1
+            // Discipline masters read their opponent's martial school and gain Combat Ramp
+            currentTarget <- currentTarget |> Combatant.addStacks 1
           elif vectorName = "Agility" then
             currentActor <- currentActor |> Combatant.updateMeters (fun m -> { m with Overwhelm = m.Overwhelm + 10 })
 
@@ -1984,19 +1941,23 @@ module ActionResolver =
         Contest = None }
     else
 
-    // --- Step B.5: Defender Passive Reactive Defense (Riposte / Disarm) from accumulated Study Stacks ---
+    // --- Step B.5: Defender Passive Reactive Defense (Riposte / Disarm) from the defender's ramp ---
     let mutable defenderDisarmedAttacker = false
 
+    // The defender answers with whatever it has built in the meter this attack feeds; 5 stacks (the
+    // cap) reaches the 70% ceiling, so a defender that has been swinging all fight can counter.
+    let defenderStacks = Combatant.stacksIn atk.Vector currentTarget
 
-    if plane = Physical && currentTarget.StudyStacks > 0 then
-      let counterChance = Math.Min(70, currentTarget.StudyStacks * 8)
+    if plane = Physical && defenderStacks > 0 then
+      let counterChance = Math.Min(70, defenderStacks * 14)
       if roller 1 100 <= counterChance then
         let defProwess = currentTarget.GetStat Prowess
         let atkPoise = currentActor.GetStat Poise
         let isDisarmPossible = defProwess >= int (Math.Round(float atkPoise * 0.75))
-        let requiredStacksForDisarm = Math.Max(3, int (Math.Ceiling((float atkPoise / Math.Max(1.0, float defProwess)) * 3.5)))
+        let requiredStacksForDisarm =
+          Math.Min(Combatant.StackCap, Math.Max(2, int (Math.Ceiling((float atkPoise / Math.Max(1.0, float defProwess)) * 3.5))))
 
-        if isDisarmPossible && currentTarget.StudyStacks >= requiredStacksForDisarm then
+        if isDisarmPossible && defenderStacks >= requiredStacksForDisarm then
           // Disarm counter: degrades attacker weapon, resets combo, spikes Frustration, defuses attack
           let degradedWeapon = WeaponCondition.degradation currentActor.WeaponCondition
           currentActor <-
@@ -2032,9 +1993,9 @@ module ActionResolver =
         roller
         vector
         offStat
-        currentActor.StudyStacks
+        (Combatant.stacksIn atk.Vector currentActor)
         defStat
-        currentTarget.StudyStacks
+        (Combatant.stacksIn atk.Vector currentTarget)
         effectivePriorDefenses
 
     if contest.EncirclementPenalty > 0 then
@@ -2328,13 +2289,35 @@ module ActionResolver =
           { currentTarget with
               ComboTracker = currentTarget.ComboTracker.ResetCombo() }
           |> Combatant.updateMeters (fun m -> { m with Frustration = m.Frustration + extraFrust })
+
+        // The stance decides what a bash does once it lands.
+        match currentActor.Stance with
+        | CombatStance.PowerStance ->
+          // Knockdown: no footing left, so Reflex suffers until the target recovers.
+          let prone = if isHeavySlam then 6 else 4
+          currentTarget <- currentTarget |> Combatant.addLimbDebuff prone
+          events <- CombatEvent.LimbDisabled(currentTarget.Id, prone) :: events
+        | CombatStance.AgilityStance ->
+          // Parry: the wind-up is turned aside and the counter-window opens on the parrier.
+          currentActor <- { currentActor with ComboTracker = currentActor.ComboTracker.RegisterHit() }
+        | _ ->
+          // Prowess: the shield bites into the weapon haft and degrades it.
+          currentTarget <- currentTarget |> Combatant.degradeWeapon
+          events <- CombatEvent.WeaponDegraded(currentTarget.Id, currentTarget.WeaponCondition) :: events
+
         if isInterrupt then
+          let stanceNote =
+            match currentActor.Stance with
+            | CombatStance.PowerStance -> "sent sprawling off its feet"
+            | CombatStance.AgilityStance -> "parried aside, leaving its guard open"
+            | _ -> "striking the weapon from its grip"
+
           events <-
             CombatEvent.ActionInterrupted(
               currentActor.Id,
               currentTarget.Id,
               "Shield Bash",
-              "Crushing shield slam staggered the target, disrupting offensive windup and shattering momentum!"
+              sprintf "Shield Bash staggered the target and %s, disrupting its windup and shattering momentum!" stanceNote
             ) :: events
       | StaffSiphon ->
         let siphonedFatigue = Math.Min(currentActor.Meters.CognitiveFatigue.Value, 20)
@@ -2530,9 +2513,9 @@ module ActionResolver =
         Events = allEvents }
 
     | DeployPreparation (PreparationType.HeraldicTreatise, _) when not adjacentTargets.IsEmpty ->
-      let bonusStudy = 2 * adjacentTargets.Length
-      currentActor <- currentActor |> Combatant.addStudyStacks bonusStudy
-      allEvents <- allEvents @ [ CombatEvent.HeraldicTreatiseStudied(currentActor.Id, bonusStudy) ]
+      let bonusRamp = 2 * adjacentTargets.Length
+      currentActor <- currentActor |> Combatant.addStacks bonusRamp
+      allEvents <- allEvents @ [ CombatEvent.HeraldicTreatiseRead(currentActor.Id, bonusRamp) ]
       { Actor = currentActor
         PrimaryTarget = currentPrimary
         SecondaryTargets = adjacentTargets
@@ -2891,7 +2874,7 @@ module ActionResolver =
 
         elif currentActor.Stance = CombatStance.DisciplineStance then
           // Discipline Stance: Chain strikes across engaged opponents
-          let chainCapacity = Math.Min(3, 1 + (currentActor.StudyStacks / 2))
+          let chainCapacity = Math.Min(3, 1 + (Combatant.stacksIn Vector.Discipline currentActor / 2))
           let chainCandidates = currentAdjacent |> List.truncate chainCapacity
           let unengaged = currentAdjacent |> List.skip chainCandidates.Length
           let mutable chainEvents = []
@@ -2916,7 +2899,7 @@ module ActionResolver =
                 |> Combatant.updateMeters (fun m -> { m with Frustration = m.Frustration + 12 })
                 |> Combatant.evaluateCollapse
 
-              currentActor <- currentActor |> Combatant.addStudyStacks 1
+              currentActor <- currentActor |> Combatant.addStacks 1
 
               chainEvents <-
                 chainEvents

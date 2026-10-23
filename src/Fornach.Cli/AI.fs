@@ -101,7 +101,7 @@ module AI =
       // Tactical Stance Evaluation:
       // When facing multiple opponents (surroundingOpponents >= 2):
       // - Prowess (Discipline Stance) is tactically superior: chains attacks with 0 Recklessness,
-      //   builds Study Stacks for passive Ripostes/Disarms, and defuses flanks with Attacks of Opportunity.
+      //   builds the combat ramp for passive Ripostes/Disarms, and defuses flanks with Attacks of Opportunity.
       // - Force (Power Stance) is viable for high-Force combatants to Cleave multiple targets,
       //   provided Recklessness is safe enough to absorb disparity-scaled exposure.
       // - Finesse (Agility Stance) is strictly single-target dueling; a master shifts away from Agility when mobbed.
@@ -116,7 +116,7 @@ module AI =
         elif wantsPower && self.Stance <> CombatStance.PowerStance then
           ShiftStance CombatStance.PowerStance
         elif self.Stance = CombatStance.DisciplineStance then
-          if self.StudyStacks >= 3 then
+          if Combatant.stacksIn Vector.Discipline self >= 3 then
             StandardAttack CalculatedFlawStrike
           else
             StandardAttack (ProwessStrike isGambit)
@@ -151,11 +151,13 @@ module AI =
           // Discipline: Evaluate Dedicated Gambits vs Standard Strike
           let oppPoise = opponent.GetStat Poise
           let canDisarm = prowess >= int (Math.Round(float oppPoise * 0.75))
-          let reqDisarmStacks = Math.Max(3, int (Math.Ceiling((float oppPoise / Math.Max(1.0, float prowess)) * 3.5)))
+          // Capped by the meter: a requirement above StackCap would gate the disarm forever.
+          let reqDisarmStacks =
+            Math.Min(Combatant.StackCap, Math.Max(2, int (Math.Ceiling((float oppPoise / Math.Max(1.0, float prowess)) * 3.5))))
 
-          if surroundingOpponents < 2 && canDisarm && self.StudyStacks >= reqDisarmStacks && opponent.WeaponCondition <> WeaponCondition.Broken then
+          if surroundingOpponents < 2 && canDisarm && Combatant.stacksIn Vector.Discipline self >= reqDisarmStacks && opponent.WeaponCondition <> WeaponCondition.Broken then
             StandardAttack (MasterfulDisarm reqDisarmStacks)
-          elif self.StudyStacks >= 3 then
+          elif Combatant.stacksIn Vector.Discipline self >= 3 then
             StandardAttack CalculatedFlawStrike
           else
             StandardAttack (ProwessStrike isGambit)
@@ -251,7 +253,7 @@ module AI =
                   | None -> true))
             |> Option.bind (fun slot ->
               match slot.Type with
-              | PreparationType.HeraldicTreatise when self.StudyStacks >= 6 -> None
+              | PreparationType.HeraldicTreatise when Combatant.stacksIn Vector.Discipline self >= Combatant.StackCap -> None
               | prepType -> Some (DeployPreparation (prepType, None)))
 
           match crowdPrep with

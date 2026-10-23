@@ -43,11 +43,12 @@ module TacticalAssessment =
     sprintf "%s %s" vectorName orientName
 
   /// Calculates effective scrutiny for an observer:
-  /// Acumen is primary (100%), Intuition provides perceptual scrutiny (+25%), and Study Stacks provide tactical familiarity (+15 each)
+  /// Acumen is primary (100%), Intuition provides perceptual scrutiny (+25%), and built-up Focus
+  /// provides tactical familiarity (+15 each) — the Discipline ramp is the reading-the-enemy meter.
   let calculateEffectiveScrutiny (observer: Combatant) : int =
     let acumen = observer.GetStat StatId.Acumen
     let intuition = observer.GetStat StatId.Intuition
-    let studyBonus = observer.StudyStacks * 15
+    let studyBonus = observer.Focus * 15
     Math.Max(1, acumen + (intuition / 4) + studyBonus)
 
   /// Calculates effective concealing composure for a target
@@ -95,7 +96,7 @@ module TacticalAssessment =
   let generateAdvice (bestStat: StatId * int) (weakestDef: StatId * int) (insight: TacticalInsightLevel) : string =
     match insight with
     | Obscured ->
-      "Target maintains stoic composure. Use Discipline strikes to build Study Stacks (+15 Acumen) to decipher their form."
+      "Target maintains stoic composure. Use Discipline strikes to build Focus (+15 Acumen) to decipher their form."
     | Discerning ->
       let (bestS, _) = bestStat
       match bestS with

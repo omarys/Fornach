@@ -28,13 +28,13 @@ type AttackClassification =
   | ProwessStrike of isInvitationalBait: bool
   /// Martial Discipline (Prowess vs. Poise): Shield bash that bludgeons target, inflicts Frustration, and interrupts telegraphed Gambits
   | ShieldBash of isHeavySlam: bool
-  /// Power Gambit: Studied cleave through a read opening, burning every Study Stack to strike Fortitude (0 Recklessness)
+  /// Power Gambit: Studied cleave through a read opening, burning every Momentum stack to strike Fortitude (0 Recklessness)
   | ForceInsightStrike
-  /// Agility Gambit: Studied thrust into a read opening, burning every Study Stack to strike Reflex (0 Recklessness)
+  /// Agility Gambit: Studied thrust into a read opening, burning every Flow stack to strike Reflex (0 Recklessness)
   | FinesseInsightStrike
-  /// Dedicated Discipline Gambit: Precision flaw exploitation burning every Study Stack (0 Recklessness)
+  /// Dedicated Discipline Gambit: Precision flaw exploitation burning every Focus stack (0 Recklessness)
   | CalculatedFlawStrike
-  /// Dedicated Discipline Gambit: Tactical disarm requiring Study Stacks scaled by target Poise vs. Prowess
+  /// Dedicated Discipline Gambit: Tactical disarm requiring Focus scaled by target Poise vs. Prowess
   | MasterfulDisarm of stacksToSpend: int
 
   // -------------------------------------------------------------------------
@@ -151,9 +151,9 @@ type AttackClassification =
 
 /// Defensive recoveries used to bleed accumulated Recklessness and re-center posture
 type DefensiveReset =
-  /// Universal reset: bleeds all seven strain meters (Poise + Composure), restores Morale, and banks Study Stacks
+  /// Universal reset: bleeds all seven strain meters (Poise + Composure), restores Morale, and banks Combat Ramp
   | SteadyForm
-  /// Fighter shield posture: uses Poise to bleed Recklessness, restores Armor Integrity (+20), and gains 2 Study Stacks
+  /// Fighter shield posture: uses Poise to bleed Recklessness, restores Armor Integrity (+20), and gains 2 Combat Ramp
   | RaiseShield
   /// Mental/Social reset: uses Composure to bleed Recklessness, clears mental strain, and generates Insight
   | CenterMind

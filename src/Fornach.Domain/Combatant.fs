@@ -56,7 +56,12 @@ type Combatant =
     Stats: StatBlock
     Meters: StatusMeters
     Collapse: CollapseState
-    StudyStacks: int
+    /// Combat ramp: rises on every attack, sharpens Finesse/Reflex, cashed by Agility specials.
+    Flow: int
+    /// Combat ramp: rises on every attack, sharpens Force/Fortitude, cashed by Power specials.
+    Momentum: int
+    /// Combat ramp: rises on every attack, sharpens Prowess/Poise, cashed by Discipline specials.
+    Focus: int
     Armor: ArmorIntegrity
     WeaponCondition: WeaponCondition
     Stance: CombatStance
@@ -159,15 +164,30 @@ type Combatant =
 
     let descriptor = Attributes.descriptorOf stat
 
-    if descriptor.Plane <> this.Plane then
-      baseValue
-    elif descriptor.Vector = stanceVector then
-      Math.Max(1, int (Math.Round(float baseValue * 1.25)))
-    elif descriptor.Orientation = Offense then
-      // Trade-off: the plane's other vectors lose offensive sharpness, but keep their guard.
-      Math.Max(1, int (Math.Round(float baseValue * 0.75)))
+    let stanceAdjusted =
+      if descriptor.Plane <> this.Plane then
+        baseValue
+      elif descriptor.Vector = stanceVector then
+        Math.Max(1, int (Math.Round(float baseValue * 1.25)))
+      elif descriptor.Orientation = Offense then
+        // Trade-off: the plane's other vectors lose offensive sharpness, but keep their guard.
+        Math.Max(1, int (Math.Round(float baseValue * 0.75)))
+      else
+        baseValue
+
+    // Combat ramp: each meter sharpens the stat pair it feeds, so a sustained fight compounds.
+    // Flow is deliberately the sharpest (10%/stack vs 1%) — it is the Agility glass cannon meter.
+    let ramp =
+      match stat with
+      | Finesse | Reflex -> 1.0 + 0.10 * float (Math.Clamp(this.Flow, 0, Combatant.StackCap))
+      | Force | Fortitude -> 1.0 + 0.01 * float (Math.Clamp(this.Momentum, 0, Combatant.StackCap))
+      | Prowess | Poise -> 1.0 + 0.01 * float (Math.Clamp(this.Focus, 0, Combatant.StackCap))
+      | _ -> 1.0
+
+    if ramp = 1.0 then
+      stanceAdjusted
     else
-      baseValue
+      Math.Max(1, int (Math.Round(float stanceAdjusted * ramp)))
 
   /// Guard every defence contest rolls against: the Poise/Composure blend, replaced while the defender
   /// holds DisciplineStance by a pure Poise anchor (1.5x against physical attacks, 1.0x against mental
@@ -212,7 +232,9 @@ type Combatant =
       Stats = stats
       Meters = StatusMeters.Zero
       Collapse = CollapseState.Stable
-      StudyStacks = 0
+      Flow = 0
+      Momentum = 0
+      Focus = 0
       Armor = ArmorIntegrity.Create 50
       WeaponCondition = WeaponCondition.Pristine
       Stance = CombatStance.PowerStance
@@ -254,7 +276,9 @@ type Combatant =
       Stats = stats
       Meters = StatusMeters.Zero
       Collapse = CollapseState.Stable
-      StudyStacks = 0
+      Flow = 0
+      Momentum = 0
+      Focus = 0
       Armor = ArmorIntegrity.Create 50
       WeaponCondition = WeaponCondition.Pristine
       Stance = defaultStance
@@ -277,10 +301,51 @@ type Combatant =
   static member updateMeters (updater: StatusMeters -> StatusMeters) (c: Combatant) =
     { c with Meters = updater c.Meters }
 
-  /// Adds or drains study/insight stacks, bounded between 0 and 15
-  static member addStudyStacks delta (c: Combatant) =
+  /// Every combat ramp meter shares one ceiling: five stacks, so a full pile cashes at 3.5x.
+  static member StackCap = 5
+
+  /// Raises all three ramp meters together. Every attack type feeds all three; only a same-vector
+  /// special spends one, so spending always resets that meter alone.
+  static member addStacks delta (c: Combatant) =
     { c with
-        StudyStacks = Math.Clamp(c.StudyStacks + delta, 0, 15) }
+        Flow = Math.Clamp(c.Flow + delta, 0, Combatant.StackCap)
+        Momentum = Math.Clamp(c.Momentum + delta, 0, Combatant.StackCap)
+        Focus = Math.Clamp(c.Focus + delta, 0, Combatant.StackCap) }
+
+  /// One stack off every meter: the end-of-turn decay when nothing is engaged.
+  static member decayStacks (c: Combatant) = Combatant.addStacks -1 c
+
+  /// Stacks currently held in the meter that gates a given attack vector.
+  static member stacksIn (vector: Vector) (c: Combatant) =
+    match vector with
+    | Vector.Agility -> c.Flow
+    | Vector.Power -> c.Momentum
+    | Vector.Discipline -> c.Focus
+
+  /// Drains one meter by `count`, clamping at zero.
+  static member drainStacks (vector: Vector) count (c: Combatant) =
+    match vector with
+    | Vector.Agility -> { c with Flow = Math.Max(0, c.Flow - count) }
+    | Vector.Power -> { c with Momentum = Math.Max(0, c.Momentum - count) }
+    | Vector.Discipline -> { c with Focus = Math.Max(0, c.Focus - count) }
+
+  /// Permanent growth on a won encounter, replacing the old Study Stack ramp: Prowess and Poise
+  /// always rise, plus an off-type tick — Fighters sharpen the mind, Mages the body. Weighted by the
+  /// strongest foe's level (Novice/Veteran +1, Master +2, GrandMaster +3) so hard fights teach more.
+  static member growFromEncounter (foes: Combatant list) (c: Combatant) =
+    let gain =
+      match foes |> List.map (fun f -> f.Progression.Level) with
+      | [] -> 1
+      | levels when List.max levels >= 200 -> 3
+      | levels when List.max levels >= 100 -> 2
+      | _ -> 1
+
+    let offType =
+      match c.Class with
+      | Fighter -> [ StatId.Acumen, 1; StatId.Intuition, 1 ]
+      | _ -> [ StatId.Force, 1; StatId.Finesse, 1 ]
+
+    { c with Stats = c.Stats.ApplyModifiers ([ StatId.Prowess, gain; StatId.Poise, gain ] @ offType) }
 
   /// Modifies active Arcane Ward barrier absorption pool
   static member addWard delta (c: Combatant) =

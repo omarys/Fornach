@@ -44,7 +44,7 @@ type PreparationType =
   // --- Abjurer (Discipline / Mental) ---
   /// Crowd/Buff: Runic sanctuary barrier applied to self or ally; reduces all damage taken by 35% and reflects 50% back to attackers as radiant retribution damage and +15 Frustration
   | AegisOfRetribution
-  /// Crowd: Pre-battle notes; grants +2 Study Stacks on all visible foes immediately
+  /// Crowd: Pre-battle notes; grants +2 Combat Ramp on all visible foes immediately
   | HeraldicTreatise
   /// Duel: Exposes contradictions; immediately converts opponent's current Recklessness to unmitigated Morale damage
   | SocraticDossier
@@ -114,7 +114,7 @@ type PreparationType =
     | BastionZoneControl -> "Plants polearm/shield; limits simultaneous attackers strictly to 3 (front three tiles; duration scales with level/primary stat)."
     | ParryingBuckler -> "Dedicated off-hand reaction shield; modifies Indes threshold by -1, widening Vor window (duration scales with level/primary stat)."
     | AegisOfRetribution -> "Runic sanctuary barrier applied to self or an ally: reduces incoming damage taken by 35% and reflects 50% back to attackers as radiant retribution damage and +15 Frustration (duration scales with level/primary stat)."
-    | HeraldicTreatise -> "Pre-battle tactical notes; immediately grants +2 Study Stacks across all foes."
+    | HeraldicTreatise -> "Pre-battle tactical notes; immediately grants +2 Combat Ramp across all foes."
     | SocraticDossier -> "Exposes contradictions; immediately converts opponent's Recklessness to unmitigated Morale damage."
 
   /// Base duration in turns for tactical preparations at Level 1 (Novice).

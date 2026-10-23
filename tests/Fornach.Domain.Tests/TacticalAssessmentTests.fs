@@ -25,7 +25,7 @@ module TacticalAssessmentTests =
     Assert.True(assess.Ratio < 0.40)
     Assert.Equal((StatId.Poise, 200), assess.WeakestDefense)
     Assert.Equal("GUARDED POSTURE", assess.Headline)
-    Assert.True(assess.StrategicAdvice.Contains("build Study Stacks"))
+    Assert.True(assess.StrategicAdvice.Contains("build Focus"))
 
   [<Fact>]
   let ``Prologue Mage scrutiny still reads Stone Gargoyle as guarded at level 1`` () =
@@ -72,18 +72,18 @@ module TacticalAssessmentTests =
     Assert.Equal((StatId.Reflex, 95), assess.WeakestDefense)
     // A level-1 Warden cannot read a Guilt Aspect's exact form yet.
     Assert.Equal(TacticalInsightLevel.Obscured, assess.InsightLevel)
-    Assert.True(assess.StrategicAdvice.Contains("build Study Stacks"))
+    Assert.True(assess.StrategicAdvice.Contains("build Focus"))
 
   [<Fact>]
-  let ``Study Stacks sharpen tactical insight from Obscured to Discerning`` () =
+  let ``Focus stacks sharpen tactical insight from Obscured to Discerning`` () =
     let player = StoryBosses.createProloguePlayer "berserker" // Acumen 19 + Intuition 34/4 (8) = 27
     let gargoyle = Bestiary.stoneGargoyle.ToCombatant (CombatantId.New())
 
     let initialAssess = TacticalAssessment.assess player gargoyle
     Assert.Equal(TacticalInsightLevel.Obscured, initialAssess.InsightLevel)
 
-    // Add 3 study stacks (+45 effective Acumen: 27 + 45 = 72 / 150 = 0.48 -> Discerning)
-    let studiedPlayer = { player with StudyStacks = 3 }
+    // Add 3 Focus stacks (+45 effective Acumen: 27 + 45 = 72 / 150 = 0.48 -> Discerning)
+    let studiedPlayer = { player with Focus = 3 }
     let studiedAssess = TacticalAssessment.assess studiedPlayer gargoyle
 
     Assert.Equal(TacticalInsightLevel.Discerning, studiedAssess.InsightLevel)
@@ -101,14 +101,14 @@ module TacticalAssessmentTests =
     Assert.True(assess.Ratio > 10.0)
 
   [<Fact>]
-  let ``High composure gap yields Obscured posture with advice to build Study Stacks`` () =
+  let ``High composure gap yields Obscured posture with advice to build Focus`` () =
     let noviceWarrior = TierFactory.createClassLevel CharacterClass.Warrior 1
     let overseer = Bestiary.quarryOverseer.ToCombatant (CombatantId.New()) // Composure 390
 
     let assess = TacticalAssessment.assess noviceWarrior overseer
     Assert.Equal(TacticalInsightLevel.Obscured, assess.InsightLevel)
     Assert.Equal("GUARDED POSTURE", assess.Headline)
-    Assert.True(assess.StrategicAdvice.Contains("build Study Stacks"))
+    Assert.True(assess.StrategicAdvice.Contains("build Focus"))
 
   [<Fact>]
   let ``Mental plane combatant correctly evaluates mental attributes as primary`` () =
@@ -141,7 +141,7 @@ module TacticalAssessmentTests =
 
     // 3. Keen insight (elevated Acumen to reach ratio in [0.75, 1.15))
     // Hound Composure 50 -> Need effective Acumen ~45 (ratio = 0.90 -> Keen)
-    let keenObserver = { observer with StudyStacks = 2 } // 22 + 30 = 52 / 50 = 1.04 -> Keen
+    let keenObserver = { observer with Focus = 2 } // 22 + 30 = 52 / 50 = 1.04 -> Keen
     let keenAssess = TacticalAssessment.assess keenObserver hound
     Assert.Equal(TacticalInsightLevel.Keen, keenAssess.InsightLevel)
     Assert.True(keenAssess.ThreatWarning.IsSome)
