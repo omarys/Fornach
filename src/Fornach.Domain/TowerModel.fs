@@ -150,6 +150,17 @@ type AltarReward =
     | KeyReward (_, keyName) -> sprintf "Keystone: %s" keyName
     | RelicReward item -> sprintf "Relic: %s" item.Name
 
+  /// The reward as a given plane can actually receive it. A Fighter may only be granted physical
+  /// attributes and a Mage only mental ones, so a stat reward authored on the wrong side of the veil
+  /// lands on its counterpart (`Attributes.counterparts`) instead of on the bearer's weak flank.
+  /// Everything else is plane-neutral. Callers must describe and apply the resolved reward, so the
+  /// offer a player reads is the boon they are handed.
+  member this.ResolvedFor(plane: Plane) : AltarReward =
+    match this with
+    | StatBuff (stat, bonusPct) when (Attributes.descriptorOf stat).Plane <> plane ->
+      StatBuff(Attributes.counterparts stat, bonusPct)
+    | other -> other
+
 /// Ancient sacrificial altar offering dangerous risk/reward dilemmas
 type AltarChoice =
   { Id: string

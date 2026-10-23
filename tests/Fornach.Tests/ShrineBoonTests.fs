@@ -112,6 +112,57 @@ let ``a shrine visit touches no mental stat for a fighter carrying materials`` (
         Assert.True(after.Player.Stats.Get stat > state.Player.Stats.Get stat, sprintf "%A should rise" stat)
 
 [<Fact>]
+let ``every themed altar resolves onto the bearer's own plane`` () =
+  let themes =
+    [ FloorTheme.QuarryPlazas
+      FloorTheme.PineCloisters
+      FloorTheme.BasaltCalderas
+      FloorTheme.TempestTerraces
+      FloorTheme.SunkenBoulevards
+      FloorTheme.ElysianSanctuaries
+      FloorTheme.CelestialSpires ]
+
+  for theme in themes do
+    let altar = WorldEvents.createAltar theme 3
+
+    for cls in [ Fighter; Mage ] do
+      let plane = (Combatant.createWithClass (CombatantId.New()) "D" 500 500 (StatBlock.Baseline) cls 1).Plane
+
+      match altar.Reward.ResolvedFor plane with
+      | StatBuff (stat, _) -> Assert.Equal(plane, (Attributes.descriptorOf stat).Plane)
+      | _ -> () // surges, keys and relics are plane-neutral
+
+[<Fact>]
+let ``the resolve altar hands a fighter fortitude and a mage resolve`` () =
+  // PineCloisters is the authored +15% Resolve altar — the one that used to sharpen a Fighter's mind.
+  let altar = WorldEvents.createAltar FloorTheme.PineCloisters 3
+  Assert.Equal("+15% Fortitude", altar.Reward.ResolvedFor Physical |> fun r -> r.Description)
+  Assert.Equal("+15% Resolve", altar.Reward.ResolvedFor Mental |> fun r -> r.Description)
+
+  let player = playerOf Fighter
+  let state = TowerSession.initSession player 4242 3
+  let pt = state.PlayerPosition
+
+  let placed =
+    { state with
+        CurrentFloor =
+          { state.CurrentFloor with
+              Entities = state.CurrentFloor.Entities |> Map.add pt (EntityEncounter (FloorEncounter.SacrificialAltar altar)) } }
+
+  let after =
+    match TowerSession.applyAltarSacrifice pt placed with
+    | Ok s -> s
+    | Error e -> failwith e
+
+  for stat in allStats do
+    let before = state.Player.Stats.Get stat
+    let now = after.Player.Stats.Get stat
+
+    if mental.Contains stat then Assert.Equal(before, now)
+
+  Assert.True(after.Player.Stats.Get Fortitude > state.Player.Stats.Get Fortitude)
+
+[<Fact>]
 let ``a shrine grants its stat boon once and cannot be farmed`` () =
   for cls in [ Fighter; Mage ] do
     for boon in [ PrimaryBoon; SecondaryBoon ] do

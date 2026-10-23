@@ -1,6 +1,6 @@
 # Fornach Balance, Combat Mechanics & Class Progression Handoff
 
-## Status: 517 Tests Passing (291 `Fornach.Tests` + 203 `Fornach.Domain.Tests` + 23 `Fornach.Spatial.Tests`, 0 Warnings)
+## Status: 519 Tests Passing (293 `Fornach.Tests` + 203 `Fornach.Domain.Tests` + 23 `Fornach.Spatial.Tests`, 0 Warnings)
 
 This document provides a comprehensive handoff of the recent combat balance tuning, archetype progression overhauls, tactical preparation enhancements, swarm simulation refinements, and a solution-wide performance profile (see §4) completed in the `Fornach` codebase.
 
@@ -118,7 +118,8 @@ This document provides a comprehensive handoff of the recent combat balance tuni
 - Altar costs were flat integers (`SacrificeHealth 25`, `SacrificeMorale 30`, `ShredArmor 30` in [`WorldEvents.fs`](file:///home/omary/Dev/fornach/src/Fornach.Engine/WorldEvents.fs)). Against pools that scale into the thousands at high tier those became free, so an altar could never bite.
 - `applyAltarSacrifice` (`TowerSession.fs:823+`) now reads every cost through `percentOf <pool.Maximum> <pct>`: **health 25%, morale 25–30%, armor 30%**. Health cost is clamped to leave **at least 1 HP**, so an altar can never end a run.
 - Consequence to preserve: accepting a health-cost altar from full always lands strictly below the 80% rest cap, which is the point — the dip is now unavoidable rather than level-dependent.
-- **The reward side went the same way in the same commit.** `applyAltarSacrifice` (`TowerSession.fs:844+`) resolves it through a local `pctOf <current> <pct>`: `StatBuff (stat, pct)` raises the current value, `VitalitySurge (hpPct, morPct)` adds a share of the pool maximum (`ApplyDelta` clamps, so a surge accepted at full health is not banked), and `RelicReward` scales the item's `StatModifiers` against the bearer at the moment of the bargain — the stored relic keeps the resolved points, not the percentages.
+- **Altar rewards are resolved onto the bearer's plane.** `AltarReward.ResolvedFor(plane)` returns the reward a plane can actually receive: a `StatBuff` authored on the wrong side of the veil lands on its `Attributes.counterparts` partner (the PineCloisters altar's authored `+15% Resolve` becomes `+15% Fortitude` for a Fighter), and surges, keys and relics pass through untouched. Both the offer and the delivery are resolved — the approach log, both TUI altar panels and `applyAltarSacrifice` all describe/apply the *resolved* reward — so a player is never shown one boon and handed another. `ShrineBoonTests` sweeps all seven themed altars for both classes.
+- **The reward side went the same way in the same commit.**- **The reward side went the same way in the same commit.** `applyAltarSacrifice` (`TowerSession.fs:844+`) resolves it through a local `pctOf <current> <pct>`: `StatBuff (stat, pct)` raises the current value, `VitalitySurge (hpPct, morPct)` adds a share of the pool maximum (`ApplyDelta` clamps, so a surge accepted at full health is not banked), and `RelicReward` scales the item's `StatModifiers` against the bearer at the moment of the bargain — the stored relic keeps the resolved points, not the percentages.
 
 ### O. Shrines — Repeatable Consolidation Point, One-Time Stat Boon
 - A shrine is no longer consumed: the `when not shrine.IsUsed` guards are gone from the engine step branch and from both TUI sites, and `IsUsed` is never written. Stepping onto it re-triggers every time.

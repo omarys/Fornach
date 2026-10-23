@@ -245,7 +245,7 @@ module TowerDisplay =
               Some (sprintf "[%s]♨ Spent Sacrificial Altar: %s[/] [grey](Pact sealed — power exhausted)[/]" Theme.Comment a.Name)
             else
               Some (sprintf "[bold %s]♨ SACRIFICIAL ALTAR: %s[/] [grey]| Cost: [bold %s]%s[/] -> Reward: [bold %s]%s[/] (Walk into tile to commune)[/]"
-                Theme.Purple a.Name Theme.Red a.Cost.Description Theme.Green a.Reward.Description)
+                Theme.Purple a.Name Theme.Red a.Cost.Description Theme.Green (a.Reward.ResolvedFor state.Player.Plane).Description)
           | WanderingTrader m ->
             Some (sprintf "[bold %s]󱁠 SPECTRAL MERCHANT: %s (%s)[/] [grey]| %d wares available (Walk into tile to trade)[/]"
               Theme.Cyan m.Name m.Title m.Wares.Length)
@@ -1662,7 +1662,7 @@ module TowerDisplay =
               let choice =
                 Display.promptSelectionWithHelp
                   (sprintf "[bold %s]♨ %s[/]\n[italic %s]%s[/]\n[bold %s]Cost: %s[/]  ──>  [bold %s]Reward: %s[/]"
-                    Theme.Purple altar.Name Theme.Comment altar.Description Theme.Red altar.Cost.Description Theme.Green altar.Reward.Description)
+                    Theme.Purple altar.Name Theme.Comment altar.Description Theme.Red altar.Cost.Description Theme.Green (altar.Reward.ResolvedFor state.Player.Plane).Description)
                   [
                     "󰄬  Accept Sacrifice and Receive Boon"
                     "🏃  Step Back / Refuse Pact"

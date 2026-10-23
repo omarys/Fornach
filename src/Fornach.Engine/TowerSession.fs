@@ -671,7 +671,7 @@ module TowerSession =
         match enc with
         | SacrificialAltar altar when not altar.IsUsed ->
           events <- [ TowerEvent.AltarEncountered(altar, targetPt) ]
-          let logMsg = sprintf "Approached %s. [Cost: %s -> Reward: %s]" altar.Name altar.Cost.Description altar.Reward.Description
+          let logMsg = sprintf "Approached %s. [Cost: %s -> Reward: %s]" altar.Name altar.Cost.Description (altar.Reward.ResolvedFor state.Player.Plane).Description
           { nextState with MessageLog = logMsg :: nextState.MessageLog }, events
 
         | SacrificialAltar _ ->
@@ -940,7 +940,11 @@ module TowerSession =
       let mutable newKeys = state.CollectedKeys
       let mutable newItems = state.InventoryItems
 
-      match altar.Reward with
+      // What the altar hands over is resolved against the bearer's plane, so a Fighter is never
+      // granted a mental attribute and a Mage never a physical one.
+      let reward = altar.Reward.ResolvedFor state.Player.Plane
+
+      match reward with
       | StatBuff (stat, pct) ->
         let updatedStats = costPlayer.Stats.Modify(stat, StatBonus.percentOf (costPlayer.Stats.Get stat) pct)
         rewardedPlayer <- { costPlayer with Stats = updatedStats }
@@ -961,7 +965,7 @@ module TowerSession =
       let updatedAltar = { altar with IsUsed = true }
       let updatedEntities = Map.add altarPt (EntityEncounter (SacrificialAltar updatedAltar)) state.CurrentFloor.Entities
       let updatedFloor = { state.CurrentFloor with Entities = updatedEntities }
-      let logMsg = sprintf "Communed with %s: Paid [%s], Received [%s]!" altar.Name altar.Cost.Description altar.Reward.Description
+      let logMsg = sprintf "Communed with %s: Paid [%s], Received [%s]!" altar.Name altar.Cost.Description reward.Description
 
       Ok { state with
              Player = rewardedPlayer
