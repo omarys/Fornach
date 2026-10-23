@@ -507,6 +507,8 @@ let ``Shrine communion resets player combat strain meters to zero`` () =
     { Id = "sanctuary_test"
       Name = "Sanctuary of Clarity"
       BlessingDescription = "Purges all strain"
+      Boon = PrimaryBoon
+      IsBlessed = false
       IsUsed = false }
   let stateWithShrine =
     { state with

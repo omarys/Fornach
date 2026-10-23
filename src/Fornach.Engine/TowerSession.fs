@@ -165,10 +165,22 @@ module TowerSession =
             Player = Consumables.apply kind state.Player
             Consumables = Consumables.remove kind state.Consumables }
 
+  /// The pair a shrine sharpens for a given plane. Fighters may only ever receive physical blessings
+  /// and Mages only ever mental ones, so the pair follows the plane rather than the shrine's flavour.
+  let shrineBoonPair (plane: Plane) (boon: ShrineBoon) : StatId * StatId =
+    match plane, boon with
+    | Physical, PrimaryBoon -> Force, Fortitude
+    | Physical, SecondaryBoon -> Finesse, Reflex
+    | Mental, PrimaryBoon -> Intellect, Resolve
+    | Mental, SecondaryBoon -> Acuity, Intuition
+
+  /// Percentage each stat of the pair gains on a shrine's first commune.
+  let shrineBoonPct = 10
+
   /// A shrine's blessing, in order: the full repair, then every carried kind is revealed, then every
   /// carried rare material is worked into the player and spent. Repeat visits are harmless: the pack
   /// is already revealed and the materials are already gone. Returns the lines the caller chronicles.
-  let shrineBlessing (state: TowerRunState) : TowerRunState * string list =
+  let shrineBlessing (shrine: TowerShrine) (pt: Point) (state: TowerRunState) : TowerRunState * string list =
     let repaired =
       { state.Player with
           Health = Pool.Create state.Player.Health.Maximum
@@ -205,11 +217,30 @@ module TowerSession =
           | Some s -> sprintf "The shrine works %d %s into your gear (+%d%% %A each)." carried kind.Name Consumables.materialUpgrade s
           | None -> sprintf "The shrine spends %d %s." carried kind.Name ]
 
+    // The stat blessing is one-time, so a shrine cannot be farmed for attributes; the restorative
+    // half above repeats on every visit.
+    let boonLine, blessedPlayer =
+      if shrine.IsBlessed then
+        [], player
+      else
+        let first, second = shrineBoonPair player.Plane shrine.Boon
+
+        let sharpened =
+          [ first; second ]
+          |> List.fold (fun (c: Combatant) (stat: StatId) ->
+            { c with Stats = c.Stats.Modify(stat, StatBonus.percentOf (c.Stats.Get stat) shrineBoonPct) }) player
+
+        [ sprintf "The monolith sharpens %A and %A by %d%% each." first second shrineBoonPct ], sharpened
+
+    let blessedShrine = { shrine with IsBlessed = true }
+    let blessedEntities = Map.add pt (EntityShrine blessedShrine) state.CurrentFloor.Entities
+
     { state with
-        Player = player
+        Player = blessedPlayer
+        CurrentFloor = { state.CurrentFloor with Entities = blessedEntities }
         Consumables = bag
         UnidentifiedConsumables = Set.empty },
-    summary
+    summary @ boonLine
 
   /// Foes scale to the player the moment they engage, so a guardian authored for tower floor 6
   /// (level 185) is not fielded against a level 36 player. The authored state is untouched;
@@ -626,7 +657,7 @@ module TowerSession =
       // A shrine is never consumed: the tile stays on the map and blesses every visit, reveal and
       // rare-material work included.
       | Some (EntityShrine shrine) ->
-        let blessedState, blessingSummary = shrineBlessing nextState
+        let blessedState, blessingSummary = shrineBlessing shrine targetPt nextState
         let logMsg = sprintf "Communed with %s: %s" shrine.Name shrine.BlessingDescription
 
         events <- [ TowerEvent.ShrineActivated shrine ]

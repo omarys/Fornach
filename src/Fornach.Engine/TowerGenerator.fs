@@ -525,13 +525,13 @@ module TowerGenerator =
             }
           HasGivenReward = false }
       entities <- Map.add lyraPos (EntityNpc lyra) entities
-    // Two shrines per stage, a third on deeper floors, so the ascent can be sustained.
+    // Two shrines per stage, one per class-appropriate stat pair, so a run can sharpen both halves of
+    // its plane. Shrines never sit in the altar rooms (plaza indices 1 and 4 in `WorldEvents`).
     let shrineSites =
-      [ 2, sprintf "shrine_floor_%d" floorNumber
-        5, sprintf "shrine_floor_%d_prime" floorNumber ]
-      @ (if plazas.Length > 8 then [ 8, sprintf "shrine_floor_%d_terce" floorNumber ] else [])
+      [ 2, PrimaryBoon, sprintf "shrine_floor_%d" floorNumber
+        5, SecondaryBoon, sprintf "shrine_floor_%d_prime" floorNumber ]
 
-    for shrineIndex, shrineId in shrineSites do
+    for shrineIndex, boon, shrineId in shrineSites do
       let shrinePlaza = plazaAt shrineIndex
       let shrinePos = { X = shrinePlaza.Center.X - 2; Y = shrinePlaza.Center.Y }
 
@@ -542,6 +542,8 @@ module TowerGenerator =
           { Id = shrineId
             Name = sprintf "Monolith of %s" theme.Name
             BlessingDescription = "Fully restores Health and Morale, repairs damaged Armor, restores Weapon to Pristine, and calms accumulated Recklessness."
+            Boon = boon
+            IsBlessed = false
             IsUsed = false }
 
         entities <- Map.add shrinePos (EntityShrine shrine) entities

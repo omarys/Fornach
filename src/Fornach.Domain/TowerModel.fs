@@ -99,11 +99,26 @@ type TowerChest =
     ItemReward: EquipmentItem option
     IsOpen: bool }
 
+/// Which of the two class-appropriate stat pairs a shrine sharpens. Floors are laid out without
+/// knowing the protagonist, so the slot is stored and resolved against their plane when communing:
+/// a Fighter only ever receives physical blessings, a Mage only ever mental ones.
+type ShrineBoon =
+  | PrimaryBoon
+  | SecondaryBoon
+
+  member this.Description =
+    match this with
+    | PrimaryBoon -> "first"
+    | SecondaryBoon -> "second"
+
 /// Ancient shrines providing blessings or relief
 type TowerShrine =
   { Id: string
     Name: string
     BlessingDescription: string
+    Boon: ShrineBoon
+    /// The stat blessing is one-time; the restorative blessing repeats on every visit.
+    IsBlessed: bool
     IsUsed: bool }
 
 /// Cost required to receive an altar's blessing. The amount is a PERCENTAGE of the player's

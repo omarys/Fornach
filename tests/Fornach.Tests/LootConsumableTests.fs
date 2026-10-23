@@ -331,7 +331,19 @@ let ``an unidentified consumable cannot be used until a shrine reveals it`` () =
   | Ok _ -> Assert.Fail "An unidentified consumable must not be usable."
   | Error msg -> Assert.Contains("unidentified", msg)
 
-  let revealed, summary = TowerSession.shrineBlessing start
+  let shrine =
+    { Id = "sanctuary_reveal_test"
+      Name = "Sanctuary of Clarity"
+      BlessingDescription = "Reveals carried kinds"
+      Boon = PrimaryBoon
+      IsBlessed = false
+      IsUsed = false }
+
+  let shrinePos =
+    { X = start.PlayerPosition.X + 1
+      Y = start.PlayerPosition.Y }
+
+  let revealed, summary = TowerSession.shrineBlessing shrine shrinePos start
 
   Assert.True(revealed.UnidentifiedConsumables.IsEmpty)
   Assert.Contains(summary, fun line -> line.Contains "reveals")
@@ -357,6 +369,8 @@ let ``a shrine blesses on every visit and never re-applies a material or a revea
       Id = "sanctuary_loot_test"
       Name = "Sanctuary of the Assemblage"
       BlessingDescription = "Restores all vitals and works carried materials"
+      Boon = PrimaryBoon
+      IsBlessed = false
       IsUsed = false
     }
 
@@ -394,9 +408,13 @@ let ``a shrine blesses on every visit and never re-applies a material or a revea
   Assert.Contains(firstEvents, isShrineEvent)
   Assert.Equal(200, first.Player.Health.Current)
   Assert.Equal(200, first.Player.Morale.Current)
+
   let blessedForce =
     [ 1 .. 2 ]
     |> List.fold (fun (f: int) _ -> f + StatBonus.percentOf f Consumables.materialUpgrade) forceBefore
+
+  // The monolith also sharpens the fighter's primary pair by `shrineBoonPct` on the first commune.
+  let blessedForce = blessedForce + StatBonus.percentOf blessedForce TowerSession.shrineBoonPct
 
   Assert.Equal(blessedForce, first.Player.Stats.Get StatId.Force)
   Assert.Equal<(ConsumableKind * int) list>([ ConsumableKind.Ration, 1 ], first.Consumables)
