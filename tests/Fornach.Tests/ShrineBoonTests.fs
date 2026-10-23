@@ -91,6 +91,27 @@ let ``the pair a shrine sharpens matches the slot`` () =
   Assert.Equal<Set<StatId>>(set [ Acuity; Intuition ], risen Mage SecondaryBoon)
 
 [<Fact>]
+let ``a shrine visit touches no mental stat for a fighter carrying materials`` () =
+  // The boon respects the plane, but the material step used to hand a Fighter Intellect from its own
+  // MentalMaterial. Both halves are exercised here on the real step path.
+  for boon in [ PrimaryBoon; SecondaryBoon ] do
+    let player = playerOf Fighter
+    let shrine = shrineOf boon false
+
+    let state =
+      { TowerSession.initSession player 4242 3 with
+          Consumables = [ MentalMaterial, 3; WeaponMaterial, 2 ]
+          UnidentifiedConsumables = Set.empty }
+
+    let after, _ = TowerSession.shrineBlessing shrine state.PlayerPosition state
+
+    for stat in allStats do
+      if mental.Contains stat then
+        Assert.Equal(state.Player.Stats.Get stat, after.Player.Stats.Get stat)
+      elif stat = Force || stat = Fortitude then
+        Assert.True(after.Player.Stats.Get stat > state.Player.Stats.Get stat, sprintf "%A should rise" stat)
+
+[<Fact>]
 let ``a shrine grants its stat boon once and cannot be farmed`` () =
   for cls in [ Fighter; Mage ] do
     for boon in [ PrimaryBoon; SecondaryBoon ] do

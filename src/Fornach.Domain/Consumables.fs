@@ -66,8 +66,9 @@ module Consumables =
     |> List.tryPick (fun ((kind, _), ceiling) -> if bound < ceiling then Some kind else None)
 
   /// The stat a rare material sharpens, per class: the weapon material takes the class's offensive
-  /// stat, the mental material takes Intellect, which every mental strike resolves from. None for the
-  /// kinds that are not materials.
+  /// stat; the mental material takes a stat on the bearer's own plane, so a physical class is never
+  /// sharpened on a mental attribute (Fortitude is Resolve's counterpart — see `Attributes.counterparts`).
+  /// None for the kinds that are not materials.
   let materialStat (kind: ConsumableKind) (cls: CharacterClass) : StatId option =
     match kind with
     | WeaponMaterial ->
@@ -79,7 +80,12 @@ module Consumables =
         | Soldier -> StatId.Prowess
         | Mage -> StatId.Intellect
       )
-    | MentalMaterial -> Some StatId.Intellect
+    | MentalMaterial ->
+      Some(
+        match cls.Plane with
+        | Mental -> StatId.Intellect
+        | Physical -> StatId.Fortitude
+      )
     | ArmorRepairKit
     | GrindingStone
     | Ration

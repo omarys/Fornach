@@ -266,6 +266,7 @@ let ``materials apply permanently and the bag decrements on each use`` () =
 
   let forceBefore = start.Player.Stats.Get StatId.Force
   let intellectBefore = start.Player.Stats.Get StatId.Intellect
+  let fortitudeBefore = start.Player.Stats.Get StatId.Fortitude
 
   Assert.Equal(
     StatId.Force,
@@ -273,9 +274,17 @@ let ``materials apply permanently and the bag decrements on each use`` () =
     |> Option.get
   )
 
+  // A mental material must never land on a mental stat for a physical class: Fortitude is the
+  // counterpart of Resolve, and Intellect is left alone.
+  Assert.Equal(
+    StatId.Fortitude,
+    Consumables.materialStat ConsumableKind.MentalMaterial CharacterClass.Fighter
+    |> Option.get
+  )
+
   Assert.Equal(
     StatId.Intellect,
-    Consumables.materialStat ConsumableKind.MentalMaterial CharacterClass.Fighter
+    Consumables.materialStat ConsumableKind.MentalMaterial CharacterClass.Mage
     |> Option.get
   )
 
@@ -308,7 +317,8 @@ let ``materials apply permanently and the bag decrements on each use`` () =
     | Ok s -> s
     | Error e -> failwith e
 
-  Assert.Equal(intellectBefore + Consumables.materialUpgrade, mental.Player.Stats.Get StatId.Intellect)
+  Assert.Equal(fortitudeBefore + materialGain fortitudeBefore, mental.Player.Stats.Get StatId.Fortitude)
+  Assert.Equal(intellectBefore, mental.Player.Stats.Get StatId.Intellect)
   Assert.True(mental.Consumables.IsEmpty)
 
   // Refused once the row is gone, and nothing is applied.
