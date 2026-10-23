@@ -554,6 +554,14 @@ module Display =
       "Prepare for tactical shift.",
       "Preparation"
 
+  /// Plain-text name of an intent for the combat log, e.g. "Force Strike: Standard Cleave (Power)".
+  /// Reuses the telegraph so the log and the telegraph can never name an action differently; only the
+  /// Spectre markup is removed, since log lines are escaped before display.
+  let intentLogLabel (intent: ActionIntent) (actor: Combatant) : string =
+    let title, _, _, vector = formatTelegraphedIntent intent actor
+    let plain = Text.RegularExpressions.Regex.Replace(title, @"\[[^\]]*\]", "").Trim()
+    sprintf "%s (%s)" plain vector
+
   let renderHUDWithTelegraph (player: Combatant) (enemy: Combatant) (roundNumber: int) (enemyIntentOpt: ActionIntent option) =
     let pnlPlayer = createCombatantPanel player Theme.ColorGreen Theme.Green None
     let pnlEnemy = createCombatantPanel enemy Theme.ColorPink Theme.Pink (Some player)

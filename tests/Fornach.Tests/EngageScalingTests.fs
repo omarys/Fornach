@@ -17,7 +17,7 @@ let ``a guardian authored far above the player is clamped to the engage allowanc
   let clamped = TierFactory.clampEngagedToPlayerLevel raw player
 
   Assert.Equal(185, raw.Level)
-  Assert.Equal(38, clamped.Level) // player level + 2
+  Assert.Equal(46, clamped.Level) // player level + 10
   Assert.Equal(raw.Name, clamped.Name) // identity survives the rescale
 
 [<Fact>]
@@ -73,3 +73,29 @@ let ``striking shifts the actor into its vector stance so the bonus lands automa
   // Finesse strikes are contested on Reflex/Intuition; without the shift the actor would eat
   // the off-vector penalty instead of gaining the in-vector bonus.
   Assert.Equal(CombatStance.AgilityStance, result.Actor.Stance)
+
+[<Fact>]
+let ``floor entry places mobs within five levels of the player and the boss ten above`` () =
+  let player = playerAt 20
+  let floor = TowerSession.rescaleFloorEnemies player (TowerGenerator.generateFloorWithMode 7 5 true)
+
+  let enemies =
+    floor.Entities
+    |> Map.toList
+    |> List.choose (fun (_, ent) ->
+      match ent with
+      | TowerEntity.EntityEnemy e -> Some e
+      | _ -> None)
+
+  Assert.NotEmpty(enemies)
+  let mobs = enemies |> List.filter (fun e -> not e.IsBoss)
+  let bosses = enemies |> List.filter (fun e -> e.IsBoss)
+  Assert.NotEmpty(mobs)
+
+  for mob in mobs do
+    Assert.InRange(mob.Combatant.Level, 20, 25)
+
+  // Floor 5 carries the stage guardian, which is the boss of the floor.
+  Assert.NotEmpty(bosses)
+  for boss in bosses do
+    Assert.Equal(30, boss.Combatant.Level)

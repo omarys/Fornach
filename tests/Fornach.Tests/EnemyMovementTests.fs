@@ -335,7 +335,10 @@ let ``reinforceFromPursuit does not report an enemy already in the fight`` () =
 [<Fact>]
 let ``reinforceFromPursuit returns the joiner clamped to the player's level`` () =
   let playerPos = { X = 3; Y = 8 }
-  let enemy = makeEnemy "mob_0" "Scavenger"
+  // Authored far above the engage ceiling, so the joiner has to be clamped down to it.
+  let enemy =
+    { makeEnemy "mob_0" "Scavenger" with
+        Combatant = TierFactory.createClassLevel CharacterClass.Warrior 200 }
   let state = makeState playerPos (openTiles 16 16) (Map.ofList [ { X = 5; Y = 8 }, EntityEnemy enemy ])
 
   let _, joined = TowerSession.reinforceFromPursuit state []

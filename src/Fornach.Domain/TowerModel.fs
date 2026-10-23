@@ -87,6 +87,9 @@ type TowerEnemy =
     /// Fraction of a pursuit step banked from earlier turns. Carries the Finesse-gap pace across
     /// turns so a slower pursuer closes over several turns; see TowerSession.paceOf.
     ChaseCharge: float }
+  /// The floor's boss: the story boss and the stage keystone guardian. Everything else is a mob.
+  member this.IsBoss : bool =
+    this.Id.StartsWith("boss_") || this.Id.StartsWith("enemy_guardian_")
 
 /// Loot caches and treasure chests
 type TowerChest =

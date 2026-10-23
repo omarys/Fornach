@@ -446,9 +446,40 @@ module TowerSession =
            | None -> sprintf "Quest complete: %s — the Ascension Portal is unlocked." questTitle)
           :: state.MessageLog }
 
+  /// Enemy levels track the protagonist. A floor's mobs land at the player's level up to five above,
+  /// and its boss ten above, measured once at floor entry: the authored bestiary levels follow the
+  /// biome, not the run, so without this a thorough player walked into floors they had outgrown and a
+  /// hurried one into floors that outclassed them. The spread is derived from the enemy id, so the
+  /// same floor always fields the same mix.
+  /// Public because the minimap rewind (TowerDisplay) re-seats pristine mobs and must land them on
+  /// the same levels.
+  let rescaleFloorEnemies (player: Combatant) (floor: TowerFloor) : TowerFloor =
+    let targetLevel (e: TowerEnemy) =
+      if e.IsBoss then player.Level + 10
+      else
+        let salt = e.Id |> Seq.sumBy int
+        player.Level + (salt % 6)
+
+    let rescaled (e: TowerEnemy) =
+      if e.IsDefeated then e
+      else
+        let level = max 1 (targetLevel e)
+        { e with
+            Combatant =
+              { TierFactory.scaleCombatantToLevel level e.Combatant with
+                  Name = sprintf "Lv.%d %s" level e.Name } }
+
+    { floor with
+        Entities =
+          floor.Entities
+          |> Map.map (fun _ ent ->
+            match ent with
+            | EntityEnemy e -> EntityEnemy(rescaled e)
+            | other -> other) }
+
   /// Initializes a new Tower run session starting at a given floor with specified story mode
   let initSessionWithMode (player: Combatant) (seed: int) (startFloor: int) (isStory: bool) : TowerRunState =
-    let floor = TowerGenerator.generateFloorWithMode seed startFloor isStory
+    let floor = TowerGenerator.generateFloorWithMode seed startFloor isStory |> rescaleFloorEnemies player
     let initial =
       { Player = player
         CurrentFloor = floor
@@ -477,7 +508,9 @@ module TowerSession =
   /// Advances to the next floor via the Stairway Door
   let ascendFloor (state: TowerRunState) : TowerRunState =
     let nextFloorNum = state.CurrentFloor.FloorNumber + 1
-    let nextFloor = TowerGenerator.generateFloorWithMode state.Seed nextFloorNum state.IsStoryMode
+    let nextFloor =
+      TowerGenerator.generateFloorWithMode state.Seed nextFloorNum state.IsStoryMode
+      |> rescaleFloorEnemies state.Player
     let nextState =
       { state with
           Player = { state.Player with Meters = StatusMeters.Zero }

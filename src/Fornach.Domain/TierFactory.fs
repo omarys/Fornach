@@ -279,24 +279,18 @@ module TierFactory =
               PrimaryStat = primaryStat } }
 
   /// How far above the player a fight is still allowed to be, expressed in levels.
-  let private engageLevelAllowance = 2
+  let private engageLevelAllowance = 10
 
-  /// Clamps an enemy to a level the player's current build can plausibly contest.
-  /// Bestiary levels are floor-themed rather than progression-aware, so tower floors 6 and 7
-  /// fielded a level 185/190 guardian against a player near level 36, whose contested defense
-  /// sat far above the player's best attack stat. Scaling here, at engage time, keeps the
-  /// authored roster and floor generation untouched.
-  /// Only ever scales down: an enemy at or below the allowance is returned unchanged.
-  let clampEngagedToPlayerLevel (enemy: Combatant) (player: Combatant) : Combatant =
-    let ceiling = player.Level + engageLevelAllowance
-    if enemy.Level <= ceiling then enemy
+  /// Uniformly rescales a combatant to a target level. The authored block keeps its shape (a
+  /// Finesse-primary foe stays Finesse-primary) while its magnitude follows the level ratio.
+  /// ProgressionScale.rescaleToLevel is deliberately additive because it preserves hand-authored and
+  /// gear-modified base stats, which for a monster authored 150 levels up would leave Reflex at three
+  /// times the player's offense (and drive armor negative) -- precisely the problem this removes.
+  let scaleCombatantToLevel (targetLevel: int) (enemy: Combatant) : Combatant =
+    let targetLevel = Math.Max(1, targetLevel)
+    if targetLevel = enemy.Level then enemy
     else
-      // Uniform rescale. The authored block keeps its shape (a Finesse-primary foe stays
-      // Finesse-primary) while its magnitude follows the level ratio. ProgressionScale.rescaleToLevel
-      // is deliberately additive because it preserves hand-authored and gear-modified base stats,
-      // which for a monster authored 150 levels up would leave Reflex at three times the player's
-      // offense (and drive armor negative) -- precisely the problem this exists to remove.
-      let factor = float ceiling / float enemy.Level
+      let factor = float targetLevel / float (max 1 enemy.Level)
       let scale (v: int) = max 1 (int (Math.Round(float v * factor)))
 
       let scaledStats =
@@ -316,10 +310,10 @@ module TierFactory =
 
       let primaryStat =
         if enemy.Plane = Physical then
-          let prim, _, _, _, _, _ = ProgressionScale.physicalStatsForLevel ceiling
+          let prim, _, _, _, _, _ = ProgressionScale.physicalStatsForLevel targetLevel
           prim
         else
-          let prim, _, _, _, _ = ProgressionScale.magicStatsForLevel ceiling
+          let prim, _, _, _, _ = ProgressionScale.magicStatsForLevel targetLevel
           prim
 
       { enemy with
@@ -331,5 +325,16 @@ module TierFactory =
               Max = armorMax }
           Progression =
             { enemy.Progression with
-                Level = ceiling
+                Level = targetLevel
                 PrimaryStat = primaryStat } }
+
+  /// Clamps an enemy to a level the player's current build can plausibly contest.
+  /// Bestiary levels are floor-themed rather than progression-aware, so mid-floor spawns can field a
+  /// level 185/190 foe against a player near level 36, whose contested defense sat far above the
+  /// player's best attack stat. Floor-entry scaling (`TowerSession`) keeps authored levels in range;
+  /// this is the backstop for everything summoned after the floor is laid out.
+  /// Only ever scales down: an enemy at or below the allowance is returned unchanged.
+  let clampEngagedToPlayerLevel (enemy: Combatant) (player: Combatant) : Combatant =
+    let ceiling = player.Level + engageLevelAllowance
+    if enemy.Level <= ceiling then enemy
+    else scaleCombatantToLevel ceiling enemy

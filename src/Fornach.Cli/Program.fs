@@ -204,6 +204,23 @@ module Program =
           powTag, agiTag, disTag, interruptBadge, rShieldTag
         | _ -> "", "", "", "", ""
 
+      /// A defence readout for one attack: the player's attacking stat minus the defender's value, so a
+      /// positive number is a favourable contest. Both sides read stance-adjusted stats because that is
+      /// what the resolver contests -- the raw stat understated the defender by their stance multiplier.
+      let contestSuffix (attackStat: StatId) (defenseStat: StatId) : string =
+        match assess.InsightLevel with
+        | Obscured -> ""
+        | Discerning ->
+          if fst assess.WeakestDefense = defenseStat then sprintf " - [bold %s]Opening[/]" Theme.Green
+          elif fst assess.BestDefense = defenseStat then sprintf " - [bold %s]Apex Guard[/]" Theme.Red
+          else ""
+        | _ ->
+          let delta = player.GetCombatStat attackStat - enemy.GetCombatStat defenseStat
+          let deltaText = if delta >= 0 then sprintf "+%d" delta else string delta
+          if fst assess.WeakestDefense = defenseStat then sprintf " - [bold %s]%s ★ Opening[/]" Theme.Green deltaText
+          elif fst assess.BestDefense = defenseStat then sprintf " - [bold %s]%s ⚠ Apex Guard[/]" Theme.Red deltaText
+          else sprintf " - [%s]%s[/]" Theme.Comment deltaText
+
       // Orders attack groups by estimated effectiveness against what the player has scouted.
       // Obscured insight means nothing is known, so the archetype's own priority order stands.
       let rankStrikes (groups: (AttackClassification * string list) list) : string list =
@@ -216,44 +233,11 @@ module Program =
           |> List.collect snd
 
       if player.Plane = Physical then
-        let fortSuffix =
-          match assess.InsightLevel with
-          | Penetrating | Keen ->
-            let fortVal = enemy.GetStat StatId.Fortitude
-            if fst assess.WeakestDefense = StatId.Fortitude then sprintf " - [bold %s]%d ★ Opening[/]" Theme.Green fortVal
-            elif fst assess.BestDefense = StatId.Fortitude then sprintf " - [bold %s]%d ⚠ Apex Guard[/]" Theme.Red fortVal
-            else sprintf " - [%s]%d[/]" Theme.Comment fortVal
-          | Discerning ->
-            if fst assess.WeakestDefense = StatId.Fortitude then sprintf " - [bold %s]Opening[/]" Theme.Green
-            elif fst assess.BestDefense = StatId.Fortitude then sprintf " - [bold %s]Apex Guard[/]" Theme.Red
-            else ""
-          | Obscured -> ""
+        let fortSuffix = contestSuffix StatId.Force StatId.Fortitude
 
-        let refSuffix =
-          match assess.InsightLevel with
-          | Penetrating | Keen ->
-            let refVal = enemy.GetStat StatId.Reflex
-            if fst assess.WeakestDefense = StatId.Reflex then sprintf " - [bold %s]%d ★ Opening[/]" Theme.Green refVal
-            elif fst assess.BestDefense = StatId.Reflex then sprintf " - [bold %s]%d ⚠ Apex Guard[/]" Theme.Red refVal
-            else sprintf " - [%s]%d[/]" Theme.Comment refVal
-          | Discerning ->
-            if fst assess.WeakestDefense = StatId.Reflex then sprintf " - [bold %s]Opening[/]" Theme.Green
-            elif fst assess.BestDefense = StatId.Reflex then sprintf " - [bold %s]Apex Guard[/]" Theme.Red
-            else ""
-          | Obscured -> ""
+        let refSuffix = contestSuffix StatId.Finesse StatId.Reflex
 
-        let poiseSuffix =
-          match assess.InsightLevel with
-          | Penetrating | Keen ->
-            let poiseVal = enemy.GetStat StatId.Poise
-            if fst assess.WeakestDefense = StatId.Poise then sprintf " - [bold %s]%d ★ Opening[/]" Theme.Green poiseVal
-            elif fst assess.BestDefense = StatId.Poise then sprintf " - [bold %s]%d ⚠ Apex Guard[/]" Theme.Red poiseVal
-            else sprintf " - [%s]%d[/]" Theme.Comment poiseVal
-          | Discerning ->
-            if fst assess.WeakestDefense = StatId.Poise then sprintf " - [bold %s]Opening[/]" Theme.Green
-            elif fst assess.BestDefense = StatId.Poise then sprintf " - [bold %s]Apex Guard[/]" Theme.Red
-            else ""
-          | Obscured -> ""
+        let poiseSuffix = contestSuffix StatId.Prowess StatId.Poise
 
         // Physical Martial Strikes grouped by vector (attacks fluidly transition combat stance)
         let powerStrikes = [
@@ -318,44 +302,11 @@ module Program =
           if prof < 85 then sprintf " [%s](%d%% Prof - Off-School Strain)[/]" Theme.Comment prof
           else sprintf " [bold %s](%d%% Prof - Specialization)[/]" Theme.Green prof
 
-        let resolveSuffix =
-          match assess.InsightLevel with
-          | Penetrating | Keen ->
-            let resVal = enemy.GetStat StatId.Resolve
-            if fst assess.WeakestDefense = StatId.Resolve then sprintf " - [bold %s]%d ★ Opening[/]" Theme.Green resVal
-            elif fst assess.BestDefense = StatId.Resolve then sprintf " - [bold %s]%d ⚠ Apex Guard[/]" Theme.Red resVal
-            else sprintf " - [%s]%d[/]" Theme.Comment resVal
-          | Discerning ->
-            if fst assess.WeakestDefense = StatId.Resolve then sprintf " - [bold %s]Opening[/]" Theme.Green
-            elif fst assess.BestDefense = StatId.Resolve then sprintf " - [bold %s]Apex Guard[/]" Theme.Red
-            else ""
-          | Obscured -> ""
+        let resolveSuffix = contestSuffix StatId.Intellect StatId.Resolve
 
-        let intuitionSuffix =
-          match assess.InsightLevel with
-          | Penetrating | Keen ->
-            let intVal = enemy.GetStat StatId.Intuition
-            if fst assess.WeakestDefense = StatId.Intuition then sprintf " - [bold %s]%d ★ Opening[/]" Theme.Green intVal
-            elif fst assess.BestDefense = StatId.Intuition then sprintf " - [bold %s]%d ⚠ Apex Guard[/]" Theme.Red intVal
-            else sprintf " - [%s]%d[/]" Theme.Comment intVal
-          | Discerning ->
-            if fst assess.WeakestDefense = StatId.Intuition then sprintf " - [bold %s]Opening[/]" Theme.Green
-            elif fst assess.BestDefense = StatId.Intuition then sprintf " - [bold %s]Apex Guard[/]" Theme.Red
-            else ""
-          | Obscured -> ""
+        let intuitionSuffix = contestSuffix StatId.Acuity StatId.Intuition
 
-        let composureSuffix =
-          match assess.InsightLevel with
-          | Penetrating | Keen ->
-            let compVal = enemy.GetStat StatId.Composure
-            if fst assess.WeakestDefense = StatId.Composure then sprintf " - [bold %s]%d ★ Opening[/]" Theme.Green compVal
-            elif fst assess.BestDefense = StatId.Composure then sprintf " - [bold %s]%d ⚠ Apex Guard[/]" Theme.Red compVal
-            else sprintf " - [%s]%d[/]" Theme.Comment compVal
-          | Discerning ->
-            if fst assess.WeakestDefense = StatId.Composure then sprintf " - [bold %s]Opening[/]" Theme.Green
-            elif fst assess.BestDefense = StatId.Composure then sprintf " - [bold %s]Apex Guard[/]" Theme.Red
-            else ""
-          | Obscured -> ""
+        let composureSuffix = contestSuffix StatId.Acumen StatId.Composure
 
         let powerSpells = [
           sprintf "✨ [%s]Arcane Cataclysm: Elemental Blast[/] (Resonance Spike Form • Intellect vs. Resolve%s)%s%s" Theme.Pink resolveSuffix (strainTag powProf) powerCounterTag
@@ -490,7 +441,7 @@ module Program =
         enemy <- enemyResult.Actor
         player <- enemyResult.Target
 
-        let intentDesc = if enemyInterrupted then "Staggered Recovery (Interrupted)" else sprintf "%A" enemyIntent
+        let intentDesc = if enemyInterrupted then "Staggered Recovery (Interrupted)" else Display.intentLogLabel enemyIntent enemyBeforeTurn
         CombatLogger.recordTurn session round 2 intentDesc enemyBeforeTurn playerBeforeTurn enemyResult
 
         Display.renderRollBreakdown intentDesc enemy.Name enemyResult.Contest
@@ -815,7 +766,7 @@ module Program =
         currentBoss <- enemyResult.Actor
         currentCombatant <- enemyResult.Target
 
-        let intentDesc = if enemyInterrupted then "Staggered Recovery (Interrupted)" else sprintf "%A" enemyIntent
+        let intentDesc = if enemyInterrupted then "Staggered Recovery (Interrupted)" else Display.intentLogLabel enemyIntent bossBeforeTurn
         CombatLogger.recordTurn session round 2 intentDesc bossBeforeTurn playerBeforeTurn enemyResult
         RuntimeLog.write (
           sprintf "combat round %d enemy turn: %s (%d events)" round intentDesc enemyResult.Events.Length)
@@ -1066,7 +1017,7 @@ module Program =
               ActionResolver.resolveEx roller intent e.Combatant currentPlayer priorDefenses
           CombatLogger.recordTurn session round turnNum (sprintf "%A" intent) e.Combatant playerBeforeTurn r
           turnNum <- turnNum + 1
-          appendTurn (sprintf "Round %d — %s strikes %s (parting blow)" round e.Name currentPlayer.Name) r.Events
+          appendTurn (sprintf "Round %d — %s strikes %s (parting blow) — %s" round e.Name currentPlayer.Name (Display.intentLogLabel intent e.Combatant)) r.Events
           currentPlayer <- r.Target
           currentEnemies <- currentEnemies |> List.map (fun en -> if en.Id = e.Id then { en with Combatant = r.Actor } else en)
           priorDefenses <- priorDefenses + 1
@@ -1119,20 +1070,21 @@ module Program =
           for e in living () |> List.truncate 8 do
             if not combatOver then
               let playerBeforeTurn = currentPlayer
+              // Resolved once so the log line below can name the technique the foe actually used.
+              let intent =
+                if e.Combatant.Id = target.Combatant.Id && isTargetInterrupted then RecoveryAction SteadyForm
+                else AI.chooseIntent e.Combatant currentPlayer
               let r =
                 if e.Combatant.Id = target.Combatant.Id && isTargetInterrupted then
                   AnsiConsole.MarkupLine(sprintf "\n[bold %s]⚡ %s is staggered from the technique interrupt! Attack defused![/]" Theme.Yellow e.Name)
-                  let recoverIntent = RecoveryAction SteadyForm
-                  ActionResolver.resolve roller recoverIntent e.Combatant currentPlayer
+                  ActionResolver.resolve roller intent e.Combatant currentPlayer
                 elif floorNumber = 1 then
-                  let intent = AI.chooseIntent e.Combatant currentPlayer
                   ActionResolver.resolveWithoutLethal roller intent e.Combatant currentPlayer
                 else
-                  let intent = AI.chooseIntent e.Combatant currentPlayer
                   ActionResolver.resolveEx roller intent e.Combatant currentPlayer priorDefenses
               CombatLogger.recordTurn session round turnNum (sprintf "%A" intent) e.Combatant playerBeforeTurn r
               turnNum <- turnNum + 1
-              appendTurn (sprintf "Round %d — %s strikes %s" round e.Name currentPlayer.Name) r.Events
+              appendTurn (sprintf "Round %d — %s strikes %s — %s" round e.Name currentPlayer.Name (Display.intentLogLabel intent e.Combatant)) r.Events
               currentPlayer <- r.Target
               currentEnemies <- currentEnemies |> List.map (fun en -> if en.Id = e.Id then { en with Combatant = r.Actor } else en)
               priorDefenses <- priorDefenses + 1

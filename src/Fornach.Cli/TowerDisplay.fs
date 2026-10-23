@@ -372,7 +372,10 @@ module TowerDisplay =
             if pt = state.PlayerPosition then "@"
             elif Set.contains pt state.CurrentFloor.Visible then
               match Map.tryFind pt state.CurrentFloor.Entities with
-              | Some (EntityEnemy e) -> if e.IsDefeated then "%" else "!"
+              | Some (EntityEnemy e) ->
+                if e.IsDefeated then "%"
+                elif e.IsBoss then "☠"
+                else "!"
               | Some (EntityNpc _) -> "?"
               | Some (EntityChest _) -> "⌹"
               | Some (EntityShrine _) -> "†"
@@ -425,6 +428,9 @@ module TowerDisplay =
           | Some (EntityEnemy e) ->
             if e.IsDefeated then
               sb.Append(sprintf "[%s]%%[/]" Theme.Comment) |> ignore
+            elif e.IsBoss then
+              // Bosses read differently from mobs on the minimap: skull, magenta, always bold.
+              sb.Append(sprintf "[bold %s]☠[/]" Theme.Purple) |> ignore
             else
               sb.Append(sprintf "[bold %s]![/]" Theme.Red) |> ignore
           | Some (EntityNpc _) ->
@@ -690,7 +696,9 @@ module TowerDisplay =
           MirrorClones = 0
           ComboTracker = ConsecutiveComboTracker.Zero
           Collapse = CollapseState.Stable }
-    let pristine = TowerGenerator.generateFloorWithMode state.Seed state.CurrentFloor.FloorNumber state.IsStoryMode
+    let pristine =
+      TowerGenerator.generateFloorWithMode state.Seed state.CurrentFloor.FloorNumber state.IsStoryMode
+      |> TowerSession.rescaleFloorEnemies state.Player
     let pristineMobs =
       pristine.Entities
       |> Map.toList
