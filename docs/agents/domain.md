@@ -1,6 +1,6 @@
 # Fornach Balance, Combat Mechanics & Class Progression Handoff
 
-## Status: 519 Tests Passing (294 `Fornach.Tests` + 202 `Fornach.Domain.Tests` + 23 `Fornach.Spatial.Tests`, 0 Warnings)
+## Status: 520 Tests Passing (294 `Fornach.Tests` + 203 `Fornach.Domain.Tests` + 23 `Fornach.Spatial.Tests`, 0 Warnings)
 
 This document provides a comprehensive handoff of the recent combat balance tuning, archetype progression overhauls, tactical preparation enhancements, swarm simulation refinements, and a solution-wide performance profile (see §4) completed in the `Fornach` codebase.
 
@@ -213,9 +213,9 @@ This document provides a comprehensive handoff of the recent combat balance tuni
 - **Cashing out is per-vector and total.** A special cashes only its own meter, empties it, and multiplies damage by `1 + 0.5 × stacks` — five stacks is **3.5×**. That replaces the whole per-school ladder (`flawSpendBase`/`flawSpendPerStack`, `insightSpendBase`/`insightSpendPerStack`) and the per-tier finisher thresholds measured in §1 X.
 - **Decay** is `Combatant.decayStacks`: one stack off all three at the end of any turn with no live engaged enemy (exploration, rest, the turn a fight ends). Nothing decays inside a fight, which is what makes the meters a within-fight ramp rather than a bankable resource.
 - **Focus also sharpens reading.** `TacticalAssessment.calculateEffectiveScrutiny` counts `observer.Focus * 15` on top of Acumen and Intuition — the old study→scrutiny read, now riding the Discipline meter (the `+15` per stack kept its original magnitude).
-- **Post-encounter growth replaces the study economy.** `Combatant.growFromEncounter (foes) (c)` pays the Discipline pair `max(10 - (bearer level - foe level), 5)` each, plus `Resolve`/`Intuition`/`Composure` `+1`. The gap term means a peer-level fight teaches the full ten and a fight a hundred levels below still pays the floor of five; a pack is read at its **strongest** member, which is the encounter's level. Per class:
-  - **Fighter** — `Prowess`/`Poise` at the gap rate, plus `Resolve`/`Intuition`/`Composure` `+1` each.
-  - **Mage** — `Acumen`/`Composure` at the gap rate, plus `Resolve`/`Intuition`/`Composure` `+1`. `Composure` sits in both sets, so a Mage takes the rate `+1` there (up to `+11`). **No physical stat and no `Prowess` at any tier**; the mental defences are what scale spell armour (see the `ProgressionScale` spell-armour pass in `TierFactory.createClassLevel`), so a caster grows defence through the mind.
+- **Post-encounter growth replaces the study economy.** `Combatant.growFromEncounter (foes) (c)` pays the Discipline pair `max(10 - max(bearer level - foe level, 0), 5)` each, plus `Resolve`/`Intuition`/`Composure` `+1`. Diminishing returns are one-directional: a peer-level fight pays the full ten, a foe eight levels behind pays five, and a foe a hundred levels *above* you also pays ten — the gap is clamped at zero so an over-levelled enemy is a hard fight, not a lever on the gain (story guardians run 110+ against a level-60 protagonist; an unclamped `10 - gap` paid ~+60 there). A pack is read at its **strongest** member, which is the encounter's level. Per class:
+  - **Fighter** — `Prowess`/`Poise` at the gap rate (`5`–`10`), plus `Resolve`/`Intuition`/`Composure` `+1` each.
+  - **Mage** — `Acumen`/`Composure` at the gap rate (`5`–`10`), plus `Resolve`/`Intuition`/`Composure` `+1`. `Composure` sits in both sets, so a Mage takes the rate `+1` there (`6`–`11`). **No physical stat and no `Prowess` at any tier**; the mental defences are what scale spell armour (see the `ProgressionScale` spell-armour pass in `TierFactory.createClassLevel`), so a caster grows defence through the mind.
   - Every other class takes the Fighter set — the Discipline pair plus the mental defences.
   - `Force` and `Finesse` are **outside** the growth set: only the Discipline pair and the mental defences harden with experience.
 

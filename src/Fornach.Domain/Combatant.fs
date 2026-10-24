@@ -334,11 +334,12 @@ type Combatant =
   /// mental defences. No offensive attribute ever grows from a kill — Power and Agility climb through
   /// the combat ramp and gear instead, so Discipline has to be fed on purpose.
   static member growFromEncounter (foes: Combatant list) (c: Combatant) =
-    // A fight worth taking teaches more: `max(10 - (bearer level - foe level), 5)` leaves a floor of 5
-    // so grinding trivial foes still moves the pair, just four times slower than a peer-level fight.
-    // A pack is read at its strongest member — that is the encounter's level.
+    // A fight worth taking teaches more: `max(10 - (bearer level - foe level), 5)`, diminishing as the
+    // foe falls behind. The gap is clamped at zero on the other side too — fighting ABOVE your level
+    // is not a lever to inflate the gain, it just pays the full ten.
     let foeLevel = foes |> List.fold (fun best (f: Combatant) -> max best f.Level) 0
-    let disciplineGain = Math.Max(10 - (c.Level - foeLevel), 5)
+    let levelGap = Math.Max(c.Level - foeLevel, 0)
+    let disciplineGain = Math.Max(10 - levelGap, 5)
 
     let mentalDefences =
       [ StatId.Resolve, 1; StatId.Intuition, 1; StatId.Composure, 1 ]
