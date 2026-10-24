@@ -301,7 +301,7 @@ type Combatant =
   static member updateMeters (updater: StatusMeters -> StatusMeters) (c: Combatant) =
     { c with Meters = updater c.Meters }
 
-  /// Every combat ramp meter shares one ceiling: five stacks, so a full pile cashes at 3.5x.
+  /// Every combat ramp meter shares one ceiling: five stacks, so a full pile cashes at 2.75x.
   static member StackCap = 5
 
   /// Raises all three ramp meters together. Every attack type feeds all three; only a same-vector
@@ -314,6 +314,10 @@ type Combatant =
 
   /// One stack off every meter: the end-of-turn decay when nothing is engaged.
   static member decayStacks (c: Combatant) = Combatant.addStacks -1 c
+
+  /// Wipes all three meters. A wait, a rest or a shrine restore breaks the ramp outright: the meters are
+  /// a within-fight ramp, never a bankable resource, so nothing survives a deliberate recovery.
+  static member clearStacks (c: Combatant) = { c with Flow = 0; Momentum = 0; Focus = 0 }
 
   /// Stacks currently held in the meter that gates a given attack vector.
   static member stacksIn (vector: Vector) (c: Combatant) =
@@ -334,11 +338,12 @@ type Combatant =
   /// mental defences. No offensive attribute ever grows from a kill — Power and Agility climb through
   /// the combat ramp and gear instead, so Discipline has to be fed on purpose.
   static member growFromEncounter (foes: Combatant list) (c: Combatant) =
-    // `max(16 - (bearer level - foe level), 8)`: diminishing as the foe falls behind, and MORE than
-    // sixteen when the bearer is the underdog. The floor of 8 is the only clamp.
+    // `max(16 - (bearer level - foe level), 2)`: diminishing as the foe falls behind, and MORE than
+    // sixteen when the bearer is the underdog. The floor of 2 is the only clamp — it keeps a meaningless
+    // kill worth *something* without letting a stage's end-of-run trash sweep pay for a level.
     let foeLevel = foes |> List.fold (fun best (f: Combatant) -> max best f.Level) 0
     let levelGap = c.Level - foeLevel
-    let disciplineGain = Math.Max(16 - levelGap, 8)
+    let disciplineGain = Math.Max(16 - levelGap, 2)
 
     let mentalDefences =
       [ StatId.Resolve, 1; StatId.Intuition, 1; StatId.Composure, 1 ]

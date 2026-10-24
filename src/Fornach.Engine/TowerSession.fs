@@ -123,11 +123,12 @@ module TowerSession =
 
   /// One turn of out-of-combat recovery. Bleeding closes first, and Health and Morale only
   /// regenerate once that has stopped the wound. Armor is tended either way — gear is maintained
-  /// regardless of what is bleeding.
+  /// regardless of what is bleeding. The combat ramp decays one stack per turn here: this function
+  /// only runs when nothing is engaged, which is what keeps the meters a within-fight ramp.
   let recoverOutOfCombat (player: Combatant) (bleedClosed: int) (heal: int) (morale: int) (armorRepair: int) =
     let bleed = closeBleed player.BleedStacks bleedClosed
 
-    { player with
+    { Combatant.decayStacks player with
         BleedStacks = bleed
         Health = restRecoverPoolWhenWoundClosed bleed player.Health heal
         Morale = restRecoverPoolWhenWoundClosed bleed player.Morale morale
@@ -177,7 +178,7 @@ module TowerSession =
   /// is already revealed and the materials are already gone. Returns the lines the caller chronicles.
   let shrineBlessing (shrine: TowerShrine) (pt: Point) (state: TowerRunState) : TowerRunState * string list =
     let repaired =
-      { state.Player with
+      { Combatant.clearStacks state.Player with
           Health = Pool.Create state.Player.Health.Maximum
           Morale = Pool.Create state.Player.Morale.Maximum
           Armor = ArmorIntegrity.Create state.Player.Armor.Max
@@ -539,7 +540,7 @@ module TowerSession =
       |> rescaleFloorEnemies state.Player
     let nextState =
       { state with
-          Player = { state.Player with Meters = StatusMeters.Zero }
+          Player = { Combatant.clearStacks state.Player with Meters = StatusMeters.Zero }
           CurrentFloor = nextFloor
           PlayerPosition = nextFloor.SpawnLocation
           Facing = Some Direction.North

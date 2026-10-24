@@ -33,14 +33,37 @@ let ``a DisciplineStance defender is estimated against its real Poise guard`` ()
   Assert.Equal(0.0, AttackEstimator.estimate weak discipline prowl)
 
 [<Fact>]
-let ``an off-stance strike estimates lower than an on-stance one`` () =
-  let power = TierFactory.createClassLevel CharacterClass.Fighter 100 // PowerStance
+let ``a strike is estimated in the stance it transitions into, not the one held`` () =
+  let power = TierFactory.createClassLevel CharacterClass.Fighter 100 // holds PowerStance
   let target = TierFactory.createClassLevel CharacterClass.Soldier 100
+  let agility = { power with Stance = CombatStance.AgilityStance }
+  let discipline = { power with Stance = CombatStance.DisciplineStance }
 
-  // The contest reads GetCombatStat, so the Power vector strikes at 1.25x and Agility at 0.75x.
-  let force = AttackEstimator.estimate power target (AttackClassification.ForceStrike false)
-  let agility = AttackEstimator.estimate power target (AttackClassification.FinesseCadence false)
-  Assert.True(force > agility)
+  // FinesseCadence always transitions to AgilityStance, so the held stance must not matter.
+  let finesse = AttackClassification.FinesseCadence false
+  let fromPower = AttackEstimator.estimate power target finesse
+  Assert.Equal(fromPower, AttackEstimator.estimate agility target finesse)
+  Assert.Equal(fromPower, AttackEstimator.estimate discipline target finesse)
+
+[<Fact>]
+let ``each strike scales with its own meter`` () =
+  let fighter = TierFactory.createClassLevel CharacterClass.Fighter 100
+  // Soft target: every vector must actually land damage, or the floors hide the ramp.
+  let baseTarget = TierFactory.createClassLevel CharacterClass.Soldier 100
+  let target =
+    { baseTarget with
+        Stats = baseTarget.Stats.With(Fortitude, 1).With(Reflex, 1).With(Poise, 1) }
+  let charged = { fighter with Flow = 5; Momentum = 5; Focus = 5 }
+
+  // Momentum/Flow/Focus are read by GetCombatStat, so a charged pile must raise every vector's strike.
+  for attack in
+    [ AttackClassification.ForceStrike false
+      AttackClassification.FinesseCadence false
+      AttackClassification.ProwessStrike false ] do
+    Assert.True(
+      AttackEstimator.estimate charged target attack > AttackEstimator.estimate fighter target attack,
+      sprintf "%A must scale with its own meter" attack
+    )
 
 [<Fact>]
 let ``a flagged strike variant estimates higher than its plain form`` () =

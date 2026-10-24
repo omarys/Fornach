@@ -1036,7 +1036,7 @@ module ProlongedBattleTests =
     Assert.True(dmgFocus > dmgZero, sprintf "A full Focus meter (%d) must outhit an empty one (%d)" dmgFocus dmgZero)
 
   [<Fact>]
-  let ``Calculated flaw strike pays 0.5 multiplier per stack and follows the spent amount`` () =
+  let ``Calculated flaw strike pays 0.35 multiplier per stack and follows the spent amount`` () =
     let target = punchingBag ()
     let mk stacks = { createFighter 50 50 50 50 120 50 with Focus = stacks }
 
@@ -1048,7 +1048,7 @@ module ProlongedBattleTests =
     let slope = float (d4 - d2) / 2.0
     let intercept = float d2 - 2.0 * slope
     let perStack = 1.0 * slope / intercept
-    Assert.True(perStack > 0.48 && perStack < 0.52, sprintf "Expected 0.5 per stack, fitted %.3f" perStack)
+    Assert.True(perStack > 0.33 && perStack < 0.37, sprintf "Expected 0.35 per stack, fitted %.3f" perStack)
 
     // Nothing is left behind: the whole pile is cashed, and every attack feeds one stack back.
     let _, res = damageTaken (mk Combatant.StackCap) CalculatedFlawStrike target

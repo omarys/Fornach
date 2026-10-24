@@ -33,6 +33,56 @@ module AttackEstimator =
     | TraumaAttack ApathyDoldrums -> Fortitude, [ Poise; Composure ]
     | TraumaAttack SereneResolution -> Composure, [ Fortitude; Resolve ]
 
+  /// The combatant a strike is actually contested as. `ActionResolver.applyFluidTransition` runs *before*
+  /// the contest, so a physical strike always lands in the stance its vector selects and a mental one in
+  /// the Complex Form its attack selects. Reading the actor's held stance instead understates every strike
+  /// that is not already in it (0.75x offensive) and credits the meter's ramp only to the stance already
+  /// held — which is exactly what made a Discipline build's Focus look worthless in the ranking.
+  /// ShieldBash is deliberately absent from the transition table and keeps the held stance.
+  let contestedAs (actor: Combatant) (attack: AttackClassification) : Combatant =
+    if
+      not actor.PlayerStyle
+      && not actor.Class.IsPlayerClass
+      && actor.MonsterFamily.IsNone
+    then
+      // Plain humanoid opposition never shifts discipline mid-fight (mirrors applyFluidTransition).
+      actor
+    elif actor.Plane = Physical then
+      match attack with
+      | ForceStrike _
+      | ForceInsightStrike
+      | TraumaAttack BasaltEruption -> { actor with Stance = CombatStance.PowerStance }
+      | FinesseCadence _
+      | FinesseInsightStrike
+      | TraumaAttack DenialPhaseShift -> { actor with Stance = CombatStance.AgilityStance }
+      | ProwessStrike _
+      | CalculatedFlawStrike
+      | MasterfulDisarm _ -> { actor with Stance = CombatStance.DisciplineStance }
+      | _ -> actor
+    else
+      match attack with
+      | ArcaneCataclysm _
+      | AuthorityDecree _ ->
+        { actor with
+            ComplexForm = Some ComplexForm.ResonanceSpike
+            Stance = CombatStance.PowerStance }
+      | SynapticGlamour _
+      | MirrorIllusion _
+      | GuileDeception _
+      | TraumaAttack DenialPhaseShift ->
+        { actor with
+            ComplexForm = Some ComplexForm.PhantasmalDiffusion
+            Stance = CombatStance.AgilityStance }
+      | RunicWardTrap _
+      | DisorientingShockwave _
+      | StaffSiphon
+      | AcumenInterrogation _
+      | TraumaAttack (CoerciveBargain | ApathyDoldrums | SereneResolution) ->
+        { actor with
+            ComplexForm = Some ComplexForm.AegisLattice
+            Stance = CombatStance.DisciplineStance }
+      | _ -> actor
+
   /// The contest reads stance-adjusted stats, so the estimate must too: an actor standing in the wrong
   /// stance strikes at 0.75x, which a blanket "always in vector stance" bonus would miss entirely.
   let private offenseValue (actor: Combatant) (stat: StatId) : float = float (actor.GetCombatStat stat)
@@ -68,15 +118,17 @@ module AttackEstimator =
   /// alone recommends the strike that hits hardest and loses the exchange; the second term is what makes
   /// "best overall outcome" mean survive-and-hit rather than hit-hardest.
   let contestMargin (actor: Combatant) (target: Combatant) (attack: AttackClassification) : int =
+    let striker = contestedAs actor attack
     let offenseStat, _ = statPair attack
-    let offense = actor.GetCombatStat offenseStat - defenseValue target attack
-    let guard = defenseValue actor attack - target.GetCombatStat offenseStat
+    let offense = striker.GetCombatStat offenseStat - defenseValue target attack
+    let guard = defenseValue striker attack - target.GetCombatStat offenseStat
     offense + guard
 
   /// Estimated damage of an attack against a target; 0.0 when the strike is expected to whiff.
   let estimate (actor: Combatant) (target: Combatant) (attack: AttackClassification) : float =
+    let striker = contestedAs actor attack
     let offenseStat, _ = statPair attack
-    let offValue = int (Math.Round(offenseValue actor offenseStat))
+    let offValue = int (Math.Round(offenseValue striker offenseStat))
     let defValue = defenseValue target attack
 
     // Study-Stack strikes pay more for spending, so the estimate has to weigh the stacks the
@@ -101,5 +153,5 @@ module AttackEstimator =
     float offValue
     * planeFactor
     * tierMult
-    * ActionResolver.strikeMultiplier attack stackSpend actor.Stance
-    * ActionResolver.masteryMultiplier actor target
+    * ActionResolver.strikeMultiplier attack stackSpend striker.Stance
+    * ActionResolver.masteryMultiplier striker target

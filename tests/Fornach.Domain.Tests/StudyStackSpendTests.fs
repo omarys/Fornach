@@ -78,14 +78,14 @@ module StudyStackSpendTests =
     Assert.Equal(4, overDrained.Momentum)
 
   [<Fact>]
-  let ``a cash-out pays 1.0 + 0.5n and nothing extra on an empty meter`` () =
+  let ``a cash-out pays 1.0 + 0.35n and nothing extra on an empty meter`` () =
     let mult stacks = ActionResolver.strikeMultiplier CalculatedFlawStrike stacks CombatStance.PowerStance
     Assert.Equal(1.0, mult 0, 6)
-    Assert.Equal(1.5, mult 1, 6)
-    Assert.Equal(2.0, mult 2, 6)
+    Assert.Equal(1.35, mult 1, 6)
+    Assert.Equal(1.7, mult 2, 6)
 
-    // Five is the ceiling the meters clamp to, so 3.5x is the most a swing can cash for.
-    Assert.Equal(3.5, mult Combatant.StackCap, 6)
+    // Five is the ceiling the meters clamp to, so 2.75x is the most a swing can cash for.
+    Assert.Equal(2.75, mult Combatant.StackCap, 6)
 
   [<Fact>]
   let ``resolving a special cashes the whole meter and leaves the swing's own stack behind`` () =
@@ -102,9 +102,10 @@ module StudyStackSpendTests =
 
   [<Fact>]
   let ``the finisher threshold sits at a full five-stack meter, not two`` () =
-    // Measured against a same-tier Master pool: the 3.5x a topped-out meter cashes clears the 3.14
-    // one-shot threshold, while a half-full meter does not. If this ever needs flattening the dial is
-    // the per-stack 0.5 in ActionResolver.spentPerStack.
+    // Measured against a same-tier Master pool: the 2.75x a topped-out meter cashes is the biggest
+    // hit in the game and still leaves an equal-tier opponent standing (one-shot threshold 3.07x at
+    // Master, 2.79x at GrandMaster). If this needs retuning the dial is the per-stack 0.35 in
+    // ActionResolver.spentPerStack.
     let pool = (master ()).Health.Maximum
 
     let dealt stacks =
@@ -114,7 +115,17 @@ module StudyStackSpendTests =
       target.Health.Current - res.Target.Health.Current
 
     Assert.True(dealt 2 < pool, sprintf "two stacks must leave the target standing: %d of %d" (dealt 2) pool)
-    Assert.True(dealt Combatant.StackCap >= pool, sprintf "a full meter should delete a same-tier pool: %d of %d" (dealt Combatant.StackCap) pool)
+
+    Assert.True(
+      dealt Combatant.StackCap < pool,
+      sprintf "a full meter must not delete a same-tier pool: %d of %d" (dealt Combatant.StackCap) pool
+    )
+
+    // ... but it is still the finisher: it takes the great majority of that pool.
+    Assert.True(
+      dealt Combatant.StackCap * 100 >= pool * 85,
+      sprintf "a full meter should still be near-lethal: %d of %d" (dealt Combatant.StackCap) pool
+    )
 
   [<Fact>]
   let ``one stack is a normal hit, a full pile is a finisher`` () =

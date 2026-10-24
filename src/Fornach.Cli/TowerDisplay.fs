@@ -1565,7 +1565,7 @@ module TowerDisplay =
                   if isBoss then
                     // Overcoming the trauma aspect grants total catharsis:
                     let catharticPlayer =
-                      { updatedPlayer with
+                      { Combatant.clearStacks updatedPlayer with
                           Health = Pool.Create updatedPlayer.Health.Maximum
                           Morale = Pool.Create updatedPlayer.Morale.Maximum
                           Armor = ArmorIntegrity.Create updatedPlayer.Armor.Max
@@ -1867,7 +1867,7 @@ module TowerDisplay =
             let recovered =
               TowerSession.recoverOutOfCombat state.Player TowerSession.bleedClosedPerRest heal morale armorRepair
             let restedPlayer =
-              { recovered with
+              { Combatant.clearStacks recovered with
                   Meters = StatusMeters.Zero
                   WeaponCondition = honedWeapon }
             let weaponMsg =

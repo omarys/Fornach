@@ -4,7 +4,7 @@ open Xunit
 open Fornach.Domain
 
 /// `Combatant.growFromEncounter` replaced the old Study Stack ramp: a won fight leaves a permanent
-/// gain on the Discipline pair — `max(16 - (bearer level - foe level), 8)` each — and +1 on each mental
+/// gain on the Discipline pair — `max(16 - (bearer level - foe level), 2)` each — and +1 on each mental
 /// defence. No offensive attribute moves.
 module EncounterGrowthTests =
 
@@ -15,7 +15,7 @@ module EncounterGrowthTests =
   /// The gain the pair is supposed to take for this bearer and this pack.
   let private expectedGain (before: Combatant) (pack: Combatant list) =
     let foeLevel = pack |> List.fold (fun best (f: Combatant) -> max best f.Level) 0
-    max (16 - (before.Level - foeLevel)) 8
+    max (16 - (before.Level - foeLevel)) 2
 
   [<Fact>]
   let ``a won fight raises Prowess and Poise by the level-gap gain`` () =
@@ -28,7 +28,7 @@ module EncounterGrowthTests =
     Assert.Equal(statOf StatId.Poise before + gain, statOf StatId.Poise grown)
 
   [<Fact>]
-  let ``the gain falls as the foe falls behind, and never drops below eight`` () =
+  let ``the gain falls as the foe falls behind, and never drops below two`` () =
     let veteran = TierFactory.createClassTier CharacterClass.Fighter CombatTier.Veteran
 
     for tier in [ CombatTier.Novice; CombatTier.Veteran; CombatTier.Master; CombatTier.GrandMaster ] do
@@ -36,7 +36,7 @@ module EncounterGrowthTests =
       let grown = Combatant.growFromEncounter pack veteran
       let gain = expectedGain veteran pack
 
-      Assert.True(gain >= 8, sprintf "a %A foe paid %d, below the floor of 8" tier gain)
+      Assert.True(gain >= 2, sprintf "a %A foe paid %d, below the floor of 2" tier gain)
       Assert.Equal(statOf StatId.Prowess veteran + gain, statOf StatId.Prowess grown)
       Assert.Equal(statOf StatId.Poise veteran + gain, statOf StatId.Poise grown)
 
@@ -49,11 +49,11 @@ module EncounterGrowthTests =
       sprintf "a peer fight (%d) should teach more than a trivial one (%d)" (expectedGain veteran peer) (expectedGain veteran trivial)
     )
 
-    Assert.Equal(8, expectedGain veteran [ foe CharacterClass.Warrior CombatTier.Novice ])
+    Assert.Equal(2, expectedGain veteran [ foe CharacterClass.Warrior CombatTier.Novice ])
 
   [<Fact>]
   let ``beating a foe above your level pays more than sixteen, by design`` () =
-    // The floor of 8 is the only clamp: an underdog who drops something well above their level is
+    // The floor of 2 is the only clamp: an underdog who drops something well above their level is
     // learning the fastest way the game allows, so the gain rises past sixteen with the disparity.
     let underdog = TierFactory.createClassTier CharacterClass.Fighter CombatTier.Novice
 

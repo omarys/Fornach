@@ -10,10 +10,10 @@ module ActionResolver =
   // =========================================================================
 
   /// What one cashed stack is worth on the special that spends it. Meters cap at five
-  /// (`Combatant.StackCap`), so a full pile pays 3.5x. That is ABOVE the 3.14 equal-tier one-shot
-  /// threshold measured in docs/agents/domain.md §1 X, so a topped-out meter can still one-shot a
-  /// same-tier opponent; capping or tapering this term is the fix if the sweep confirms it.
-  let spentPerStack = 0.5
+  /// (`Combatant.StackCap`), so a full pile pays 2.75x. That sits UNDER the tightest equal-tier
+  /// one-shot threshold measured in docs/agents/domain.md §1 Y (2.79x, GrandMaster), so a topped-out
+  /// meter is the biggest hit in the game without deleting an equal-tier opponent in one blow.
+  let spentPerStack = 0.35
 
   /// Damage multiplier for a strike's own flag/stance shape. The ramp meters deliberately do not
   /// appear here: they sharpen the actor's stats instead (`Combatant.GetCombatStat`), so holding them
