@@ -49,16 +49,6 @@ module StanceGrowthTests =
     Assert.Equal((Acumen, Composure), { mental with Stance = CombatStance.DisciplineStance }.StanceAttributes)
 
   [<Fact>]
-  let ``a kill sharpens the stance offence by five and leaves the other attributes alone`` () =
-    let duelist = fighter (100, 100, 100, 100, 100, 100) CombatStance.AgilityStance
-    let sharpened = Combatant.sharpenStance duelist
-
-    Assert.Equal(duelist.Stats.Get Finesse + 5, sharpened.Stats.Get Finesse)
-    Assert.Equal(duelist.Stats.Get Reflex, sharpened.Stats.Get Reflex)
-    Assert.Equal(duelist.Stats.Get Force, sharpened.Stats.Get Force)
-    Assert.Equal(duelist.GetStat Finesse + 5, sharpened.GetStat Finesse)
-
-  [<Fact>]
   let ``a blow taken hardens the stance guard by two`` () =
     let warden = fighter (100, 100, 100, 100, 100, 100) CombatStance.DisciplineStance
     let hardened = Combatant.fortifyStance warden
@@ -67,7 +57,7 @@ module StanceGrowthTests =
     Assert.Equal(warden.Stats.Get Prowess, hardened.Stats.Get Prowess)
 
   [<Fact>]
-  let ``an exchange fortifies the side struck and sharpens the side that drops a foe`` () =
+  let ``an exchange fortifies the side struck and pays the killer no offensive stat`` () =
     let roller: DiceRoller = fun _ _ -> 6
     let actor = fighter (900, 100, 100, 100, 100, 100) CombatStance.PowerStance
     let victim =
@@ -78,9 +68,9 @@ module StanceGrowthTests =
 
     Assert.True(result.Target.Health.Current <= 0, "the victim should be dropped in one blow")
 
-    // The actor's stance may shift during the strike, so growth is checked against its final stance.
-    let actorOffence, _ = result.Actor.StanceAttributes
-    Assert.Equal(actor.Stats.Get actorOffence + 5, result.Actor.Stats.Get actorOffence)
+    // A kill pays in experience and in the Discipline pair, never in an offensive attribute.
+    for stat in [ Force; Finesse; Intellect; Acuity ] do
+      Assert.Equal(actor.Stats.Get stat, result.Actor.Stats.Get stat)
 
     let _, victimGuard = result.Target.StanceAttributes
     Assert.Equal(victim.Stats.Get victimGuard + 2, result.Target.Stats.Get victimGuard)

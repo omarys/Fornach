@@ -329,19 +329,24 @@ type Combatant =
     | Vector.Power -> { c with Momentum = Math.Max(0, c.Momentum - count) }
     | Vector.Discipline -> { c with Focus = Math.Max(0, c.Focus - count) }
 
-  /// Permanent growth on a won encounter, replacing the old Study Stack ramp: +2 to the Discipline pair
+  /// Permanent growth on a won encounter, replacing the old Study Stack ramp: the Discipline pair
   /// (Prowess/Poise for everyone but a Mage, which takes Acumen/Composure) and +1 to each of the three
-  /// mental defences. Foe tier no longer matters.
-  static member growFromEncounter (_foes: Combatant list) (c: Combatant) =
-    // Flat, foe-independent: the difficulty of a win is already paid in the fight, and a tier-weighted
-    // gain made late-game fights worth several early ones on top of their experience.
+  /// mental defences. No offensive attribute ever grows from a kill — Power and Agility climb through
+  /// the combat ramp and gear instead, so Discipline has to be fed on purpose.
+  static member growFromEncounter (foes: Combatant list) (c: Combatant) =
+    // A fight worth taking teaches more: `max(10 - (bearer level - foe level), 5)` leaves a floor of 5
+    // so grinding trivial foes still moves the pair, just four times slower than a peer-level fight.
+    // A pack is read at its strongest member — that is the encounter's level.
+    let foeLevel = foes |> List.fold (fun best (f: Combatant) -> max best f.Level) 0
+    let disciplineGain = Math.Max(10 - (c.Level - foeLevel), 5)
+
     let mentalDefences =
       [ StatId.Resolve, 1; StatId.Intuition, 1; StatId.Composure, 1 ]
 
     let disciplinePair =
       match c.Class with
-      | Mage -> [ StatId.Acumen, 2; StatId.Composure, 2 ]
-      | _ -> [ StatId.Prowess, 2; StatId.Poise, 2 ]
+      | Mage -> [ StatId.Acumen, disciplineGain; StatId.Composure, disciplineGain ]
+      | _ -> [ StatId.Prowess, disciplineGain; StatId.Poise, disciplineGain ]
 
     { c with Stats = c.Stats.ApplyModifiers(disciplinePair @ mentalDefences) }
 
@@ -400,11 +405,6 @@ type Combatant =
     | Mental, CombatStance.PowerStance -> Intellect, Resolve
     | Mental, CombatStance.AgilityStance -> Acuity, Intuition
     | Mental, CombatStance.DisciplineStance -> Acumen, Composure
-
-  /// A kill teaches the stance that won it: +5 to that stance's offensive attribute.
-  static member sharpenStance (c: Combatant) : Combatant =
-    let offense, _ = c.StanceAttributes
-    { c with Stats = c.Stats.Modify(offense, 5) }
 
   /// A blow taken hardens the stance that absorbed it: +2 to that stance's defensive attribute.
   static member fortifyStance (c: Combatant) : Combatant =

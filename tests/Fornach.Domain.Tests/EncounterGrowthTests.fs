@@ -4,32 +4,52 @@ open Xunit
 open Fornach.Domain
 
 /// `Combatant.growFromEncounter` replaced the old Study Stack ramp: a won fight leaves a permanent
-/// +2 on the Discipline pair and +1 on each mental defence, regardless of what was beaten.
+/// gain on the Discipline pair — `max(10 - (bearer level - foe level), 5)` each — and +1 on each mental
+/// defence. No offensive attribute moves.
 module EncounterGrowthTests =
 
   let private statOf (stat: StatId) (c: Combatant) = c.Stats.Get stat
 
   let private foe (cls: CharacterClass) (tier: CombatTier) = TierFactory.createClassTier cls tier
 
-  [<Fact>]
-  let ``a won fight raises Prowess and Poise by two apiece`` () =
-    let before = TierFactory.createClassTier CharacterClass.Fighter CombatTier.Master
-    let grown = Combatant.growFromEncounter [ foe CharacterClass.Warrior CombatTier.Novice ] before
-
-    Assert.Equal(statOf StatId.Prowess before + 2, statOf StatId.Prowess grown)
-    Assert.Equal(statOf StatId.Poise before + 2, statOf StatId.Poise grown)
+  /// The gain the pair is supposed to take for this bearer and this pack.
+  let private expectedGain (before: Combatant) (pack: Combatant list) =
+    let foeLevel = pack |> List.fold (fun best (f: Combatant) -> max best f.Level) 0
+    max (10 - (before.Level - foeLevel)) 5
 
   [<Fact>]
-  let ``the gain is flat, so a grandmaster teaches no more than a novice`` () =
+  let ``a won fight raises Prowess and Poise by the level-gap gain`` () =
     let before = TierFactory.createClassTier CharacterClass.Fighter CombatTier.Master
+    let pack = [ foe CharacterClass.Warrior CombatTier.Novice ]
+    let grown = Combatant.growFromEncounter pack before
+    let gain = expectedGain before pack
 
-    let grownAgainst tier =
-      Combatant.growFromEncounter [ foe CharacterClass.Warrior tier ] before
+    Assert.Equal(statOf StatId.Prowess before + gain, statOf StatId.Prowess grown)
+    Assert.Equal(statOf StatId.Poise before + gain, statOf StatId.Poise grown)
+
+  [<Fact>]
+  let ``the gain falls as the foe falls behind, and never drops below five`` () =
+    let veteran = TierFactory.createClassTier CharacterClass.Fighter CombatTier.Veteran
 
     for tier in [ CombatTier.Novice; CombatTier.Veteran; CombatTier.Master; CombatTier.GrandMaster ] do
-      let grown = grownAgainst tier
-      Assert.Equal(statOf StatId.Prowess before + 2, statOf StatId.Prowess grown)
-      Assert.Equal(statOf StatId.Poise before + 2, statOf StatId.Poise grown)
+      let pack = [ foe CharacterClass.Warrior tier ]
+      let grown = Combatant.growFromEncounter pack veteran
+      let gain = expectedGain veteran pack
+
+      Assert.True(gain >= 5, sprintf "a %A foe paid %d, below the floor of 5" tier gain)
+      Assert.Equal(statOf StatId.Prowess veteran + gain, statOf StatId.Prowess grown)
+      Assert.Equal(statOf StatId.Poise veteran + gain, statOf StatId.Poise grown)
+
+    // A peer-level fight is the ceiling; a foe a hundred levels behind is the floor.
+    let peer = [ foe CharacterClass.Warrior CombatTier.Veteran ]
+    let trivial = [ foe CharacterClass.Warrior CombatTier.Novice ]
+
+    Assert.True(
+      expectedGain veteran peer > expectedGain veteran trivial,
+      sprintf "a peer fight (%d) should teach more than a trivial one (%d)" (expectedGain veteran peer) (expectedGain veteran trivial)
+    )
+
+    Assert.Equal(5, expectedGain veteran [ foe CharacterClass.Warrior CombatTier.Novice ] |> max 0)
 
   [<Fact>]
   let ``the pack size does not compound the gain`` () =
@@ -41,7 +61,8 @@ module EncounterGrowthTests =
         foe CharacterClass.Soldier CombatTier.GrandMaster ]
 
     let grown = Combatant.growFromEncounter pack before
-    Assert.Equal(statOf StatId.Prowess before + 2, statOf StatId.Prowess grown)
+    // A pack is read at its strongest member, and the gain does not compound with its size.
+    Assert.Equal(statOf StatId.Prowess before + expectedGain before pack, statOf StatId.Prowess grown)
 
   [<Fact>]
   let ``both player classes harden Resolve, Intuition and Composure, and neither grows the other's tick`` () =
@@ -58,9 +79,9 @@ module EncounterGrowthTests =
     Assert.Equal(statOf StatId.Finesse fighter, statOf StatId.Finesse grownFighter)
 
     let grownMage = Combatant.growFromEncounter novices mage
-    Assert.Equal(statOf StatId.Acumen mage + 2, statOf StatId.Acumen grownMage)
+    Assert.Equal(statOf StatId.Acumen mage + expectedGain mage novices, statOf StatId.Acumen grownMage)
     // Composure is in the Discipline pair and again in the defensive trio, so it takes both.
-    Assert.Equal(statOf StatId.Composure mage + 3, statOf StatId.Composure grownMage)
+    Assert.Equal(statOf StatId.Composure mage + expectedGain mage novices + 1, statOf StatId.Composure grownMage)
     Assert.Equal(statOf StatId.Resolve mage + 1, statOf StatId.Resolve grownMage)
     Assert.Equal(statOf StatId.Intuition mage + 1, statOf StatId.Intuition grownMage)
     // A caster gains no physical stat at all, and no Prowess.
@@ -73,8 +94,8 @@ module EncounterGrowthTests =
     let before = TierFactory.createClassTier CharacterClass.Warrior CombatTier.Master
     let grown = Combatant.growFromEncounter [ foe CharacterClass.Warrior CombatTier.Novice ] before
 
-    Assert.Equal(statOf StatId.Prowess before + 2, statOf StatId.Prowess grown)
-    Assert.Equal(statOf StatId.Poise before + 2, statOf StatId.Poise grown)
+    Assert.Equal(statOf StatId.Prowess before + expectedGain before [ foe CharacterClass.Warrior CombatTier.Novice ], statOf StatId.Prowess grown)
+    Assert.Equal(statOf StatId.Poise before + expectedGain before [ foe CharacterClass.Warrior CombatTier.Novice ], statOf StatId.Poise grown)
     Assert.Equal(statOf StatId.Resolve before + 1, statOf StatId.Resolve grown)
     Assert.Equal(statOf StatId.Composure before + 1, statOf StatId.Composure grown)
     // Force and Finesse are outside the growth set now.

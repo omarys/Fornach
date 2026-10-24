@@ -2392,20 +2392,16 @@ module ActionResolver =
   // =========================================================================
 
   /// Stance growth, read off the pools after the turn: whoever took a blow hardens the guard of the
-  /// stance they were holding (+2 to its defensive attribute), and whoever dropped a foe sharpens that
-  /// stance's weapon arm (+5 to its offensive attribute). Both sides grow, and every source inside the
-  /// turn counts — ripostes, opportunity attacks, bleed — because only the before/after is compared.
+  /// stance they were holding (+2 to its defensive attribute). Both sides grow, and every source inside
+  /// the turn counts — ripostes, opportunity attacks, bleed — because only the before/after is compared.
+  /// Dropping a foe no longer feeds the stance's offensive attribute: a kill pays in experience and in
+  /// the Discipline pair (`Combatant.growFromEncounter`), never in Force/Finesse/Intellect/Acuity.
   let private applyStanceGrowth (beforeActor: Combatant) (beforeTarget: Combatant) (res: ActionResult) : ActionResult =
     let tookDamage (before: Combatant) (after: Combatant) =
       after.Health.Current < before.Health.Current || after.Morale.Current < before.Morale.Current
 
-    let wasDropped (before: Combatant) (after: Combatant) =
-      (before.Health.Current > 0 && after.Health.Current <= 0)
-      || (before.Morale.Current > 0 && after.Morale.Current <= 0)
-
     let actor =
-      (if tookDamage beforeActor res.Actor then Combatant.fortifyStance res.Actor else res.Actor)
-      |> fun a -> if wasDropped beforeTarget res.Target then Combatant.sharpenStance a else a
+      if tookDamage beforeActor res.Actor then Combatant.fortifyStance res.Actor else res.Actor
 
     let target =
       if tookDamage beforeTarget res.Target then Combatant.fortifyStance res.Target else res.Target

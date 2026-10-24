@@ -1,6 +1,6 @@
 # Fornach Balance, Combat Mechanics & Class Progression Handoff
 
-## Status: 520 Tests Passing (294 `Fornach.Tests` + 203 `Fornach.Domain.Tests` + 23 `Fornach.Spatial.Tests`, 0 Warnings)
+## Status: 519 Tests Passing (294 `Fornach.Tests` + 202 `Fornach.Domain.Tests` + 23 `Fornach.Spatial.Tests`, 0 Warnings)
 
 This document provides a comprehensive handoff of the recent combat balance tuning, archetype progression overhauls, tactical preparation enhancements, swarm simulation refinements, and a solution-wide performance profile (see §4) completed in the `Fornach` codebase.
 
@@ -168,11 +168,11 @@ This document provides a comprehensive handoff of the recent combat balance tuni
 
 ### U. Stance Growth — Kills Sharpen, Blows Harden
 - `Combatant.StanceAttributes` (`Combatant.fs:332`) maps plane + stance to an `(offense, defense)` pair. Physical: `PowerStance` → Force/Fortitude, `AgilityStance` → Finesse/Reflex, `DisciplineStance` → Prowess/Poise. Mental reads the mental triad instead: Intellect/Resolve, Acuity/Intuition, Acumen/Composure.
-- `Combatant.sharpenStance` (**+5** to the stance's offensive attribute) and `Combatant.fortifyStance` (**+2** to its defensive one) write into canonical `Stats`, so growth survives the stance shift that follows a strike.
+- `Combatant.fortifyStance` (**+2** to the stance's defensive attribute) writes into canonical `Stats`, so growth survives the stance shift that follows a strike. **`sharpenStance` is gone**: a kill no longer feeds the stance's offensive attribute, so Force/Finesse/Intellect/Acuity can only move through the combat ramp, gear, consumables and levelling — never through grinding.
 - `ActionResolver.applyStanceGrowth` (`ActionResolver.fs:2392`) runs once at the `resolveEx` funnel and **infers** growth by diffing Health/Morale before vs after the turn — so ripostes, bleed ticks, opportunity attacks and cleave all count with no per-site instrumentation, and a turn where nothing lands changes nothing. Both sides grow; every resolution path (duel, boss, pack, parting blow, quick-resolve) reaches it because they all funnel through `resolveEx`.
 - **Opportunity attacks scale on the stat margin, not only the trigger chance.** `aooDmg = max 10 (base + delta * 0.5)` at `ActionResolver.fs:1686`, where `base` is `defFinesse * 0.65` / `defProwess * 0.75` and `delta` is the interceptor's vector stat minus the flanker's matching guard — the same `delta` that already drove the trigger chance. Interceptor Finesse 400 against Reflex 300 goes 260 → 310; against Reflex 100, 260 → 410.
 - Guards: `tests/Fornach.Domain.Tests/StanceGrowthTests.fs` (6 tests) — the attribute map on both planes, +5/+2 in isolation with neighbours untouched, a real `resolveEx` exchange crediting both sides, a no-contact turn leaving stats byte-identical, and AoO monotonicity (wide gap strictly harder, both non-zero).
-- **Unbounded on purpose.** No cap was requested and none was added: twenty PowerStance kills is +100 Force stacking on the buff layer. A clamp inside `sharpenStance` is the one-line brake if a long run sags — see §5 item 9.
+- **No offensive stat comes from a kill.** The old `sharpenStance` (+5 to the stance offence per kill) made Power and Agility outrun Discipline badly once rooms ran eight mobs deep, so it was removed outright rather than clamped; `applyStanceGrowth` in `ActionResolver.fs` now only fortifies the side that took a blow. Discipline is fed deliberately, by `growFromEncounter`.
 
 ### V. Percentages Replace Flat Bonuses
 - **The problem was scale, not generosity.** A flat `+30 Fortitude` is `+67%` on a level-1 primary of 45 and `+3%` at level 200 (primary 841 — `ProgressionScale.physicalStatsForLevel`), so every authored item silently stopped mattering as the character grew. The same held for the rare-material drip and Raise Shield's armor repair.
@@ -213,9 +213,9 @@ This document provides a comprehensive handoff of the recent combat balance tuni
 - **Cashing out is per-vector and total.** A special cashes only its own meter, empties it, and multiplies damage by `1 + 0.5 × stacks` — five stacks is **3.5×**. That replaces the whole per-school ladder (`flawSpendBase`/`flawSpendPerStack`, `insightSpendBase`/`insightSpendPerStack`) and the per-tier finisher thresholds measured in §1 X.
 - **Decay** is `Combatant.decayStacks`: one stack off all three at the end of any turn with no live engaged enemy (exploration, rest, the turn a fight ends). Nothing decays inside a fight, which is what makes the meters a within-fight ramp rather than a bankable resource.
 - **Focus also sharpens reading.** `TacticalAssessment.calculateEffectiveScrutiny` counts `observer.Focus * 15` on top of Acumen and Intuition — the old study→scrutiny read, now riding the Discipline meter (the `+15` per stack kept its original magnitude).
-- **Post-encounter growth replaces the study economy.** `Combatant.growFromEncounter (_foes) (c)` is **flat** — the foe list is deliberately ignored, so a Novice teaches exactly what a GrandMaster does. The win itself is the payment; a tier-weighted gain also made late fights worth several early ones on top of their experience. Per class:
-  - **Fighter** — `Prowess`/`Poise` `+2`, plus `Resolve`/`Intuition`/`Composure` `+1` each.
-  - **Mage** — `Acumen`/`Composure` `+2`, plus `Resolve`/`Intuition`/`Composure` `+1`. `Composure` sits in both sets, so a Mage takes `+3` there. **No physical stat and no `Prowess` at any tier**; the mental defences are what scale spell armour (see the `ProgressionScale` spell-armour pass in `TierFactory.createClassLevel`), so a caster grows defence through the mind.
+- **Post-encounter growth replaces the study economy.** `Combatant.growFromEncounter (foes) (c)` pays the Discipline pair `max(10 - (bearer level - foe level), 5)` each, plus `Resolve`/`Intuition`/`Composure` `+1`. The gap term means a peer-level fight teaches the full ten and a fight a hundred levels below still pays the floor of five; a pack is read at its **strongest** member, which is the encounter's level. Per class:
+  - **Fighter** — `Prowess`/`Poise` at the gap rate, plus `Resolve`/`Intuition`/`Composure` `+1` each.
+  - **Mage** — `Acumen`/`Composure` at the gap rate, plus `Resolve`/`Intuition`/`Composure` `+1`. `Composure` sits in both sets, so a Mage takes the rate `+1` there (up to `+11`). **No physical stat and no `Prowess` at any tier**; the mental defences are what scale spell armour (see the `ProgressionScale` spell-armour pass in `TierFactory.createClassLevel`), so a caster grows defence through the mind.
   - Every other class takes the Fighter set — the Discipline pair plus the mental defences.
   - `Force` and `Finesse` are **outside** the growth set: only the Discipline pair and the mental defences harden with experience.
 
@@ -277,7 +277,7 @@ Results from `dotnet run --project src/Fornach.Cli -- --balance-matrix` (re-run 
   - [`tests/Fornach.Domain.Tests/PreparationTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Domain.Tests/PreparationTests.fs): Unit tests for `AegisOfRetribution`, `BerserkTincture`, and cleave scaling.
   - [`tests/Fornach.Domain.Tests/OverallBalanceTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Domain.Tests/OverallBalanceTests.fs): Macro balance suite verifying tier scaling and plane vulnerabilities.
   - [`tests/Fornach.Domain.Tests/MonteCarloSwarmTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Domain.Tests/MonteCarloSwarmTests.fs): Swarm Monte-Carlo tests.
-  - [`tests/Fornach.Domain.Tests/StanceGrowthTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Domain.Tests/StanceGrowthTests.fs): Stance attribute map, `sharpenStance` / `fortifyStance`, growth through a real `resolveEx` exchange, and opportunity-attack damage monotonicity (§1 U).
+  - [`tests/Fornach.Domain.Tests/StanceGrowthTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Domain.Tests/StanceGrowthTests.fs): Stance attribute map, `fortifyStance`, growth through a real `resolveEx` exchange, and that a kill pays no offensive stat, and opportunity-attack damage monotonicity (§1 U).
 
 ---
 
