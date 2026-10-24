@@ -15,7 +15,7 @@ module EncounterGrowthTests =
   /// The gain the pair is supposed to take for this bearer and this pack.
   let private expectedGain (before: Combatant) (pack: Combatant list) =
     let foeLevel = pack |> List.fold (fun best (f: Combatant) -> max best f.Level) 0
-    max (10 - max (before.Level - foeLevel) 0) 5
+    max (10 - (before.Level - foeLevel)) 5
 
   [<Fact>]
   let ``a won fight raises Prowess and Poise by the level-gap gain`` () =
@@ -52,20 +52,24 @@ module EncounterGrowthTests =
     Assert.Equal(5, expectedGain veteran [ foe CharacterClass.Warrior CombatTier.Novice ])
 
   [<Fact>]
-  let ``fighting above your level pays the full ten, not more`` () =
-    // The gap is clamped at zero: an over-levelled foe is a hard fight, not a lever on the gain. Story
-    // guardians sit well above the protagonist (level 110 against level 60), and an unclamped
-    // `10 - gap` would have paid fifty-odd points of Prowess for one kill.
+  let ``beating a foe above your level pays more than ten, by design`` () =
+    // The floor of 5 is the only clamp: an underdog who drops something well above their level is
+    // learning the fastest way the game allows, so the gain rises past ten with the disparity.
     let underdog = TierFactory.createClassTier CharacterClass.Fighter CombatTier.Novice
 
-    for tier in [ CombatTier.Veteran; CombatTier.Master; CombatTier.GrandMaster ] do
-      let pack = [ foe CharacterClass.Warrior tier ]
-      let grown = Combatant.growFromEncounter pack underdog
-      let gained = statOf StatId.Prowess grown - statOf StatId.Prowess underdog
+    let gains =
+      [ for tier in [ CombatTier.Veteran; CombatTier.Master; CombatTier.GrandMaster ] ->
+          let pack = [ foe CharacterClass.Warrior tier ]
+          let grown = Combatant.growFromEncounter pack underdog
 
-      Assert.True(pack |> List.forall (fun f -> f.Level > underdog.Level), "the foe should outrank the bearer")
-      Assert.Equal(10, gained)
-      Assert.Equal(10, expectedGain underdog pack)
+          Assert.True(pack |> List.forall (fun f -> f.Level > underdog.Level), "the foe should outrank the bearer")
+          statOf StatId.Prowess grown - statOf StatId.Prowess underdog ]
+
+    for gained in gains do
+      Assert.True(gained > 10, sprintf "an underdog win paid only %d" gained)
+
+    // Harder foe, bigger lesson: the gains climb with the disparity.
+    Assert.True(gains[0] < gains[1] && gains[1] < gains[2], sprintf "gains did not climb with the gap: %A" gains)
 
   [<Fact>]
   let ``the pack size does not compound the gain`` () =
