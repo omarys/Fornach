@@ -2391,22 +2391,9 @@ module ActionResolver =
   // 6. Public Dispatcher
   // =========================================================================
 
-  /// Stance growth, read off the pools after the turn: whoever took a blow hardens the guard of the
-  /// stance they were holding (+2 to its defensive attribute). Both sides grow, and every source inside
-  /// the turn counts — ripostes, opportunity attacks, bleed — because only the before/after is compared.
-  /// Dropping a foe no longer feeds the stance's offensive attribute: a kill pays in experience and in
-  /// the Discipline pair (`Combatant.growFromEncounter`), never in Force/Finesse/Intellect/Acuity.
-  let private applyStanceGrowth (beforeActor: Combatant) (beforeTarget: Combatant) (res: ActionResult) : ActionResult =
-    let tookDamage (before: Combatant) (after: Combatant) =
-      after.Health.Current < before.Health.Current || after.Morale.Current < before.Morale.Current
-
-    let actor =
-      if tookDamage beforeActor res.Actor then Combatant.fortifyStance res.Actor else res.Actor
-
-    let target =
-      if tookDamage beforeTarget res.Target then Combatant.fortifyStance res.Target else res.Target
-
-    { res with Actor = actor; Target = target }
+  /// Nothing in a turn mutates a combatant's permanent attributes. Force/Fortitude and Finesse/Reflex
+  /// are owned by the combat ramp (Momentum, Flow) and by gear; a won encounter pays the Discipline
+  /// pair (`Combatant.growFromEncounter`), never Force/Finesse/Intellect/Acuity.
 
   let resolveEx (roller: DiceRoller) (intent: ActionIntent) (actor: Combatant) (target: Combatant) (priorDefenses: int) : ActionResult =
     let upkeepActor, upkeepEvents = applyTurnUpkeep actor
@@ -2435,8 +2422,7 @@ module ActionResolver =
         | StandardAttack atk -> resolveAttack roller atk upkeepActor target priorDefenses
         | DeployPreparation (prep, targetIdOpt) -> resolveDeployPreparation prep targetIdOpt upkeepActor target
 
-      let grown = applyStanceGrowth upkeepActor target res
-      { grown with Events = upkeepEvents @ grown.Events }
+      { res with Events = upkeepEvents @ res.Events }
 
 
   let resolve (roller: DiceRoller) (intent: ActionIntent) (actor: Combatant) (target: Combatant) : ActionResult =

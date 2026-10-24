@@ -5,9 +5,9 @@ open Xunit
 open Fornach.Domain
 open Fornach.Engine
 
-/// Killing in a stance sharpens that stance's offensive attribute (+5); taking a blow hardens its
-/// defensive attribute (+2). Growth folds into canonical `Stats`, so it survives the stance shifts
-/// that happen when the same combatant attacks with a different vector.
+/// The file outlived its original subject: stance growth (kill +5 to the stance's attack attribute,
+/// blow +2 to its guard) is gone, replaced by the Flow/Momentum/Focus ramp. What remains under test is
+/// that no turn moves a permanent attribute, and the stance attribute table itself.
 module StanceGrowthTests =
 
   let private stats force fortitude finesse reflex prowess poise =
@@ -49,15 +49,10 @@ module StanceGrowthTests =
     Assert.Equal((Acumen, Composure), { mental with Stance = CombatStance.DisciplineStance }.StanceAttributes)
 
   [<Fact>]
-  let ``a blow taken hardens the stance guard by two`` () =
-    let warden = fighter (100, 100, 100, 100, 100, 100) CombatStance.DisciplineStance
-    let hardened = Combatant.fortifyStance warden
-
-    Assert.Equal(warden.Stats.Get Poise + 2, hardened.Stats.Get Poise)
-    Assert.Equal(warden.Stats.Get Prowess, hardened.Stats.Get Prowess)
-
-  [<Fact>]
-  let ``an exchange fortifies the side struck and pays the killer no offensive stat`` () =
+  let ``no exchange moves a permanent attribute on either side`` () =
+    // Force/Fortitude and Finesse/Reflex belong to the combat ramp (Momentum, Flow) and to gear. A blow
+    // taken and a foe dropped must leave the stat block byte-identical — the old +2 stance fortification
+    // and the old kill bonus both lived here and both compounded without bound.
     let roller: DiceRoller = fun _ _ -> 6
     let actor = fighter (900, 100, 100, 100, 100, 100) CombatStance.PowerStance
     let victim =
@@ -67,13 +62,8 @@ module StanceGrowthTests =
     let result = ActionResolver.resolve roller (StandardAttack(ForceStrike false)) actor victim
 
     Assert.True(result.Target.Health.Current <= 0, "the victim should be dropped in one blow")
-
-    // A kill pays in experience and in the Discipline pair, never in an offensive attribute.
-    for stat in [ Force; Finesse; Intellect; Acuity ] do
-      Assert.Equal(actor.Stats.Get stat, result.Actor.Stats.Get stat)
-
-    let _, victimGuard = result.Target.StanceAttributes
-    Assert.Equal(victim.Stats.Get victimGuard + 2, result.Target.Stats.Get victimGuard)
+    Assert.Equal<Map<StatId, int>>(actor.Stats.ToMap(), result.Actor.Stats.ToMap())
+    Assert.Equal<Map<StatId, int>>(victim.Stats.ToMap(), result.Target.Stats.ToMap())
 
   [<Fact>]
   let ``a turn that neither lands nor takes a blow leaves both fighters untouched`` () =

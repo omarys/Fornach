@@ -334,12 +334,11 @@ type Combatant =
   /// mental defences. No offensive attribute ever grows from a kill — Power and Agility climb through
   /// the combat ramp and gear instead, so Discipline has to be fed on purpose.
   static member growFromEncounter (foes: Combatant list) (c: Combatant) =
-    // `max(10 - (bearer level - foe level), 5)`: diminishing as the foe falls behind, and MORE than ten
-    // when the bearer is the underdog — beating something above your level is the best teacher there is.
-    // The floor of 5 is the only clamp.
+    // `max(16 - (bearer level - foe level), 8)`: diminishing as the foe falls behind, and MORE than
+    // sixteen when the bearer is the underdog. The floor of 8 is the only clamp.
     let foeLevel = foes |> List.fold (fun best (f: Combatant) -> max best f.Level) 0
     let levelGap = c.Level - foeLevel
-    let disciplineGain = Math.Max(10 - levelGap, 5)
+    let disciplineGain = Math.Max(16 - levelGap, 8)
 
     let mentalDefences =
       [ StatId.Resolve, 1; StatId.Intuition, 1; StatId.Composure, 1 ]
@@ -406,11 +405,6 @@ type Combatant =
     | Mental, CombatStance.PowerStance -> Intellect, Resolve
     | Mental, CombatStance.AgilityStance -> Acuity, Intuition
     | Mental, CombatStance.DisciplineStance -> Acumen, Composure
-
-  /// A blow taken hardens the stance that absorbed it: +2 to that stance's defensive attribute.
-  static member fortifyStance (c: Combatant) : Combatant =
-    let _, defense = c.StanceAttributes
-    { c with Stats = c.Stats.Modify(defense, 2) }
 
   /// Permanently folds an item's stat modifiers into a combatant's base Stats
   /// (each stat clamped to a minimum of 1). Story pickups use this so that an
