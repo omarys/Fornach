@@ -1265,3 +1265,43 @@ module TowerSession =
         Consumables = newConsumables
         UnidentifiedConsumables = newUnidentified
         MessageLog = xpMessages @ logMessages }
+
+  /// Resolves the fleeing behavior of a critically wounded lone beast (ADR 0009)
+  let resolveBeastFlee (enemyId: string) (isSpared: bool) (state: TowerRunState) : TowerRunState =
+    let mutable targetEnemyOpt = None
+    let updatedEntities =
+      state.CurrentFloor.Entities
+      |> Map.map (fun _ ent ->
+        match ent with
+        | EntityEnemy e when e.Id = enemyId ->
+          targetEnemyOpt <- Some e
+          EntityEnemy { e with IsDefeated = true }
+        | other -> other)
+
+    match targetEnemyOpt with
+    | None -> state
+    | Some e ->
+      if isSpared then
+        let updatedPlayer =
+          state.Player
+          |> Combatant.updateMeters (fun m -> { m with Recklessness = Meter.Zero })
+          |> (fun p -> { p with Morale = p.Morale.ApplyDelta 20 })
+          |> Combatant.growFromEncounter [ e.Combatant ]
+
+        let msg = sprintf "The wounded %s scrambled into the shadows and vanished. You spared it, steadying your nerves and gaining martial insight." e.Name
+        { state with
+            CurrentFloor = { state.CurrentFloor with Entities = updatedEntities }
+            Player = updatedPlayer
+            MessageLog = msg :: state.MessageLog }
+      else
+        // Executed: resolve standard defeat (drops loot/trophy) + 15 Recklessness
+        let stateAfterDefeat = resolveEnemyDefeat enemyId state
+        let updatedPlayer =
+          stateAfterDefeat.Player
+          |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness + 15 })
+          |> Combatant.growFromEncounter [ e.Combatant ]
+
+        let msg = sprintf "Delivered a merciless coup de grâce to the fleeing %s (+15 Recklessness)." e.Name
+        { stateAfterDefeat with
+            Player = updatedPlayer
+            MessageLog = msg :: stateAfterDefeat.MessageLog }

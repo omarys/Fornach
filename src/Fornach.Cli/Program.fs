@@ -64,6 +64,14 @@ module Program =
       ExecuteStrike Physical
     elif choice.Contains("EXECUTE FINISHER (Mental") then
       ExecuteStrike Mental
+    elif choice.Contains("Fortitude Guard") then
+      ActiveDefense (FortitudeGuard (choice.Contains("Braced")))
+    elif choice.Contains("Reflex Slip") then
+      ActiveDefense (ReflexSlip (choice.Contains("Evasive")))
+    elif choice.Contains("Resolve Anchor") then
+      ActiveDefense (ResolveAnchor (choice.Contains("Iron Will")))
+    elif choice.Contains("Intuition Perception") then
+      ActiveDefense (IntuitionPerception (choice.Contains("Insight")))
     elif choice.Contains("Force Strike: Standard Cleave") then
       StandardAttack (ForceStrike false)
     elif choice.Contains("Force Strike: Wild Blow") then
@@ -205,6 +213,16 @@ module Program =
           powTag, agiTag, disTag, interruptBadge, rShieldTag
         | _ -> "", "", "", "", ""
 
+      let isCounterPower =
+        match enemyIntentOpt with
+        | Some (StandardAttack atk) -> atk.Vector = Vector.Power
+        | _ -> false
+
+      let isCounterAgility =
+        match enemyIntentOpt with
+        | Some (StandardAttack atk) -> atk.Vector = Vector.Agility
+        | _ -> false
+
       /// A defence readout for one attack: the player's attacking stat minus the defender's value, so a
       /// positive number is a favourable contest. Both sides read stance-adjusted stats because that is
       /// what the resolver contests -- the raw stat understated the defender by their stance multiplier.
@@ -236,18 +254,29 @@ module Program =
           |> List.sortBy (fun ((margin, damage), _) -> -float margin, -damage)
           |> List.collect snd
 
-      if player.Plane = Physical then
+      if player.IsInNach then
+        // In Nach (Defender): Action menu is strictly active defenses and recoveries (ADR 0009)
+        if player.Plane = Physical then
+          let fortCounterTag = if isCounterPower then sprintf " [bold %s]★ Affinity Counter (Mitigates Force)[/]" Theme.Green else ""
+          let refCounterTag = if isCounterAgility then sprintf " [bold %s]★ Affinity Counter (Mitigates Finesse)[/]" Theme.Green else ""
+          sprintf "🛡️  [%s]Fortitude Guard: Braced Guard[/] (Power Defense • Counter Force Strikes; +25%% mitigation, seize Vor)%s" Theme.Cyan fortCounterTag
+          sprintf "🛡️  [%s]Reflex Slip: Evasive Slip[/] (Agility Defense • Counter Finesse Cadences; +25%% mitigation, seize Vor)%s" Theme.Green refCounterTag
+          sprintf "🛡️  [bold %s]Raise Shield[/] (Bastion Posture: Repair Armor ~36%% of max, Gain 2 Combat Ramp, Bleed Recklessness)%s" Theme.Green raiseShieldTag
+          sprintf "🛡️  [%s]Steady Form[/] (Recovery: vent all strain via Poise & Composure, restore Morale, build Combat Ramp)" Theme.Green
+        else
+          let resCounterTag = if isCounterPower then sprintf " [bold %s]★ Affinity Counter (Mitigates Power)[/]" Theme.Green else ""
+          let intCounterTag = if isCounterAgility then sprintf " [bold %s]★ Affinity Counter (Mitigates Agility)[/]" Theme.Green else ""
+          sprintf "🧠 [%s]Resolve Anchor: Iron Will[/] (Mental Power Defense • Counter Intellect; +25%% mitigation, seize Vor)%s" Theme.Cyan resCounterTag
+          sprintf "👁️ [%s]Intuition Perception: Insight[/] (Mental Agility Defense • Counter Acuity; +25%% mitigation, seize Vor)%s" Theme.Green intCounterTag
+          sprintf "🧠 [%s]Center Mind[/] (Mental Reset: Drain Recklessness, clear Confusion, restore Arcane Ward)" Theme.Cyan
+      elif player.Plane = Physical then
+        // In Vor or Indes (Attacker): Power and Agility vectors plus recoveries
         let fortSuffix = contestSuffix StatId.Force StatId.Fortitude
-
         let refSuffix = contestSuffix StatId.Finesse StatId.Reflex
 
-        let poiseSuffix = contestSuffix StatId.Prowess StatId.Poise
-
-        // Physical Martial Strikes grouped by vector (attacks fluidly transition combat stance)
         let powerStrikes = [
           sprintf "⚔️  [%s]Force Strike: Standard Cleave[/] (Power Stance • Cleave vs. Fortitude%s)%s" Theme.Red fortSuffix powerCounterTag
           sprintf "⚡ [bold %s]Force Strike: Wild Blow[/] (Power Stance Gambit: +30 Recklessness, 1.5x Dmg)" Theme.Red
-          // Dedicated Power Gambit (costs Momentum with 0 Recklessness!)
           if player.Momentum >= 2 then
             sprintf "🎯 [bold %s]Force Strike: Insight Cleave[/] (Power Stance Gambit: Burn every Momentum stack for a Read Opening, 0 Recklessness)" Theme.Red
         ]
@@ -255,39 +284,20 @@ module Program =
         let agilityStrikes = [
           sprintf "⚔️  [%s]Finesse Cadence: Rapid Probing[/] (Agility Stance • Probing Cadence vs. Reflex%s)%s" Theme.Green refSuffix agilityCounterTag
           sprintf "⚡ [bold %s]Finesse Cadence: Relentless Blitz[/] (Agility Stance Gambit: +25 Recklessness)" Theme.Green
-          // Dedicated Agility Gambit (costs Flow with 0 Recklessness!)
           if player.Flow >= 2 then
             sprintf "🎯 [bold %s]Finesse Cadence: Threaded Opening[/] (Agility Stance Gambit: Burn every Flow stack to Thread a Vital Opening, 0 Recklessness)" Theme.Green
-        ]
-
-        let disciplineStrikes = [
-          sprintf "⚔️  [%s]Prowess Strike: Stance Pressure[/] (Discipline Stance • Focus vs. Poise%s)%s" Theme.Purple poiseSuffix disciplineCounterTag
-          sprintf "⚡ [bold %s]Prowess Strike: Invitational Bait[/] (Discipline Stance Gambit: +35 Recklessness)" Theme.Purple
-          // Shield Bash: one action, stance-keyed, offered only while there is a wind-up to break.
           if isInterruptibleWindup enemyIntentOpt then
-            sprintf "🛡️  [bold %s]Shield Bash[/] (Interrupt the windup — Power: knockdown, Agility: parry + counter window, Discipline: weapon break)%s" Theme.Cyan shieldInterruptTag
-          // Dedicated Discipline Gambits (cost Focus with 0 Recklessness!)
-          if player.Focus >= 2 then
-            sprintf "🎯 [bold %s]Calculated Flaw Strike[/] (Discipline Stance Gambit: Burn every Focus stack for a Vital Opening, 0 Recklessness)" Theme.Purple
-          if player.Focus >= 3 then
-            sprintf "⚔️  [bold %s]Masterful Disarm[/] (Discipline Stance Gambit: Spend Focus to Degrade Opponent Weapon, 0 Recklessness)" Theme.Purple
+            sprintf "🛡️  [bold %s]Shield Bash[/] (Interrupt the windup — Power: knockdown, Agility: parry + counter window)%s" Theme.Cyan shieldInterruptTag
         ]
 
-        // Archetype vector leads the list and breaks ties between equally effective strikes
         let martialGroups =
           match player.Class.Vector with
           | Vector.Power ->
             [ ForceStrike false, powerStrikes
-              FinesseCadence false, agilityStrikes
-              ProwessStrike false, disciplineStrikes ]
-          | Vector.Agility ->
-            [ FinesseCadence false, agilityStrikes
-              ProwessStrike false, disciplineStrikes
-              ForceStrike false, powerStrikes ]
-          | Vector.Discipline ->
-            [ ProwessStrike false, disciplineStrikes
-              ForceStrike false, powerStrikes
               FinesseCadence false, agilityStrikes ]
+          | _ ->
+            [ FinesseCadence false, agilityStrikes
+              ForceStrike false, powerStrikes ]
 
         yield! rankStrikes martialGroups
 
@@ -297,7 +307,7 @@ module Program =
         sprintf "🛡️  [%s]Steady Form[/] (Recovery: vent all strain via Poise & Composure, restore Morale, build Combat Ramp)" Theme.Green
 
       else
-        // Arcane Spellcraft (Mental Characters)
+        // Arcane Spellcraft (Mental Characters in Vor or Indes)
         let powProf = int (Math.Round(player.GetArcaneProficiency Power * 100.0))
         let agiProf = int (Math.Round(player.GetArcaneProficiency Agility * 100.0))
         let disProf = int (Math.Round(player.GetArcaneProficiency Discipline * 100.0))
@@ -307,10 +317,7 @@ module Program =
           else sprintf " [bold %s](%d%% Prof - Specialization)[/]" Theme.Green prof
 
         let resolveSuffix = contestSuffix StatId.Intellect StatId.Resolve
-
         let intuitionSuffix = contestSuffix StatId.Acuity StatId.Intuition
-
-        let composureSuffix = contestSuffix StatId.Acumen StatId.Composure
 
         let powerSpells = [
           sprintf "✨ [%s]Arcane Cataclysm: Elemental Blast[/] (Resonance Spike Form • Intellect vs. Resolve%s)%s%s" Theme.Pink resolveSuffix (strainTag powProf) powerCounterTag
@@ -325,34 +332,14 @@ module Program =
           sprintf "⚡ [bold %s]Mirror Illusion: Decoy Swarm[/] (Phantasmal Diffusion Gambit: +25 Recklessness, Extra Clones)%s" Theme.Purple (strainTag agiProf)
         ]
 
-        let siphonClarityTag =
-          if player.Meters.CognitiveFatigue.Value >= 20 || player.Meters.Recklessness.Value >= 20 then
-            sprintf " [bold %s]★ Vents Fatigue & Calms Mind[/]" Theme.Green
-          else ""
-
-        let disciplineSpells = [
-          // Active Armament Technique: Mage Staff Siphon
-          sprintf "✨ [bold %s]Staff Siphon: Runic Clarity[/] (Aegis Lattice Form • Strike Morale, Siphon -20 Fatigue, -15 Recklessness, +15 Ward)%s%s%s" Theme.Cyan composureSuffix disciplineCounterTag siphonClarityTag
-          sprintf "🛡️  [%s]Runic Ward Trap: Abjuration Glyph[/] (Aegis Lattice Form • Acumen vs. Composure%s, Ward)%s%s" Theme.Cyan composureSuffix (strainTag disProf) disciplineCounterTag
-          sprintf "⚡ [bold %s]Runic Ward Trap: Anomalous Glyph[/] (Aegis Lattice Gambit: +30 Recklessness, Heavy Ward)%s" Theme.Cyan (strainTag disProf)
-          sprintf "🌀 [%s]Disorienting Shockwave: Balance Disruption[/] (Aegis Lattice Form • Break Posture & Tempo)%s" Theme.Orange (strainTag disProf)
-          sprintf "⚡ [bold %s]Disorienting Shockwave: Staggering Pulse[/] (Aegis Lattice Gambit: +25 Recklessness, Swarm Pulse)%s" Theme.Orange (strainTag disProf)
-        ]
-
         let spellGroups =
           match player.Class.Vector with
           | Vector.Power ->
             [ ArcaneCataclysm false, powerSpells
-              SynapticGlamour false, agilitySpells
-              RunicWardTrap false, disciplineSpells ]
-          | Vector.Agility ->
-            [ SynapticGlamour false, agilitySpells
-              RunicWardTrap false, disciplineSpells
-              ArcaneCataclysm false, powerSpells ]
-          | Vector.Discipline ->
-            [ RunicWardTrap false, disciplineSpells
-              ArcaneCataclysm false, powerSpells
               SynapticGlamour false, agilitySpells ]
+          | _ ->
+            [ SynapticGlamour false, agilitySpells
+              ArcaneCataclysm false, powerSpells ]
 
         yield! rankStrikes spellGroups
 
@@ -385,99 +372,141 @@ module Program =
     while not combatOver do
       let playerHasVor = player.IsInVor || not enemy.IsInVor
       let enemyIntent = AI.chooseIntent enemy player
-      Display.renderHUDWithTelegraph player enemy round (Some enemyIntent)
 
-      let doPlayerTurn (turnNumber: int) =
-        let choices = buildActionChoicesWithTelegraph player enemy (if playerHasVor then Some enemyIntent else None)
-        let choice =
+      let isLoneBeastFleeEligible =
+        enemy.IsBeast
+        && float enemy.Health.Current / float enemy.Health.Maximum < 0.30
+        && float player.Health.Current / float player.Health.Maximum > 0.70
+
+      if isLoneBeastFleeEligible then
+        Display.renderHUDWithTelegraph player enemy round (Some enemyIntent)
+        let fleePromptTitle =
+          sprintf "[bold %s]🐾 The critically wounded %s is whimpering, limping away into the shadows![/]" Theme.Yellow enemy.Name
+        let fleeChoices =
+          [ sprintf "🕊️ [bold %s]Spare the beast[/] (Mercy: Clear Recklessness to 0, restore +20 Morale, gain Bestiary Prowess)" Theme.Green
+            sprintf "☠️ [bold %s]Execute the beast[/] (Coup de Grâce: Harvest trophies/pelts, +15 Recklessness, gain Bestiary Prowess)" Theme.Red ]
+        let fleeChoice =
           Display.promptSelectionWithHelp
-            (sprintf "[bold %s]Round %d - Select Tactical Action for %s (Press '?' or F1 for Symbol Legend):[/]" Theme.Yellow round player.Name)
-            choices
-            (Some 12)
-            (fun () -> Display.renderHUDWithTelegraph player enemy round (if playerHasVor then Some enemyIntent else None))
+            fleePromptTitle
+            fleeChoices
+            (Some 2)
+            (fun () -> Display.renderHUDWithTelegraph player enemy round (Some enemyIntent))
 
-        let playerIntent = parseActionChoice choice
-
-        let playerBefore = player
-        let enemyBefore = enemy
-
-        AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes %s...[/]" Theme.Green player.Name choice)
-        let playerResult = ActionResolver.resolve roller playerIntent player enemy
-        player <- playerResult.Actor
-        enemy <- playerResult.Target
-
-        enemyInterrupted <-
-          playerResult.Events
-          |> List.exists (function CombatEvent.ActionInterrupted _ -> true | _ -> false)
-
-        CombatLogger.recordTurn session round turnNumber choice playerBefore enemyBefore playerResult
-
-        Display.renderRollBreakdown choice player.Name playerResult.Contest
-        Display.logDamageSummary playerResult.Events enemyBefore enemy
-        playerResult.Events |> List.iter Display.logEvent
-
-        let playerExecutedEnemy =
-          playerResult.Events
-          |> List.exists (function CombatEvent.Executed _ -> true | _ -> false)
-
-        if playerExecutedEnemy || enemy.Health.IsDepleted || enemy.Morale.IsDepleted then
+        if fleeChoice.Contains("Spare") then
+          player <-
+            player
+            |> Combatant.updateMeters (fun m -> { m with Recklessness = Meter.Zero })
+            |> (fun p -> { p with Morale = p.Morale.ApplyDelta 20 })
+            |> Combatant.growFromEncounter [ enemy ]
+          Display.logEvent (CombatEvent.BeastFled(enemy.Id, enemy.Name))
+          Display.logEvent (CombatEvent.BeastSpared(player.Id, enemy.Id))
           combatOver <- true
           outcome <- "PlayerVictorious"
-          AnsiConsole.WriteLine()
-          AnsiConsole.Write(
-            Rule(sprintf "[bold %s]★★★ VICTORY: %s HAS PREVAILED OVER %s! ★★★[/]" Theme.Green player.Name enemy.Name)
-              .Centered()
-              .RuleStyle(Theme.StyleGreen)
-          )
-
-      let doEnemyTurn (turnNumber: int) =
-        let enemyBeforeTurn = enemy
-        let playerBeforeTurn = player
-
-        let enemyResult =
-          if enemyInterrupted then
-            AnsiConsole.MarkupLine(sprintf "\n[bold %s]⚡ %s is staggered from the technique interrupt! Attack defused![/]" Theme.Yellow enemy.Name)
-            let recoverIntent = RecoveryAction SteadyForm
-            ActionResolver.resolve roller recoverIntent enemy player
-          else
-            let tempoMsg = if not playerHasVor then " (Holding the Vor)" else ""
-            AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes telegraphed action%s...[/]" Theme.Pink enemy.Name tempoMsg)
-            ActionResolver.resolve roller enemyIntent enemy player
-
-        enemy <- enemyResult.Actor
-        player <- enemyResult.Target
-
-        let intentDesc = if enemyInterrupted then "Staggered Recovery (Interrupted)" else Display.intentLogLabel enemyIntent enemyBeforeTurn
-        CombatLogger.recordTurn session round turnNumber intentDesc enemyBeforeTurn playerBeforeTurn enemyResult
-
-        Display.renderRollBreakdown intentDesc enemy.Name enemyResult.Contest
-        Display.logDamageSummary enemyResult.Events playerBeforeTurn player
-        enemyResult.Events |> List.iter Display.logEvent
-        if enemyInterrupted then enemyInterrupted <- false
-
-        let enemyExecutedPlayer =
-          enemyResult.Events
-          |> List.exists (function CombatEvent.Executed _ -> true | _ -> false)
-
-        if enemyExecutedPlayer || player.Health.IsDepleted || player.Morale.IsDepleted then
+          AnsiConsole.MarkupLine(sprintf "\n[bold %s]🕊️ You lowered your weapon. The wounded %s scrambled into the darkness. You steadied your composure and gained martial insight.[/]" Theme.Green enemy.Name)
+        else
+          player <-
+            player
+            |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness + 15 })
+            |> Combatant.growFromEncounter [ enemy ]
+          Display.logEvent (CombatEvent.BeastExecuted(player.Id, enemy.Id))
           combatOver <- true
-          outcome <- "PlayerDefeated"
-          AnsiConsole.WriteLine()
-          AnsiConsole.Write(
-            Rule(sprintf "[bold %s]☠☠☠ DEFEAT: %s HAS FALLEN TO %s! ☠☠☠[/]" Theme.Red player.Name enemy.Name)
-              .Centered()
-              .RuleStyle(Theme.StyleRed)
-          )
+          outcome <- "PlayerVictorious"
+          AnsiConsole.MarkupLine(sprintf "\n[bold %s]☠️ You struck down the fleeing %s without hesitation (+15 Recklessness, Bestiary Prowess gained).[/]" Theme.Red enemy.Name)
 
-      if playerHasVor then
-        doPlayerTurn 1
-        if not combatOver then
-          doEnemyTurn 2
-      else
-        AnsiConsole.MarkupLine(sprintf "\n[bold %s]⚡ %s holds the Vor and strikes first![/]" Theme.Yellow enemy.Name)
-        doEnemyTurn 1
-        if not combatOver then
-          doPlayerTurn 2
+      if not combatOver then
+        Display.renderHUDWithTelegraph player enemy round (Some enemyIntent)
+
+        let doPlayerTurn (turnNumber: int) =
+          let choices = buildActionChoicesWithTelegraph player enemy (if playerHasVor then Some enemyIntent else None)
+          let choice =
+            Display.promptSelectionWithHelp
+              (sprintf "[bold %s]Round %d - Select Tactical Action for %s (Press '?' or F1 for Symbol Legend):[/]" Theme.Yellow round player.Name)
+              choices
+              (Some 12)
+              (fun () -> Display.renderHUDWithTelegraph player enemy round (if playerHasVor then Some enemyIntent else None))
+
+          let playerIntent = parseActionChoice choice
+
+          let playerBefore = player
+          let enemyBefore = enemy
+
+          AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes %s...[/]" Theme.Green player.Name choice)
+          let playerResult = ActionResolver.resolve roller playerIntent player enemy
+          player <- playerResult.Actor
+          enemy <- playerResult.Target
+
+          enemyInterrupted <-
+            playerResult.Events
+            |> List.exists (function CombatEvent.ActionInterrupted _ -> true | _ -> false)
+
+          CombatLogger.recordTurn session round turnNumber choice playerBefore enemyBefore playerResult
+
+          Display.renderRollBreakdown choice player.Name playerResult.Contest
+          Display.logDamageSummary playerResult.Events enemyBefore enemy
+          playerResult.Events |> List.iter Display.logEvent
+
+          let playerExecutedEnemy =
+            playerResult.Events
+            |> List.exists (function CombatEvent.Executed _ -> true | _ -> false)
+
+          if playerExecutedEnemy || enemy.Health.IsDepleted || enemy.Morale.IsDepleted then
+            combatOver <- true
+            outcome <- "PlayerVictorious"
+            AnsiConsole.WriteLine()
+            AnsiConsole.Write(
+              Rule(sprintf "[bold %s]★★★ VICTORY: %s HAS PREVAILED OVER %s! ★★★[/]" Theme.Green player.Name enemy.Name)
+                .Centered()
+                .RuleStyle(Theme.StyleGreen)
+            )
+
+        let doEnemyTurn (turnNumber: int) =
+          let enemyBeforeTurn = enemy
+          let playerBeforeTurn = player
+
+          let enemyResult =
+            if enemyInterrupted then
+              AnsiConsole.MarkupLine(sprintf "\n[bold %s]⚡ %s is staggered from the technique interrupt! Attack defused![/]" Theme.Yellow enemy.Name)
+              let recoverIntent = RecoveryAction SteadyForm
+              ActionResolver.resolve roller recoverIntent enemy player
+            else
+              let tempoMsg = if not playerHasVor then " (Holding the Vor)" else ""
+              AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes telegraphed action%s...[/]" Theme.Pink enemy.Name tempoMsg)
+              ActionResolver.resolve roller enemyIntent enemy player
+
+          enemy <- enemyResult.Actor
+          player <- enemyResult.Target
+
+          let intentDesc = if enemyInterrupted then "Staggered Recovery (Interrupted)" else Display.intentLogLabel enemyIntent enemyBeforeTurn
+          CombatLogger.recordTurn session round turnNumber intentDesc enemyBeforeTurn playerBeforeTurn enemyResult
+
+          Display.renderRollBreakdown intentDesc enemy.Name enemyResult.Contest
+          Display.logDamageSummary enemyResult.Events playerBeforeTurn player
+          enemyResult.Events |> List.iter Display.logEvent
+          if enemyInterrupted then enemyInterrupted <- false
+
+          let enemyExecutedPlayer =
+            enemyResult.Events
+            |> List.exists (function CombatEvent.Executed _ -> true | _ -> false)
+
+          if enemyExecutedPlayer || player.Health.IsDepleted || player.Morale.IsDepleted then
+            combatOver <- true
+            outcome <- "PlayerDefeated"
+            AnsiConsole.WriteLine()
+            AnsiConsole.Write(
+              Rule(sprintf "[bold %s]☠☠☠ DEFEAT: %s HAS FALLEN TO %s! ☠☠☠[/]" Theme.Red player.Name enemy.Name)
+                .Centered()
+                .RuleStyle(Theme.StyleRed)
+            )
+
+        if playerHasVor then
+          doPlayerTurn 1
+          if not combatOver then
+            doEnemyTurn 2
+        else
+          AnsiConsole.MarkupLine(sprintf "\n[bold %s]⚡ %s holds the Vor and strikes first![/]" Theme.Yellow enemy.Name)
+          doEnemyTurn 1
+          if not combatOver then
+            doPlayerTurn 2
 
       if not combatOver then
         AnsiConsole.WriteLine()
@@ -722,108 +751,150 @@ module Program =
     while not combatOver do
       let playerHasVor = currentCombatant.IsInVor || not currentBoss.IsInVor
       let enemyIntent = AI.chooseIntent currentBoss currentCombatant
-      Display.renderHUDWithTelegraph currentCombatant currentBoss round (Some enemyIntent)
 
-      let doPlayerTurn (turnNumber: int) =
-        let choices = buildActionChoicesWithTelegraph currentCombatant currentBoss (if playerHasVor then Some enemyIntent else None)
-        let choice =
+      let isLoneBeastFleeEligible =
+        currentBoss.IsBeast
+        && float currentBoss.Health.Current / float currentBoss.Health.Maximum < 0.30
+        && float currentCombatant.Health.Current / float currentCombatant.Health.Maximum > 0.70
+
+      if isLoneBeastFleeEligible then
+        Display.renderHUDWithTelegraph currentCombatant currentBoss round (Some enemyIntent)
+        let fleePromptTitle =
+          sprintf "[bold %s]🐾 The critically wounded %s is whimpering, limping away into the shadows![/]" Theme.Yellow currentBoss.Name
+        let fleeChoices =
+          [ sprintf "🕊️ [bold %s]Spare the beast[/] (Mercy: Clear Recklessness to 0, restore +20 Morale, gain Bestiary Prowess)" Theme.Green
+            sprintf "☠️ [bold %s]Execute the beast[/] (Coup de Grâce: Harvest trophies/pelts, +15 Recklessness, gain Bestiary Prowess)" Theme.Red ]
+        let fleeChoice =
           Display.promptSelectionWithHelp
-            (sprintf "[bold %s]Round %d - Tactical Action against %s (Press '?' or F1 for Symbol Legend):[/]" Theme.Yellow round currentBoss.Name)
-            choices
-            (Some 12)
-            (fun () -> Display.renderHUDWithTelegraph currentCombatant currentBoss round (if playerHasVor then Some enemyIntent else None))
+            fleePromptTitle
+            fleeChoices
+            (Some 2)
+            (fun () -> Display.renderHUDWithTelegraph currentCombatant currentBoss round (Some enemyIntent))
 
-        let playerIntent = parseActionChoice choice
-
-        let playerBefore = currentCombatant
-        let bossBefore = currentBoss
-
-        AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes %s...[/]" Theme.Green currentCombatant.Name choice)
-        let playerResult = ActionResolver.resolve roller playerIntent currentCombatant currentBoss
-        currentCombatant <- playerResult.Actor
-        currentBoss <- playerResult.Target
-
-        enemyInterrupted <-
-          playerResult.Events
-          |> List.exists (function CombatEvent.ActionInterrupted _ -> true | _ -> false)
-
-        CombatLogger.recordTurn session round turnNumber choice playerBefore bossBefore playerResult
-        RuntimeLog.write (
-          sprintf "combat round %d player turn: %s (%d events)" round choice playerResult.Events.Length)
-
-        Display.renderRollBreakdown choice currentCombatant.Name playerResult.Contest
-        Display.logDamageSummary playerResult.Events bossBefore currentBoss
-        playerResult.Events |> List.iter Display.logEvent
-
-        let playerExecutedEnemy =
-          playerResult.Events
-          |> List.exists (function CombatEvent.Executed _ -> true | _ -> false)
-
-        if playerExecutedEnemy || currentBoss.Health.IsDepleted || currentBoss.Morale.IsDepleted then
+        if fleeChoice.Contains("Spare") then
+          currentCombatant <-
+            currentCombatant
+            |> Combatant.updateMeters (fun m -> { m with Recklessness = Meter.Zero })
+            |> (fun p -> { p with Morale = p.Morale.ApplyDelta 20 })
+            |> Combatant.growFromEncounter [ currentBoss ]
+          Display.logEvent (CombatEvent.BeastFled(currentBoss.Id, currentBoss.Name))
+          Display.logEvent (CombatEvent.BeastSpared(currentCombatant.Id, currentBoss.Id))
           combatOver <- true
           outcome <- CombatOutcome.PlayerVictorious
-          currentCombatant <- Combatant.growFromEncounter [ currentBoss ] currentCombatant
-          AnsiConsole.WriteLine()
-          AnsiConsole.Write(
-            Rule(sprintf "[bold %s]★★★ MANIFESTATION RESOLVED: %s PREVAILED! ★★★[/]" Theme.Green currentCombatant.Name)
-              .Centered()
-              .RuleStyle(Theme.StyleGreen)
-          )
-
-      let doEnemyTurn (turnNumber: int) =
-        let bossBeforeTurn = currentBoss
-        let playerBeforeTurn = currentCombatant
-
-        let enemyResult =
-          if enemyInterrupted then
-            AnsiConsole.MarkupLine(sprintf "\n[bold %s]⚡ %s is staggered from the technique interrupt! Attack defused![/]" Theme.Yellow currentBoss.Name)
-            let recoverIntent = RecoveryAction SteadyForm
-            ActionResolver.resolve roller recoverIntent currentBoss currentCombatant
-          else
-            let tempoMsg = if not playerHasVor then " (Holding the Vor)" else ""
-            AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes telegraphed action%s...[/]" Theme.Pink currentBoss.Name tempoMsg)
-            if floorNumber = 1 then
-              // Tutorial grace: the level-1 protagonist cannot be one-shot on the opening stage.
-              ActionResolver.resolveWithoutLethal roller enemyIntent currentBoss currentCombatant
-            else
-              ActionResolver.resolve roller enemyIntent currentBoss currentCombatant
-
-        currentBoss <- enemyResult.Actor
-        currentCombatant <- enemyResult.Target
-
-        let intentDesc = if enemyInterrupted then "Staggered Recovery (Interrupted)" else Display.intentLogLabel enemyIntent bossBeforeTurn
-        CombatLogger.recordTurn session round turnNumber intentDesc bossBeforeTurn playerBeforeTurn enemyResult
-        RuntimeLog.write (
-          sprintf "combat round %d enemy turn: %s (%d events)" round intentDesc enemyResult.Events.Length)
-
-        Display.renderRollBreakdown intentDesc currentBoss.Name enemyResult.Contest
-        Display.logDamageSummary enemyResult.Events playerBeforeTurn currentCombatant
-        enemyResult.Events |> List.iter Display.logEvent
-        if enemyInterrupted then enemyInterrupted <- false
-
-        let enemyExecutedPlayer =
-          enemyResult.Events
-          |> List.exists (function CombatEvent.Executed _ -> true | _ -> false)
-
-        if enemyExecutedPlayer || currentCombatant.Health.IsDepleted || currentCombatant.Morale.IsDepleted then
+          AnsiConsole.MarkupLine(sprintf "\n[bold %s]🕊️ You lowered your weapon. The wounded %s scrambled into the darkness. You steadied your composure and gained martial insight.[/]" Theme.Green currentBoss.Name)
+        else
+          currentCombatant <-
+            currentCombatant
+            |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness + 15 })
+            |> Combatant.growFromEncounter [ currentBoss ]
+          Display.logEvent (CombatEvent.BeastExecuted(currentCombatant.Id, currentBoss.Id))
           combatOver <- true
-          outcome <- CombatOutcome.PlayerDefeated
-          AnsiConsole.WriteLine()
-          AnsiConsole.Write(
-            Rule(sprintf "[bold %s]☠☠☠ DEFEATED BY TRAUMA: %s HAS FALLEN! ☠☠☠[/]" Theme.Red currentCombatant.Name)
-              .Centered()
-              .RuleStyle(Theme.StyleRed)
-          )
+          outcome <- CombatOutcome.PlayerVictorious
+          AnsiConsole.MarkupLine(sprintf "\n[bold %s]☠️ You struck down the fleeing %s without hesitation (+15 Recklessness, Bestiary Prowess gained).[/]" Theme.Red currentBoss.Name)
 
-      if playerHasVor then
-        doPlayerTurn 1
-        if not combatOver then
-          doEnemyTurn 2
-      else
-        AnsiConsole.MarkupLine(sprintf "\n[bold %s]⚡ %s holds the Vor and strikes first![/]" Theme.Yellow currentBoss.Name)
-        doEnemyTurn 1
-        if not combatOver then
-          doPlayerTurn 2
+      if not combatOver then
+        Display.renderHUDWithTelegraph currentCombatant currentBoss round (Some enemyIntent)
+
+        let doPlayerTurn (turnNumber: int) =
+          let choices = buildActionChoicesWithTelegraph currentCombatant currentBoss (if playerHasVor then Some enemyIntent else None)
+          let choice =
+            Display.promptSelectionWithHelp
+              (sprintf "[bold %s]Round %d - Tactical Action against %s (Press '?' or F1 for Symbol Legend):[/]" Theme.Yellow round currentBoss.Name)
+              choices
+              (Some 12)
+              (fun () -> Display.renderHUDWithTelegraph currentCombatant currentBoss round (if playerHasVor then Some enemyIntent else None))
+
+          let playerIntent = parseActionChoice choice
+
+          let playerBefore = currentCombatant
+          let bossBefore = currentBoss
+
+          AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes %s...[/]" Theme.Green currentCombatant.Name choice)
+          let playerResult = ActionResolver.resolve roller playerIntent currentCombatant currentBoss
+          currentCombatant <- playerResult.Actor
+          currentBoss <- playerResult.Target
+
+          enemyInterrupted <-
+            playerResult.Events
+            |> List.exists (function CombatEvent.ActionInterrupted _ -> true | _ -> false)
+
+          CombatLogger.recordTurn session round turnNumber choice playerBefore bossBefore playerResult
+          RuntimeLog.write (
+            sprintf "combat round %d player turn: %s (%d events)" round choice playerResult.Events.Length)
+
+          Display.renderRollBreakdown choice currentCombatant.Name playerResult.Contest
+          Display.logDamageSummary playerResult.Events bossBefore currentBoss
+          playerResult.Events |> List.iter Display.logEvent
+
+          let playerExecutedEnemy =
+            playerResult.Events
+            |> List.exists (function CombatEvent.Executed _ -> true | _ -> false)
+
+          if playerExecutedEnemy || currentBoss.Health.IsDepleted || currentBoss.Morale.IsDepleted then
+            combatOver <- true
+            outcome <- CombatOutcome.PlayerVictorious
+            currentCombatant <- Combatant.growFromEncounter [ currentBoss ] currentCombatant
+            AnsiConsole.WriteLine()
+            AnsiConsole.Write(
+              Rule(sprintf "[bold %s]★★★ MANIFESTATION RESOLVED: %s PREVAILED! ★★★[/]" Theme.Green currentCombatant.Name)
+                .Centered()
+                .RuleStyle(Theme.StyleGreen)
+            )
+
+        let doEnemyTurn (turnNumber: int) =
+          let bossBeforeTurn = currentBoss
+          let playerBeforeTurn = currentCombatant
+
+          let enemyResult =
+            if enemyInterrupted then
+              AnsiConsole.MarkupLine(sprintf "\n[bold %s]⚡ %s is staggered from the technique interrupt! Attack defused![/]" Theme.Yellow currentBoss.Name)
+              let recoverIntent = RecoveryAction SteadyForm
+              ActionResolver.resolve roller recoverIntent currentBoss currentCombatant
+            else
+              let tempoMsg = if not playerHasVor then " (Holding the Vor)" else ""
+              AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes telegraphed action%s...[/]" Theme.Pink currentBoss.Name tempoMsg)
+              if floorNumber = 1 then
+                // Tutorial grace: the level-1 protagonist cannot be one-shot on the opening stage.
+                ActionResolver.resolveWithoutLethal roller enemyIntent currentBoss currentCombatant
+              else
+                ActionResolver.resolve roller enemyIntent currentBoss currentCombatant
+
+          currentBoss <- enemyResult.Actor
+          currentCombatant <- enemyResult.Target
+
+          let intentDesc = if enemyInterrupted then "Staggered Recovery (Interrupted)" else Display.intentLogLabel enemyIntent bossBeforeTurn
+          CombatLogger.recordTurn session round turnNumber intentDesc bossBeforeTurn playerBeforeTurn enemyResult
+          RuntimeLog.write (
+            sprintf "combat round %d enemy turn: %s (%d events)" round intentDesc enemyResult.Events.Length)
+
+          Display.renderRollBreakdown intentDesc currentBoss.Name enemyResult.Contest
+          Display.logDamageSummary enemyResult.Events playerBeforeTurn currentCombatant
+          enemyResult.Events |> List.iter Display.logEvent
+          if enemyInterrupted then enemyInterrupted <- false
+
+          let enemyExecutedPlayer =
+            enemyResult.Events
+            |> List.exists (function CombatEvent.Executed _ -> true | _ -> false)
+
+          if enemyExecutedPlayer || currentCombatant.Health.IsDepleted || currentCombatant.Morale.IsDepleted then
+            combatOver <- true
+            outcome <- CombatOutcome.PlayerDefeated
+            AnsiConsole.WriteLine()
+            AnsiConsole.Write(
+              Rule(sprintf "[bold %s]☠☠☠ DEFEATED BY TRAUMA: %s HAS FALLEN! ☠☠☠[/]" Theme.Red currentCombatant.Name)
+                .Centered()
+                .RuleStyle(Theme.StyleRed)
+            )
+
+        if playerHasVor then
+          doPlayerTurn 1
+          if not combatOver then
+            doEnemyTurn 2
+        else
+          AnsiConsole.MarkupLine(sprintf "\n[bold %s]⚡ %s holds the Vor and strikes first![/]" Theme.Yellow currentBoss.Name)
+          doEnemyTurn 1
+          if not combatOver then
+            doPlayerTurn 2
 
       if not combatOver then
         AnsiConsole.WriteLine()

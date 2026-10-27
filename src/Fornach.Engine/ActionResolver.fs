@@ -67,15 +67,9 @@ module ActionResolver =
     elif netHits = 10 then 4.00
     else Math.Min(5.00, 4.00 + (float (netHits - 10) * 0.05))
 
-  /// Familiarity with a species pays off both ways: +2% damage dealt per kill of it (cap 20%)
-  /// and -1% damage taken from it (cap 10%). Only the player's profile ever carries mastery,
-  /// so every other matchup resolves to 1.0 without needing to identify who the player is.
-  let masteryMultiplier (attacker: Combatant) (defender: Combatant) : float =
-    let killsOf (profile: ProgressionProfile) (species: string) =
-      profile.Mastery |> Map.tryFind species |> Option.defaultValue 0 |> min 10
-
-    (1.0 + 0.02 * float (killsOf attacker.Progression defender.Name))
-    * (1.0 - 0.01 * float (killsOf defender.Progression attacker.Name))
+  /// Familiarity with a species is now modeled directly through the diegetic Prowess bestiary progression
+  /// (ADR 0009). The legacy percentage bonuses are retired.
+  let masteryMultiplier (_attacker: Combatant) (_defender: Combatant) : float = 1.0
 
   // =========================================================================
   // 1b. Tempo ownership (Vor / Nach / Indes)
@@ -161,7 +155,9 @@ module ActionResolver =
         |> Option.defaultValue 0.0
       let etherealShrugged =
         if etherealSoak > 0.0 && remAmount > 0 then
-          int (Math.Round(float remAmount * etherealSoak))
+          let rawShrug = int (Math.Round(float remAmount * etherealSoak))
+          if etherealSoak < 1.0 then Math.Min(remAmount - 1, rawShrug)
+          else rawShrug
         else 0
 
       let postEnrageAmount = Math.Max(0, remAmount - enrageShrugged - disciplineShrugged - etherealShrugged)
@@ -945,6 +941,7 @@ module ActionResolver =
   let private resolveAttack
     (roller: DiceRoller)
     (atk: AttackClassification)
+    (defenseOpt: DefenseClassification option)
     (actor: Combatant)
     (target: Combatant)
     (priorDefenses: int)
@@ -1196,17 +1193,18 @@ module ActionResolver =
         // Probing cadence deals reduced base damage (0.95x) while seeking openings; Relentless Cadence gambit unleashes a 1.35x flurry
         let baseProbingMult = (if isRelentless then 1.35 else 0.95) * reckMult
         let ratio = float off / Math.Max(1.0, float def)
-        let baseConfusion =
+        let baseOverwhelm =
           if off >= def then
             12 + ((off - def) / 4)
           else
             int (Math.Round(12.0 * Math.Pow(ratio, 2.0)))
-        let confusion = fun isCrit -> baseConfusion + (if isCrit then 20 else 0)
-        let disp = fun isCrit -> if isCrit then Some(ArterialRupture(confusion true)) else None
+        let overwhelm = fun isCrit -> baseOverwhelm + (if isCrit then 20 else 0)
+        let disp = fun isCrit -> if isCrit then Some(ArterialRupture(overwhelm true)) else None
 
         let upd isCrit (m: StatusMeters) =
           { m with
-              Confusion = m.Confusion + (confusion isCrit)
+              Confusion = m.Confusion + (overwhelm isCrit)
+              Overwhelm = m.Overwhelm + (overwhelm isCrit)
               Recklessness = m.Recklessness + (5 * hits) }
 
         off, def, baseProbingMult, disp, upd
@@ -1216,17 +1214,18 @@ module ActionResolver =
         let def = (currentTarget.GetCombatStat Reflex + currentTarget.GetCombatStat Intuition) / 2
         let mult = strikeMultiplier atk stackSpend currentActor.Stance
         let ratio = float off / Math.Max(1.0, float def)
-        let baseConfusion =
+        let baseOverwhelm =
           if off >= def then
             12 + ((off - def) / 4)
           else
             int (Math.Round(12.0 * Math.Pow(ratio, 2.0)))
-        let confusion = fun isCrit -> baseConfusion + (if isCrit then 20 else 0)
-        let disp = fun isCrit -> if isCrit then Some(ArterialRupture(confusion true)) else None
+        let overwhelm = fun isCrit -> baseOverwhelm + (if isCrit then 20 else 0)
+        let disp = fun isCrit -> if isCrit then Some(ArterialRupture(overwhelm true)) else None
 
         let upd isCrit (m: StatusMeters) =
           { m with
-              Confusion = m.Confusion + (confusion isCrit)
+              Confusion = m.Confusion + (overwhelm isCrit)
+              Overwhelm = m.Overwhelm + (overwhelm isCrit)
               Recklessness = m.Recklessness } // 0 recklessness cost!
 
         off, def, mult, disp, upd
@@ -1381,7 +1380,6 @@ module ActionResolver =
           let e = exhaust isCrit
 
           { m with
-              Exhaustion = m.Exhaustion + e
               CognitiveFatigue = m.CognitiveFatigue + e
               Recklessness = m.Recklessness + 15 + disparityReck }
 
@@ -1784,7 +1782,7 @@ module ActionResolver =
         if roller 1 100 <= weaveChance then
           let atkIntuition = currentActor.GetStat Intuition
           let disparity = defIntuition - atkIntuition
-          let isOverwhelming = (currentTarget.Progression.Level - currentActor.Progression.Level >= 60) || disparity >= 550
+          let isOverwhelming = (currentTarget.Progression.Level - currentActor.Progression.Level >= 190) || disparity >= 700
           let fatigueCost =
             if isOverwhelming then 0
             elif disparity >= 200 then 1
@@ -1804,13 +1802,13 @@ module ActionResolver =
         let defComposure = currentTarget.GetStat Composure
         let atkComposure = currentActor.GetStat Composure
         let disparity = defComposure - atkComposure
-        let isOverwhelming = (currentTarget.Progression.Level - currentActor.Progression.Level >= 60) || disparity >= 550
+        let isOverwhelming = (currentTarget.Progression.Level - currentActor.Progression.Level >= 190) || disparity >= 700
         let fatigueCost =
           if isOverwhelming then 0
-          elif disparity >= 200 then 1
-          elif disparity >= 30 then 2
-          else 4
-        let fatigueCap = if isOverwhelming then 90 else 65
+          elif disparity >= 200 then 1 + priorDefenses
+          elif disparity >= 30 then 2 + priorDefenses
+          else 4 + priorDefenses * 2
+        let fatigueCap = if isOverwhelming then 90 else 100
         if currentTarget.Meters.CognitiveFatigue.Value < fatigueCap then
           let wardGen = Math.Max(25, defComposure / 8)
           currentTarget <-
@@ -1825,13 +1823,13 @@ module ActionResolver =
         let defIntellect = currentTarget.GetStat Intellect
         let atkResolve = currentActor.GetStat Resolve
         let disparity = defIntellect - atkResolve
-        let isOverwhelming = (currentTarget.Progression.Level - currentActor.Progression.Level >= 60) || disparity >= 550
+        let isOverwhelming = (currentTarget.Progression.Level - currentActor.Progression.Level >= 190) || disparity >= 700
         let fatigueCost =
           if isOverwhelming then 0
-          elif disparity >= 200 then 1
-          elif disparity >= 30 then 2
-          else 4
-        let fatigueCap = if isOverwhelming then 90 else 60
+          elif disparity >= 200 then 1 + priorDefenses
+          elif disparity >= 30 then 2 + priorDefenses
+          else 4 + priorDefenses * 2
+        let fatigueCap = if isOverwhelming then 90 else 100
         if currentTarget.Meters.CognitiveFatigue.Value < fatigueCap then
           let dreadSpike = 12
           currentActor <- currentActor |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness + dreadSpike })
@@ -1852,21 +1850,21 @@ module ActionResolver =
       let atkPerception = (currentActor.GetStat Reflex + currentActor.GetStat Intuition) / 2
       let delta = defAcuity - atkPerception
       let disparity = delta
-      let isOverwhelming = (currentTarget.Progression.Level - currentActor.Progression.Level >= 60) || disparity >= 550
-      let fatigueCap = if isOverwhelming then 90 else 75
+      let isOverwhelming = (currentTarget.Progression.Level - currentActor.Progression.Level >= 190) || disparity >= 700
+      let fatigueCap = if isOverwhelming then 90 else 100
       if currentTarget.Meters.CognitiveFatigue.Value < fatigueCap then
         let rollMargin = (roller 1 6 - roller 1 6) * 3
-        let fatiguePenalty = (currentTarget.Meters.Exhaustion.Value / 4) + (currentTarget.Meters.Recklessness.Value / 4)
+        let fatiguePenalty = (currentTarget.Meters.CognitiveFatigue.Value / 3) + (currentTarget.Meters.Exhaustion.Value / 4) + (currentTarget.Meters.Recklessness.Value / 4)
         let slope = if delta >= 0 then 0.20 else 0.40
         let baseChance = if hasDiffusion then 50.0 else 25.0
         let forceDispersion = if currentActor.Class = CharacterClass.Fighter && currentActor.Stance = CombatStance.PowerStance then 15 else 0
         let swapChance = Math.Clamp(int (baseChance + float delta * slope) + rollMargin - fatiguePenalty - forceDispersion, 10, 48)
-        if priorDefenses < 5 && roller 1 100 <= swapChance then
+        if priorDefenses < 2 && roller 1 100 <= swapChance then
           let fatigueCost, exhaustionCost =
             if isOverwhelming then 0, 0
-            elif disparity >= 200 then 1, 1
-            elif disparity >= 30 then 3, 2
-            else 5, 3
+            elif disparity >= 200 then 1 + priorDefenses, 1
+            elif disparity >= 30 then 3 + priorDefenses * 2, 2
+            else 5 + priorDefenses * 3, 3
           let cloneChange = if currentTarget.MirrorClones > 0 then -1 else 0
           currentTarget <-
             currentTarget
@@ -1897,21 +1895,21 @@ module ActionResolver =
 
     // B. Abjurer: Destabilizing Ground Ward (Acumen vs. Poise)
     // Capped at up to 5 flanking spaces; priorDefenses penalty removed, limited by stat minus Exhaustion/Recklessness
-    if not decoyIntercepted && currentTarget.Class = CharacterClass.Mage then
+    if not decoyIntercepted && plane = Physical && currentTarget.Class = CharacterClass.Mage then
       let defAcumen = currentTarget.GetStat Acumen
-      let atkPoise = currentActor.GetStat Poise
+      let atkPoise = if currentActor.IsHumanoid then currentActor.GetStat Poise else currentActor.GetStat Fortitude
       let disparity = defAcumen - atkPoise
-      let isOverwhelming = (currentTarget.Progression.Level - currentActor.Progression.Level >= 60) || disparity >= 550
-      let fatigueCap = if isOverwhelming then 90 else 75
+      let isOverwhelming = (currentTarget.Progression.Level - currentActor.Progression.Level >= 190) || disparity >= 700
+      let fatigueCap = if isOverwhelming then 90 else 100
       if currentTarget.Meters.CognitiveFatigue.Value < fatigueCap then
-        let fatiguePenalty = (currentTarget.Meters.Exhaustion.Value / 4) + (currentTarget.Meters.Recklessness.Value / 4)
+        let fatiguePenalty = (currentTarget.Meters.CognitiveFatigue.Value / 3) + (currentTarget.Meters.Exhaustion.Value / 4) + (currentTarget.Meters.Recklessness.Value / 4)
         let acumenMargin = (defAcumen / 20) - (atkPoise / 20) - fatiguePenalty + (roller 1 6 - roller 1 6)
-        if acumenMargin >= 3 && priorDefenses < 5 then
+        if acumenMargin >= 3 && priorDefenses < 2 then
           let fatigueCost, exhaustionCost =
             if isOverwhelming then 0, 0
-            elif disparity >= 200 then 2, 1
-            elif disparity >= 30 then 5, 2
-            else 8, 4
+            elif disparity >= 200 then 2 + priorDefenses * 2, 1
+            elif disparity >= 30 then 5 + priorDefenses * 3, 2
+            else 8 + priorDefenses * 4, 4
           currentTarget <- currentTarget |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue + fatigueCost; Exhaustion = m.Exhaustion + exhaustionCost })
           let costMsg = if fatigueCost > 0 || exhaustionCost > 0 then sprintf " (+%d Fatigue, +%d Exhaustion)" fatigueCost exhaustionCost else " (Effortless)"
           let desc = sprintf "%s projected a ground ward under the attacker mid-swing! The attacker stumbled and fell%s!" currentTarget.Class.Name costMsg
@@ -1928,12 +1926,12 @@ module ActionResolver =
             |> Combatant.updateMeters (fun m -> { m with Frustration = m.Frustration + frustSpike; Overwhelm = m.Overwhelm + 25; Exhaustion = m.Exhaustion + 15 })
           events <- CombatEvent.ComboReset(currentActor.Id, "Attacker lost footing on destabilizing ground ward.") :: events
           decoyIntercepted <- true
-        elif acumenMargin >= 0 && priorDefenses < 5 then
+        elif acumenMargin >= 0 && priorDefenses < 2 then
           let fatigueCost =
             if isOverwhelming then 0
-            elif disparity >= 200 then 1
-            elif disparity >= 30 then 2
-            else 4
+            elif disparity >= 200 then 1 + priorDefenses
+            elif disparity >= 30 then 2 + priorDefenses * 2
+            else 4 + priorDefenses * 2
           currentTarget <- currentTarget |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue + fatigueCost })
           let costMsg = if fatigueCost > 0 then sprintf " (+%d Fatigue)" fatigueCost else " (Effortless)"
           let desc = sprintf "Destabilizing ground ward disrupted attacker's stance! Incoming strike glanced (-50%% damage)%s." costMsg
@@ -1943,12 +1941,12 @@ module ActionResolver =
 
     // C. Inquisitor: Synaptic Mind-Shock (Intellect vs. Fortitude)
     // Capped at up to 5 flanking spaces; priorDefenses penalty removed, limited by stat minus Exhaustion/Recklessness
-    if not decoyIntercepted && currentTarget.Class = CharacterClass.Mage then
+    if not decoyIntercepted && plane = Physical && currentTarget.Class = CharacterClass.Mage then
       let defIntellect = float (currentTarget.GetStat Intellect)
       let atkFortitude = float (currentActor.GetStat Fortitude)
       let disparity = int defIntellect - int atkFortitude
-      let isOverwhelming = (currentTarget.Progression.Level - currentActor.Progression.Level >= 60) || disparity >= 550
-      let fatigueCap = if isOverwhelming then 90 else 75
+      let isOverwhelming = (currentTarget.Progression.Level - currentActor.Progression.Level >= 190) || disparity >= 700
+      let fatigueCap = if isOverwhelming then 90 else 100
       if currentTarget.Meters.CognitiveFatigue.Value < fatigueCap then
         let ratio = defIntellect / Math.Max(1.0, atkFortitude)
         let fatiguePenalty = float ((currentTarget.Meters.Exhaustion.Value / 4) + (currentTarget.Meters.Recklessness.Value / 4)) * 0.2
@@ -1998,8 +1996,8 @@ module ActionResolver =
       let counterChance = Math.Min(70, defenderStacks * 14)
       if roller 1 100 <= counterChance then
         let defProwess = currentTarget.GetStat Prowess
-        let atkPoise = currentActor.GetStat Poise
-        let isDisarmPossible = defProwess >= int (Math.Round(float atkPoise * 0.75))
+        let atkPoise = if currentActor.IsHumanoid then currentActor.GetStat Poise else currentActor.GetStat Fortitude
+        let isDisarmPossible = currentActor.IsHumanoid && defProwess >= int (Math.Round(float atkPoise * 0.75))
         let requiredStacksForDisarm =
           Math.Min(Combatant.StackCap, Math.Max(2, int (Math.Ceiling((float atkPoise / Math.Max(1.0, float defProwess)) * 3.5))))
 
@@ -2033,14 +2031,65 @@ module ActionResolver =
         Contest = None }
     else
 
+    // --- Active Defense & Affinity Evaluation (ADR 0009) ---
+    let isAffinityCounter, affinityMitigationMult =
+      match defenseOpt with
+      | Some activeDefense ->
+        let isCounter, mult =
+          match plane, activeDefense with
+          | Physical, FortitudeGuard _ ->
+            if vector = Vector.Power then true, 0.75
+            elif vector = Vector.Agility then false, 1.15
+            else false, 1.0
+          | Physical, ReflexSlip _ ->
+            if vector = Vector.Agility then true, 0.75
+            elif vector = Vector.Power then false, 1.15
+            else false, 1.0
+          | Mental, ResolveAnchor _ ->
+            if vector = Vector.Power then true, 0.75
+            elif vector = Vector.Agility then false, 1.15
+            else false, 1.0
+          | Mental, IntuitionPerception _ ->
+            if vector = Vector.Agility then true, 0.75
+            elif vector = Vector.Power then false, 1.15
+            else false, 1.0
+          | _ -> false, 1.0
+        events <- CombatEvent.DefenseAffinityResolved(currentTarget.Id, currentActor.Id, isCounter, (if isCounter then 25 else -15)) :: events
+        isCounter, mult
+      | None ->
+        false, 1.0
+
+    // Passive Discipline Bonuses (Prowess to Offense, Poise to Defense) (ADR 0009)
+    // Discipline advantage reflects out-reading / out-poising the opponent's martial discipline.
+    let offDisciplineBonus, defDisciplineBonus =
+      if plane = Physical then
+        let atkProwess = if currentActor.IsHumanoid then currentActor.GetCombatStat Prowess else 0
+        let defPoise = if currentTarget.IsHumanoid then currentTarget.GetCombatStat Poise else 0
+        let disparity = atkProwess - defPoise
+        let offBonus = if disparity > 0 then Math.Min(int (float offStat * 0.25), int (Math.Round(float disparity * 0.25))) else 0
+        let defBonus = if priorDefenses = 0 && disparity < 0 then Math.Min(int (float defStat * 0.25), int (Math.Round(float (-disparity) * 0.25))) else 0
+        offBonus, defBonus
+      elif plane = Mental then
+        let atkAcumen = if currentActor.IsHumanoid then currentActor.GetCombatStat Acumen else 0
+        let defComposure = if currentTarget.IsHumanoid then currentTarget.GetCombatStat Composure else 0
+        let disparity = atkAcumen - defComposure
+        let offBonus = if disparity > 0 then Math.Min(int (float offStat * 0.25), int (Math.Round(float disparity * 0.25))) else 0
+        let defBonus = if priorDefenses = 0 && disparity < 0 then Math.Min(int (float defStat * 0.25), int (Math.Round(float (-disparity) * 0.25))) else 0
+        offBonus, defBonus
+      else
+        0, 0
+
+    let effectiveOffStat = offStat + offDisciplineBonus
+    let effectiveDefStat = defStat + defDisciplineBonus
+
     // --- Step C: Opposed Resolution via DicePool ---
     let contest =
       DicePool.resolveContestEx
         roller
         vector
-        offStat
+        effectiveOffStat
         (Combatant.stacksIn atk.Vector currentActor)
-        defStat
+        effectiveDefStat
         (Combatant.stacksIn atk.Vector currentTarget)
         effectivePriorDefenses
 
@@ -2051,7 +2100,8 @@ module ActionResolver =
       events <- CombatEvent.EncirclementPenalized(currentTarget.Id, effectivePriorDefenses, contest.EncirclementPenalty) :: events
 
     // --- Step D: Whiff vs. Landed Hit Branching ---
-    if contest.IsWhiff then
+    let isWhiff = contest.IsWhiff && not (currentTarget.Meters.Recklessness.Value >= 75 || currentTarget.Meters.CognitiveFatigue.Value >= 75)
+    if isWhiff then
       // Whiff: 0 damage, clear combo momentum. Clean deflection - no overwhelm inflicted!
       currentActor <-
         { currentActor with
@@ -2061,6 +2111,16 @@ module ActionResolver =
         CombatEvent.ComboReset(currentActor.Id, "Attack failed to penetrate defenses; combo momentum cleared.")
         :: events
 
+      // Poise Determining Factor Check (ADR 0009)
+      let poiseDeterminingFactor = defStat < offStat && effectiveDefStat >= offStat
+      if poiseDeterminingFactor then
+        let margin = effectiveDefStat - defStat
+        if currentActor.IsHumanoid then
+          currentActor <- currentActor |> Combatant.updateMeters (fun m -> { m with Frustration = m.Frustration + 25 })
+        else
+          currentActor <- currentActor |> Combatant.updateMeters (fun m -> { m with Overwhelm = m.Overwhelm + 25 })
+        events <- CombatEvent.TacticalOutmaneuver(currentTarget.Id, currentActor.Id, margin, 25) :: events
+
       // Evaluate Indes tempo seizure opportunity (enhanced by Parrying Buckler, windup commitment, and high recklessness)
       let updatedDef, updatedAtk, indesEvents, seized =
         IndesResolver.resolveIndesOpportunityWithWindup currentTarget currentActor atk.IsHeavyWindup contest
@@ -2068,6 +2128,11 @@ module ActionResolver =
         currentTarget <- updatedDef
         currentActor <- updatedAtk
         events <- events @ indesEvents
+      elif isAffinityCounter && currentTarget.IsInNach then
+        let newVor, newNach = Combatant.seizeVor currentTarget, Combatant.yieldVor currentActor
+        events <- CombatEvent.TempoShifted(newVor.Id, newNach.Id, sprintf "%s countered the attack cleanly from the Nach, seizing the Vor!" newVor.Name) :: events
+        currentTarget <- newVor
+        currentActor <- newNach
       else
         // No Indes: the defense still answered, so a held Vor passes rather than surviving on a whiff.
         let yielder, taker, moved = resolveWhiffTempo currentActor currentTarget
@@ -2105,13 +2170,42 @@ module ActionResolver =
 
     else
       // Landed Strike: Scaled Tiered NetHits Damage & Weapon Degradation Multiplier
+      // Prowess Determining Factor Check (ADR 0009)
+      let prowessDeterminingFactor = offStat < defStat && effectiveOffStat >= defStat
+      if prowessDeterminingFactor then
+        let margin = effectiveOffStat - offStat
+        if currentTarget.IsHumanoid then
+          currentTarget <- currentTarget |> Combatant.updateMeters (fun m -> { m with Frustration = m.Frustration + 25 })
+        else
+          currentTarget <- currentTarget |> Combatant.updateMeters (fun m -> { m with Overwhelm = m.Overwhelm + 25 })
+        events <- CombatEvent.TacticalOutmaneuver(currentActor.Id, currentTarget.Id, margin, 25) :: events
+
+      // Passive Gambits at 5/5 Momentum or Flow + Prowess Advantage (ADR 0009):
+      let mutable passiveFinisherBonusDmg = 1.0
+      if plane = Physical && currentActor.IsHumanoid && currentActor.GetStat Prowess >= currentTarget.GetStat Poise then
+        if vector = Vector.Power && stacksAtStart >= 5 then
+          currentActor <- currentActor |> Combatant.drainStacks Vector.Power 5
+          passiveFinisherBonusDmg <- 1.50
+          events <- CombatEvent.DisciplineGambitExecuted(currentActor.Id, "Passive Finisher: Flaw Exploit", 5) :: events
+        elif vector = Vector.Agility && stacksAtStart >= 5 then
+          currentActor <- currentActor |> Combatant.drainStacks Vector.Agility 5
+          let degraded = WeaponCondition.degradation currentTarget.WeaponCondition
+          currentTarget <-
+            { currentTarget with
+                WeaponCondition = degraded
+                ComboTracker = currentTarget.ComboTracker.ResetCombo() }
+          events <- CombatEvent.DisciplineGambitExecuted(currentActor.Id, "Passive Finisher: Masterful Disarm", 5) :: events
+          events <- CombatEvent.WeaponDegraded(currentTarget.Id, degraded) :: events
+
       let baseDamage =
         if plane = Mental then
           // Cognitive and psychic strikes scale with raw mental dominance
           int (float offStat * 1.15)
         else
           int (float offStat * 1.50)
-      let tierMult = computeTierMultiplier contest.NetHits
+      let isStrainBypass = currentTarget.Meters.Recklessness.Value >= 75 || currentTarget.Meters.CognitiveFatigue.Value >= 75
+      let effectiveNetHits = if isStrainBypass then Math.Max(1, contest.NetHits) else contest.NetHits
+      let tierMult = computeTierMultiplier effectiveNetHits
       let gambitMult = if isGambit then 1.5 else 1.0
       let weaponEff = if plane = Mental then 1.0 else WeaponCondition.effectiveness currentActor.WeaponCondition
       let berserkMult = if currentActor.HasActivePreparation PreparationType.BerserkTincture then 1.35 else 1.0
@@ -2148,7 +2242,9 @@ module ActionResolver =
         else
           false
 
-      let isCrit = contest.IsCritical || agilityCritRolled
+      // Strain >= 75: all incoming hits critically strike (ADR 0009)
+      let strainCrit = currentTarget.Meters.Recklessness.Value >= 75 || currentTarget.Meters.CognitiveFatigue.Value >= 75
+      let isCrit = contest.IsCritical || agilityCritRolled || strainCrit
       let critDmgMult =
         if isCrit && isAgilityAtk then
           if currentTarget.Stance = CombatStance.DisciplineStance then 1.75
@@ -2164,6 +2260,10 @@ module ActionResolver =
           | Some ComplexForm.PhantasmalDiffusion -> 0.85
           | _ -> 1.0
         else 1.0
+
+      // Recklessness >= 75: +25% damage dealt (ADR 0009)
+      let recklessnessDmgMult =
+        if currentActor.Meters.Recklessness.Value >= 75 then 1.25 else 1.0
 
       let ferocityMult =
         currentActor.MonsterTraits
@@ -2181,9 +2281,15 @@ module ActionResolver =
           | _ -> None)
         |> Option.defaultValue 1.0
 
+      let isFinisherOrGambit =
+        isGambit || stackSpend > 0 || passiveFinisherBonusDmg > 1.0 || (match atk with ForceInsightStrike | FinesseInsightStrike | CalculatedFlawStrike | MasterfulDisarm _ -> true | _ -> false)
+
       let baseRawDmg =
         if classMult <= 0.0 then 0
-        else Math.Max(1, int (float baseDamage * tierMult * gambitMult * classMult * weaponEff * critDmgMult * berserkMult * formDmgMult * attackDamageMitigation * ferocityMult * packMult))
+        else
+          // ADR 0009: Base physical HP damage scaled down by 30% on standard attacks to prioritize tactical meter collapses
+          let scaledBase = if isFinisherOrGambit || plane = Mental then float baseDamage else float baseDamage * 0.70
+          Math.Max(1, int (scaledBase * tierMult * gambitMult * classMult * weaponEff * critDmgMult * berserkMult * formDmgMult * attackDamageMitigation * ferocityMult * packMult * recklessnessDmgMult * affinityMitigationMult * passiveFinisherBonusDmg))
 
       // Aegis of Retribution: 35% damage reduction applied to recipient
       let rawDmg =
@@ -2233,6 +2339,25 @@ module ActionResolver =
       let updatedTarget, dmgEvt, wardEvts = applyDamage plane rawDmg isCrit currentTarget
       currentTarget <- updatedTarget
       events <- wardEvts @ (CombatEvent.DamageApplied dmgEvt :: events)
+
+      // Transient Pain Shock Check (ADR 0009):
+      // Single-turn physical HP damage >= 15% Max HP triggers a check against Poise (Fortitude fallback for non-humanoids)
+      if plane = Physical && dmgEvt.Amount > 0 then
+        let maxHp = Math.Max(1, currentTarget.Health.Maximum)
+        let dmgPct = int (Math.Round((float dmgEvt.Amount / float maxHp) * 100.0))
+        if dmgPct >= 15 then
+          let effectivePoise =
+            if currentTarget.IsHumanoid then currentTarget.GetStat StatId.Poise
+            else currentTarget.GetStat StatId.Fortitude
+          let reqPoise = dmgPct * 2
+          let resisted = effectivePoise >= reqPoise
+          events <- CombatEvent.PainShockSuffered(currentTarget.Id, dmgEvt.Amount, dmgPct, effectivePoise, resisted) :: events
+          if not resisted then
+            currentTarget <-
+              currentTarget
+              |> Combatant.stagger
+              |> Combatant.updateMeters (fun m -> { m with Overwhelm = m.Overwhelm + 25; Exhaustion = m.Exhaustion + 15 })
+            events <- CombatEvent.CombatantStaggered(currentTarget.Id, sprintf "Pain Shock failure (%d Poise vs %d required) — Staggered!" effectivePoise reqPoise) :: events
 
       // Defender Reactive Monster Traits: Acidic Blood & Molten Aura
       if plane = Physical && dmgEvt.Amount > 0 then
@@ -2287,8 +2412,13 @@ module ActionResolver =
         // output: a champion striking a far weaker abjurer was reflecting its own overwhelming power
         // back at itself as unmitigated Mental damage, which drained a GrandMaster's Morale in three
         // rounds against level-one mages.
+        let wardSoaked =
+          wardEvts
+          |> List.choose (function CombatEvent.ArcaneWardAbsorbed (_, soaked, _) -> Some soaked | _ -> None)
+          |> List.sum
         let reflectRatio = if hasRetributionAegis || hasAegisLattice then 0.50 else 0.25
-        let reflectDmg = Math.Max(12, int (Math.Round(float dmgEvt.Amount * reflectRatio)))
+        let reflectBase = if hasRetributionAegis || hasAegisLattice then dmgEvt.Amount else wardSoaked
+        let reflectDmg = Math.Max(1, int (Math.Round(float reflectBase * reflectRatio)))
         let frustSpike = if hasRetributionAegis || hasAegisLattice then 15 else 10
         let actorAfterReflect, reflectDmgEvt, reflectWardEvts = applyDamage Mental reflectDmg false currentActor
         currentActor <-
@@ -2455,7 +2585,11 @@ module ActionResolver =
       let finalActorWithFluid, fluidEvts = applyFluidTransition finalActor
 
       // Step H: the initiative does not follow the dice — only a decisive answer turns the tempo.
-      let landedActor, landedTarget, tempoMoved = resolveLandedTempo finalActorWithFluid finalTarget contest.NetHits
+      let landedActor, landedTarget, tempoMoved =
+        if isAffinityCounter && contest.NetHits <= 1 && finalTarget.IsInNach then
+          Combatant.yieldVor finalActorWithFluid, Combatant.seizeVor finalTarget, true
+        else
+          resolveLandedTempo finalActorWithFluid finalTarget contest.NetHits
 
       if tempoMoved then
         events <-
@@ -2477,11 +2611,78 @@ module ActionResolver =
   // 6. Public Dispatcher
   // =========================================================================
 
+  /// Resolves an active defense posture taken in the Nach when opponent did not attack (ADR 0009)
+  let resolveActiveDefense (defense: DefenseClassification) (actor: Combatant) (target: Combatant) : ActionResult =
+    let mutable currentActor = actor
+    let mutable events = [ CombatEvent.ActiveDefenseDeclared(actor.Id, sprintf "%A" defense) ]
+
+    let benefitMsg, updatedActor =
+      match defense with
+      | FortitudeGuard isBraced ->
+        let armorRepaired = if isBraced then 30 else 20
+        let reckDrained = if isBraced then 15 else 10
+        let a =
+          { currentActor with
+              Armor = currentActor.Armor.Repair armorRepaired
+              Stance = CombatStance.PowerStance }
+          |> Combatant.addStacks 1
+          |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness - reckDrained })
+        sprintf "Fortitude Guard repaired +%d Armor durability, bled -%d Recklessness, and braced for Power strike (+1 Momentum)." armorRepaired reckDrained, a
+
+      | ReflexSlip isEvasive ->
+        let overwheimVent = if isEvasive then 25 else 15
+        let exhaustVent = if isEvasive then 15 else 10
+        let a =
+          { currentActor with Stance = CombatStance.AgilityStance }
+          |> Combatant.addStacks 1
+          |> Combatant.updateMeters (fun m ->
+            { m with
+                Overwhelm = m.Overwhelm - overwheimVent
+                Exhaustion = m.Exhaustion - exhaustVent })
+        sprintf "Reflex Slip vented -%d Overwhelm and -%d Exhaustion, resetting footwork for Agility strike (+1 Flow)." overwheimVent exhaustVent, a
+
+      | ResolveAnchor isIronWill ->
+        let wardErected = if isIronWill then 30 else 20
+        let fatigueVent = if isIronWill then 20 else 15
+        let a =
+          { currentActor with ComplexForm = Some ComplexForm.AegisLattice; Stance = CombatStance.DisciplineStance }
+          |> Combatant.addWard wardErected
+          |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue - fatigueVent })
+        sprintf "Resolve Anchor reinforced +%d Arcane Ward and cleared -%d Cognitive Fatigue." wardErected fatigueVent, a
+
+      | IntuitionPerception isInsightful ->
+        let confVent = if isInsightful then 25 else 20
+        let provVent = if isInsightful then 20 else 15
+        let a =
+          { currentActor with ComplexForm = Some ComplexForm.PhantasmalDiffusion; Stance = CombatStance.AgilityStance }
+          |> Combatant.updateMeters (fun m ->
+            { m with
+                Confusion = m.Confusion - confVent
+                Provoke = m.Provoke - provVent })
+        sprintf "Intuition Perception dispelled -%d Confusion and calmed -%d Provoke, sharpening insight." confVent provVent, a
+
+    currentActor <- updatedActor
+    events <- events @ [ CombatEvent.UnattackedStanceBenefit(currentActor.Id, sprintf "%A" defense, benefitMsg) ]
+
+    let finalActor, finalTarget =
+      if currentActor.IsInNach && not target.IsInVor then
+        let a = Combatant.seizeVor currentActor
+        let t = Combatant.yieldVor target
+        events <- events @ [ CombatEvent.TempoShifted(a.Id, t.Id, sprintf "%s capitalized on unattacked defense and seized the Vor." a.Name) ]
+        a, t
+      else
+        currentActor, target
+
+    { Actor = finalActor
+      Target = finalTarget
+      Events = events
+      Contest = None }
+
   /// Nothing in a turn mutates a combatant's permanent attributes. Force/Fortitude and Finesse/Reflex
   /// are owned by the combat ramp (Momentum, Flow) and by gear; a won encounter pays the Discipline
   /// pair (`Combatant.growFromEncounter`), never Force/Finesse/Intellect/Acuity.
 
-  let resolveEx (roller: DiceRoller) (intent: ActionIntent) (actor: Combatant) (target: Combatant) (priorDefenses: int) : ActionResult =
+  let resolveExWithDefense (roller: DiceRoller) (intent: ActionIntent) (defenseOpt: DefenseClassification option) (actor: Combatant) (target: Combatant) (priorDefenses: int) : ActionResult =
     let upkeepActor, upkeepEvents = applyTurnUpkeep actor
     if upkeepActor.Health.IsDepleted then
       { Actor = upkeepActor
@@ -2500,6 +2701,7 @@ module ActionResolver =
             { recRes with Actor = updatedActor; Target = updatedTarget; Events = recRes.Events @ [ tempoEvt ] }
           else
             recRes
+        | ActiveDefense defense -> resolveActiveDefense defense upkeepActor target
         | ExecuteStrike plane -> resolveExecute plane upkeepActor target
         | ShiftStance stance -> resolveShiftStance stance upkeepActor target
         | ThreadComplexForm form -> resolveThreadComplexForm form upkeepActor target
@@ -2513,14 +2715,23 @@ module ActionResolver =
             Target = target
             Events = [ CombatEvent.ComboReset(upkeepActor.Id, msg) ]
             Contest = None }
-        | StandardAttack atk -> resolveAttack roller atk upkeepActor target priorDefenses
+        | StandardAttack atk -> resolveAttack roller atk defenseOpt upkeepActor target priorDefenses
         | DeployPreparation (prep, targetIdOpt) -> resolveDeployPreparation prep targetIdOpt upkeepActor target
 
       { res with Events = upkeepEvents @ res.Events }
 
+  let resolveEx (roller: DiceRoller) (intent: ActionIntent) (actor: Combatant) (target: Combatant) (priorDefenses: int) : ActionResult =
+    resolveExWithDefense roller intent None actor target priorDefenses
 
   let resolve (roller: DiceRoller) (intent: ActionIntent) (actor: Combatant) (target: Combatant) : ActionResult =
     resolveEx roller intent actor target 0
+
+  let resolveExchange (roller: DiceRoller) (attackerIntent: ActionIntent) (attacker: Combatant) (defenderIntent: ActionIntent) (defender: Combatant) : ActionResult =
+    match defenderIntent with
+    | ActiveDefense def ->
+      resolveExWithDefense roller attackerIntent (Some def) attacker defender 0
+    | _ ->
+      resolveEx roller attackerIntent attacker defender 0
 
   /// Resolves an action but prevents a single turn from reducing the target's Health or
   /// Morale from above zero to zero. Used by the story tutorial so a level-1 protagonist
@@ -2673,8 +2884,8 @@ module ActionResolver =
         | _ -> false
 
       if isLandedArcaneCataclysm && not currentAdjacent.IsEmpty then
-        // Arcane Cataclysm: Destructive mental burst splashes to up to 5 adjacent targets (the 5 flanking spaces)
-        let splashCandidates = currentAdjacent |> List.truncate 5
+        // Arcane Cataclysm: Destructive mental burst splashes to up to 2 adjacent targets
+        let splashCandidates = currentAdjacent |> List.truncate 2
         let unengaged = currentAdjacent |> List.skip splashCandidates.Length
         let mutable splashEvents = []
 
@@ -2684,7 +2895,7 @@ module ActionResolver =
           |> List.tryHead
           |> Option.defaultValue (Math.Max(20, currentActor.GetStat Intellect))
 
-        let rawSplashDmg = Math.Max(15, int (float primaryDmg * 0.80))
+        let rawSplashDmg = Math.Max(10, int (float primaryDmg * 0.50))
 
         let processedSplash =
           splashCandidates

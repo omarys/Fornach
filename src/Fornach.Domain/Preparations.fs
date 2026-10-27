@@ -225,6 +225,23 @@ type ProgressionProfile = {
     let estimatedPrimaryStat = 45 + (Math.Max(1, level) - 1) * 4
     ProgressionProfile.createWithStat cls level estimatedPrimaryStat
 
+  /// Calculates Prowess gain for an encounter based on prior encounters with this species
+  /// (ADR 0009: 25 -> 5 -> 3 -> 2 -> 1 uncapped).
+  static member ProwessGainForEncounter (priorEncounters: int) : int =
+    match priorEncounters with
+    | 0 -> 25
+    | 1 -> 5
+    | 2 -> 3
+    | 3 -> 2
+    | _ -> 1
+
+  /// Records an encounter with an enemy species, returning the updated profile and the Prowess gained
+  member this.RecordBestiaryEncounter (species: string) : ProgressionProfile * int =
+    let prior = this.Mastery |> Map.tryFind species |> Option.defaultValue 0
+    let gain = ProgressionProfile.ProwessGainForEncounter prior
+    let updatedMastery = this.Mastery.Add(species, prior + 1)
+    ({ this with Mastery = updatedMastery }, gain)
+
   /// Experience required to advance from the given level to the next (uncapped linear curve).
   static member ExperienceForNextLevel (level: int) : int =
     Math.Max(1, level) * 100

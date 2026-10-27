@@ -159,6 +159,34 @@ type AttackClassification =
     | TraumaAttack _ -> true
     | _ -> false
 
+/// Classifies active defensive counters in the Nach across Physical and Mental planes (ADR 0009)
+type DefenseClassification =
+  /// Fortitude Guard (Power Defense): Braced guard countering ForceStrike (+25% mitigation, seizes Vor on success); vulnerable to FinesseCadence (-15% mitigation)
+  | FortitudeGuard of isBraced: bool
+  /// Reflex Slip (Agility Defense): Evasive slip countering FinesseCadence (+25% mitigation, seizes Vor on success); vulnerable to ForceStrike (-15% mitigation)
+  | ReflexSlip of isEvasive: bool
+  /// Resolve Anchor (Mental Power Defense): Countering Intellect / AuthorityDecree / ArcaneCataclysm (+25% mitigation); vulnerable to Acuity (-15% mitigation)
+  | ResolveAnchor of isIronWill: bool
+  /// Intuition Perception (Mental Agility Defense): Countering Acuity / GuileDeception / SynapticGlamour (+25% mitigation); vulnerable to Intellect (-15% mitigation)
+  | IntuitionPerception of isInsightful: bool
+
+  member this.Plane : Plane =
+    match this with
+    | FortitudeGuard _ | ReflexSlip _ -> Physical
+    | ResolveAnchor _ | IntuitionPerception _ -> Mental
+
+  member this.Vector : Vector =
+    match this with
+    | FortitudeGuard _ | ResolveAnchor _ -> Power
+    | ReflexSlip _ | IntuitionPerception _ -> Agility
+
+  member this.StatId : StatId =
+    match this with
+    | FortitudeGuard _ -> StatId.Fortitude
+    | ReflexSlip _ -> StatId.Reflex
+    | ResolveAnchor _ -> StatId.Resolve
+    | IntuitionPerception _ -> StatId.Intuition
+
 /// Defensive recoveries used to bleed accumulated Recklessness and re-center posture
 type DefensiveReset =
   /// Universal reset: bleeds all seven strain meters (Poise + Composure), restores Morale, and banks Combat Ramp
@@ -172,6 +200,8 @@ type DefensiveReset =
 type ActionIntent =
   /// An offensive strike, gambit, or incantation
   | StandardAttack of AttackClassification
+  /// An active defensive counter-guard in the Nach (Fortitude, Reflex, Resolve, Intuition)
+  | ActiveDefense of DefenseClassification
   /// A defensive stabilization or posture recovery
   | RecoveryAction of DefensiveReset
   /// An execution attempt against an opponent currently in a Collapsed state

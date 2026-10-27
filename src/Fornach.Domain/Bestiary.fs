@@ -68,7 +68,14 @@ type MonsterTemplate =
 
   /// Instantiates a zero-allocation, combat-ready Combatant from this monster template
   member this.ToCombatant (uniqueId: CombatantId) : Combatant =
-    let statBlock = StatBlock.Create this.Stats
+    let adjustedStats =
+      // Non-humanoid monsters have 0 Prowess / Poise (ADR 0009)
+      this.Stats
+      |> List.map (function
+          | Prowess, _ -> Prowess, 0
+          | Poise, _ -> Poise, 0
+          | id, v -> id, v)
+    let statBlock = StatBlock.Create adjustedStats
     let nearestClass =
       match this.Family, this.Role with
       // Monster families borrow the surviving class whose plane and vector match most closely.
@@ -83,6 +90,7 @@ type MonsterTemplate =
     let prog = ProgressionProfile.create nearestClass this.Level
     let baseArmor = ArmorIntegrity.Create this.ArmorDurability
     { Combatant.create uniqueId this.Name this.MaxHealth this.MaxMorale statBlock with
+        Class = nearestClass
         Progression = prog
         Armor = baseArmor
         Stance = this.PreferredStance

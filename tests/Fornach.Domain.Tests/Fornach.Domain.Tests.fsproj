@@ -26,6 +26,8 @@
     <Compile Include="TacticalAssessmentTests.fs" />
     <Compile Include="StanceGrowthTests.fs" />
     <Compile Include="StatBonusTests.fs" />
+    <Compile Include="PainShockTests.fs" />
+    <Compile Include="ActiveDefenseTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

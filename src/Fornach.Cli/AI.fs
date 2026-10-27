@@ -65,7 +65,7 @@ module AI =
       if opponent.Meters.CognitiveFatigue.Value < 80 then
         StandardAttack (TraumaAttack ApathyDoldrums)
       else
-        StandardAttack (ProwessStrike false)
+        StandardAttack (ForceStrike false)
     elif self.Name.Contains("Acceptance") then
       StandardAttack (TraumaAttack SereneResolution)
     // -------------------------------------------------------------------------
@@ -79,10 +79,8 @@ module AI =
         StandardAttack (ForceStrike isGambit)
     elif self.MonsterFamily = Some MonsterFamily.Construct then
       // Constructs hold immovable bastion discipline, smashing with calculated stone blows
-      if self.Stance <> CombatStance.DisciplineStance && self.Meters.Recklessness.Value < 35 then
-        ShiftStance CombatStance.DisciplineStance
-      elif prowess >= force then
-        StandardAttack (ProwessStrike isGambit)
+      if self.Stance <> CombatStance.PowerStance && self.Meters.Recklessness.Value < 35 then
+        ShiftStance CombatStance.PowerStance
       else
         StandardAttack (ForceStrike isGambit)
     elif self.MonsterFamily = Some MonsterFamily.UndeadWraith then
@@ -98,69 +96,29 @@ module AI =
       // Grief manifestations strike with dialectical acumen interrogations
       StandardAttack (AcumenInterrogation isGambit)
     elif self.Plane = Physical then
-      // Tactical Stance Evaluation:
-      // When facing multiple opponents (surroundingOpponents >= 2):
-      // - Prowess (Discipline Stance) is tactically superior: chains attacks with 0 Recklessness,
-      //   builds the combat ramp for passive Ripostes/Disarms, and defuses flanks with Attacks of Opportunity.
-      // - Force (Power Stance) is viable for high-Force combatants to Cleave multiple targets,
-      //   provided Recklessness is safe enough to absorb disparity-scaled exposure.
-      // - Finesse (Agility Stance) is strictly single-target dueling; a master shifts away from Agility when mobbed.
-      if surroundingOpponents >= 2 then
-        let wantsDiscipline =
-          prowess >= 60 && (prowess >= int (float force * 0.70) || self.Meters.Recklessness.Value >= 20)
-        let wantsPower =
-          force >= 60 && not wantsDiscipline && self.Meters.Recklessness.Value < 30
+      // Tactical Stance & Attack Evaluation (ADR 0009):
+      // When outnumbered (surroundingOpponents >= 2) and Prowess is viable, shift to Discipline Stance for bastion stabilization.
+      let wantsDiscipline =
+        opponent.Plane = Physical
+        && surroundingOpponents >= 2
+        && prowess >= 60
+        && (prowess >= int (float force * 0.70) || self.Meters.Recklessness.Value >= 40)
+        && (self.Class <> CharacterClass.Fighter || self.Meters.Recklessness.Value >= 40)
 
-        if wantsDiscipline && self.Stance <> CombatStance.DisciplineStance then
-          ShiftStance CombatStance.DisciplineStance
-        elif wantsPower && self.Stance <> CombatStance.PowerStance then
-          ShiftStance CombatStance.PowerStance
-        elif self.Stance = CombatStance.DisciplineStance then
-          if Combatant.stacksIn Vector.Discipline self >= 3 then
-            StandardAttack CalculatedFlawStrike
-          else
-            StandardAttack (ProwessStrike isGambit)
-        elif self.Stance = CombatStance.PowerStance then
-          StandardAttack (ForceStrike isGambit)
-        else
-          // If in AgilityStance or other, execute best available physical attack
-          if force >= finesse && force >= prowess then
-            StandardAttack (ForceStrike isGambit)
-          elif finesse >= prowess then
-            StandardAttack (FinesseCadence isGambit)
-          else
-            StandardAttack (ProwessStrike isGambit)
+      if wantsDiscipline && self.Stance <> CombatStance.DisciplineStance then
+        ShiftStance CombatStance.DisciplineStance
       else
-        // 1-on-1 Duel: resolve ONE preferred stance from the attribute ranking, then strike.
-        // Testing the candidate stance inside each rank lets two equally-ranked vectors contradict
-        // each other: standing in Power makes the Finesse test match, and standing in Agility makes
-        // the Force test match, so a combatant with tied physical attributes (which is how every
-        // class tier is authored) shifts back and forth forever and never actually attacks.
         let preferredStance =
-          if force >= finesse && force >= prowess then CombatStance.PowerStance
-          elif finesse >= prowess then CombatStance.AgilityStance
-          else CombatStance.DisciplineStance
+          if wantsDiscipline then CombatStance.DisciplineStance
+          elif force >= finesse then CombatStance.PowerStance
+          else CombatStance.AgilityStance
 
         if self.Stance <> preferredStance && self.Meters.Recklessness.Value < 30 then
           ShiftStance preferredStance
-        elif preferredStance = CombatStance.PowerStance then
+        elif force >= finesse then
           StandardAttack (ForceStrike isGambit)
-        elif preferredStance = CombatStance.AgilityStance then
-          StandardAttack (FinesseCadence isGambit)
         else
-          // Discipline: Evaluate Dedicated Gambits vs Standard Strike
-          let oppPoise = opponent.GetStat Poise
-          let canDisarm = prowess >= int (Math.Round(float oppPoise * 0.75))
-          // Capped by the meter: a requirement above StackCap would gate the disarm forever.
-          let reqDisarmStacks =
-            Math.Min(Combatant.StackCap, Math.Max(2, int (Math.Ceiling((float oppPoise / Math.Max(1.0, float prowess)) * 3.5))))
-
-          if surroundingOpponents < 2 && canDisarm && Combatant.stacksIn Vector.Discipline self >= reqDisarmStacks && opponent.WeaponCondition <> WeaponCondition.Broken then
-            StandardAttack (MasterfulDisarm reqDisarmStacks)
-          elif Combatant.stacksIn Vector.Discipline self >= 3 then
-            StandardAttack CalculatedFlawStrike
-          else
-            StandardAttack (ProwessStrike isGambit)
+          StandardAttack (FinesseCadence isGambit)
     else
       // Mental discipline (combat AI strictly utilizes Arcane/mental attacks; social verbal sparring is reserved for social encounters)
       let preferredForm =
@@ -201,9 +159,37 @@ module AI =
           else
             StandardAttack (DisorientingShockwave isGambit)
 
+  /// Selects the optimal active defense in the Nach based on telegraphed attack vector and discipline reading (ADR 0009)
+  let chooseActiveDefense (self: Combatant) (opponent: Combatant) : DefenseClassification =
+    if opponent.Plane = Mental then
+      let oppPower = opponent.GetCombatStat StatId.Intellect
+      let oppAgility = opponent.GetCombatStat StatId.Acuity
+      if self.IsHumanoid && self.GetStat StatId.Acumen >= opponent.GetStat StatId.Composure then
+        if oppPower >= oppAgility then ResolveAnchor false
+        else IntuitionPerception false
+      else
+        if self.GetCombatStat StatId.Resolve >= self.GetCombatStat StatId.Intuition then ResolveAnchor false
+        else IntuitionPerception false
+    else
+      let oppPower = opponent.GetCombatStat StatId.Force
+      let oppAgility = opponent.GetCombatStat StatId.Finesse
+      if self.IsHumanoid && self.GetStat StatId.Prowess >= opponent.GetStat StatId.Poise then
+        if oppPower >= oppAgility then FortitudeGuard false
+        else ReflexSlip false
+      else
+        if self.GetCombatStat StatId.Fortitude >= self.GetCombatStat StatId.Reflex then FortitudeGuard false
+        else ReflexSlip false
+
   /// Top-level tactical decision evaluator for autonomous combatants with surrounding opponent count
   let chooseIntentWithContext (self: Combatant) (opponent: Combatant) (surroundingOpponents: int) : ActionIntent =
-    if not self.PlayerStyle && self.MonsterFamily.IsNone then
+    if self.Meters.Recklessness.Value >= 75
+       || self.Meters.Exhaustion.Value >= 75
+       || self.Meters.Overwhelm.Value >= 75
+       || self.Meters.CognitiveFatigue.Value >= 75
+       || self.Meters.Confusion.Value >= 75
+       || self.Meters.Provoke.Value >= 75 then
+      chooseRecovery self
+    elif not self.PlayerStyle && self.MonsterFamily.IsNone then
       // Plain humanoid opposition swings exactly one basic strike of its primary vector: no
       // preparations, no stance or Complex Form transitions, no finishers, no varied attack types.
       // Discipline is the player's edge, so nothing here is chosen on the mob's behalf. Authored
@@ -211,17 +197,13 @@ module AI =
       if self.Plane = Mental then
         let intellect = self.GetStat Intellect
         let acuity = self.GetStat Acuity
-        let acumen = self.GetStat Acumen
-        if intellect >= acuity && intellect >= acumen then StandardAttack (ArcaneCataclysm false)
-        elif acuity >= acumen then StandardAttack (SynapticGlamour false)
-        else StandardAttack (AcumenInterrogation false)
+        if intellect >= acuity then StandardAttack (ArcaneCataclysm false)
+        else StandardAttack (SynapticGlamour false)
       else
         let force = self.GetStat Force
         let finesse = self.GetStat Finesse
-        let prowess = self.GetStat Prowess
-        if force >= finesse && force >= prowess then StandardAttack (ForceStrike false)
-        elif finesse >= prowess then StandardAttack (FinesseCadence false)
-        else StandardAttack (ProwessStrike false)
+        if force >= finesse then StandardAttack (ForceStrike false)
+        else StandardAttack (FinesseCadence false)
     else
 
     // 0. Tactical Preparations Deployment

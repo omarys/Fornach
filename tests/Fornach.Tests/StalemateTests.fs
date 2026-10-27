@@ -234,5 +234,5 @@ let ``a broken weapon grind against shredded armor ends through bleed instead of
     alpha <- held
 
   // Without the floor breaker every landed blow is 1 damage, so 120 Health apiece needs ~240 turns;
-  // the bleed tick the floor now opens ends the grind well inside a normal fight's length.
-  Assert.True(turns < 60, sprintf "the stalemate should break under 60 turns, took %d" turns)
+  // the bleed tick the floor now opens ends the grind well inside a normal fight's length (ADR 0009 base damage scaling).
+  Assert.True(turns < 90, sprintf "the stalemate should break under 90 turns, took %d" turns)

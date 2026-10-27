@@ -556,11 +556,92 @@ module Display =
       sprintf "Attuning mental complex form to %s." form.Name,
       "Counter spell school vector.",
       "ComplexForm"
+    | ActiveDefense def ->
+      match def with
+      | FortitudeGuard isBraced ->
+        let bracedTag = if isBraced then " (Braced)" else ""
+        sprintf "🛡️ [bold %s]ACTIVE DEFENSE: Fortitude Guard%s[/]" Theme.Cyan bracedTag,
+        "Bracing guard behind shield/posture to absorb incoming Force strikes.",
+        "Strike with Finesse Cadence to bypass braced guard!",
+        "Defense"
+      | ReflexSlip isEvasive ->
+        let evasiveTag = if isEvasive then " (Evasive)" else ""
+        sprintf "🛡️ [bold %s]ACTIVE DEFENSE: Reflex Slip%s[/]" Theme.Green evasiveTag,
+        "Shifting footwork to slip and evade incoming Finesse cadences.",
+        "Strike with heavy Force Cleave to catch evasion off guard!",
+        "Defense"
+      | ResolveAnchor isIronWill ->
+        let ironTag = if isIronWill then " (Iron Will)" else ""
+        sprintf "🧠 [bold %s]ACTIVE DEFENSE: Resolve Anchor%s[/]" Theme.Cyan ironTag,
+        "Steeling mental grounding to absorb cognitive and psionic strikes.",
+        "Strike with Acuity deceptions to confuse anchored resolve!",
+        "Defense"
+      | IntuitionPerception isInsightful ->
+        let insightTag = if isInsightful then " (Perceptive)" else ""
+        sprintf "👁️ [bold %s]ACTIVE DEFENSE: Intuition Perception%s[/]" Theme.Green insightTag,
+        "Observing mental openings to see through sensory glamours.",
+        "Overpower with raw Intellect cataclysms!",
+        "Defense"
     | DeployPreparation (prep, _) ->
       sprintf "🎒 [%s]Deploying Preparation: %A[/]" Theme.Orange prep,
       "Deploying tactical asset.",
       "Prepare for tactical shift.",
       "Preparation"
+
+  /// Formats telegraphed intent taking into account observer scrutiny and the 3-tier information ladder (ADR 0009)
+  let formatTelegraphedIntentWithLadder (observer: Combatant) (actor: Combatant) (intent: ActionIntent) : string * string * string * string =
+    let enemyDC =
+      if actor.IsBeast then actor.GetStat StatId.Finesse
+      elif actor.Plane = Physical then actor.GetStat StatId.Poise
+      else actor.GetStat StatId.Composure
+
+    let scrutiny =
+      if actor.Plane = Physical then observer.GetStat StatId.Prowess
+      else observer.GetStat StatId.Acumen
+
+    let fullTitle, fullDesc, fullTip, vector = formatTelegraphedIntent intent actor
+
+    // Tier 1: Obscured (scrutiny < enemyDC)
+    if scrutiny < enemyDC then
+      "[grey]󰓥 Masked Posture (Intent Obscured)[/]",
+      "Opponent's fluid footwork and defensive guard conceal their precise intent.",
+      "Raise active defense or increase Prowess to read opponent's windup.",
+      "Obscured"
+
+    // Tier 2: Vector Telegraphed (enemyDC <= scrutiny < enemyDC + 15)
+    elif scrutiny < enemyDC + 15 then
+      let categoryTitle =
+        match vector with
+        | "Power" -> sprintf "⚔️ [bold %s]Telegraphed Windup: Power Strike Vector[/]" Theme.Red
+        | "Agility" -> sprintf "⚔️ [bold %s]Telegraphed Windup: Agility Cadence Vector[/]" Theme.Green
+        | "Discipline" -> sprintf "⚔️ [bold %s]Telegraphed Windup: Discipline Vector[/]" Theme.Purple
+        | "Defensive" -> sprintf "🛡️ [bold %s]Telegraphed Windup: Recovery Posture[/]" Theme.Yellow
+        | "Defense" -> sprintf "🛡️ [bold %s]Telegraphed Windup: Active Counter-Defense[/]" Theme.Cyan
+        | "Finisher" -> sprintf "☠️ [bold %s]Telegraphed Windup: Lethal Finisher[/]" Theme.Red
+        | other -> sprintf "⚡ [bold %s]Telegraphed Windup: %s Vector[/]" Theme.Yellow other
+
+      let categoryDesc =
+        match vector with
+        | "Power" -> "Opponent committing kinetic weight to a heavy Power blow."
+        | "Agility" -> "Opponent testing distance with rapid probing Agility footwork."
+        | "Discipline" -> "Opponent measuring stance posture and baiting openings."
+        | "Defensive" -> "Opponent settling balance to catch breath and vent strain."
+        | "Defense" -> "Opponent assuming active defense posture."
+        | other -> sprintf "Opponent preparing %s action." other
+
+      let categoryTip =
+        match vector with
+        | "Power" -> "Counter with Fortitude Guard (or Resolve Anchor if mental)!"
+        | "Agility" -> "Counter with Reflex Slip (or Intuition Perception if mental)!"
+        | "Discipline" -> "Break guard or maintain measured poise."
+        | "Defensive" -> "Seize the Vor with an aggressive strike!"
+        | other -> fullTip
+
+      categoryTitle, categoryDesc, categoryTip, vector
+
+    // Tier 3: Full Numerical Telemetry (scrutiny >= enemyDC + 15)
+    else
+      fullTitle, fullDesc, fullTip, vector
 
   /// Plain-text name of an intent for the combat log, e.g. "Force Strike: Standard Cleave (Power)".
   /// Reuses the telegraph so the log and the telegraph can never name an action differently; only the
@@ -588,7 +669,7 @@ module Display =
 
     match enemyIntentOpt with
     | Some intent ->
-      let title, desc, tip, _ = formatTelegraphedIntent intent enemy
+      let title, desc, tip, _ = formatTelegraphedIntentWithLadder player enemy intent
       let telegraphGrid = Grid()
       telegraphGrid.AddColumn(GridColumn()) |> ignore
       telegraphGrid.AddRow(Markup(sprintf "  [bold %s]󰓥 Telegraphed Windup:[/] %s" Theme.Yellow title)) |> ignore
@@ -956,6 +1037,42 @@ module Display =
 
     | CombatEvent.ShieldRaised (_, armor, stacks) ->
       AnsiConsole.MarkupLine(sprintf "  [bold %s]🛡️ BASTION SHIELD:[/] Fortified armor soak (+%d Armor) and braced stance (+%d ramp stacks)!" Theme.Green armor stacks)
+
+    | CombatEvent.PainShockSuffered (_, dmg, pct, poise, resisted) ->
+      if resisted then
+        AnsiConsole.MarkupLine(sprintf "  [bold %s]⚡ PAIN SHOCK RESISTED:[/] Target shrugged off severe somatic trauma (%d damage, %d%% Max HP) with %d Poise!" Theme.Cyan dmg pct poise)
+      else
+        AnsiConsole.MarkupLine(sprintf "  [bold %s]⚡ PAIN SHOCK COLLAPSE:[/] Target buckled under severe trauma (%d damage, %d%% Max HP; needed %d Poise, had %d)!" Theme.Red dmg pct (pct * 2) poise)
+
+    | CombatEvent.CombatantStaggered (_, reason) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]💥 STAGGERED:[/] Target lost footing and dropped guard (%s)!" Theme.Red reason)
+
+    | CombatEvent.StaggerRecovered _ ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🔄 RECOVERED:[/] Target recovered from stagger." Theme.Cyan)
+
+    | CombatEvent.TacticalOutmaneuver (_, _, margin, frustration) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]󰒋 TACTICAL OUTMANEUVER:[/] Martial read outplayed opponent (Margin +%d), inflicting +%d Frustration!" Theme.Purple margin frustration)
+
+    | CombatEvent.ActiveDefenseDeclared (_, defName) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🛡️ ACTIVE DEFENSE:[/] Combatant assumed %s posture!" Theme.Cyan defName)
+
+    | CombatEvent.DefenseAffinityResolved (_, _, isCounter, mitPct) ->
+      if isCounter then
+        AnsiConsole.MarkupLine(sprintf "  [bold %s]★ AFFINITY COUNTER:[/] Defense countered incoming attack vector (+%d%% damage mitigation)!" Theme.Green mitPct)
+      else
+        AnsiConsole.MarkupLine(sprintf "  [bold %s]⚠ AFFINITY VULNERABILITY:[/] Defense was vulnerable to incoming attack vector (%d%% damage penalty)!" Theme.Red mitPct)
+
+    | CombatEvent.UnattackedStanceBenefit (_, defName, benefit) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]󰓥 UNATTACKED STANCE BENEFIT:[/] %s: %s" Theme.Green defName benefit)
+
+    | CombatEvent.BeastFled (_, name) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🐾 BEAST FLED:[/] The critically wounded %s scrambled into the shadows and fled the battle!" Theme.Yellow name)
+
+    | CombatEvent.BeastSpared _ ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🕊️ MERCY EXTENDED:[/] Spared the wounded beast! Calmed Recklessness to 0 and restored Morale!" Theme.Green)
+
+    | CombatEvent.BeastExecuted _ ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]☠️ COUP DE GRÂCE:[/] Executed the fleeing beast! Harvested pelts and trophies (+15 Recklessness)!" Theme.Red)
 
   /// Creates the Panel for the comprehensive Symbol & Glyph Reference Guide
   let createSymbolAndGlyphLegendPanel () : Panel =

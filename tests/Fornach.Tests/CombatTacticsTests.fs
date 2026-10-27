@@ -163,13 +163,14 @@ module CombatTacticsTests =
     Assert.True(hasEvasiveTag, "Agility options should highlight evasive advantage vs Power")
     Assert.True(hasInterruptTag, "Shield bash should highlight interrupt opportunity vs heavy power windup")
 
-    // 2. Enemy telegraphs Agility flurry -> Discipline gets Bastion Counter, Raise Shield gets Parry Opening
+    // 2. Enemy telegraphs Agility flurry -> In Nach, Reflex Slip gets Affinity Counter, Raise Shield gets Parry Opening (ADR 0009)
     let agilityWindup = ActionIntent.StandardAttack (AttackClassification.FinesseCadence true)
-    let agilityChoices = Program.buildActionChoicesWithTelegraph player enemy (Some agilityWindup)
+    let defendingPlayer = player |> Combatant.yieldVor
+    let agilityChoices = Program.buildActionChoicesWithTelegraph defendingPlayer enemy (Some agilityWindup)
 
-    let hasBastionTag = agilityChoices |> List.exists (fun c -> c.Contains("Bastion Counter"))
+    let hasAffinityTag = agilityChoices |> List.exists (fun c -> c.Contains("Affinity Counter (Mitigates Finesse)"))
     let hasParryTag = agilityChoices |> List.exists (fun c -> c.Contains("Parry Opening"))
-    Assert.True(hasBastionTag, "Discipline options should highlight bastion counter vs Agility")
+    Assert.True(hasAffinityTag, "Reflex Slip should highlight affinity counter vs Agility")
     Assert.True(hasParryTag, "Raise shield should highlight parry opening vs Agility")
 
   [<Fact>]

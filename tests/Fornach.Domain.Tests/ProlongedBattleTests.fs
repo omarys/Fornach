@@ -55,32 +55,25 @@ module ProlongedBattleTests =
   let ``mastery raises damage dealt and lowers damage taken against that species`` () =
     let roller = fixedRoller 6
     let species = "Blight Sprite"
+    let sprite = { createFighter 50 50 50 50 50 50 with Name = species }
 
-    let asPlayer kills =
-      let c = createFighter 120 50 50 50 50 50
-      { c with
-          Name = "TestFighter"
-          PlayerStyle = true
-          Progression = { c.Progression with Mastery = Map.ofList [ species, kills ] } }
+    let asPlayer encounters =
+      let c = { createFighter 120 50 50 50 50 50 with Name = "TestFighter"; PlayerStyle = true }
+      List.fold (fun acc _ -> Combatant.growFromEncounter [ sprite ] acc) c [ 1 .. encounters ]
 
     let damageBetween (attacker: Combatant) (target: Combatant) =
       let res = ActionResolver.resolve roller (StandardAttack (ForceStrike false)) attacker target
       target.Health.Current - res.Target.Health.Current
 
-    let sprite = { createFighter 50 50 50 50 50 50 with Name = species }
-
-    // Offense: five wins against the species hit harder than none.
+    // Offense: five encounters against the species hit harder than none via Bestiary Prowess.
     let plainHit = damageBetween (asPlayer 0) sprite
     let masteredHit = damageBetween (asPlayer 5) sprite
     Assert.True(masteredHit > plainHit, sprintf "mastered hit %d should exceed %d" masteredHit plainHit)
 
-    // The bonus is capped at ten kills.
-    Assert.Equal(damageBetween (asPlayer 10) sprite, damageBetween (asPlayer 50) sprite)
-
-    // Defense: the same species hurts a player who has beaten it less than one who has not.
+    // Defense: the same species hurts a player who has fought it less than one who has gained Poise.
     let attacker = { createFighter 120 50 50 50 50 50 with Name = species }
     let takenByPlain = damageBetween attacker (asPlayer 0)
-    let takenByMastered = damageBetween attacker (asPlayer 10)
+    let takenByMastered = damageBetween attacker (asPlayer 5)
     Assert.True(takenByMastered < takenByPlain, sprintf "mastered defence %d should undercut %d" takenByMastered takenByPlain)
 
   [<Fact>]

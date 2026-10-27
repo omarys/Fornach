@@ -227,7 +227,14 @@ module TierFactory =
     let level = ProgressionScale.tierToLevel tier
     let fighter = createClassLevel cls level
     let tierName = sprintf "%s %s" (tier.ToString()) cls.Name
-    { fighter with Name = tierName }
+    let mobStance =
+      match cls with
+      | CharacterClass.Fighter
+      | CharacterClass.Warrior
+      | CharacterClass.Mage
+      | CharacterClass.Soldier -> CombatStance.PowerStance
+      | CharacterClass.Rogue -> CombatStance.AgilityStance
+    { fighter with Name = tierName; Stance = mobStance }
 
   /// Rescales an existing combatant to a new level, preserving identity, gear, stance, and
   /// current resource ratios. Applies only the per-level growth between the canonical

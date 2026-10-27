@@ -17,6 +17,11 @@ type ArmorIntegrity =
     { Current = Math.Clamp(this.Current - amount, 0, this.Max)
       Max = this.Max }
 
+  /// Repairs current armor durability, clamped between 0 and Max
+  member this.Repair amount =
+    { Current = Math.Clamp(this.Current + amount, 0, this.Max)
+      Max = this.Max }
+
   /// Passive mitigation ratio: pristine armor soaks up to 50% of raw physical hits
   member this.AbsorptionRatio =
     if this.Max = 0 then
@@ -60,7 +65,7 @@ type Combatant =
     Flow: int
     /// Combat ramp: rises on every attack, sharpens Force/Fortitude, cashed by Power specials.
     Momentum: int
-    /// Combat ramp: rises on every attack, sharpens Prowess/Poise, cashed by Discipline specials.
+    /// Retired Discipline combat ramp (ADR 0009). Deprecated; removed in Phase 3.
     Focus: int
     Armor: ArmorIntegrity
     WeaponCondition: WeaponCondition
@@ -82,11 +87,19 @@ type Combatant =
     /// tactical preparations, and a varied attack kit. Plain opposition leaves this false.
     PlayerStyle: bool
     /// Tactical tempo in the Vor / Nach paradigm
-    Tempo: TacticalTiming }
+    Tempo: TacticalTiming
+    /// True when staggered by Pain Shock, losing the next action/turn (ADR 0009)
+    IsStaggered: bool }
 
   /// Tactical tempo state helpers
   member this.IsInVor = this.Tempo = TacticalTiming.Vor
   member this.IsInNach = this.Tempo = TacticalTiming.Nach
+
+  /// True for humanoids (characters without a non-humanoid MonsterFamily)
+  member this.IsHumanoid = this.MonsterFamily.IsNone
+
+  /// True for wild predatory fauna
+  member this.IsBeast = this.MonsterFamily = Some MonsterFamily.Beast
 
   /// Combatant level derived from progression profile
   member this.Level = this.Progression.Level
@@ -137,21 +150,47 @@ type Combatant =
     this.ActivePreparations
     |> List.exists (fun a -> a.Type = prepType && a.TargetId = Some targetId && not a.IsExpired)
 
-  /// Retrieves an effective stat value factoring in limb debuffs and collapse penalties
+  /// Retrieves an effective stat value factoring in limb debuffs and collapse penalties.
+  /// Non-humanoids have 0 Prowess and Poise (ADR 0009).
   member this.GetStat(stat: StatId) =
-    let rawVal = this.Stats.Get stat
-    let penalized =
-      if stat = Reflex then
-        Math.Max(1, rawVal - this.LimbDebuff)
-      else
-        rawVal
-    int (Math.Round(float penalized * this.EffectiveDefenseMultiplier))
+    if not this.IsHumanoid && (stat = Prowess || stat = Poise) then 0
+    else
+      let rawVal = this.Stats.Get stat
+      let penalized =
+        if stat = Reflex then
+          Math.Max(1, rawVal - this.LimbDebuff)
+        else
+          rawVal
+      int (Math.Round(float penalized * this.EffectiveDefenseMultiplier))
 
   /// Retrieves a stance-adjusted stat for opposed combat resolution: adopting a stance boosts
   /// the stats of its vector (+25%) and penalizes off-vector offensive stats (-25%) while preserving guard.
+  /// Applies strain threshold debuffs (>=75) (ADR 0009).
   /// Canonical `GetStat` and `Stats` remain stance-neutral; this is the combat-only view used by ActionResolver.
   member this.GetCombatStat(stat: StatId) =
     let baseValue = this.GetStat stat
+
+    let isDefenseStat =
+      stat = Fortitude || stat = Reflex || stat = Resolve || stat = Intuition || stat = Poise || stat = Composure
+
+    // Strain debuffs at >= 75 (ADR 0009):
+    let baseAdjusted =
+      if (stat = Force || stat = Fortitude) && this.Meters.Exhaustion.Value >= 75 then
+        int (Math.Round(float baseValue * 0.75))
+      elif (stat = Finesse || stat = Reflex) && this.Meters.Overwhelm.Value >= 75 then
+        int (Math.Round(float baseValue * 0.75))
+      elif stat = Poise && this.Meters.Frustration.Value >= 75 then
+        int (Math.Round(float baseValue * 0.50))
+      elif this.Meters.CognitiveFatigue.Value >= 75 && (stat = Intellect || stat = Acuity || (this.Plane = Mental && (stat = Fortitude || stat = Reflex || stat = Resolve || stat = Intuition))) then
+        int (Math.Round(float baseValue * 0.75))
+      else
+        baseValue
+
+    let strainAdjusted =
+      if this.Meters.Recklessness.Value >= 75 && isDefenseStat then
+        int (Math.Round(float baseAdjusted * 0.75))
+      else
+        baseAdjusted
 
     let stanceVector =
       if this.Plane = Mental then
@@ -172,14 +211,14 @@ type Combatant =
 
     let stanceAdjusted =
       if descriptor.Plane <> this.Plane then
-        baseValue
+        strainAdjusted
       elif descriptor.Vector = stanceVector then
-        Math.Max(1, int (Math.Round(float baseValue * 1.25)))
+        Math.Max(1, int (Math.Round(float strainAdjusted * 1.25)))
       elif descriptor.Orientation = Offense then
         // Trade-off: the plane's other vectors lose offensive sharpness, but keep their guard.
-        Math.Max(1, int (Math.Round(float baseValue * 0.75)))
+        Math.Max(1, int (Math.Round(float strainAdjusted * 0.75)))
       else
-        baseValue
+        strainAdjusted
 
     // Combat ramp: each meter sharpens the stat pair it feeds, so a sustained fight compounds.
     // Flow is deliberately the sharpest (10%/stack vs 1%) — it is the Agility glass cannon meter.
@@ -197,9 +236,12 @@ type Combatant =
 
   /// Guard every defence contest rolls against: the Poise/Composure blend, replaced while the defender
   /// holds DisciplineStance by a pure Poise anchor (1.5x against physical attacks, 1.0x against mental
-  /// ones) that drops Composure. `useCombatStats` keeps each call site's existing stat view.
+  /// ones) that drops Composure. Non-humanoids use Fortitude fallback (ADR 0009).
   member this.GetGuard(plane: Plane, useCombatStats: bool) : int =
-    if this.Stance = CombatStance.DisciplineStance then
+    if not this.IsHumanoid then
+      let stat = if useCombatStats then this.GetCombatStat else this.GetStat
+      stat Fortitude
+    elif this.Stance = CombatStance.DisciplineStance then
       let stanceGuard = match plane with Physical -> 1.5 | Mental -> 1.0
       int (Math.Round(float (this.GetStat Poise) * stanceGuard))
     else
@@ -258,7 +300,8 @@ type Combatant =
       MonsterFamily = None
       MonsterTraits = []
       PlayerStyle = false
-      Tempo = TacticalTiming.Vor }
+      Tempo = TacticalTiming.Vor
+      IsStaggered = false }
 
   /// Factory for creating a combatant with explicit class archetype and progression level
   static member createWithClass id name maxHealth maxMorale (stats: StatBlock) (cls: CharacterClass) (level: int) =
@@ -303,7 +346,8 @@ type Combatant =
       MonsterFamily = None
       MonsterTraits = []
       PlayerStyle = false
-      Tempo = TacticalTiming.Vor }
+      Tempo = TacticalTiming.Vor
+      IsStaggered = false }
 
   /// Updates the combatant's tactical tempo (Vor / Nach)
   static member withTempo (tempo: TacticalTiming) (c: Combatant) = { c with Tempo = tempo }
@@ -314,15 +358,26 @@ type Combatant =
   /// Yields the Vor, moving the combatant into the Nach (reactive defense)
   static member yieldVor (c: Combatant) = { c with Tempo = TacticalTiming.Nach }
 
-  /// Pure helper to update status meters
+  /// Staggers combatant from Pain Shock, causing them to lose their next action (ADR 0009)
+  static member stagger (c: Combatant) = { c with IsStaggered = true }
+
+  /// Clears stagger after lost action
+  static member clearStagger (c: Combatant) = { c with IsStaggered = false }
+
+  /// Pure helper to update status meters. Non-humanoids are immune to martial Frustration (ADR 0009).
   static member updateMeters (updater: StatusMeters -> StatusMeters) (c: Combatant) =
-    { c with Meters = updater c.Meters }
+    let updated = updater c.Meters
+    let finalMeters =
+      if not c.IsHumanoid && updated.Frustration.Value > 0 then
+        { updated with Frustration = Meter.Zero }
+      else
+        updated
+    { c with Meters = finalMeters }
 
   /// Every combat ramp meter shares one ceiling: five stacks, so a full pile cashes at 2.75x.
   static member StackCap = 5
 
-  /// Raises all three ramp meters together. Every attack type feeds all three; only a same-vector
-  /// special spends one, so spending always resets that meter alone.
+  /// Raises kinetic ramp meters together.
   static member addStacks delta (c: Combatant) =
     { c with
         Flow = Math.Clamp(c.Flow + delta, 0, Combatant.StackCap)
@@ -332,8 +387,7 @@ type Combatant =
   /// One stack off every meter: the end-of-turn decay when nothing is engaged.
   static member decayStacks (c: Combatant) = Combatant.addStacks -1 c
 
-  /// Wipes all three meters. A wait, a rest or a shrine restore breaks the ramp outright: the meters are
-  /// a within-fight ramp, never a bankable resource, so nothing survives a deliberate recovery.
+  /// Wipes active ramp meters. Recovery breaks the ramp outright.
   static member clearStacks (c: Combatant) = { c with Flow = 0; Momentum = 0; Focus = 0 }
 
   /// Stacks currently held in the meter that gates a given attack vector.
@@ -350,29 +404,34 @@ type Combatant =
     | Vector.Power -> { c with Momentum = Math.Max(0, c.Momentum - count) }
     | Vector.Discipline -> { c with Focus = Math.Max(0, c.Focus - count) }
 
-  /// Permanent growth on a won encounter, replacing the old Study Stack ramp: the Discipline pair
-  /// (Prowess/Poise for everyone but a Mage, which takes Acumen/Composure) and +1 to each of the three
-  /// mental defences. No offensive attribute ever grows from a kill — Power and Agility climb through
-  /// the combat ramp and gear instead, so Discipline has to be fed on purpose.
+  /// Permanent growth on a won or survived encounter (ADR 0009):
+  /// Prowess grows based on species familiarity (25 -> 5 -> 3 -> 2 -> 1 uncapped),
+  /// Poise grows by +1 per survived encounter, and mental defences gain +1.
   static member growFromEncounter (foes: Combatant list) (c: Combatant) =
-    // `max(8 - (bearer level - foe level), 2)`: diminishing as the foe falls behind, and more than
-    // eight when the bearer is the underdog. Halved from sixteen, which paid a whole tier of
-    // Discipline per kill and left a cleared stage far above the tier the next floor is built for.
-    // The floor of 2 is the only clamp — it keeps a meaningless kill worth *something* without
-    // letting a stage's end-of-run trash sweep pay for a level.
-    let foeLevel = foes |> List.fold (fun best (f: Combatant) -> max best f.Level) 0
-    let levelGap = c.Level - foeLevel
-    let disciplineGain = Math.Max(8 - levelGap, 2)
-
     let mentalDefences =
       [ StatId.Resolve, 1; StatId.Intuition, 1; StatId.Composure, 1 ]
 
+    let updatedProg, prowessGain =
+      foes
+      |> List.fold (fun (p: ProgressionProfile, totalProwess) foe ->
+          let pNext, gain = p.RecordBestiaryEncounter foe.Name
+          pNext, totalProwess + gain) (c.Progression, 0)
+
+    let poiseGain = 1
+
     let disciplinePair =
       match c.Class with
-      | Mage -> [ StatId.Acumen, disciplineGain; StatId.Composure, disciplineGain ]
-      | _ -> [ StatId.Prowess, disciplineGain; StatId.Poise, disciplineGain ]
+      | Mage -> [ StatId.Acumen, prowessGain; StatId.Composure, poiseGain ]
+      | _ -> [ StatId.Prowess, prowessGain; StatId.Poise, poiseGain ]
 
-    { c with Stats = c.Stats.ApplyModifiers(disciplinePair @ mentalDefences) }
+    { c with
+        Stats = c.Stats.ApplyModifiers(disciplinePair @ mentalDefences)
+        Progression = updatedProg }
+
+  /// Awards milestone Poise bonus for defeating a Floor Boss / Guardian without collapsing (ADR 0009)
+  static member grantBossPoise (c: Combatant) =
+    let bonus = match c.Class with Mage -> [ StatId.Composure, 3 ] | _ -> [ StatId.Poise, 3 ]
+    { c with Stats = c.Stats.ApplyModifiers bonus }
 
   /// Modifies active Arcane Ward barrier absorption pool
   static member addWard delta (c: Combatant) =

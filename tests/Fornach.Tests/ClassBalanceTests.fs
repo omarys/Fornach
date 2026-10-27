@@ -460,11 +460,11 @@ let ``Combat action choices are ordered by class archetype vector`` () =
   Assert.Contains("Finesse Cadence: Rapid Probing", duelistChoices.[0])
   Assert.Contains("Finesse Cadence: Relentless Blitz", duelistChoices.[1])
 
-  // 3. Soldier (Discipline Vector): Prowess / Poise must be top choices
+  // 3. Soldier (Discipline Vector): in Nach, active defenses (Fortitude Guard / Reflex Slip) lead (ADR 0009)
   let soldier = TierFactory.createClassLevel CharacterClass.Soldier 1
-  let wardenChoices = Program.buildActionChoices soldier dummyEnemy
-  Assert.Contains("Prowess Strike: Stance Pressure", wardenChoices.[0])
-  Assert.Contains("Prowess Strike: Invitational Bait", wardenChoices.[1])
+  let wardenChoices = Program.buildActionChoices (soldier |> Combatant.yieldVor) dummyEnemy
+  Assert.Contains("Fortitude Guard", wardenChoices.[0])
+  Assert.Contains("Reflex Slip", wardenChoices.[1])
 
   // 4. Mage (Power Mental Vector): its own mental strikes must lead. A plain Warrior dummy is
   // defensively opaque to mental attacks, so every Mage strike lands near-zero there and the exact

@@ -23,7 +23,7 @@ module TacticalAssessmentTests =
     Assert.Equal(19 + 34 / 4, assess.EffectiveAcumen)
     Assert.Equal(150, assess.TargetComposure)
     Assert.True(assess.Ratio < 0.40)
-    Assert.Equal((StatId.Poise, 200), assess.WeakestDefense)
+    Assert.Equal((StatId.Fortitude, 220), assess.WeakestDefense)
     Assert.Equal("GUARDED POSTURE", assess.Headline)
     Assert.True(assess.StrategicAdvice.Contains("build Focus"))
 
@@ -44,16 +44,16 @@ module TacticalAssessmentTests =
     Assert.True(assess.VulnerabilitySummary.IsNone)
 
   [<Fact>]
-  let ``Prologue classes discern Slag Hound primary stat as Force and weakest defense as Poise`` () =
+  let ``Prologue classes discern Slag Hound primary stat as Force and weakest defense as Reflex`` () =
     let player = StoryBosses.createProloguePlayer "duelist"
     let hound = Bestiary.slagHound.ToCombatant (CombatantId.New())
 
     let assess = TacticalAssessment.assess player hound
 
-    // Slag Hound stats: Force 105, Fortitude 95, Finesse 80, Reflex 75, Poise 70, Composure 50
+    // Slag Hound stats: Force 105, Fortitude 95, Finesse 80, Reflex 75 (Poise 0 for non-humanoids)
     Assert.Equal(StatId.Force, assess.PrimaryStat)
     Assert.Equal(105, assess.PrimaryStatValue)
-    Assert.Equal((StatId.Poise, 70), assess.WeakestDefense)
+    Assert.Equal((StatId.Reflex, 75), assess.WeakestDefense)
     // Duelist Acumen 15 + Intuition 22/4 (5) = 20 vs Composure 50 -> Discerning (0.40)
     Assert.Equal(TacticalInsightLevel.Discerning, assess.InsightLevel)
     Assert.Equal("DISCERNING READ", assess.Headline)
@@ -83,7 +83,7 @@ module TacticalAssessmentTests =
     Assert.Equal(TacticalInsightLevel.Obscured, initialAssess.InsightLevel)
 
     // Add 3 Focus stacks (+45 effective Acumen: 27 + 45 = 72 / 150 = 0.48 -> Discerning)
-    let studiedPlayer = { player with Focus = 3 }
+    let studiedPlayer = { player with Stats = player.Stats.ApplyModifiers [ StatId.Acumen, 45 ] }
     let studiedAssess = TacticalAssessment.assess studiedPlayer gargoyle
 
     Assert.Equal(TacticalInsightLevel.Discerning, studiedAssess.InsightLevel)
@@ -141,7 +141,7 @@ module TacticalAssessmentTests =
 
     // 3. Keen insight (elevated Acumen to reach ratio in [0.75, 1.15))
     // Hound Composure 50 -> Need effective Acumen ~45 (ratio = 0.90 -> Keen)
-    let keenObserver = { observer with Focus = 2 } // 22 + 30 = 52 / 50 = 1.04 -> Keen
+    let keenObserver = { observer with Stats = observer.Stats.ApplyModifiers [ StatId.Acumen, 30 ] } // 22 + 30 = 52 / 50 = 1.04 -> Keen
     let keenAssess = TacticalAssessment.assess keenObserver hound
     Assert.Equal(TacticalInsightLevel.Keen, keenAssess.InsightLevel)
     Assert.True(keenAssess.ThreatWarning.IsSome)

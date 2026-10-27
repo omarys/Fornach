@@ -216,3 +216,33 @@ type CombatEvent =
 
   /// Fighter braced behind their shield, fortifying armor soak and establishing bastion guard
   | ShieldRaised of actorId: CombatantId * armorFortified: int * rampStacksGained: int
+
+  /// Single-turn damage spike triggered a Pain Shock check against Poise (ADR 0009)
+  | PainShockSuffered of targetId: CombatantId * damageTaken: int * damagePct: int * poise: int * resisted: bool
+
+  /// Combatant staggered by Pain Shock, losing their turn (ADR 0009)
+  | CombatantStaggered of targetId: CombatantId * reason: string
+
+  /// Combatant recovered from Stagger at turn end
+  | StaggerRecovered of targetId: CombatantId
+
+  /// Discipline was the determining factor in a successful strike/defense, outmaneuvering the foe (ADR 0009)
+  | TacticalOutmaneuver of actorId: CombatantId * targetId: CombatantId * statMargin: int * frustrationInflicted: int
+
+  /// Active defense declared in the Nach (Fortitude, Reflex, Resolve, Intuition)
+  | ActiveDefenseDeclared of defenderId: CombatantId * defenseName: string
+
+  /// Defense affinity matched or mismatched against incoming attack vector
+  | DefenseAffinityResolved of defenderId: CombatantId * attackerId: CombatantId * isCounter: bool * mitigationPct: int
+
+  /// Active defense stance payoff granted when opponent recovered or did not attack
+  | UnattackedStanceBenefit of defenderId: CombatantId * defenseName: string * benefitDesc: string
+
+  /// Critically wounded lone beast fled combat
+  | BeastFled of beastId: CombatantId * beastName: string
+
+  /// Player spared a fleeing wounded beast
+  | BeastSpared of playerId: CombatantId * beastId: CombatantId
+
+  /// Player executed a fleeing wounded beast
+  | BeastExecuted of playerId: CombatantId * beastId: CombatantId

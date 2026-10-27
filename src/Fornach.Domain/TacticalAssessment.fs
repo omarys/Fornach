@@ -59,8 +59,12 @@ module TacticalAssessment =
   let analyzeTargetStats (target: Combatant) : (StatId * int) * (StatId * int) * (StatId * int) * (StatId * int) =
     let relevantStats =
       match target.Plane with
-      | Physical -> [ StatId.Force; StatId.Fortitude; StatId.Finesse; StatId.Reflex; StatId.Prowess; StatId.Poise ]
-      | Mental -> [ StatId.Intellect; StatId.Resolve; StatId.Acuity; StatId.Intuition; StatId.Acumen; StatId.Composure ]
+      | Physical ->
+        if target.IsHumanoid then [ StatId.Force; StatId.Fortitude; StatId.Finesse; StatId.Reflex; StatId.Prowess; StatId.Poise ]
+        else [ StatId.Force; StatId.Fortitude; StatId.Finesse; StatId.Reflex ]
+      | Mental ->
+        if target.IsHumanoid then [ StatId.Intellect; StatId.Resolve; StatId.Acuity; StatId.Intuition; StatId.Acumen; StatId.Composure ]
+        else [ StatId.Intellect; StatId.Resolve; StatId.Acuity; StatId.Intuition ]
 
     let statsWithValues =
       relevantStats

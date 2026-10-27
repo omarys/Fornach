@@ -21,69 +21,127 @@ module Simulation =
 
     let executeTurn (actorIsA: bool) =
       let actor, target = if actorIsA then combA, combB else combB, combA
-      let intent = AI.chooseIntent actor target
-      let res = ActionResolver.resolve roller intent actor target
-      if actorIsA then
-        combA <- res.Actor
-        combB <- res.Target
+      if actor.IsStaggered then
+        let recovered = actor |> Combatant.clearStagger
+        if actorIsA then combA <- recovered else combB <- recovered
       else
-        combB <- res.Actor
-        combA <- res.Target
+        let intent = AI.chooseIntent actor target
+        let defOpt =
+          if target.IsHumanoid && target.IsInNach then
+            Some (AI.chooseActiveDefense target actor)
+          else None
+        let res = ActionResolver.resolveExWithDefense roller intent defOpt actor target 0
+        if actorIsA then
+          combA <- res.Actor
+          combB <- res.Target
+        else
+          combB <- res.Actor
+          combA <- res.Target
 
-      match res.Contest with
-      | Some c ->
-        if c.IsWhiff then whiffs <- whiffs + 1
-        if c.IsCritical then crits <- crits + 1
-      | None -> ()
+        match res.Contest with
+        | Some c ->
+          if c.IsWhiff then whiffs <- whiffs + 1
+          if c.IsCritical then crits <- crits + 1
+        | None -> ()
 
-      let hasExecutedTarget =
-        res.Events
-        |> List.exists (function CombatEvent.Executed _ -> true | _ -> false)
+        let hasExecutedTarget =
+          res.Events
+          |> List.exists (function CombatEvent.Executed _ -> true | _ -> false)
 
-      let currentActor = if actorIsA then combA else combB
-      let currentTarget = if actorIsA then combB else combA
+        let currentActor = if actorIsA then combA else combB
+        let currentTarget = if actorIsA then combB else combA
 
-      if hasExecutedTarget then
-        let plane = match intent with ExecuteStrike p -> p | _ -> Physical
-        winner <- Some currentActor.Name
-        winnerId <- Some currentActor.Id
-        winnerIsA <- Some actorIsA
-        loser <- Some currentTarget.Name
-        condition <- ExecutionFinisher plane
-      elif currentActor.Health.IsDepleted then
-        winner <- Some currentTarget.Name
-        winnerId <- Some currentTarget.Id
-        winnerIsA <- Some (not actorIsA)
-        loser <- Some currentActor.Name
+        if hasExecutedTarget then
+          let plane = match intent with ExecuteStrike p -> p | _ -> Physical
+          winner <- Some currentActor.Name
+          winnerId <- Some currentActor.Id
+          winnerIsA <- Some actorIsA
+          loser <- Some currentTarget.Name
+          condition <- ExecutionFinisher plane
+        elif currentTarget.IsExecuteEligible then
+          let r = match currentTarget.Collapse with CollapseState.Collapsed r -> r | _ -> RecklessExposure
+          winner <- Some currentActor.Name
+          winnerId <- Some currentActor.Id
+          winnerIsA <- Some actorIsA
+          loser <- Some currentTarget.Name
+          condition <- CollapseDecisive r
+        elif currentActor.IsExecuteEligible then
+          let r = match currentActor.Collapse with CollapseState.Collapsed r -> r | _ -> RecklessExposure
+          winner <- Some currentTarget.Name
+          winnerId <- Some currentTarget.Id
+          winnerIsA <- Some (not actorIsA)
+          loser <- Some currentActor.Name
+          condition <- CollapseDecisive r
+        elif currentActor.Health.IsDepleted then
+          winner <- Some currentTarget.Name
+          winnerId <- Some currentTarget.Id
+          winnerIsA <- Some (not actorIsA)
+          loser <- Some currentActor.Name
+          condition <- HealthDepleted
+        elif currentTarget.Health.IsDepleted then
+          winner <- Some currentActor.Name
+          winnerId <- Some currentActor.Id
+          winnerIsA <- Some actorIsA
+          loser <- Some currentTarget.Name
+          condition <- HealthDepleted
+        elif currentTarget.Morale.IsDepleted then
+          winner <- Some currentActor.Name
+          winnerId <- Some currentActor.Id
+          winnerIsA <- Some actorIsA
+          loser <- Some currentTarget.Name
+          condition <- MoraleDepleted
+        elif currentActor.Morale.IsDepleted then
+          winner <- Some currentTarget.Name
+          winnerId <- Some currentTarget.Id
+          winnerIsA <- Some (not actorIsA)
+          loser <- Some currentActor.Name
+          condition <- MoraleDepleted
+
+    let checkBeastFlee (beast: Combatant) (opponent: Combatant) (beastIsA: bool) =
+      if beast.IsBeast
+         && float beast.Health.Current / float beast.Health.Maximum < 0.30
+         && float opponent.Health.Current / float opponent.Health.Maximum > 0.70 then
+        let isMerciful = opponent.Meters.Recklessness.Value < 50
+        let updatedOpponent =
+          if isMerciful then
+            opponent
+            |> Combatant.updateMeters (fun m -> { m with Recklessness = Meter.Zero })
+            |> (fun p -> { p with Morale = p.Morale.ApplyDelta 20 })
+            |> Combatant.growFromEncounter [ beast ]
+          else
+            opponent
+            |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness + 15 })
+            |> Combatant.growFromEncounter [ beast ]
+
+        if beastIsA then
+          combB <- updatedOpponent
+          winner <- Some combB.Name
+          winnerId <- Some combB.Id
+          winnerIsA <- Some false
+          loser <- Some combA.Name
+        else
+          combA <- updatedOpponent
+          winner <- Some combA.Name
+          winnerId <- Some combA.Id
+          winnerIsA <- Some true
+          loser <- Some combB.Name
         condition <- HealthDepleted
-      elif currentTarget.Health.IsDepleted then
-        winner <- Some currentActor.Name
-        winnerId <- Some currentActor.Id
-        winnerIsA <- Some actorIsA
-        loser <- Some currentTarget.Name
-        condition <- HealthDepleted
-      elif currentTarget.Morale.IsDepleted then
-        winner <- Some currentActor.Name
-        winnerId <- Some currentActor.Id
-        winnerIsA <- Some actorIsA
-        loser <- Some currentTarget.Name
-        condition <- MoraleDepleted
-      elif currentActor.Morale.IsDepleted then
-        winner <- Some currentTarget.Name
-        winnerId <- Some currentTarget.Id
-        winnerIsA <- Some (not actorIsA)
-        loser <- Some currentActor.Name
-        condition <- MoraleDepleted
+        true
+      else
+        false
 
     while winner.IsNone && round <= maxRounds do
-      // First turn of the round belongs to whichever combatant holds the Vor
-      let aHasVor = combA.IsInVor || not combB.IsInVor
-      executeTurn aHasVor
-      if winner.IsNone then
-        executeTurn (not aHasVor)
+      if checkBeastFlee combA combB true || checkBeastFlee combB combA false then
+        ()
+      else
+        // First turn of the round belongs to whichever combatant holds the Vor
+        let aHasVor = combA.IsInVor || not combB.IsInVor
+        executeTurn aHasVor
+        if winner.IsNone && not (checkBeastFlee combA combB true || checkBeastFlee combB combA false) then
+          executeTurn (not aHasVor)
 
-      if winner.IsNone then
-        round <- round + 1
+        if winner.IsNone then
+          round <- round + 1
 
     { WinnerName = winner
       WinnerId = winnerId
@@ -434,7 +492,8 @@ module Simulation =
         while mobIdx < mob.Length && swingsCount < availableSwings && winnerIsSolo.IsNone do
           let attacker = mob.[mobIdx]
           let intentMob = AI.chooseIntent attacker solo
-          let mobRes = ActionResolver.resolveEx roller intentMob attacker solo priorDefenses
+          let defOpt = if priorDefenses = 0 && solo.IsHumanoid then Some (AI.chooseActiveDefense solo attacker) else None
+          let mobRes = ActionResolver.resolveExWithDefense roller intentMob defOpt attacker solo priorDefenses
           let newAttacker = mobRes.Actor
           solo <- mobRes.Target
           swingsCount <- swingsCount + 1
@@ -452,7 +511,6 @@ module Simulation =
           match mobRes.Contest with
           | Some c ->
             if c.IsCritical then mobCrits <- mobCrits + 1
-            if c.EncirclementPenalty > peakPenalty then peakPenalty <- c.EncirclementPenalty
           | None -> ()
 
           let soloExecuted = mobRes.Events |> List.exists (function CombatEvent.Executed _ -> true | _ -> false)
@@ -484,7 +542,13 @@ module Simulation =
           let swarmExertion = if mob.Length >= 3 then 1 else 0
           solo <-
             if swarmExertion > 0 then
-              solo |> Combatant.updateMeters (fun m -> { m with Exhaustion = m.Exhaustion + swarmExertion })
+              solo |> Combatant.updateMeters (fun m ->
+                if solo.Plane = Mental then
+                  { m with
+                      Exhaustion = m.Exhaustion + swarmExertion
+                      CognitiveFatigue = m.CognitiveFatigue + (if mob.Length >= 10 then 3 elif mob.Length >= 5 then 2 else 1) }
+                else
+                  { m with Exhaustion = m.Exhaustion + swarmExertion })
             else
               solo
           if solo.Health.IsDepleted then
@@ -764,7 +828,7 @@ module Simulation =
     if rate1 >= 0.50 then
       OverrunBy 1
     else
-      let brackets = [ 2; 3; 5; 8; 12; 16; 24; 32; 48; 64; 80; maxMobCount ] |> List.distinct |> List.sort
+      let brackets = [ 2; 3; 5; 8; 12; 16; 24; 32; 48; 64; 80; maxMobCount ] |> List.filter (fun b -> b <= maxMobCount) |> List.distinct |> List.sort
       let rec searchBracket prevN remaining =
         match remaining with
         | [] -> None

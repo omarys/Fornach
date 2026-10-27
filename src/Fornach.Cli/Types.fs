@@ -15,6 +15,7 @@ type WinCondition =
   | HealthDepleted
   | MoraleDepleted
   | ExecutionFinisher of Plane
+  | CollapseDecisive of CollapseReason
   | Stalemate
 
 type SingleCombatResult =
