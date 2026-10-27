@@ -90,6 +90,25 @@ type CliOptions =
   | RunPeerBalanceMatrix
   | RunBalanceMatrix
   | RunBestiarySwarmMatrix of selectedTier: CombatTier option
+  | RunProgressionSimulation of runs: int * maxFloors: int
+
+/// One floor's contribution to the progression report.
+type FloorSimStat =
+  { Floor: int
+    Reached: int
+    Wins: int
+    AvgLevel: float
+    AvgHpPct: float
+    AvgMoralePct: float }
+
+/// Whole-run view: how deep runs get when every floor is fought with the real scaling and the real
+/// growth applied. This is the only measurement that can answer "does the player outscale the tower".
+type ProgressionSimReport =
+  { Runs: int
+    MaxFloors: int
+    RunsWon: int
+    AvgFloorsReached: float
+    Floors: FloorSimStat list }
 
 /// Debug/test-play launch options parsed alongside the CliOptions mode.
 /// Enabled = --debug/-d (HUD overlay + seed printout);

@@ -178,6 +178,14 @@ module Display =
     sprintf "%s [%s]%s[/][%s]%s[/] [bold %s]%3d%%[/]"
       (label.PadRight barLabelWidth) warnColor filled Theme.CurrentLine empty Theme.Foreground m.Value
 
+  /// The tactical-timing badge: who holds the initiative right now. The whole Vor/Nach/Indes system
+  /// is invisible unless the panel says so, so every combatant panel carries it in its header.
+  let tempoBadge (c: Combatant) : string =
+    match c.Tempo with
+    | TacticalTiming.Vor -> sprintf "[bold %s]⚡ VOR[/]" Theme.Yellow
+    | TacticalTiming.Nach -> sprintf "[%s]NACH[/]" Theme.Comment
+    | TacticalTiming.Indes -> sprintf "[bold %s]INDES[/]" Theme.Cyan
+
   let createCombatantPanel (c: Combatant) (borderColor: Color) (headerColor: string) (observerOpt: Combatant option) =
     let grid = Grid()
     grid.AddColumn(GridColumn()) |> ignore
@@ -301,7 +309,7 @@ module Display =
     | CollapseState.Stable -> ()
 
     Panel(grid)
-      .Header(sprintf "[bold %s] %s [/]" headerColor c.Name)
+      .Header(sprintf "[bold %s] %s [/] %s" headerColor c.Name (tempoBadge c))
       .Border(BoxBorder.Rounded)
       .BorderColor(borderColor)
       .Expand()
@@ -357,7 +365,7 @@ module Display =
     for line in compactCombatantLines c observerOpt do
       grid.AddRow(Markup(line)) |> ignore
     Panel(grid)
-      .Header(sprintf "[bold %s] %s [/]" headerColor c.Name)
+      .Header(sprintf "[bold %s] %s [/] %s" headerColor c.Name (tempoBadge c))
       .Border(BoxBorder.Rounded)
       .BorderColor(borderColor)
       .Expand()
@@ -873,6 +881,9 @@ module Display =
 
     | CombatEvent.IndesSeized (_, _, thresh, margin) ->
       AnsiConsole.MarkupLine(sprintf "  [bold %s]⚡ INDES SEIZURE:[/] Defenses overwhelmed attack (Margin: %d >= Threshold: %d); seized the Vor!" Theme.Yellow margin thresh)
+
+    | CombatEvent.TempoShifted (_, _, reason) ->
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]󰒋 TEMPO SHIFTED:[/] %s" Theme.Yellow reason)
 
     | CombatEvent.BastionZoneErected _ ->
       AnsiConsole.MarkupLine(sprintf "  [bold %s]🏰 BASTION ZONE:[/] Polearm planted! Limits simultaneous attackers strictly to 3 (frontline choke)!" Theme.Cyan)

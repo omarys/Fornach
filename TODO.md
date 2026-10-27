@@ -28,6 +28,13 @@
   - Updated duel menus and HUD rendering in [`Display.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/Display.fs), [`TowerDisplay.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/TowerDisplay.fs), and [`Program.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/Program.fs).
   - Verified with 8 unit tests in [`ClassBalanceTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Tests/ClassBalanceTests.fs) (202 tests passing, 0 warnings) and verified against 128-matchup `--balance-matrix`.
 
+- [x] **1.6. Vor / Nach / Indes Tactical Tempo Integration (ADR 0006)**:
+  - Promoted `TacticalTiming` (`Vor | Nach | Indes`) to `Fornach.Domain` and added `Tempo: TacticalTiming` on `Combatant` (`Combatant.seizeVor`, `yieldVor`, `IsInVor`, `IsInNach`).
+  - Added dynamic Indes thresholds in `IndesResolver.fs`: attacker heavy windup (`IsHeavyWindup`) or high Recklessness ($\ge 60$) reduces Indes threshold by 1 each (stacks with `ParryingBuckler`, clamped at 1).
+  - Wired dynamic round initiative in `Simulation.fs` (`runSingleMatch`) and `Program.fs` (`runInteractiveDuel`, `runStoryDuel`): the combatant holding the Vor attacks first; seizing the Vor in Indes or landing a strike from the Nach flips initiative for the next exchange; recovery in the Vor yields initiative.
+  - Added `[VOR]` and `[NACH]` badges in duel HUD headers and logged `TempoShifted` combat events in `Display.fs`.
+  - Verified with 4 new unit tests in `PreparationTests.fs` (524 tests passing across solution, 0 warnings; `ParallelDeterminismTests`, `MonteCarloSwarmTests`, and `OverallBalanceTests` all green).
+
 - [ ] **2. Infinite Tower Boss Scaling**:
   - Verify Grief Aspect bosses in [`docs/STORY_AND_TOWER.md`](file:///home/omary/Dev/fornach/docs/STORY_AND_TOWER.md) against the revised preparations and meter interactions.
 

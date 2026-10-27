@@ -591,7 +591,9 @@ module TowerGenerator =
       if isStory && floorNumber <= 7 then
         let bossCombatant =
           if floorNumber = 1 then
-            // The tutorial guardian is a mundane bandit chieftain, not a Grief Aspect.
+            // The tutorial guardian is a mundane bandit chieftain, not a Grief Aspect. Authored at
+            // Veteran magnitude (level 30-35 band) and re-levelled by the floor's scaling like any other
+            // enemy: at `player.Level + 10` it is the strongest thing on the floor, which is the point.
             let chieftain = TierFactory.createClassLevel CharacterClass.Warrior 32
             { chieftain with Name = "Bandit Leader" }
           else
@@ -681,21 +683,26 @@ module TowerGenerator =
 
     let mobSpecies (i: int) =
       if isStory && floorNumber = 1 then
-        // Tutorial floor: alternate low-level bandits (Warrior / Rogue) with equally
-        // low-level woodland creatures so a level-1 protagonist always has survivable
-        // fights. The PineCloisters Novice template (Blight Sprite) is level 20 and would
-        // one-shot a level-1 player, so creatures are generated at the tutorial level.
+        // Tutorial floor: alternate low-level bandits (Warrior / Rogue) with equally low-level woodland
+        // creatures so a level-1 protagonist always has survivable fights. The PineCloisters Novice
+        // template (Blight Sprite) is level 20 and would one-shot a level-1 player, so creatures are
+        // generated at the tutorial level.
+        //
+        // Every mob is authored at the SAME level: `TowerSession.rescaleFloorEnemies` re-levels the floor
+        // by multiplying pools with `target / authored`, so a ramp (this used to be `1 + i * 2`, up to
+        // level 8) made equal-looking Lv.3 enemies span 478 to 2250 health — the 2250 one unkillable.
+        // Only the class varies now; the re-levelling sets the real level.
+        let tutorialLevel = 3
+
         if i % 2 = 0 then
           let cls = if (i / 2) % 2 = 0 then CharacterClass.Warrior else CharacterClass.Rogue
-          let lvl = Math.Min(8, 1 + i * 2)
           let name = if cls = CharacterClass.Warrior then "Bandit" else "Bandit Scout"
-          let combatant = TierFactory.createClassLevel cls lvl
+          let combatant = TierFactory.createClassLevel cls tutorialLevel
           name, { combatant with Name = name }
         else
           let cls = if (i / 2) % 2 = 0 then CharacterClass.Rogue else CharacterClass.Warrior
-          let lvl = Math.Min(8, 2 + i * 2)
           let name = if cls = CharacterClass.Rogue then "Forest Wolf" else "Bramble Boar"
-          let combatant = TierFactory.createClassLevel cls lvl
+          let combatant = TierFactory.createClassLevel cls tutorialLevel
           name, { combatant with Name = name }
       else
         let mobTemplate =
@@ -736,9 +743,12 @@ module TowerGenerator =
     for roomIndex in 0 .. plazas.Length - 1 do
       let room = plazas.[roomIndex]
       // Roaming density climbs with depth: 4-6 mobs per chamber on the shallow floors, saturating the
-      // ten mobOffsets by the deep ones. The authored tutorial pair on story floor 1 stands.
+      // ten mobOffsets by the deep ones. The opening floor answers with a pair instead: a level-1
+      // protagonist facing a chamber's four Slag Hounds plus whoever joins from the next chamber has
+      // no play (reported from play as "surrounded by 6 Slag Hounds"), and --run-sim's 98% floor-1
+      // clear only models four attackers at once, never the six real pursuit piles on.
       let targetCount =
-        if isStory && floorNumber = 1 then 2
+        if floorNumber <= 1 then 2
         else Math.Min(mobOffsets.Length, 4 + floorNumber / 2 + rng.Next(0, 2))
       let mutable placedCount = 0
       let mutable offsetIndex = 0

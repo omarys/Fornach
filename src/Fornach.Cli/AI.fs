@@ -284,9 +284,12 @@ module AI =
           | PreparationType.AegisOfRetribution -> Some (DeployPreparation (PreparationType.AegisOfRetribution, None))
           | prepType -> Some (DeployPreparation (prepType, Some opponent.Id)))
 
+    // A combatant in the Nach is reacting, not setting up: it strikes now to win the initiative
+    // back (a landed strike seizes the Vor) instead of spending the turn deploying. Only the side
+    // holding the Vor gets to choose its ground, which is what makes losing it cost something.
     match prepIntentOpt with
-    | Some prepIntent -> prepIntent
-    | None ->
+    | Some prepIntent when not self.IsInNach -> prepIntent
+    | _ ->
       // 1. If opponent is in a Collapsed threshold state, seize the moment with an Execution finisher
       if opponent.IsExecuteEligible then
         ExecuteStrike (chooseExecutePlane self)

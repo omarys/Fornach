@@ -77,6 +77,52 @@ module ActionResolver =
     (1.0 + 0.02 * float (killsOf attacker.Progression defender.Name))
     * (1.0 - 0.01 * float (killsOf defender.Progression attacker.Name))
 
+  // =========================================================================
+  // 1b. Tempo ownership (Vor / Nach / Indes)
+  // =========================================================================
+
+  /// A combatant holding the Nach is reading the attack rather than racing it, so it answers with one
+  /// extra defensive hit: the strike is blunted and the Indes window (`Indes.evaluateIndesWithAttacker`)
+  /// widens by that same hit, because both read the same `Defender.TotalHits`. This is the whole price
+  /// of holding the Vor, and it is why yielding the initiative is a posture instead of a punishment.
+  let applyNachPosture (defender: Combatant) (contest: ContestResult) : ContestResult =
+    if not defender.IsInNach then
+      contest
+    else
+      let defenderHits = contest.Defender.TotalHits + 1
+      let netHits = contest.Attacker.TotalHits - defenderHits
+
+      { contest with
+          Defender = { contest.Defender with TotalHits = defenderHits }
+          NetHits = netHits
+          IsCritical = netHits >= 5
+          IsWhiff = netHits <= 0 }
+
+  /// Who holds the initiative after a strike lands. Landing used to hand the attacker the Vor outright,
+  /// which made the tempo a tautology: whoever swung last held it, so it flipped every round in strict
+  /// alternation and no choice could change it. Now only a *decisive* answer turns the tempo (two hits
+  /// of margin): a scratch is contact without control, and the striker keeps what it already holds.
+  /// Returns updated attacker, updated defender, and whether the Vor changed hands.
+  let resolveLandedTempo (attacker: Combatant) (defender: Combatant) (netHits: int) : Combatant * Combatant * bool =
+    if attacker.IsInNach && netHits >= 2 then
+      Combatant.seizeVor attacker, Combatant.yieldVor defender, true
+    elif attacker.IsInVor then
+      // A striker that holds the Vor insists on it, so a stray second holder is put back in the Nach.
+      attacker, Combatant.yieldVor defender, false
+    else
+      attacker, defender, false
+
+  /// The Vor is lost by being *answered*: a strike that comes to nothing has spent its commitment and the
+  /// defender takes the tempo. A defender reading the attack from the Nach earns this even when it did not
+  /// hold the Vor — that answer is the reward for yielding the initiative instead of racing the strike.
+  /// Without the Vor half the opening holder keeps the first strike all fight; without the Nach half there
+  /// is no reason to ever stand in the Nach at all.
+  let resolveWhiffTempo (attacker: Combatant) (defender: Combatant) : Combatant * Combatant * bool =
+    if attacker.IsInVor || defender.IsInNach then
+      Combatant.yieldVor attacker, Combatant.seizeVor defender, true
+    else
+      attacker, defender, false
+
   /// Applies pool damage, arcane ward barrier soak, armor soak, and massive blow armor shredding
   let private applyDamage
     (plane: Plane)
@@ -1998,6 +2044,9 @@ module ActionResolver =
         (Combatant.stacksIn atk.Vector currentTarget)
         effectivePriorDefenses
 
+    // The Nach answers before the net count does: one extra defensive hit against every strike it takes.
+    let contest = applyNachPosture currentTarget contest
+
     if contest.EncirclementPenalty > 0 then
       events <- CombatEvent.EncirclementPenalized(currentTarget.Id, effectivePriorDefenses, contest.EncirclementPenalty) :: events
 
@@ -2012,13 +2061,28 @@ module ActionResolver =
         CombatEvent.ComboReset(currentActor.Id, "Attack failed to penetrate defenses; combo momentum cleared.")
         :: events
 
-      // Evaluate Indes tempo seizure opportunity (enhanced by Parrying Buckler)
+      // Evaluate Indes tempo seizure opportunity (enhanced by Parrying Buckler, windup commitment, and high recklessness)
       let updatedDef, updatedAtk, indesEvents, seized =
-        IndesResolver.resolveIndesOpportunity currentTarget currentActor contest
+        IndesResolver.resolveIndesOpportunityWithWindup currentTarget currentActor atk.IsHeavyWindup contest
       if seized then
         currentTarget <- updatedDef
         currentActor <- updatedAtk
         events <- events @ indesEvents
+      else
+        // No Indes: the defense still answered, so a held Vor passes rather than surviving on a whiff.
+        let yielder, taker, moved = resolveWhiffTempo currentActor currentTarget
+
+        if moved then
+          events <-
+            events
+            @ [ CombatEvent.TempoShifted(
+                  taker.Id,
+                  yielder.Id,
+                  sprintf "%s read the strike and took the Vor." taker.Name
+                ) ]
+
+          currentActor <- yielder
+          currentTarget <- taker
 
       // Evaluate collapse on actor in case gambit self-spiked Recklessness
       let finalActor = Combatant.evaluateCollapse currentActor
@@ -2319,6 +2383,14 @@ module ActionResolver =
               "Shield Bash",
               sprintf "Shield Bash staggered the target and %s, disrupting its windup and shattering momentum!" stanceNote
             ) :: events
+          events <-
+            CombatEvent.TempoShifted(
+              currentActor.Id,
+              currentTarget.Id,
+              "Shield Bash intercepted the windup in Indes, seizing the Vor!"
+            ) :: events
+          currentActor <- Combatant.seizeVor currentActor
+          currentTarget <- Combatant.yieldVor currentTarget
       | StaffSiphon ->
         let siphonedFatigue = Math.Min(currentActor.Meters.CognitiveFatigue.Value, 20)
         let siphonedReck = Math.Min(currentActor.Meters.Recklessness.Value, 15)
@@ -2382,8 +2454,22 @@ module ActionResolver =
 
       let finalActorWithFluid, fluidEvts = applyFluidTransition finalActor
 
-      { Actor = finalActorWithFluid
-        Target = finalTarget
+      // Step H: the initiative does not follow the dice — only a decisive answer turns the tempo.
+      let landedActor, landedTarget, tempoMoved = resolveLandedTempo finalActorWithFluid finalTarget contest.NetHits
+
+      if tempoMoved then
+        events <-
+          CombatEvent.TempoShifted(
+            landedActor.Id,
+            landedTarget.Id,
+            sprintf "%s struck decisively from the Nach, seizing the Vor!" landedActor.Name
+          )
+          :: events
+
+      let finalActorWithTempo, finalTargetWithTempo = landedActor, landedTarget
+
+      { Actor = finalActorWithTempo
+        Target = finalTargetWithTempo
         Events = events @ fluidEvts
         Contest = Some contest }
 
@@ -2405,7 +2491,15 @@ module ActionResolver =
     else
       let res =
         match intent with
-        | RecoveryAction reset -> resolveRecovery reset upkeepActor target
+        | RecoveryAction reset ->
+          let recRes = resolveRecovery reset upkeepActor target
+          if upkeepActor.IsInVor then
+            let updatedActor = Combatant.yieldVor recRes.Actor
+            let updatedTarget = Combatant.seizeVor recRes.Target
+            let tempoEvt = CombatEvent.TempoShifted(updatedTarget.Id, updatedActor.Id, sprintf "%s assumed a recovery posture, yielding the Vor." upkeepActor.Name)
+            { recRes with Actor = updatedActor; Target = updatedTarget; Events = recRes.Events @ [ tempoEvt ] }
+          else
+            recRes
         | ExecuteStrike plane -> resolveExecute plane upkeepActor target
         | ShiftStance stance -> resolveShiftStance stance upkeepActor target
         | ThreadComplexForm form -> resolveThreadComplexForm form upkeepActor target
@@ -2445,7 +2539,7 @@ module ActionResolver =
 
   /// Resolves an action turn against a primary target, and if in Power or Discipline stance against multiple opponents,
   /// resolves secondary cleave or chained attacks according to martial stance rules.
-  let resolveGroupTurn
+  let private resolveGroupTurnCore
     (roller: DiceRoller)
     (intent: ActionIntent)
     (actor: Combatant)
@@ -2916,3 +3010,31 @@ module ActionResolver =
             PrimaryTarget = currentPrimary
             SecondaryTargets = currentAdjacent
             Events = allEvents }
+
+  /// `resolveGroupTurnCore` plus the tempo consequence of a landed group technique: every secondary
+  /// target that actually took damage is knocked out of the Vor and into the Nach. Secondaries never
+  /// pass through `resolveEx`, so without this a cleave or a chained strike would leave the initiative
+  /// of everyone it hit untouched, and only the primary target would ever change hands.
+  let resolveGroupTurn
+    (roller: DiceRoller)
+    (intent: ActionIntent)
+    (actor: Combatant)
+    (primaryTarget: Combatant)
+    (adjacentTargets: Combatant list)
+    : GroupActionResult =
+    let result = resolveGroupTurnCore roller intent actor primaryTarget adjacentTargets
+
+    let wasStruck (before: Combatant) =
+      match result.SecondaryTargets |> List.tryFind (fun (after: Combatant) -> after.Id = before.Id) with
+      | Some after -> after.Health.Current < before.Health.Current || after.Morale.Current < before.Morale.Current
+      | None -> false
+
+    let knockedBack =
+      adjacentTargets |> List.filter wasStruck |> List.map (fun c -> c.Id) |> Set.ofList
+
+    if knockedBack.IsEmpty then result
+    else
+      { result with
+          SecondaryTargets =
+            result.SecondaryTargets
+            |> List.map (fun (c: Combatant) -> if Set.contains c.Id knockedBack then Combatant.yieldVor c else c) }

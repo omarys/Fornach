@@ -555,6 +555,9 @@ module TowerDisplay =
         sprintf "%-10s [%s]%4d[/][%s]/[/]%4d [%s](%d%% soak)[/]" " Armor" Theme.Comment p.Armor.Current Theme.Comment p.Armor.Max Theme.Yellow (int (p.Armor.AbsorptionRatio * 100.0))
     row (armorText) |> ignore
 
+    // Initiative: the single fact that decides whether the next blow lands first.
+    row (sprintf "%-22s %s" "󰒋 Initiative" (Display.tempoBadge p)) |> ignore
+
     // Prominent low health warning banner
     if p.Health.Current <= p.Health.Maximum / 4 then
       row ("[bold blink red]⚠ CRITICAL HEALTH: Rest or visit Shrine before combat![/]") |> ignore
@@ -696,9 +699,11 @@ module TowerDisplay =
           MirrorClones = 0
           ComboTracker = ConsecutiveComboTracker.Zero
           Collapse = CollapseState.Stable }
+    let depthCap, bossOffset = TowerSession.floorScalingFor state.IsStoryMode state.CurrentFloor.FloorNumber
+
     let pristine =
       TowerGenerator.generateFloorWithMode state.Seed state.CurrentFloor.FloorNumber state.IsStoryMode
-      |> TowerSession.rescaleFloorEnemies state.Player
+      |> TowerSession.rescaleFloorEnemiesWith depthCap bossOffset state.Player
     let pristineMobs =
       pristine.Entities
       |> Map.toList

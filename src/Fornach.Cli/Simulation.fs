@@ -8,8 +8,8 @@ open Fornach.Engine
 module Simulation =
 
   let private runSingleMatch (roller: DiceRoller) (factoryA: unit -> Combatant) (factoryB: unit -> Combatant) (maxRounds: int) : SingleCombatResult =
-    let mutable combA = factoryA ()
-    let mutable combB = factoryB ()
+    let mutable combA = factoryA () |> Combatant.seizeVor
+    let mutable combB = factoryB () |> Combatant.yieldVor
     let mutable round = 1
     let mutable winner : string option = None
     let mutable winnerId : CombatantId option = None
@@ -19,90 +19,68 @@ module Simulation =
     let mutable whiffs = 0
     let mutable crits = 0
 
-    while winner.IsNone && round <= maxRounds do
-      // Combatant A turn
-      let intentA = AI.chooseIntent combA combB
-      let resA = ActionResolver.resolve roller intentA combA combB
-      combA <- resA.Actor
-      combB <- resA.Target
+    let executeTurn (actorIsA: bool) =
+      let actor, target = if actorIsA then combA, combB else combB, combA
+      let intent = AI.chooseIntent actor target
+      let res = ActionResolver.resolve roller intent actor target
+      if actorIsA then
+        combA <- res.Actor
+        combB <- res.Target
+      else
+        combB <- res.Actor
+        combA <- res.Target
 
-      match resA.Contest with
+      match res.Contest with
       | Some c ->
         if c.IsWhiff then whiffs <- whiffs + 1
         if c.IsCritical then crits <- crits + 1
       | None -> ()
 
-      let hasExecutedB =
-        resA.Events
+      let hasExecutedTarget =
+        res.Events
         |> List.exists (function CombatEvent.Executed _ -> true | _ -> false)
 
-      if hasExecutedB then
-        let plane = match intentA with ExecuteStrike p -> p | _ -> Physical
-        winner <- Some combA.Name
-        winnerId <- Some combA.Id
-        winnerIsA <- Some true
-        loser <- Some combB.Name
+      let currentActor = if actorIsA then combA else combB
+      let currentTarget = if actorIsA then combB else combA
+
+      if hasExecutedTarget then
+        let plane = match intent with ExecuteStrike p -> p | _ -> Physical
+        winner <- Some currentActor.Name
+        winnerId <- Some currentActor.Id
+        winnerIsA <- Some actorIsA
+        loser <- Some currentTarget.Name
         condition <- ExecutionFinisher plane
-      elif combA.Health.IsDepleted then
-        winner <- Some combB.Name
-        winnerId <- Some combB.Id
-        winnerIsA <- Some false
-        loser <- Some combA.Name
+      elif currentActor.Health.IsDepleted then
+        winner <- Some currentTarget.Name
+        winnerId <- Some currentTarget.Id
+        winnerIsA <- Some (not actorIsA)
+        loser <- Some currentActor.Name
         condition <- HealthDepleted
-      elif combB.Health.IsDepleted then
-        winner <- Some combA.Name
-        winnerId <- Some combA.Id
-        winnerIsA <- Some true
-        loser <- Some combB.Name
+      elif currentTarget.Health.IsDepleted then
+        winner <- Some currentActor.Name
+        winnerId <- Some currentActor.Id
+        winnerIsA <- Some actorIsA
+        loser <- Some currentTarget.Name
         condition <- HealthDepleted
-      elif combB.Morale.IsDepleted then
-        winner <- Some combA.Name
-        winnerId <- Some combA.Id
-        winnerIsA <- Some true
-        loser <- Some combB.Name
+      elif currentTarget.Morale.IsDepleted then
+        winner <- Some currentActor.Name
+        winnerId <- Some currentActor.Id
+        winnerIsA <- Some actorIsA
+        loser <- Some currentTarget.Name
         condition <- MoraleDepleted
-      else
-        // Combatant B turn
-        let intentB = AI.chooseIntent combB combA
-        let resB = ActionResolver.resolve roller intentB combB combA
-        combB <- resB.Actor
-        combA <- resB.Target
+      elif currentActor.Morale.IsDepleted then
+        winner <- Some currentTarget.Name
+        winnerId <- Some currentTarget.Id
+        winnerIsA <- Some (not actorIsA)
+        loser <- Some currentActor.Name
+        condition <- MoraleDepleted
 
-        match resB.Contest with
-        | Some c ->
-          if c.IsWhiff then whiffs <- whiffs + 1
-          if c.IsCritical then crits <- crits + 1
-        | None -> ()
-
-        let hasExecutedA =
-          resB.Events
-          |> List.exists (function CombatEvent.Executed _ -> true | _ -> false)
-
-        if hasExecutedA then
-          let plane = match intentB with ExecuteStrike p -> p | _ -> Physical
-          winner <- Some combB.Name
-          winnerId <- Some combB.Id
-          winnerIsA <- Some false
-          loser <- Some combA.Name
-          condition <- ExecutionFinisher plane
-        elif combB.Health.IsDepleted then
-          winner <- Some combA.Name
-          winnerId <- Some combA.Id
-          winnerIsA <- Some true
-          loser <- Some combB.Name
-          condition <- HealthDepleted
-        elif combA.Health.IsDepleted then
-          winner <- Some combB.Name
-          winnerId <- Some combB.Id
-          winnerIsA <- Some false
-          loser <- Some combA.Name
-          condition <- HealthDepleted
-        elif combA.Morale.IsDepleted then
-          winner <- Some combB.Name
-          winnerId <- Some combB.Id
-          winnerIsA <- Some false
-          loser <- Some combA.Name
-          condition <- MoraleDepleted
+    while winner.IsNone && round <= maxRounds do
+      // First turn of the round belongs to whichever combatant holds the Vor
+      let aHasVor = combA.IsInVor || not combB.IsInVor
+      executeTurn aHasVor
+      if winner.IsNone then
+        executeTurn (not aHasVor)
 
       if winner.IsNone then
         round <- round + 1
@@ -349,15 +327,17 @@ module Simulation =
   // 4. 1 vs N Encirclement Swarm Simulation
   // =========================================================================
 
-  let runSingleGroupMatch
+  /// One pack fight starting from combatants that already exist. Returns the result plus the
+  /// surviving solo, so a caller can carry a player forward between floors (`runProgressionSim`).
+  let runPreparedGroupMatch
     (roller: DiceRoller)
-    (soloFactory: unit -> Combatant)
-    (mobFactory: unit -> Combatant)
-    (mobCount: int)
+    (soloStart: Combatant)
+    (mobsStart: Combatant list)
     (maxRounds: int)
-    : GroupSingleResult =
-    let mutable solo = soloFactory ()
-    let mutable mob = List.init mobCount (fun _ -> mobFactory ())
+    : GroupSingleResult * Combatant =
+    let initialMobCount = mobsStart.Length
+    let mutable solo = soloStart
+    let mutable mob = mobsStart
     let mutable round = 1
     let mutable winnerIsSolo : bool option = None
     let mutable condition = Stalemate
@@ -517,13 +497,13 @@ module Simulation =
       if winnerIsSolo.IsNone then
         round <- round + 1
 
-    let elim = mobCount - mob.Length
+    let elim = initialMobCount - mob.Length
     let soloHPPct = Math.Max(0.0, (float solo.Health.Current / float solo.Health.Maximum) * 100.0)
     let soloMoralePct = Math.Max(0.0, (float solo.Morale.Current / float solo.Morale.Maximum) * 100.0)
 
-    { SoloWon = winnerIsSolo = Some true
+    { SoloWon = (winnerIsSolo = Some true)
       Rounds = Math.Min(round, maxRounds)
-      OpponentsInitial = mobCount
+      OpponentsInitial = initialMobCount
       OpponentsEliminated = elim
       SoloRemainingHPPct = soloHPPct
       SoloRemainingMoralePct = soloMoralePct
@@ -534,7 +514,17 @@ module Simulation =
       TotalAoOsTriggered = totalAoOs
       TotalCleaves = totalCleaves
       TotalChains = totalChains
-      Condition = condition }
+      Condition = condition }, solo
+
+  let runSingleGroupMatch
+    (roller: DiceRoller)
+    (soloFactory: unit -> Combatant)
+    (mobFactory: unit -> Combatant)
+    (mobCount: int)
+    (maxRounds: int)
+    : GroupSingleResult =
+    runPreparedGroupMatch roller (soloFactory ()) (List.init mobCount (fun _ -> mobFactory ())) maxRounds
+    |> fst
 
 
   /// Headless batch simulation of 1 vs N swarm combat without console progress bars
@@ -1198,3 +1188,128 @@ module Simulation =
 
     AnsiConsole.Write(legendPanel)
     AnsiConsole.WriteLine()
+
+
+  // ---------------------------------------------------------------------------
+  // Progression simulation: does the player outscale the tower?
+  // ---------------------------------------------------------------------------
+
+  /// The floor's live mobs, scaled exactly the way the interactive tower scales them. Guardians are
+  /// dropped: a progression sweep measures the mob curve, and one boss per floor would dominate it.
+  let private floorMobs (seed: int) (player: Combatant) (floorNumber: int) : Combatant list =
+    TowerGenerator.generateFloorWithMode seed floorNumber false
+    |> TowerSession.rescaleFloorEnemies player
+    |> fun floor -> floor.Entities |> Map.toList |> List.map snd
+    |> List.choose (function
+      | TowerEntity.EntityEnemy enemy when not enemy.IsDefeated && not enemy.IsBoss -> Some enemy.Combatant
+      | _ -> None)
+    |> List.truncate 4
+
+  /// Plays whole runs: real floor generation, real level scaling, real growth and XP, no healing between
+  /// floors (the tower heals only at shrines and rests, so a run that spends neither is the honest floor).
+  let runProgressionSim (runs: int) (maxFloors: int) : ProgressionSimReport =
+    let reached = Array.zeroCreate (maxFloors + 1)
+    let wins = Array.zeroCreate (maxFloors + 1)
+    let levels = Array.create (maxFloors + 1) 0.0
+    let hp = Array.create (maxFloors + 1) 0.0
+    let morale = Array.create (maxFloors + 1) 0.0
+    let mutable clearedAll = 0
+    let mutable totalDepth = 0
+
+    for run in 0 .. runs - 1 do
+      let seed = batchBaseSeed + run
+      let rng = Random(seed)
+      let roller: DiceRoller = fun min max -> rng.Next(min, max + 1)
+
+      // Alternate the two player classes so the sweep does not report one class's curve twice.
+      let playerClass = if run % 2 = 0 then CharacterClass.Fighter else CharacterClass.Mage
+      let mutable player = TierFactory.createClassLevel playerClass 1 |> Combatant.seizeVor
+      let mutable floor = 1
+      let mutable alive = true
+
+      while alive && floor <= maxFloors do
+        reached.[floor] <- reached.[floor] + 1
+        let foes = floorMobs seed player floor
+
+        if foes.IsEmpty then
+          wins.[floor] <- wins.[floor] + 1
+          floor <- floor + 1
+        else
+          let maxRounds = Math.Max(60, foes.Length + 20)
+          let result, survivor = runPreparedGroupMatch roller player foes maxRounds
+
+          if result.SoloWon then
+            wins.[floor] <- wins.[floor] + 1
+            levels.[floor] <- levels.[floor] + float survivor.Level
+            hp.[floor] <- hp.[floor] + (float survivor.Health.Current / float survivor.Health.Maximum * 100.0)
+            morale.[floor] <- morale.[floor] + (float survivor.Morale.Current / float survivor.Morale.Maximum * 100.0)
+
+            // The tower's own progression: growth from the pack, XP for the pack, stacks cleared on the stairs.
+            let grown = Combatant.growFromEncounter foes survivor
+            let xp = foes |> List.sumBy (fun f -> f.Level * 10 + 25)
+            let levelled, _ = TowerSession.applyExperience grown xp
+            player <- { Combatant.clearStacks levelled with Meters = StatusMeters.Zero }
+            floor <- floor + 1
+          else
+            alive <- false
+
+      totalDepth <- totalDepth + (floor - 1)
+      if floor > maxFloors then clearedAll <- clearedAll + 1
+
+    let perFloor =
+      [ 1 .. maxFloors ]
+      |> List.map (fun f ->
+        let n = reached.[f]
+        let average (total: float) =
+          // Survivor readings only exist for runs that won the floor, so divide by wins, not by arrivals.
+          let w = wins.[f]
+          if w = 0 then 0.0 else total / float w
+
+        { Floor = f
+          Reached = n
+          Wins = wins.[f]
+          AvgLevel = average levels.[f]
+          AvgHpPct = average hp.[f]
+          AvgMoralePct = average morale.[f] })
+
+    { Runs = runs
+      MaxFloors = maxFloors
+      RunsWon = clearedAll
+      AvgFloorsReached = (if runs = 0 then 0.0 else float totalDepth / float runs)
+      Floors = perFloor }
+
+  let renderProgressionDashboard (report: ProgressionSimReport) =
+    let table = Table().Border(TableBorder.Rounded).BorderColor(Theme.ColorCurrentLine)
+
+    for header in [ "Floor"; "Reached"; "Cleared"; "Clear %"; "Avg Level"; "Avg HP %"; "Avg Morale %" ] do
+      table.AddColumn(TableColumn(sprintf "[bold %s]%s[/]" Theme.Foreground header)) |> ignore
+
+    for f in report.Floors do
+      let clearPct = if f.Reached = 0 then 0.0 else float f.Wins / float f.Reached * 100.0
+
+      table.AddRow(
+        string f.Floor,
+        string f.Reached,
+        sprintf "[%s]%d[/]" Theme.Green f.Wins,
+        sprintf "%.0f%%" clearPct,
+        sprintf "%.1f" f.AvgLevel,
+        sprintf "[%s]%.0f%%[/]" Theme.Red f.AvgHpPct,
+        sprintf "[%s]%.0f%%[/]" Theme.Cyan f.AvgMoralePct
+      )
+      |> ignore
+
+    AnsiConsole.Write(table)
+    AnsiConsole.WriteLine()
+    AnsiConsole.MarkupLine(
+      sprintf "[bold]Runs:[/] %d   [bold]Cleared all %d floors:[/] %d (%.0f%%)   [bold]Avg floors reached:[/] %.2f"
+        report.Runs report.MaxFloors report.RunsWon
+        (if report.Runs = 0 then 0.0 else float report.RunsWon / float report.Runs * 100.0)
+        report.AvgFloorsReached
+    )
+
+    // Say the assumptions out loud: these numbers are a pessimistic floor, not a typical playthrough.
+    AnsiConsole.MarkupLine(
+      sprintf
+        "[%s]Pessimistic model: whole pack (up to 4) fights at once, no rest, honing, consumables or gear; enemies sit up to 5 levels above the player.[/]"
+        Theme.Comment
+    )

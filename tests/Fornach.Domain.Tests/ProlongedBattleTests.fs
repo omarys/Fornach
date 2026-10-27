@@ -548,6 +548,29 @@ module ProlongedBattleTests =
     Assert.Equal(Combatant.StackCap, groupRes.Actor.Focus)
 
   [<Fact>]
+  let ``a chained secondary is knocked out of the Vor, not left holding it`` () =
+    let roller = fixedRoller 6
+    let master =
+      { createFighter 180 200 180 200 300 280 with
+          Stance = CombatStance.DisciplineStance
+          Focus = 2 }
+    let primary = createFighter 45 40 25 25 30 30
+
+    let flanks =
+      [ createFighter 45 40 25 25 30 30 |> Combatant.seizeVor
+        createFighter 45 40 25 25 30 30 |> Combatant.seizeVor ]
+
+    let res =
+      ActionResolver.resolveGroupTurn roller (StandardAttack (ProwessStrike false)) master primary flanks
+
+    // Secondaries never pass through `resolveEx`, so the group wrapper has to apply the knock-back
+    // itself — otherwise a chain lands on Health and leaves the initiative exactly where it was.
+    for before in flanks do
+      let after = res.SecondaryTargets |> List.find (fun (c: Combatant) -> c.Id = before.Id)
+      Assert.True(after.Health.Current < before.Health.Current, "the flanker should have been chained")
+      Assert.True(after.IsInNach, "a chained secondary should be knocked out of the Vor")
+
+  [<Fact>]
   let ``Agility / Finesse Stance strictly duels single target with zero cleave or chain`` () =
     let roller = fixedRoller 6
     let fencer = { createFighter 60 70 140 130 95 85 with Stance = CombatStance.AgilityStance }

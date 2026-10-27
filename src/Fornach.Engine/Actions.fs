@@ -149,6 +149,16 @@ type AttackClassification =
       | Physical -> this.Plane = Physical
       | Mental -> this.Plane = Mental
 
+  /// True when this attack involves a heavy committed wind-up that can be intercepted in Indes
+  member this.IsHeavyWindup : bool =
+    match this with
+    | ForceStrike true
+    | FinesseCadence true
+    | ProwessStrike true
+    | ArcaneCataclysm true
+    | TraumaAttack _ -> true
+    | _ -> false
+
 /// Defensive recoveries used to bleed accumulated Recklessness and re-center posture
 type DefensiveReset =
   /// Universal reset: bleeds all seven strain meters (Poise + Composure), restores Morale, and banks Combat Ramp
@@ -172,6 +182,12 @@ type ActionIntent =
   | ThreadComplexForm of ComplexForm
   /// Deploying a class-specific tactical preparation asset
   | DeployPreparation of preparation: PreparationType * targetId: CombatantId option
+
+  /// True when the intent is a heavy telegraphed wind-up that an Indes counter can intercept
+  member this.IsHeavyWindup : bool =
+    match this with
+    | StandardAttack atk -> atk.IsHeavyWindup
+    | _ -> false
 
 /// Result payload emitted after an ActionIntent is fully evaluated
 type ActionResult =

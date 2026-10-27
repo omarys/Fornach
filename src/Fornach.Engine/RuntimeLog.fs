@@ -20,8 +20,18 @@ module RuntimeLog =
 
   let mutable private stream : StreamWriter option = None
   let mutable private streamPath = ""
+  let private syncRoot = obj()
 
   let private stamp () = DateTime.Now.ToString("HH:mm:ss.fff")
+
+  /// Disposes the open session stream writer and flushes any buffered output.
+  let close () : unit =
+    lock syncRoot (fun () ->
+      match stream with
+      | Some s -> s.Dispose()
+      | None -> ()
+      stream <- None
+      streamPath <- "")
 
   /// Returns the append-mode writer for the current `path`, reopening it whenever the
   /// active session file changes. AutoFlush keeps the newest line on disk even if the
@@ -45,12 +55,14 @@ module RuntimeLog =
   let write (msg: string) : unit =
     if enabled then
       let line = sprintf "[%s] %s" (stamp ()) msg
-      match sessionStream () with
-      | Some s -> s.WriteLine line
-      | None -> ()
-      if mirrorPath <> "" then
-        try File.AppendAllText(mirrorPath, line + Environment.NewLine)
-        with _ -> ()
+      lock syncRoot (fun () ->
+        match sessionStream () with
+        | Some s -> s.WriteLine line
+        | None -> ()
+        if mirrorPath <> "" then
+          try File.AppendAllText(mirrorPath, line + Environment.NewLine)
+          with _ -> ()
+      )
 
   /// Writes a banner line marking the start of a logical section.
   let section (title: string) : unit =

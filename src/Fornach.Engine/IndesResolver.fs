@@ -3,15 +3,6 @@ namespace Fornach.Engine
 open System
 open Fornach.Domain
 
-/// Tactical timing in the historical German fencing (Vor / Nach / Indes) paradigm
-type TacticalTiming =
-  /// Vor (Before): Possessing initiative, attacking first, driving the tempo
-  | Vor
-  /// Nach (After): Reacting, parrying, defending against an incoming strike
-  | Nach
-  /// Indes (Meanwhile / In the midst): Intercepting at the tempo midpoint; simultaneous counter-action
-  | Indes
-
 /// Evaluation result for an Indes tempo-seizure opportunity
 type IndesEvaluation = {
   CanSeizeVor: bool
@@ -26,24 +17,37 @@ module Indes =
   /// Default baseline margin of net defense hits needed to seize the Vor from the Nach
   let defaultThreshold = 3
 
-  /// Calculates the Indes threshold for a combatant.
-  /// A ParryingBuckler modifies Indes.calculateThreshold by -1, widening the window for Justicars to seize the Vor.
-  let calculateThreshold (combatant: Combatant) : int =
+  /// Calculates the Indes threshold for a combatant considering defender preparations, attacker overextension, and wind-up commitment.
+  let calculateThresholdWithAttacker (defender: Combatant) (attackerOpt: Combatant option) (isWindup: bool) : int =
     let baseThresh = defaultThreshold
     let bucklerMod =
-      if combatant.HasActivePreparation PreparationType.ParryingBuckler then -1
+      if defender.HasActivePreparation PreparationType.ParryingBuckler then -1
       else 0
-    Math.Max(1, baseThresh + bucklerMod)
+    let windupMod = if isWindup then -1 else 0
+    let recklessnessMod =
+      match attackerOpt with
+      | Some atk when atk.Meters.Recklessness.Value >= 60 -> -1
+      | _ -> 0
+    Math.Max(1, baseThresh + bucklerMod + windupMod + recklessnessMod)
 
-  /// Evaluates whether a defender in the Nach can seize the Vor via an Indes counter-timing
-  let evaluateIndes (defender: Combatant) (defenseHits: int) (attackHits: int) : IndesEvaluation =
-    let threshold = calculateThreshold defender
+  /// Calculates the baseline Indes threshold for a combatant.
+  /// A ParryingBuckler modifies Indes.calculateThreshold by -1, widening the window for combatants to seize the Vor.
+  let calculateThreshold (combatant: Combatant) : int =
+    calculateThresholdWithAttacker combatant None false
+
+  /// Evaluates whether a defender in the Nach can seize the Vor via an Indes counter-timing with attacker context
+  let evaluateIndesWithAttacker (defender: Combatant) (attackerOpt: Combatant option) (isWindup: bool) (defenseHits: int) (attackHits: int) : IndesEvaluation =
+    let threshold = calculateThresholdWithAttacker defender attackerOpt isWindup
     let margin = defenseHits - attackHits
     { CanSeizeVor = margin >= threshold
       Threshold = threshold
       Margin = margin
       DefenderHits = defenseHits
       AttackerHits = attackHits }
+
+  /// Evaluates whether a defender in the Nach can seize the Vor via an Indes counter-timing
+  let evaluateIndes (defender: Combatant) (defenseHits: int) (attackHits: int) : IndesEvaluation =
+    evaluateIndesWithAttacker defender None false defenseHits attackHits
 
 module IndesResolver =
 
@@ -75,11 +79,14 @@ module IndesResolver =
     let finalAttacker =
       if isDisrupted then
         { updatedAttacker with ComboTracker = updatedAttacker.ComboTracker.ResetCombo() }
+        |> Combatant.yieldVor
       else
         updatedAttacker
 
     // Consume the one-time active ConcealedBlade from defender
-    let updatedDefender = Combatant.removeActivePreparation PreparationType.ConcealedBlade defender
+    let updatedDefender =
+      Combatant.removeActivePreparation PreparationType.ConcealedBlade defender
+      |> fun d -> if isDisrupted then Combatant.seizeVor d else d
 
     let evts = [
       CombatEvent.ConcealedBladeCounter(defender.Id, attacker.Id, punctureDmg, isDisrupted)
@@ -92,10 +99,38 @@ module IndesResolver =
         IsArmorCompromised = false
       }
       if isDisrupted then
+        CombatEvent.TempoShifted(defender.Id, attacker.Id, "Incoming strike interrupted from the Nach by quick-draw Concealed Blade; seized the Vor!")
         CombatEvent.ComboReset(attacker.Id, "Incoming strike interrupted and defused by quick-draw Concealed Blade!")
     ]
 
     updatedDefender, finalAttacker, evts, isDisrupted
+
+  /// Evaluates Indes tempo seizure when defense hits significantly exceed attack hits, factoring in wind-up commitment
+  let resolveIndesOpportunityWithWindup
+    (defender: Combatant)
+    (attacker: Combatant)
+    (isWindup: bool)
+    (contest: ContestResult)
+    : Combatant * Combatant * CombatEvent list * bool =
+    let eval = Indes.evaluateIndesWithAttacker defender (Some attacker) isWindup contest.Defender.TotalHits contest.Attacker.TotalHits
+    if eval.CanSeizeVor then
+      let updatedDef =
+        defender
+        |> Combatant.addStacks 1
+        |> Combatant.seizeVor
+      let updatedAtk =
+        attacker
+        |> Combatant.updateMeters (fun m -> { m with Frustration = m.Frustration + 10 })
+        |> Combatant.yieldVor
+        |> fun a -> { a with ComboTracker = a.ComboTracker.ResetCombo() }
+      let evts = [
+        CombatEvent.IndesSeized(defender.Id, attacker.Id, eval.Threshold, eval.Margin)
+        CombatEvent.TempoShifted(defender.Id, attacker.Id, sprintf "Defender seized the Vor in Indes (margin %d >= threshold %d); offensive momentum arrested." eval.Margin eval.Threshold)
+        CombatEvent.ComboReset(attacker.Id, "Defender seized the Vor in Indes; offensive momentum arrested.")
+      ]
+      updatedDef, updatedAtk, evts, true
+    else
+      defender, attacker, [], false
 
   /// Evaluates Indes tempo seizure when defense hits significantly exceed attack hits
   let resolveIndesOpportunity
@@ -103,17 +138,4 @@ module IndesResolver =
     (attacker: Combatant)
     (contest: ContestResult)
     : Combatant * Combatant * CombatEvent list * bool =
-    let eval = Indes.evaluateIndes defender contest.Defender.TotalHits contest.Attacker.TotalHits
-    if eval.CanSeizeVor then
-      let updatedDef = defender |> Combatant.addStacks 1
-      let updatedAtk =
-        attacker
-        |> Combatant.updateMeters (fun m -> { m with Frustration = m.Frustration + 10 })
-        |> fun a -> { a with ComboTracker = a.ComboTracker.ResetCombo() }
-      let evts = [
-        CombatEvent.IndesSeized(defender.Id, attacker.Id, eval.Threshold, eval.Margin)
-        CombatEvent.ComboReset(attacker.Id, "Defender seized the Vor in Indes; offensive momentum arrested.")
-      ]
-      updatedDef, updatedAtk, evts, true
-    else
-      defender, attacker, [], false
+    resolveIndesOpportunityWithWindup defender attacker false contest

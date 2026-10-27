@@ -193,3 +193,200 @@ module CombatTacticsTests =
       |> List.filter (fun c -> c.Contains("Shield Bash"))
 
     Assert.Equal(1, List.length bashes)
+
+  // ---------------------------------------------------------------------------
+  // Tempo ownership: the Vor moves on a decisive answer, not on contact
+  // ---------------------------------------------------------------------------
+
+  let private poolOf (hits: int) : DicePoolResult =
+    { StatValue = 30
+      FloorHits = hits
+      RolledHits = 0
+      TotalHits = hits
+      RawRolls = []
+      IsGlitch = false }
+
+  let private contestOf (attackerHits: int) (defenderHits: int) : ContestResult =
+    let net = attackerHits - defenderHits
+
+    { Attacker = poolOf attackerHits
+      Defender = poolOf defenderHits
+      NetHits = net
+      IsCritical = net >= 5
+      IsWhiff = net <= 0
+      EncirclementPenalty = 0 }
+
+  let private vorHolder () = TierFactory.createClassLevel CharacterClass.Fighter 30 |> Combatant.seizeVor
+  let private nachHolder () = TierFactory.createClassLevel CharacterClass.Warrior 30 |> Combatant.yieldVor
+
+  [<Fact>]
+  let ``a Nach posture blunts the strike by one hit and widens the Indes window by the same hit`` () =
+    let scratch = contestOf 4 3
+
+    let unchallenged = ActionResolver.applyNachPosture (vorHolder ()) scratch
+    Assert.Equal(1, unchallenged.NetHits)
+    Assert.False(unchallenged.IsWhiff)
+
+    let answered = ActionResolver.applyNachPosture (nachHolder ()) scratch
+    Assert.Equal(4, answered.Defender.TotalHits)
+    Assert.Equal(0, answered.NetHits)
+    Assert.True(answered.IsWhiff, "The Nach turn of one hit should turn a scratch into a clean answer")
+
+  [<Fact>]
+  let ``a scratch from the Nach leaves the Vor with its holder`` () =
+    let holder = vorHolder ()
+    let striker = nachHolder ()
+    let actor, target, moved = ActionResolver.resolveLandedTempo striker holder 1
+
+    Assert.False(moved, "One hit of margin is contact without control, not a tempo change")
+    Assert.True(target.IsInVor)
+    Assert.True(actor.IsInNach)
+
+  [<Fact>]
+  let ``a decisive strike from the Nach seizes the Vor`` () =
+    let holder = vorHolder ()
+    let striker = nachHolder ()
+    let actor, target, moved = ActionResolver.resolveLandedTempo striker holder 2
+
+    Assert.True(moved)
+    Assert.True(actor.IsInVor)
+    Assert.True(target.IsInNach)
+
+  [<Fact>]
+  let ``landing while holding the Vor keeps it`` () =
+    let holder = vorHolder ()
+    let defender = nachHolder ()
+    let actor, target, moved = ActionResolver.resolveLandedTempo holder defender 3
+
+    Assert.False(moved)
+    Assert.True(actor.IsInVor)
+    Assert.True(target.IsInNach)
+
+  [<Fact>]
+  let ``a whiffing Vor holder hands the initiative to the defender`` () =
+    let holder = vorHolder ()
+    let defender = nachHolder ()
+    let actor, target, moved = ActionResolver.resolveWhiffTempo holder defender
+
+    Assert.True(moved)
+    Assert.True(actor.IsInNach, "The commitment was spent for nothing, so the striker loses the Vor")
+    Assert.True(target.IsInVor)
+
+  [<Fact>]
+  let ``landing from the Vor through the real resolver keeps the initiative`` () =
+    let player = TierFactory.createClassLevel CharacterClass.Fighter 100 |> Combatant.seizeVor
+    let enemy = TierFactory.createClassLevel CharacterClass.Warrior 10 |> Combatant.yieldVor
+
+    let result =
+      ActionResolver.resolve (fixedRoller 5) (ActionIntent.StandardAttack(AttackClassification.ForceStrike false)) player enemy
+
+    Assert.True(result.Contest.IsSome, "A master should land against a novice")
+    Assert.True(result.Actor.IsInVor, "Landing while holding the Vor keeps it")
+    Assert.True(result.Target.IsInVor |> not, "The target stays out of the Vor")
+
+  [<Fact>]
+  let ``a decisive strike from the Nach takes the Vor through the real resolver`` () =
+    let striker = TierFactory.createClassLevel CharacterClass.Fighter 100 |> Combatant.yieldVor
+    let holder = TierFactory.createClassLevel CharacterClass.Warrior 10 |> Combatant.seizeVor
+
+    let result =
+      ActionResolver.resolve (fixedRoller 5) (ActionIntent.StandardAttack(AttackClassification.ForceStrike false)) striker holder
+
+    Assert.True(result.Actor.IsInVor, "A decisive answer from the Nach takes the tempo")
+    Assert.True(result.Target.IsInNach)
+    Assert.True(result.Events |> List.exists (function CombatEvent.TempoShifted _ -> true | _ -> false))
+
+  // ---------------------------------------------------------------------------
+  // Tempo ownership, tested on the pure rules rather than through the dice, so
+  // these facts stay true regardless of how the roll falls.
+  // ---------------------------------------------------------------------------
+
+  let private pool (hits: int) : DicePoolResult =
+    { StatValue = 30
+      FloorHits = hits
+      RolledHits = 0
+      TotalHits = hits
+      RawRolls = []
+      IsGlitch = false }
+
+  let private contest (attackerHits: int) (defenderHits: int) : ContestResult =
+    let net = attackerHits - defenderHits
+
+    { Attacker = pool attackerHits
+      Defender = pool defenderHits
+      NetHits = net
+      IsCritical = net >= 5
+      IsWhiff = net <= 0
+      EncirclementPenalty = 0 }
+
+  [<Fact>]
+  let ``a scratch from the Nach does not take the Vor`` () =
+    let holder = TierFactory.createClassLevel CharacterClass.Warrior 30 |> Combatant.seizeVor
+    let striker = TierFactory.createClassLevel CharacterClass.Fighter 30 |> Combatant.yieldVor
+
+    let actor, target, moved = ActionResolver.resolveLandedTempo striker holder 1
+
+    Assert.False(moved, "One hit of margin is contact, not control")
+    Assert.False(actor.IsInVor)
+    Assert.True(target.IsInVor, "The holder keeps the initiative against a scratch")
+
+  [<Fact>]
+  let ``a decisive strike from the Nach takes the Vor`` () =
+    let holder = TierFactory.createClassLevel CharacterClass.Warrior 30 |> Combatant.seizeVor
+    let striker = TierFactory.createClassLevel CharacterClass.Fighter 30 |> Combatant.yieldVor
+
+    let actor, target, moved = ActionResolver.resolveLandedTempo striker holder 2
+
+    Assert.True(moved)
+    Assert.True(actor.IsInVor)
+    Assert.True(target.IsInNach)
+
+  [<Fact>]
+  let ``a whiffed strike hands the Vor to the defender`` () =
+    let holder = TierFactory.createClassLevel CharacterClass.Warrior 30 |> Combatant.seizeVor
+
+    let defender = TierFactory.createClassLevel CharacterClass.Fighter 30 |> Combatant.yieldVor
+    let actor, target, moved = ActionResolver.resolveWhiffTempo holder defender
+
+    Assert.True(moved, "Commitment that lands nothing is answered with the tempo")
+    Assert.True(actor.IsInNach)
+    Assert.True(target.IsInVor)
+
+  [<Fact>]
+  let ``a whiff from outside the Vor leaves the tempo alone`` () =
+    let striker = TierFactory.createClassLevel CharacterClass.Fighter 30 |> Combatant.yieldVor
+    let holder = TierFactory.createClassLevel CharacterClass.Warrior 30 |> Combatant.seizeVor
+
+    let actor, target, moved = ActionResolver.resolveWhiffTempo striker holder
+
+    Assert.False(moved, "Only a Vor holder can lose the Vor by missing")
+    Assert.False(actor.IsInVor)
+    Assert.True(target.IsInVor)
+
+  [<Fact>]
+  let ``holding the Nach blunts a strike by one hit and can turn it into a whiff`` () =
+    let nachDefender = TierFactory.createClassLevel CharacterClass.Warrior 30 |> Combatant.yieldVor
+    let vorDefender = TierFactory.createClassLevel CharacterClass.Warrior 30 |> Combatant.seizeVor
+
+    let blunt = ActionResolver.applyNachPosture nachDefender (contest 3 1)
+    let unblunted = ActionResolver.applyNachPosture vorDefender (contest 3 1)
+
+    Assert.Equal(1, blunt.NetHits)
+    Assert.Equal(2, unblunted.NetHits)
+    Assert.Equal(2, blunt.Defender.TotalHits)
+
+    // One hit of margin from the Nach becomes a whiff, which is what feeds the Indes window.
+    let washed = ActionResolver.applyNachPosture nachDefender (contest 2 1)
+    Assert.True(washed.IsWhiff)
+    Assert.Equal(0, washed.NetHits)
+
+  [<Fact>]
+  let ``a Nach defender that answers a strike takes the Vor even without holding it`` () =
+    let striker = TierFactory.createClassLevel CharacterClass.Fighter 30 |> Combatant.yieldVor
+    let answerer = TierFactory.createClassLevel CharacterClass.Warrior 30 |> Combatant.yieldVor
+
+    let actor, target, moved = ActionResolver.resolveWhiffTempo striker answerer
+
+    Assert.True(moved, "Answering the strike is the reward for standing in the Nach")
+    Assert.False(actor.IsInVor)
+    Assert.True(target.IsInVor)

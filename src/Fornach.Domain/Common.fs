@@ -56,6 +56,21 @@ type ComplexForm =
     | PhantasmalDiffusion -> Vector.Agility
     | AegisLattice -> Vector.Discipline
 
+/// Tactical timing in the historical German fencing (Vor / Nach / Indes) paradigm
+type TacticalTiming =
+  /// Vor (Before): Possessing initiative, attacking first, driving the tempo
+  | Vor
+  /// Nach (After): Reacting, parrying, defending against an incoming strike
+  | Nach
+  /// Indes (Meanwhile / In the midst): Intercepting at the tempo midpoint; simultaneous counter-action
+  | Indes
+
+  member this.Name : string =
+    match this with
+    | Vor -> "Vor"
+    | Nach -> "Nach"
+    | Indes -> "Indes"
+
 [<RequireQualifiedAccess>]
 type WeaponCondition =
   | Pristine

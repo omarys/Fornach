@@ -80,7 +80,13 @@ type Combatant =
     MonsterTraits: MonsterTrait list
     /// True for combatants with player-style discipline: fluid stance / Complex Form transitions,
     /// tactical preparations, and a varied attack kit. Plain opposition leaves this false.
-    PlayerStyle: bool }
+    PlayerStyle: bool
+    /// Tactical tempo in the Vor / Nach paradigm
+    Tempo: TacticalTiming }
+
+  /// Tactical tempo state helpers
+  member this.IsInVor = this.Tempo = TacticalTiming.Vor
+  member this.IsInNach = this.Tempo = TacticalTiming.Nach
 
   /// Combatant level derived from progression profile
   member this.Level = this.Progression.Level
@@ -251,7 +257,8 @@ type Combatant =
       ActivePreparations = []
       MonsterFamily = None
       MonsterTraits = []
-      PlayerStyle = false }
+      PlayerStyle = false
+      Tempo = TacticalTiming.Vor }
 
   /// Factory for creating a combatant with explicit class archetype and progression level
   static member createWithClass id name maxHealth maxMorale (stats: StatBlock) (cls: CharacterClass) (level: int) =
@@ -295,7 +302,17 @@ type Combatant =
       ActivePreparations = []
       MonsterFamily = None
       MonsterTraits = []
-      PlayerStyle = false }
+      PlayerStyle = false
+      Tempo = TacticalTiming.Vor }
+
+  /// Updates the combatant's tactical tempo (Vor / Nach)
+  static member withTempo (tempo: TacticalTiming) (c: Combatant) = { c with Tempo = tempo }
+
+  /// Advances the combatant into the Vor (proactive initiative)
+  static member seizeVor (c: Combatant) = { c with Tempo = TacticalTiming.Vor }
+
+  /// Yields the Vor, moving the combatant into the Nach (reactive defense)
+  static member yieldVor (c: Combatant) = { c with Tempo = TacticalTiming.Nach }
 
   /// Pure helper to update status meters
   static member updateMeters (updater: StatusMeters -> StatusMeters) (c: Combatant) =
@@ -338,12 +355,14 @@ type Combatant =
   /// mental defences. No offensive attribute ever grows from a kill — Power and Agility climb through
   /// the combat ramp and gear instead, so Discipline has to be fed on purpose.
   static member growFromEncounter (foes: Combatant list) (c: Combatant) =
-    // `max(16 - (bearer level - foe level), 2)`: diminishing as the foe falls behind, and MORE than
-    // sixteen when the bearer is the underdog. The floor of 2 is the only clamp — it keeps a meaningless
-    // kill worth *something* without letting a stage's end-of-run trash sweep pay for a level.
+    // `max(8 - (bearer level - foe level), 2)`: diminishing as the foe falls behind, and more than
+    // eight when the bearer is the underdog. Halved from sixteen, which paid a whole tier of
+    // Discipline per kill and left a cleared stage far above the tier the next floor is built for.
+    // The floor of 2 is the only clamp — it keeps a meaningless kill worth *something* without
+    // letting a stage's end-of-run trash sweep pay for a level.
     let foeLevel = foes |> List.fold (fun best (f: Combatant) -> max best f.Level) 0
     let levelGap = c.Level - foeLevel
-    let disciplineGain = Math.Max(16 - levelGap, 2)
+    let disciplineGain = Math.Max(8 - levelGap, 2)
 
     let mentalDefences =
       [ StatId.Resolve, 1; StatId.Intuition, 1; StatId.Composure, 1 ]

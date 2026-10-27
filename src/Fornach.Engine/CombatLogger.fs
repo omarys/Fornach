@@ -68,6 +68,8 @@ module CombatLogger =
       sprintf "Damage Dealt: %d %A%s%s" d.Amount d.Plane crit comp
     | CombatEvent.DisparityTriggered (_, _, outcome) ->
       sprintf "Stat Disparity: %A" outcome
+    | CombatEvent.TempoShifted (_, _, reason) ->
+      sprintf "Tempo Shifted: %s" reason
     | CombatEvent.PassiveProcTriggered (_, _, outcome) ->
       sprintf "Passive Proc: %A" outcome
     | CombatEvent.MonsterTraitTriggered (_, name, desc) ->

@@ -148,6 +148,9 @@ type CombatEvent =
   /// Defender seized the Vor from the Nach via an Indes counter-interception
   | IndesSeized of defenderId: CombatantId * attackerId: CombatantId * threshold: int * margin: int
 
+  /// Dynamic tempo shifted: combatant seized the Vor from the Nach
+  | TempoShifted of newVorId: CombatantId * previousVorId: CombatantId * reason: string
+
   /// Bastion Zone Control planted, restricting multi-opponent engagement to 3 simultaneous attackers
   | BastionZoneErected of actorId: CombatantId
 

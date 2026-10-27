@@ -368,8 +368,8 @@ module Program =
     let rng = Random()
     let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
 
-    let mutable player = playerArch.Factory ()
-    let mutable enemy = enemyArch.Factory ()
+    let mutable player = playerArch.Factory () |> Combatant.seizeVor
+    let mutable enemy = enemyArch.Factory () |> Combatant.yieldVor
     let mutable round = 1
     let mutable combatOver = false
     let mutable outcome = "PlayerDefeated"
@@ -383,53 +383,54 @@ module Program =
         enemy
 
     while not combatOver do
+      let playerHasVor = player.IsInVor || not enemy.IsInVor
       let enemyIntent = AI.chooseIntent enemy player
       Display.renderHUDWithTelegraph player enemy round (Some enemyIntent)
 
-      // 1. Choose Player Action
-      let choices = buildActionChoicesWithTelegraph player enemy (Some enemyIntent)
-      let choice =
-        Display.promptSelectionWithHelp
-          (sprintf "[bold %s]Round %d - Select Tactical Action for %s (Press '?' or F1 for Symbol Legend):[/]" Theme.Yellow round player.Name)
-          choices
-          (Some 12)
-          (fun () -> Display.renderHUDWithTelegraph player enemy round (Some enemyIntent))
+      let doPlayerTurn (turnNumber: int) =
+        let choices = buildActionChoicesWithTelegraph player enemy (if playerHasVor then Some enemyIntent else None)
+        let choice =
+          Display.promptSelectionWithHelp
+            (sprintf "[bold %s]Round %d - Select Tactical Action for %s (Press '?' or F1 for Symbol Legend):[/]" Theme.Yellow round player.Name)
+            choices
+            (Some 12)
+            (fun () -> Display.renderHUDWithTelegraph player enemy round (if playerHasVor then Some enemyIntent else None))
 
-      let playerIntent = parseActionChoice choice
+        let playerIntent = parseActionChoice choice
 
-      let playerBefore = player
-      let enemyBefore = enemy
+        let playerBefore = player
+        let enemyBefore = enemy
 
-      AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes %s...[/]" Theme.Green player.Name choice)
-      let playerResult = ActionResolver.resolve roller playerIntent player enemy
-      player <- playerResult.Actor
-      enemy <- playerResult.Target
+        AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes %s...[/]" Theme.Green player.Name choice)
+        let playerResult = ActionResolver.resolve roller playerIntent player enemy
+        player <- playerResult.Actor
+        enemy <- playerResult.Target
 
-      enemyInterrupted <-
-        playerResult.Events
-        |> List.exists (function CombatEvent.ActionInterrupted _ -> true | _ -> false)
+        enemyInterrupted <-
+          playerResult.Events
+          |> List.exists (function CombatEvent.ActionInterrupted _ -> true | _ -> false)
 
-      CombatLogger.recordTurn session round 1 choice playerBefore enemyBefore playerResult
+        CombatLogger.recordTurn session round turnNumber choice playerBefore enemyBefore playerResult
 
-      Display.renderRollBreakdown choice player.Name playerResult.Contest
-      Display.logDamageSummary playerResult.Events enemyBefore enemy
-      playerResult.Events |> List.iter Display.logEvent
+        Display.renderRollBreakdown choice player.Name playerResult.Contest
+        Display.logDamageSummary playerResult.Events enemyBefore enemy
+        playerResult.Events |> List.iter Display.logEvent
 
-      let playerExecutedEnemy =
-        playerResult.Events
-        |> List.exists (function CombatEvent.Executed _ -> true | _ -> false)
+        let playerExecutedEnemy =
+          playerResult.Events
+          |> List.exists (function CombatEvent.Executed _ -> true | _ -> false)
 
-      if playerExecutedEnemy || enemy.Health.IsDepleted || enemy.Morale.IsDepleted then
-        combatOver <- true
-        outcome <- "PlayerVictorious"
-        AnsiConsole.WriteLine()
-        AnsiConsole.Write(
-          Rule(sprintf "[bold %s]★★★ VICTORY: %s HAS PREVAILED OVER %s! ★★★[/]" Theme.Green player.Name enemy.Name)
-            .Centered()
-            .RuleStyle(Theme.StyleGreen)
-        )
-      else
-        // 2. Enemy AI Turn
+        if playerExecutedEnemy || enemy.Health.IsDepleted || enemy.Morale.IsDepleted then
+          combatOver <- true
+          outcome <- "PlayerVictorious"
+          AnsiConsole.WriteLine()
+          AnsiConsole.Write(
+            Rule(sprintf "[bold %s]★★★ VICTORY: %s HAS PREVAILED OVER %s! ★★★[/]" Theme.Green player.Name enemy.Name)
+              .Centered()
+              .RuleStyle(Theme.StyleGreen)
+          )
+
+      let doEnemyTurn (turnNumber: int) =
         let enemyBeforeTurn = enemy
         let playerBeforeTurn = player
 
@@ -439,14 +440,15 @@ module Program =
             let recoverIntent = RecoveryAction SteadyForm
             ActionResolver.resolve roller recoverIntent enemy player
           else
-            AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes telegraphed action...[/]" Theme.Pink enemy.Name)
+            let tempoMsg = if not playerHasVor then " (Holding the Vor)" else ""
+            AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes telegraphed action%s...[/]" Theme.Pink enemy.Name tempoMsg)
             ActionResolver.resolve roller enemyIntent enemy player
 
         enemy <- enemyResult.Actor
         player <- enemyResult.Target
 
         let intentDesc = if enemyInterrupted then "Staggered Recovery (Interrupted)" else Display.intentLogLabel enemyIntent enemyBeforeTurn
-        CombatLogger.recordTurn session round 2 intentDesc enemyBeforeTurn playerBeforeTurn enemyResult
+        CombatLogger.recordTurn session round turnNumber intentDesc enemyBeforeTurn playerBeforeTurn enemyResult
 
         Display.renderRollBreakdown intentDesc enemy.Name enemyResult.Contest
         Display.logDamageSummary enemyResult.Events playerBeforeTurn player
@@ -466,6 +468,16 @@ module Program =
               .Centered()
               .RuleStyle(Theme.StyleRed)
           )
+
+      if playerHasVor then
+        doPlayerTurn 1
+        if not combatOver then
+          doEnemyTurn 2
+      else
+        AnsiConsole.MarkupLine(sprintf "\n[bold %s]⚡ %s holds the Vor and strikes first![/]" Theme.Yellow enemy.Name)
+        doEnemyTurn 1
+        if not combatOver then
+          doPlayerTurn 2
 
       if not combatOver then
         AnsiConsole.WriteLine()
@@ -661,6 +673,13 @@ module Program =
         RunPeerBalanceMatrix
       elif isMatrix then
         RunBalanceMatrix
+      elif hasFlag "--run-sim" then
+        let numberArg (flags: string list) (defaultVal: int) =
+          match Int32.TryParse(findArg flags (string defaultVal)) with
+          | true, v -> Math.Max(1, v)
+          | _ -> defaultVal
+
+        RunProgressionSimulation(numberArg [ "--run-sim" ] 25, numberArg [ "--floors" ] 10)
       elif not isSim then
         InteractiveMenu
       else
@@ -684,8 +703,8 @@ module Program =
     let rng = Random()
     let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
 
-    let mutable currentCombatant = player
-    let mutable currentBoss = boss
+    let mutable currentCombatant = player |> Combatant.seizeVor
+    let mutable currentBoss = boss |> Combatant.yieldVor
     let mutable round = 1
     let mutable combatOver = false
     let mutable outcome = CombatOutcome.PlayerDefeated
@@ -701,56 +720,57 @@ module Program =
     RuntimeLog.write (sprintf "combat start: %s vs %s (round 1)" currentCombatant.Name currentBoss.Name)
 
     while not combatOver do
+      let playerHasVor = currentCombatant.IsInVor || not currentBoss.IsInVor
       let enemyIntent = AI.chooseIntent currentBoss currentCombatant
       Display.renderHUDWithTelegraph currentCombatant currentBoss round (Some enemyIntent)
 
-      // 1. Choose Player Action
-      let choices = buildActionChoicesWithTelegraph currentCombatant currentBoss (Some enemyIntent)
-      let choice =
-        Display.promptSelectionWithHelp
-          (sprintf "[bold %s]Round %d - Tactical Action against %s (Press '?' or F1 for Symbol Legend):[/]" Theme.Yellow round currentBoss.Name)
-          choices
-          (Some 12)
-          (fun () -> Display.renderHUDWithTelegraph currentCombatant currentBoss round (Some enemyIntent))
+      let doPlayerTurn (turnNumber: int) =
+        let choices = buildActionChoicesWithTelegraph currentCombatant currentBoss (if playerHasVor then Some enemyIntent else None)
+        let choice =
+          Display.promptSelectionWithHelp
+            (sprintf "[bold %s]Round %d - Tactical Action against %s (Press '?' or F1 for Symbol Legend):[/]" Theme.Yellow round currentBoss.Name)
+            choices
+            (Some 12)
+            (fun () -> Display.renderHUDWithTelegraph currentCombatant currentBoss round (if playerHasVor then Some enemyIntent else None))
 
-      let playerIntent = parseActionChoice choice
+        let playerIntent = parseActionChoice choice
 
-      let playerBefore = currentCombatant
-      let bossBefore = currentBoss
+        let playerBefore = currentCombatant
+        let bossBefore = currentBoss
 
-      AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes %s...[/]" Theme.Green currentCombatant.Name choice)
-      let playerResult = ActionResolver.resolve roller playerIntent currentCombatant currentBoss
-      currentCombatant <- playerResult.Actor
-      currentBoss <- playerResult.Target
+        AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes %s...[/]" Theme.Green currentCombatant.Name choice)
+        let playerResult = ActionResolver.resolve roller playerIntent currentCombatant currentBoss
+        currentCombatant <- playerResult.Actor
+        currentBoss <- playerResult.Target
 
-      enemyInterrupted <-
-        playerResult.Events
-        |> List.exists (function CombatEvent.ActionInterrupted _ -> true | _ -> false)
+        enemyInterrupted <-
+          playerResult.Events
+          |> List.exists (function CombatEvent.ActionInterrupted _ -> true | _ -> false)
 
-      CombatLogger.recordTurn session round 1 choice playerBefore bossBefore playerResult
-      RuntimeLog.write (
-        sprintf "combat round %d player turn: %s (%d events)" round choice playerResult.Events.Length)
+        CombatLogger.recordTurn session round turnNumber choice playerBefore bossBefore playerResult
+        RuntimeLog.write (
+          sprintf "combat round %d player turn: %s (%d events)" round choice playerResult.Events.Length)
 
-      Display.renderRollBreakdown choice currentCombatant.Name playerResult.Contest
-      Display.logDamageSummary playerResult.Events bossBefore currentBoss
-      playerResult.Events |> List.iter Display.logEvent
+        Display.renderRollBreakdown choice currentCombatant.Name playerResult.Contest
+        Display.logDamageSummary playerResult.Events bossBefore currentBoss
+        playerResult.Events |> List.iter Display.logEvent
 
-      let playerExecutedEnemy =
-        playerResult.Events
-        |> List.exists (function CombatEvent.Executed _ -> true | _ -> false)
+        let playerExecutedEnemy =
+          playerResult.Events
+          |> List.exists (function CombatEvent.Executed _ -> true | _ -> false)
 
-      if playerExecutedEnemy || currentBoss.Health.IsDepleted || currentBoss.Morale.IsDepleted then
-        combatOver <- true
-        outcome <- CombatOutcome.PlayerVictorious
-        currentCombatant <- Combatant.growFromEncounter [ currentBoss ] currentCombatant
-        AnsiConsole.WriteLine()
-        AnsiConsole.Write(
-          Rule(sprintf "[bold %s]★★★ MANIFESTATION RESOLVED: %s PREVAILED! ★★★[/]" Theme.Green currentCombatant.Name)
-            .Centered()
-            .RuleStyle(Theme.StyleGreen)
-        )
-      else
-        // 2. Enemy AI Turn
+        if playerExecutedEnemy || currentBoss.Health.IsDepleted || currentBoss.Morale.IsDepleted then
+          combatOver <- true
+          outcome <- CombatOutcome.PlayerVictorious
+          currentCombatant <- Combatant.growFromEncounter [ currentBoss ] currentCombatant
+          AnsiConsole.WriteLine()
+          AnsiConsole.Write(
+            Rule(sprintf "[bold %s]★★★ MANIFESTATION RESOLVED: %s PREVAILED! ★★★[/]" Theme.Green currentCombatant.Name)
+              .Centered()
+              .RuleStyle(Theme.StyleGreen)
+          )
+
+      let doEnemyTurn (turnNumber: int) =
         let bossBeforeTurn = currentBoss
         let playerBeforeTurn = currentCombatant
 
@@ -760,7 +780,8 @@ module Program =
             let recoverIntent = RecoveryAction SteadyForm
             ActionResolver.resolve roller recoverIntent currentBoss currentCombatant
           else
-            AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes telegraphed action...[/]" Theme.Pink currentBoss.Name)
+            let tempoMsg = if not playerHasVor then " (Holding the Vor)" else ""
+            AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes telegraphed action%s...[/]" Theme.Pink currentBoss.Name tempoMsg)
             if floorNumber = 1 then
               // Tutorial grace: the level-1 protagonist cannot be one-shot on the opening stage.
               ActionResolver.resolveWithoutLethal roller enemyIntent currentBoss currentCombatant
@@ -771,7 +792,7 @@ module Program =
         currentCombatant <- enemyResult.Target
 
         let intentDesc = if enemyInterrupted then "Staggered Recovery (Interrupted)" else Display.intentLogLabel enemyIntent bossBeforeTurn
-        CombatLogger.recordTurn session round 2 intentDesc bossBeforeTurn playerBeforeTurn enemyResult
+        CombatLogger.recordTurn session round turnNumber intentDesc bossBeforeTurn playerBeforeTurn enemyResult
         RuntimeLog.write (
           sprintf "combat round %d enemy turn: %s (%d events)" round intentDesc enemyResult.Events.Length)
 
@@ -793,6 +814,16 @@ module Program =
               .Centered()
               .RuleStyle(Theme.StyleRed)
           )
+
+      if playerHasVor then
+        doPlayerTurn 1
+        if not combatOver then
+          doEnemyTurn 2
+      else
+        AnsiConsole.MarkupLine(sprintf "\n[bold %s]⚡ %s holds the Vor and strikes first![/]" Theme.Yellow currentBoss.Name)
+        doEnemyTurn 1
+        if not combatOver then
+          doPlayerTurn 2
 
       if not combatOver then
         AnsiConsole.WriteLine()
@@ -822,6 +853,19 @@ module Program =
     let isStanding (e: TowerEnemy) =
       not e.IsDefeated && not e.Combatant.Health.IsDepleted && not e.Combatant.Morale.IsDepleted
 
+    // Who opens the exchange, read from live tempo rather than assumed: a pack that has seized the
+    // Vor strikes before the player does, and that has to be visible before the player commits.
+    let packHasVor =
+      (not player.IsInVor) && (enemies |> List.exists (fun e -> isStanding e && e.Combatant.IsInVor))
+
+    AnsiConsole.MarkupLine(
+      if packHasVor then
+        sprintf "[bold %s]⚡ THE PACK HOLDS THE VOR — it strikes before you can answer.[/]" Theme.Yellow
+      elif player.IsInVor then
+        sprintf "[bold %s]⚡ %s holds the Vor — you act first, the pack answers from the Nach.[/]" Theme.Yellow (Markup.Escape player.Name)
+      else
+        sprintf "[%s]◈ Neither side holds the Vor — the exchange opens from the Nach.[/]" Theme.Comment)
+
     // Deadliest first, so the foes that fall off the bottom are the ones that matter least: standing
     // before down, then level, then sheer bulk.
     let ordered =
@@ -839,6 +883,7 @@ module Program =
 
     let pack = Grid()
     pack.AddColumn(GridColumn().PadRight(3)) |> ignore
+    pack.AddColumn(GridColumn().PadRight(2)) |> ignore
     pack.AddColumn(GridColumn().PadRight(2)) |> ignore
     pack.AddColumn(GridColumn().PadRight(2)) |> ignore
     pack.AddColumn(GridColumn().PadRight(2)) |> ignore
@@ -876,6 +921,7 @@ module Program =
         Markup(sprintf "[%s]%d/%d[/]" (if standing then Theme.Red else Theme.Comment) c.Health.Current c.Health.Maximum),
         Markup(sprintf "[%s]%d/%d[/]" (if standing then Theme.Cyan else Theme.Comment) c.Morale.Current c.Morale.Maximum),
         Markup(armorText),
+        Markup(if standing then Display.tempoBadge c else ""),
         Markup(status)
       )
       |> ignore
@@ -883,6 +929,7 @@ module Program =
     if hidden > 0 then
       pack.AddRow(
         Markup(sprintf "[%s]… +%d more[/]" Theme.Comment hidden),
+        Markup(""),
         Markup(""),
         Markup(""),
         Markup(""),
@@ -972,9 +1019,54 @@ module Program =
 
     let living () = currentEnemies |> List.filter isLiving
 
+    // Who opens the exchange: the pack, when it holds the Vor and the player does not.
+    let packHasVor () =
+      (not currentPlayer.IsInVor) && (living () |> List.exists (fun e -> e.Combatant.IsInVor))
+
+    let mutable turnNum = 1
+    // The foe whose technique the player interrupted this round; its strike defuses into a recovery.
+    let mutable interruptedTarget : CombatantId option = None
+
+    // The pack's phase: each surviving foe that can still reach the player strikes, capped at the
+    // eight surrounding tiles. Shared rather than inlined because it runs before the player's action
+    // when the pack holds the Vor, and after it when the player does.
+    let packPhase () =
+      for e in living () |> List.truncate 8 do
+        if not combatOver then
+          let playerBeforeTurn = currentPlayer
+          let isStaggered = Some e.Combatant.Id = interruptedTarget
+          // Resolved once so the log line below can name the technique the foe actually used.
+          let intent =
+            if isStaggered then RecoveryAction SteadyForm
+            else AI.chooseIntent e.Combatant currentPlayer
+          let r =
+            if isStaggered then
+              AnsiConsole.MarkupLine(sprintf "\n[bold %s]⚡ %s is staggered from the technique interrupt! Attack defused![/]" Theme.Yellow e.Name)
+              ActionResolver.resolve roller intent e.Combatant currentPlayer
+            elif floorNumber = 1 then
+              ActionResolver.resolveWithoutLethal roller intent e.Combatant currentPlayer
+            else
+              ActionResolver.resolveEx roller intent e.Combatant currentPlayer priorDefenses
+          CombatLogger.recordTurn session round turnNum (sprintf "%A" intent) e.Combatant playerBeforeTurn r
+          turnNum <- turnNum + 1
+          appendTurn (sprintf "Round %d — %s strikes %s — %s" round e.Name currentPlayer.Name (Display.intentLogLabel intent e.Combatant)) r.Events
+          currentPlayer <- r.Target
+          currentEnemies <- currentEnemies |> List.map (fun en -> if en.Id = e.Id then { en with Combatant = r.Actor } else en)
+          priorDefenses <- priorDefenses + 1
+          let executed = r.Events |> List.exists (function CombatEvent.Executed _ -> true | _ -> false)
+          if executed || currentPlayer.Health.IsDepleted || currentPlayer.Morale.IsDepleted then
+            outcome <- TowerDisplay.GroupDuelOutcome.Defeated
+            combatOver <- true
+            AnsiConsole.WriteLine()
+            AnsiConsole.Write(
+              Rule(sprintf "[bold %s]☠☠☠ OVERWHELMED: %s HAS FALLEN! ☠☠☠[/]" Theme.Red currentPlayer.Name)
+                .Centered()
+                .RuleStyle(Theme.StyleRed)
+            )
+
     while not combatOver && not (living ()).IsEmpty do
       priorDefenses <- 0
-      let mutable turnNum = 1
+      interruptedTarget <- None
       renderGroupHud currentPlayer currentEnemies round (logLines ())
       let livingNow = living ()
       RuntimeLog.write (sprintf "group combat round %d: %d foe(s) standing" round livingNow.Length)
@@ -1033,75 +1125,55 @@ module Program =
           outcome <- TowerDisplay.GroupDuelOutcome.Defeated
         combatOver <- true
       else
-        // 3. Player action via the group-turn resolver (cleave/splash onto nearby foes)
-        let intent = parseActionChoice choice
-        let otherLiving = livingNow |> List.filter (fun e -> e.Id <> target.Id) |> List.map (fun e -> e.Combatant)
-        AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes %s...[/]" Theme.Green currentPlayer.Name choice)
-        let playerBefore = currentPlayer
-        let targetBefore = targetCombatant
-        let res = ActionResolver.resolveGroupTurn roller intent currentPlayer targetCombatant otherLiving
-        let isTargetInterrupted =
-          res.Events
-          |> List.exists (function CombatEvent.ActionInterrupted(_, tId, _, _) when tId = target.Combatant.Id -> true | _ -> false)
-        CombatLogger.recordTurn session round turnNum choice playerBefore targetBefore
-          { Actor = res.Actor; Target = res.PrimaryTarget; Events = res.Events; Contest = None }
-        turnNum <- turnNum + 1
-        appendTurn (sprintf "Round %d — %s uses %s on %s" round currentPlayer.Name choice target.Name) res.Events
-        currentPlayer <- res.Actor
-        currentEnemies <-
-          currentEnemies
-          |> List.map (fun e ->
-            if e.Id = target.Id then { e with Combatant = res.PrimaryTarget }
-            else
-              match res.SecondaryTargets |> List.tryFind (fun (c: Combatant) -> c.Id = e.Combatant.Id) with
-              | Some c -> { e with Combatant = c }
-              | None -> e)
+        // 3a. The pack opens when it holds the Vor and the player does not: it strikes before the
+        // player's action, and its end-of-round answer is skipped so neither side strikes twice.
+        let openedByPack = packHasVor ()
+        if openedByPack then
+          AnsiConsole.MarkupLine(sprintf "\n[bold %s]⚡ The pack holds the Vor and strikes before you can answer![/]" Theme.Yellow)
+          packPhase ()
 
-        if (living ()).IsEmpty then
-          outcome <- TowerDisplay.GroupDuelOutcome.Victorious
-          currentPlayer <- Combatant.growFromEncounter (currentEnemies |> List.map (fun e -> e.Combatant)) currentPlayer
-          combatOver <- true
-          AnsiConsole.WriteLine()
-          AnsiConsole.Write(
-            Rule(sprintf "[bold %s]★★★ PACK VANQUISHED: %s PREVAILED! ★★★[/]" Theme.Green currentPlayer.Name)
-              .Centered()
-              .RuleStyle(Theme.StyleGreen)
-          )
-        else
-          // 4. Enemy turn: each surviving foe strikes in deterministic order, capped at 8 attackers
-          // (the eight tiles surrounding the player — any extras cannot reach).
+        if not combatOver then
+          // 3. Player action via the group-turn resolver (cleave/splash onto nearby foes)
+          let intent = parseActionChoice choice
+          let otherLiving = livingNow |> List.filter (fun e -> e.Id <> target.Id) |> List.map (fun e -> e.Combatant)
+          AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes %s...[/]" Theme.Green currentPlayer.Name choice)
+          let playerBefore = currentPlayer
+          let targetBefore = targetCombatant
+          let res = ActionResolver.resolveGroupTurn roller intent currentPlayer targetCombatant otherLiving
+          let isTargetInterrupted =
+            res.Events
+            |> List.exists (function CombatEvent.ActionInterrupted(_, tId, _, _) when tId = target.Combatant.Id -> true | _ -> false)
+          // An interrupted foe recovers instead of striking when the pack's phase comes round.
+          interruptedTarget <- if isTargetInterrupted then Some target.Combatant.Id else None
+          CombatLogger.recordTurn session round turnNum choice playerBefore targetBefore
+            { Actor = res.Actor; Target = res.PrimaryTarget; Events = res.Events; Contest = None }
+          turnNum <- turnNum + 1
+          appendTurn (sprintf "Round %d — %s uses %s on %s" round currentPlayer.Name choice target.Name) res.Events
+          currentPlayer <- res.Actor
+          currentEnemies <-
+            currentEnemies
+            |> List.map (fun e ->
+              if e.Id = target.Id then { e with Combatant = res.PrimaryTarget }
+              else
+                match res.SecondaryTargets |> List.tryFind (fun (c: Combatant) -> c.Id = e.Combatant.Id) with
+                | Some c -> { e with Combatant = c }
+                | None -> e)
+
+          if (living ()).IsEmpty then
+            outcome <- TowerDisplay.GroupDuelOutcome.Victorious
+            currentPlayer <- Combatant.growFromEncounter (currentEnemies |> List.map (fun e -> e.Combatant)) currentPlayer
+            combatOver <- true
+            AnsiConsole.WriteLine()
+            AnsiConsole.Write(
+              Rule(sprintf "[bold %s]★★★ PACK VANQUISHED: %s PREVAILED! ★★★[/]" Theme.Green currentPlayer.Name)
+                .Centered()
+                .RuleStyle(Theme.StyleGreen)
+            )
+
+        // 4. Enemy answer: skipped when the pack already opened this round.
+        if not combatOver && not openedByPack then
           AnsiConsole.MarkupLine(sprintf "\n[bold %s]The pack retaliates...[/]" Theme.Pink)
-          for e in living () |> List.truncate 8 do
-            if not combatOver then
-              let playerBeforeTurn = currentPlayer
-              // Resolved once so the log line below can name the technique the foe actually used.
-              let intent =
-                if e.Combatant.Id = target.Combatant.Id && isTargetInterrupted then RecoveryAction SteadyForm
-                else AI.chooseIntent e.Combatant currentPlayer
-              let r =
-                if e.Combatant.Id = target.Combatant.Id && isTargetInterrupted then
-                  AnsiConsole.MarkupLine(sprintf "\n[bold %s]⚡ %s is staggered from the technique interrupt! Attack defused![/]" Theme.Yellow e.Name)
-                  ActionResolver.resolve roller intent e.Combatant currentPlayer
-                elif floorNumber = 1 then
-                  ActionResolver.resolveWithoutLethal roller intent e.Combatant currentPlayer
-                else
-                  ActionResolver.resolveEx roller intent e.Combatant currentPlayer priorDefenses
-              CombatLogger.recordTurn session round turnNum (sprintf "%A" intent) e.Combatant playerBeforeTurn r
-              turnNum <- turnNum + 1
-              appendTurn (sprintf "Round %d — %s strikes %s — %s" round e.Name currentPlayer.Name (Display.intentLogLabel intent e.Combatant)) r.Events
-              currentPlayer <- r.Target
-              currentEnemies <- currentEnemies |> List.map (fun en -> if en.Id = e.Id then { en with Combatant = r.Actor } else en)
-              priorDefenses <- priorDefenses + 1
-              let executed = r.Events |> List.exists (function CombatEvent.Executed _ -> true | _ -> false)
-              if executed || currentPlayer.Health.IsDepleted || currentPlayer.Morale.IsDepleted then
-                outcome <- TowerDisplay.GroupDuelOutcome.Defeated
-                combatOver <- true
-                AnsiConsole.WriteLine()
-                AnsiConsole.Write(
-                  Rule(sprintf "[bold %s]☠☠☠ OVERWHELMED: %s HAS FALLEN! ☠☠☠[/]" Theme.Red currentPlayer.Name)
-                    .Centered()
-                    .RuleStyle(Theme.StyleRed)
-                )
+          packPhase ()
 
       if not combatOver then
         // Between rounds the pack may grow: pursuers keep closing and whoever reaches the player joins.
@@ -1244,6 +1316,11 @@ module Program =
       | RunBalanceMatrix ->
         printBanner()
         Simulation.renderBalanceMatrix()
+        0
+
+      | RunProgressionSimulation (runs, maxFloors) ->
+        printBanner()
+        Simulation.renderProgressionDashboard(Simulation.runProgressionSim runs maxFloors)
         0
 
       | RunSimulation (nameA, nameB, iters) ->

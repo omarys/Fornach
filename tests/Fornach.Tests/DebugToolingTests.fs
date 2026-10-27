@@ -33,11 +33,13 @@ module DebugToolingTests =
       RuntimeLog.path <- tmp
       RuntimeLog.write "first entry"
       RuntimeLog.write "second entry"
+      RuntimeLog.close ()
       let text = File.ReadAllText tmp
       Assert.Contains("first entry", text)
       Assert.Contains("second entry", text)
       Assert.Matches(@"\[\d{2}:\d{2}:\d{2}\.\d{3}\]", text)
     finally
+      RuntimeLog.close ()
       RuntimeLog.enabled <- false
       RuntimeLog.path <- wasPath
       if File.Exists tmp then File.Delete tmp

@@ -473,19 +473,20 @@ module TowerSession =
            | None -> sprintf "Quest complete: %s — the Ascension Portal is unlocked." questTitle)
           :: state.MessageLog }
 
-  /// Enemy levels track the protagonist. A floor's mobs land at the player's level up to five above,
-  /// and its boss ten above, measured once at floor entry: the authored bestiary levels follow the
-  /// biome, not the run, so without this a thorough player walked into floors they had outgrown and a
-  /// hurried one into floors that outclassed them. The spread is derived from the enemy id, so the
-  /// same floor always fields the same mix.
-  /// Public because the minimap rewind (TowerDisplay) re-seats pristine mobs and must land them on
-  /// the same levels.
-  let rescaleFloorEnemies (player: Combatant) (floor: TowerFloor) : TowerFloor =
+  /// The level spread a floor is allowed to field, as `(mobCap, bossOffset)` measured from the player's
+  /// level. The story's first floor is the tutorial: its mobs answer at the protagonist's own level,
+  /// because a level-1 protagonist has nothing to grow into yet and the intro has no way out. The
+  /// guardian keeps its `+10`, which is what makes it the strongest thing on the floor.
+  /// Exported because the minimap rewind re-seats pristine mobs and must land them on the same levels.
+  let floorScalingFor (isStory: bool) (floorNumber: int) : int * int =
+    if isStory && floorNumber <= 1 then 0, 10 else 2 + floorNumber / 2, 10
+
+  let rescaleFloorEnemiesWith (depthCap: int) (bossOffset: int) (player: Combatant) (floor: TowerFloor) : TowerFloor =
     let targetLevel (e: TowerEnemy) =
-      if e.IsBoss then player.Level + 10
+      if e.IsBoss then player.Level + bossOffset
       else
         let salt = e.Id |> Seq.sumBy int
-        player.Level + (salt % 6)
+        player.Level + min (salt % 6) depthCap
 
     let rescaled (e: TowerEnemy) =
       if e.IsDefeated then e
@@ -504,9 +505,26 @@ module TowerSession =
             | EntityEnemy e -> EntityEnemy(rescaled e)
             | other -> other) }
 
+  /// Enemy levels track the protagonist. A floor's mobs land at the player's level up to five above,
+  /// and its boss ten above, measured once at floor entry: the authored bestiary levels follow the
+  /// biome, not the run, so without this a thorough player walked into floors they had outgrown and a
+  /// hurried one into floors that outclassed them. The spread is derived from the enemy id, so the
+  /// same floor always fields the same mix.
+  /// The spread is capped by depth: floor 1 answers at +0..+2, floor 4 at +3, and from floor 8 the
+  /// full +0..+5 is live. Uncapped, a level-1 player opened the tower against four enemies of up to
+  /// level 6 (--run-sim: 55% floor-1 clear, 33% by floor 3) with no room to grow into it.
+  /// The tower curve; story floors go through `floorScalingFor` instead.
+  let rescaleFloorEnemies (player: Combatant) (floor: TowerFloor) : TowerFloor =
+    let depthCap, bossOffset = floorScalingFor false floor.FloorNumber
+    rescaleFloorEnemiesWith depthCap bossOffset player floor
+
   /// Initializes a new Tower run session starting at a given floor with specified story mode
   let initSessionWithMode (player: Combatant) (seed: int) (startFloor: int) (isStory: bool) : TowerRunState =
-    let floor = TowerGenerator.generateFloorWithMode seed startFloor isStory |> rescaleFloorEnemies player
+    let depthCap, bossOffset = floorScalingFor isStory startFloor
+
+    let floor =
+      TowerGenerator.generateFloorWithMode seed startFloor isStory
+      |> rescaleFloorEnemiesWith depthCap bossOffset player
     let initial =
       { Player = player
         CurrentFloor = floor
@@ -535,9 +553,11 @@ module TowerSession =
   /// Advances to the next floor via the Stairway Door
   let ascendFloor (state: TowerRunState) : TowerRunState =
     let nextFloorNum = state.CurrentFloor.FloorNumber + 1
+    let depthCap, bossOffset = floorScalingFor state.IsStoryMode nextFloorNum
+
     let nextFloor =
       TowerGenerator.generateFloorWithMode state.Seed nextFloorNum state.IsStoryMode
-      |> rescaleFloorEnemies state.Player
+      |> rescaleFloorEnemiesWith depthCap bossOffset state.Player
     let nextState =
       { state with
           Player = { Combatant.clearStacks state.Player with Meters = StatusMeters.Zero }

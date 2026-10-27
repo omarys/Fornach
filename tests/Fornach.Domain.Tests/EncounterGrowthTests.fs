@@ -4,7 +4,7 @@ open Xunit
 open Fornach.Domain
 
 /// `Combatant.growFromEncounter` replaced the old Study Stack ramp: a won fight leaves a permanent
-/// gain on the Discipline pair — `max(16 - (bearer level - foe level), 2)` each — and +1 on each mental
+/// gain on the Discipline pair — `max(8 - (bearer level - foe level), 2)` each — and +1 on each mental
 /// defence. No offensive attribute moves.
 module EncounterGrowthTests =
 
@@ -15,7 +15,7 @@ module EncounterGrowthTests =
   /// The gain the pair is supposed to take for this bearer and this pack.
   let private expectedGain (before: Combatant) (pack: Combatant list) =
     let foeLevel = pack |> List.fold (fun best (f: Combatant) -> max best f.Level) 0
-    max (16 - (before.Level - foeLevel)) 2
+    max (8 - (before.Level - foeLevel)) 2
 
   [<Fact>]
   let ``a won fight raises Prowess and Poise by the level-gap gain`` () =
@@ -52,9 +52,9 @@ module EncounterGrowthTests =
     Assert.Equal(2, expectedGain veteran [ foe CharacterClass.Warrior CombatTier.Novice ])
 
   [<Fact>]
-  let ``beating a foe above your level pays more than sixteen, by design`` () =
+  let ``beating a foe above your level pays more than eight, by design`` () =
     // The floor of 2 is the only clamp: an underdog who drops something well above their level is
-    // learning the fastest way the game allows, so the gain rises past sixteen with the disparity.
+    // learning the fastest way the game allows, so the gain rises past eight with the disparity.
     let underdog = TierFactory.createClassTier CharacterClass.Fighter CombatTier.Novice
 
     let gains =
@@ -66,7 +66,7 @@ module EncounterGrowthTests =
           statOf StatId.Prowess grown - statOf StatId.Prowess underdog ]
 
     for gained in gains do
-      Assert.True(gained > 16, sprintf "an underdog win paid only %d" gained)
+      Assert.True(gained > 8, sprintf "an underdog win paid only %d" gained)
 
     // Harder foe, bigger lesson: the gains climb with the disparity.
     Assert.True(gains[0] < gains[1] && gains[1] < gains[2], sprintf "gains did not climb with the gap: %A" gains)

@@ -281,6 +281,97 @@ module PreparationTests =
     Assert.Equal(2, thresh)
     Assert.True(margin >= thresh)
 
+  [<Fact>]
+  let ``Indes dynamic threshold reduces with heavy wind-up attacks and high recklessness`` () =
+    let defender = createStandardFighter CharacterClass.Soldier 1
+    let standardAttacker = createStandardFighter CharacterClass.Warrior 1
+    let recklessAttacker =
+      standardAttacker
+      |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness + 65 })
+
+    // Baseline: 3
+    Assert.Equal(3, Indes.calculateThreshold defender)
+
+    // With heavy windup: 3 - 1 = 2
+    Assert.Equal(2, Indes.calculateThresholdWithAttacker defender (Some standardAttacker) true)
+
+    // With high recklessness (>=60): 3 - 1 = 2
+    Assert.Equal(2, Indes.calculateThresholdWithAttacker defender (Some recklessAttacker) false)
+
+    // With both windup and recklessness: 3 - 1 - 1 = 1
+    Assert.Equal(1, Indes.calculateThresholdWithAttacker defender (Some recklessAttacker) true)
+
+    // With Parrying Buckler + windup + recklessness: clamped at 1
+    let bucklerDefender =
+      defender
+      |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ParryingBuckler None 3)
+    Assert.Equal(1, Indes.calculateThresholdWithAttacker bucklerDefender (Some recklessAttacker) true)
+
+  [<Fact>]
+  let ``Indes seizure updates defender to Vor and attacker to Nach with TempoShifted event`` () =
+    let attacker =
+      createFighterWithClass CharacterClass.Warrior 1 20 20 20 20 20 20 10 10 10 10 10 10
+      |> Combatant.seizeVor
+    let defender =
+      createFighterWithClass CharacterClass.Soldier 5 40 80 40 40 40 40 10 10 10 10 10 10
+      |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ParryingBuckler None 3)
+      |> Combatant.yieldVor
+
+    Assert.True(attacker.IsInVor)
+    Assert.True(defender.IsInNach)
+
+    let roller = fixedRoller 4
+    let res = ActionResolver.resolve roller (StandardAttack (ForceStrike false)) attacker defender
+
+    Assert.True(res.Target.IsInVor, "Defender should have seized the Vor")
+    Assert.True(res.Actor.IsInNach, "Attacker should have been forced into the Nach")
+
+    let tempoShifted =
+      res.Events
+      |> List.tryPick (function CombatEvent.TempoShifted (newVor, oldVor, reason) -> Some (newVor, oldVor, reason) | _ -> None)
+
+    Assert.True(tempoShifted.IsSome, "TempoShifted event should be emitted on Indes seizure")
+    let newVor, oldVor, _ = tempoShifted.Value
+    Assert.Equal(defender.Id, newVor)
+    Assert.Equal(attacker.Id, oldVor)
+
+  [<Fact>]
+  let ``RecoveryAction in the Vor yields the Vor to the target`` () =
+    let actor = createStandardFighter CharacterClass.Fighter 1 |> Combatant.seizeVor
+    let target = createStandardFighter CharacterClass.Warrior 1 |> Combatant.yieldVor
+
+    let roller = fixedRoller 3
+    let res = ActionResolver.resolve roller (RecoveryAction SteadyForm) actor target
+
+    Assert.True(res.Actor.IsInNach, "Actor should have yielded the Vor")
+    Assert.True(res.Target.IsInVor, "Target should have gained the Vor")
+
+    let tempoShifted =
+      res.Events
+      |> List.tryPick (function CombatEvent.TempoShifted (newVor, oldVor, _) -> Some (newVor, oldVor) | _ -> None)
+    Assert.True(tempoShifted.IsSome)
+    let newVor, oldVor = tempoShifted.Value
+    Assert.Equal(target.Id, newVor)
+    Assert.Equal(actor.Id, oldVor)
+
+  [<Fact>]
+  let ``Landed strike from the Nach claims the Vor`` () =
+    let attackerInNach =
+      createFighterWithClass CharacterClass.Warrior 10 150 150 150 150 150 150 50 50 50 50 50 50
+      |> Combatant.yieldVor
+    let defenderInVor =
+      createFighterWithClass CharacterClass.Soldier 1 20 20 20 20 20 20 10 10 10 10 10 10
+      |> Combatant.seizeVor
+
+    Assert.True(attackerInNach.IsInNach)
+    Assert.True(defenderInVor.IsInVor)
+
+    let roller = fixedRoller 5
+    let res = ActionResolver.resolve roller (StandardAttack (ForceStrike false)) attackerInNach defenderInVor
+
+    Assert.True(res.Actor.IsInVor, "Attacker should have seized the Vor upon landed strike")
+    Assert.True(res.Target.IsInNach, "Defender should be in the Nach")
+
   // =========================================================================
   // 6. Multi-Opponent Shockwave Slam & Group Turn Tests
   // =========================================================================
