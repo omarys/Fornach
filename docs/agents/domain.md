@@ -1,8 +1,8 @@
 # Fornach Balance, Combat Mechanics & Class Progression Handoff
 
-## Status: 538 Tests Passing (308 `Fornach.Tests` + 207 `Fornach.Domain.Tests` + 23 `Fornach.Spatial.Tests`, 0 Warnings)
+## Status: 555 Tests Passing (308 `Fornach.Tests` + 224 `Fornach.Domain.Tests` + 23 `Fornach.Spatial.Tests`, 0 Warnings)
 
-Latest commit / worktree: *Enemy level spread capped by depth* ([ADR 0008](file:///home/omary/Dev/fornach/docs/adr/0008-cap-enemy-level-spread-by-depth.md)), on top of *Tempo turns on a decisive answer* ([ADR 0007](file:///home/omary/Dev/fornach/docs/adr/0007-tempo-turns-on-decisive-answers.md)) and *Vor / Nach / Indes Tactical Tempo Integration* ([ADR 0006](file:///home/omary/Dev/fornach/docs/adr/0006-vor-nach-indes-tactical-tempo-integration.md), OpenLore decision `1198520b`). Earlier decision drafts (`d32fa8c7`, `ffee09d7`, and `dd1a1ad2` for ADR 0007) are recorded but **not yet approved**; `openlore decisions --sync` has nothing to write until they are.
+Latest commit / worktree: *Prowess, Poise and Asymmetric Tempo Redesign* ([ADR 0009](file:///home/omary/Dev/fornach/docs/adr/0009-prowess-poise-and-asymmetric-tempo-redesign.md), OpenLore decisions `c5838dca`, `d2e94057`, `6f3c46db`, `f2bfed90`), on top of *Enemy level spread capped by depth* ([ADR 0008](file:///home/omary/Dev/fornach/docs/adr/0008-cap-enemy-level-spread-by-depth.md)), *Tempo turns on a decisive answer* ([ADR 0007](file:///home/omary/Dev/fornach/docs/adr/0007-tempo-turns-on-decisive-answers.md)) and *Vor / Nach / Indes Tactical Tempo Integration* ([ADR 0006](file:///home/omary/Dev/fornach/docs/adr/0006-vor-nach-indes-tactical-tempo-integration.md), OpenLore decision `1198520b`).
 
 This document provides a comprehensive handoff of the recent combat balance tuning, archetype progression overhauls, tactical preparation enhancements, swarm simulation refinements, and a solution-wide performance profile (see §4) completed in the `Fornach` codebase.
 
@@ -262,6 +262,53 @@ This document provides a comprehensive handoff of the recent combat balance tuni
 - **The Progression Curve, Measured**: `dotnet run --project src/Fornach.Cli -- --run-sim 40 --floors 8` before the cap: **55% floor-1 clear, 55% floor 2, 33% floor 3**, avg depth **1.23**, 1/40 finishing. After: **98% / 90% / 69% / 58%** on floors 1–4, avg depth **3.48**, 5/40 finishing; over 14 floors the shape holds (teach → bite at 3–4 → attrition as average health drifts 60% → 33%). The softer alternative `1 + floor/2` was also measured (100/100/85/76/77, avg depth 4.88, 7/40) and rejected as too flat. Harness: `Simulation.runProgressionSim` → `renderProgressionDashboard`, built on `runPreparedGroupMatch` (`runSingleGroupMatch` is now a thin wrapper), whole pack up to 4 at once with no rest/honing/consumables/gear — deliberately pessimistic.
 - **Guards**: Added 4 unit tests in [`PreparationTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Domain.Tests/PreparationTests.fs) covering dynamic threshold calculation with wind-up/recklessness, Indes seizure tempo updates, recovery tempo yielding, and landed Nach strikes claiming the Vor; plus 6 dice-independent facts on the tempo helpers in [`CombatTacticsTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Tests/CombatTacticsTests.fs) (scratch does not steal, a two-hit answer does, whiff hands over, whiff from a Nach defender does not disturb a Vor holder, a Nach defender that answers takes the Vor, Nach posture blunts by exactly one and can convert a hit into a whiff), plus the group knock-back test in `ProlongedBattleTests.fs`. All 538 tests passing cleanly across the solution (0 warnings).
 
+### AA. Prowess, Poise and Asymmetric Tempo Redesign (ADR 0009)
+- **Passive Discipline Model (Prowess & Poise)**:
+  - Retired active `Prowess` attacks (`ProwessStrike`, `CalculatedFlawStrike`, `MasterfulDisarm`) and removed the `Focus` resource entirely.
+  - `Prowess` is now the passive martial reading skill:
+    - Provides deterministic 3-tier intent reading on opponents (`TacticalAssessment.fs`): Obscured, Discerning, Clear Intent.
+    - Applies a passive offensive bonus to `Force` and `Finesse` strikes in `Combatant.GetCombatStat`.
+  - `Poise` is now the passive defensive stability skill:
+    - Applies a passive defensive bonus to `Fortitude` and `Reflex` defenses in `Combatant.GetCombatStat`.
+    - Mitigates `Exhaustion`, `Overwhelm`, and `Frustration` build-up.
+    - Provides damage-spike shock resistance against physical `Pain`.
+  - Mental Plane Mirror: `Acumen` provides intent reading and bonuses to `Intellect`/`Acuity`; `Composure` provides mental shock resistance and bonuses to `Resolve`/`Intuition`.
+  - Only humanoids possess Prowess and Poise. Non-humanoids (beasts, constructs) have 0 Prowess and 0 Poise with Fortitude fallback for defense checks.
+  - Gambits are folded into passive triggers when combatants hold 5/5 Momentum/Flow and maintain a Prowess advantage.
+- **Asymmetric Tempo Roles (`Vor` / `Nach` / `Indes`) & Active Defenses**:
+  - In `Vor` (Attacker): Combatants choose between Power (`ForceStrike`) and Agility (`FinesseCadence`) vectors, plus preparations / recovery.
+  - In `Nach` (Defender): The incoming attack is telegraphed; combatants must select active defense counters rather than symmetric attacks:
+    - Physical: `FortitudeGuard` (Power Defense) or `ReflexSlip` (Agility Defense).
+    - Mental: `ResolveAnchor` (Power Defense) or `IntuitionPerception` (Agility Defense).
+  - Counter Affinity Matching:
+    - `Fortitude` counters `Force` (+25% damage mitigation, seizes `Vor` on successful defense); vulnerable to `Finesse` (+15% damage, `Vor` retained by attacker).
+    - `Reflex` counters `Finesse` (+25% damage mitigation, seizes `Vor` on successful defense); vulnerable to `Force` (+15% damage, `Vor` retained by attacker).
+  - Unattacked Active Defenses: When an opponent prepares or rests, active defenses yield immediate recovery:
+    - `FortitudeGuard`: Repairs armor durability, bleeds self-Recklessness, gains Momentum, and seizes the Vor.
+    - `ReflexSlip`: Vents Overwhelm and Exhaustion, gains Flow, and seizes the Vor.
+- **Determining Factor & Frustration**:
+  - When Prowess or Poise bonus is the sole factor converting what would have been a contest failure into a success, `CombatEvent.TacticalOutmaneuver` is emitted, inflicting heavy Frustration on humanoid targets.
+- **Transient Pain Shock System**:
+  - Physical HP damage $\ge 15\%$ Max HP in a single round triggers a Pain Shock test: $\text{Poise} \ge \text{Damage\%} \times 2$.
+  - Failure inflicts **Stagger** (action loss / turn skipped) and a meter surge (**+25 Overwhelm**, **+15 Exhaustion**). Guarded in `PainShockTests.fs`.
+- **Diegetic Bestiary Knowledge Progression**:
+  - Replaced legacy flat `masteryMultiplier` (+2% damage dealt / -1% taken per kill) with diegetic encounter familiarity.
+  - Defeating or surviving species encounters grants diminishing Prowess: **+25** on first encounter, then **+5, +3, +2, +1 floor** uncapped thereafter, plus **+1 Poise** per survived encounter. Tracked in `ProgressionProfile.BestiaryKnowledge` and `EncounterCounts`.
+  - Non-humanoid beasts compensate for 0 Prowess/Poise with higher baseline Force/Finesse.
+  - Lone wounded beasts (<30% HP, player >70% HP, alone) attempt to limp away; players can choose to **Spare** (retaining full bestiary knowledge gain) or **Execute**.
+- **Status Meter Primacy & Strain Debuffs**:
+  - Direct HP damage scaled down by -30% across the board to allow tactical strain meters to determine duel outcomes.
+  - Reaching $\ge 75$ on any meter inflicts severe operational debuffs:
+    - `Exhaustion >= 75`: -25% Force and Fortitude.
+    - `Overwhelm >= 75`: -25% Finesse and Reflex.
+    - `Frustration >= 75`: -50% Poise / Intent reading masked.
+    - `Recklessness >= 75`: -25% Defense, all incoming attacks crit, whiff gate bypassed.
+    - `Cognitive Fatigue >= 75`: -25% Intellect & Acuity, incoming mental attacks crit, whiff bypassed.
+  - Reaching 100 on any meter triggers immediate decisive victory / collapse (`CollapseDecisive`).
+- **Guards & Verification**:
+  - Added `tests/Fornach.Domain.Tests/PainShockTests.fs` (10 tests) and `tests/Fornach.Domain.Tests/ActiveDefenseTests.fs` (6 tests).
+  - All 555 tests passing cleanly across 3 test projects with 0 warnings. OpenLore decisions `c5838dca`, `d2e94057`, `6f3c46db`, `f2bfed90`.
+
 ---
 
 ## 2. Archetype Tipping-Point Matrix (Novice mobs vs. Fighter & Mage)
@@ -434,7 +481,7 @@ This also fully explains the `createGrandMasterBerserker` row of §4.2 (43 µs /
 - [ ] **4. Quick-Play Mode** — the remaining half of TODO §7; see §7 below.
 - [ ] **5. Shrine balance brake**: repeatable shrines are an unlimited full restore (§1 O). If the caps are meant to bite, add a per-visit soul cost that scales with floor.
 - [ ] **6. Shrine-gated identification risk**: unidentified consumables cannot be used until a shrine, so a long floor can strand the player's loot. Measure shrines-per-floor on floors 5+ before deciding whether that is a reward or a trap (§1 P).
-- [ ] **7. Bestiary unlock on repeated kills** was raised by the user but never scoped or implemented — do not assume it exists.
+- [x] **7. Bestiary unlock on repeated kills / encounter familiarity (ADR 0009)**: Implemented via diegetic Bestiary encounter growth. Replaces legacy flat mastery multiplier with diminishing Prowess (+25 on 1st, then +5, +3, +2, +1 floor thereafter) and +1 Poise per survived encounter, tracked in `ProgressionProfile.BestiaryKnowledge` and `EncounterCounts`. Lone wounded beasts limp away with Spare/Execute choices.
 - [ ] **8. Quest reward payout — implemented, awaiting a play-check.** `TowerQuest` now carries a `Reward: QuestReward` record (`Souls`, `Health`, `Morale`, `FullVitality`, `KeyId`), declared through `questReward souls morale keyId` (`TowerGenerator.fs`) with the two odd ones written out in full. `TowerSession.completeQuest` grants it and the per-visit hardcoded `+50 Souls / +40 Morale` is gone. Suite green; nobody has read the resulting numbers in play.
 - [x] **9. Stance growth is uncapped (§1 U) — obsolete in both halves.** The `+2`-per-blow-absorbed drip (`fortifyStance` / `ActionResolver.applyStanceGrowth` / `FortifyBlows`) was deleted outright in `bfdb242`: a turn no longer touches permanent stats at all, which is what removed the unlimited defensive subsidy. The `+5`-per-kill half is now `Combatant.growFromEncounter` (per *encounter*, not per kill), floored at **2** this session so an end-of-stage trash sweep cannot pay for a level. Nothing is left uncapped except the underdog direction, which is deliberate.
 - [ ] **10. `HealthBonus` / `MoraleBonus` on `EquipmentItem` are never read** (§1 W). Either delete them or convert them to percentages of the pool maximum and apply them in `applyItemBonus` — but know that wiring them up hands every boss in `Bosses.fs` several hundred extra health.
@@ -460,6 +507,7 @@ This also fully explains the `createGrandMasterBerserker` row of §4.2 (43 µs /
   - The guardian's authored level stays `32` (the level 30–35 band `BalanceRegressionTests` and `StoryTutorialTests` lock) and still lands at `player.Level + 10`; the "≥12 roaming mobs" lock is why the tutorial keeps two per room rather than one.
   - Two seams moved with the policy: `TowerSession.rescaleFloorEnemies` gained `floorScalingFor` / `rescaleFloorEnemiesWith`, and `TowerDisplay`'s minimap rewind now passes `state.IsStoryMode`. 546 tests passing, 0 warnings.
 - [x] **19. The opening floor fields a pair per chamber, not a pack — APPLIED this session.** Reported from play: "starting off surrounded by 6 Slag Hounds". Six is a chamber's four-to-five `grind_mob_` residents plus the pursuers that `reinforceFromPursuit` walks into the fight; `--run-sim` cannot see it because the sweep models at most four attackers and never chains adjacent chambers. `TowerGenerator` now keys `targetCount` on `floorNumber <= 1 then 2`, so both the story tutorial and the tower's prologue chamber open at two. Floor 1 is already exempt from every density lock (`EnemyDensityTests` and `BalanceRegressionTests` both start at floor 2), and story floors 2+ keep the deeper curve. 546 tests passing, 0 warnings.
+- [x] **20. Prowess, Poise and Asymmetric Tempo Redesign (ADR 0009)**: All 8 core pillars designed, implemented, tested, and verified across all tiers and swarm tests. 555 tests passing cleanly across 3 test projects with 0 warnings. Active Prowess attacks and Focus retired; Prowess and Poise converted to passive reading and determining factors; dynamic Vor/Nach active defenses (`FortitudeGuard`, `ReflexSlip`, `ResolveAnchor`, `IntuitionPerception`); Pain Shock tests on $\ge 15\%$ damage; status strain debuffs at $\ge 75$ with decisive collapse at 100; non-humanoid fallback; and bestiary familiarity curve (`25 -> 5 -> 3 -> 2 -> 1`). OpenLore decisions `c5838dca`, `d2e94057`, `6f3c46db`, `f2bfed90`.
 
 ---
 
