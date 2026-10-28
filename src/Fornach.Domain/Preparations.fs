@@ -198,11 +198,25 @@ type ProgressionProfile = {
   Class: CharacterClass
   PrimaryStat: int
   Preparations: PreparationSlot list
-  /// Kills per defeated enemy species (keyed by the enemy's display name), capped by the reader.
+  /// Kills per defeated enemy species (keyed by canonical species name), capped by the reader.
   Mastery: Map<string, int>
+  /// Species-specific familiarity experience points (keyed by canonical species name, stripped of Lv.N prefix).
+  BestiaryKnowledge: Map<string, int>
 } with
   /// Preparation capacity: strictly limited to 2 uses per encounter
   static member CalculateMaxPrepUses (_primaryStat: int) : int = 2
+
+  /// Normalizes an enemy display name into a canonical species name by stripping level prefixes (e.g. "Lv.1 Forest Wolf" -> "Forest Wolf").
+  static member NormalizeSpeciesName (name: string) : string =
+    if System.String.IsNullOrWhiteSpace(name) then ""
+    else
+      let trimmed = name.Trim()
+      if trimmed.StartsWith("Lv.", StringComparison.OrdinalIgnoreCase) then
+        match trimmed.IndexOf(' ') with
+        | -1 -> trimmed
+        | idx -> trimmed.Substring(idx + 1).Trim()
+      else
+        trimmed
 
   /// Creates a standard progression profile with replenished class preparations based on primary stat.
   /// Generic NPC classes do not receive preparation uses or slots.
@@ -218,29 +232,35 @@ type ProgressionProfile = {
       Class = cls
       PrimaryStat = primaryStat
       Preparations = slots
-      Mastery = Map.empty }
+      Mastery = Map.empty
+      BestiaryKnowledge = Map.empty }
 
   /// Creates profile with estimated primary stat for level
   static member create (cls: CharacterClass) (level: int) : ProgressionProfile =
     let estimatedPrimaryStat = 45 + (Math.Max(1, level) - 1) * 4
     ProgressionProfile.createWithStat cls level estimatedPrimaryStat
 
-  /// Calculates Prowess gain for an encounter based on prior encounters with this species
-  /// (ADR 0009: 25 -> 5 -> 3 -> 2 -> 1 uncapped).
-  static member ProwessGainForEncounter (priorEncounters: int) : int =
+  /// Calculates species familiarity bonus gain for an encounter based on prior encounters with this species
+  /// (5 -> 3 -> 1 -> 1 -> 1...).
+  static member SpeciesExperienceForEncounter (priorEncounters: int) : int =
     match priorEncounters with
-    | 0 -> 25
-    | 1 -> 5
-    | 2 -> 3
-    | 3 -> 2
+    | 0 -> 5
+    | 1 -> 3
     | _ -> 1
 
-  /// Records an encounter with an enemy species, returning the updated profile and the Prowess gained
+  /// Legacy helper for backwards compatibility
+  static member ProwessGainForEncounter (priorEncounters: int) : int =
+    ProgressionProfile.SpeciesExperienceForEncounter priorEncounters
+
+  /// Records an encounter with an enemy species, returning the updated profile and the species experience gained
   member this.RecordBestiaryEncounter (species: string) : ProgressionProfile * int =
-    let prior = this.Mastery |> Map.tryFind species |> Option.defaultValue 0
-    let gain = ProgressionProfile.ProwessGainForEncounter prior
-    let updatedMastery = this.Mastery.Add(species, prior + 1)
-    ({ this with Mastery = updatedMastery }, gain)
+    let canonicalSpecies = ProgressionProfile.NormalizeSpeciesName species
+    let prior = this.Mastery |> Map.tryFind canonicalSpecies |> Option.defaultValue 0
+    let gain = ProgressionProfile.SpeciesExperienceForEncounter prior
+    let priorExp = this.BestiaryKnowledge |> Map.tryFind canonicalSpecies |> Option.defaultValue 0
+    let updatedMastery = this.Mastery.Add(canonicalSpecies, prior + 1)
+    let updatedKnowledge = this.BestiaryKnowledge.Add(canonicalSpecies, priorExp + gain)
+    ({ this with Mastery = updatedMastery; BestiaryKnowledge = updatedKnowledge }, gain)
 
   /// Experience required to advance from the given level to the next (uncapped linear curve).
   static member ExperienceForNextLevel (level: int) : int =

@@ -4,7 +4,8 @@ open Xunit
 open Fornach.Domain
 
 /// `Combatant.growFromEncounter` implements ADR 0009 bestiary familiarity growth:
-/// Prowess rises by 25 -> 5 -> 3 -> 2 -> 1 uncapped per species encounter.
+/// Global Prowess/Acumen rises strictly by +1 per encounter.
+/// Species-specific familiarity experience is tracked separately in BestiaryKnowledge (5 -> 3 -> 1 -> 1...).
 /// Poise rises by +1 per survived encounter, and each mental defence gains +1.
 module EncounterGrowthTests =
 
@@ -13,53 +14,66 @@ module EncounterGrowthTests =
   let private foe (cls: CharacterClass) (tier: CombatTier) = TierFactory.createClassTier cls tier
 
   [<Fact>]
-  let ``a won fight raises Prowess by 25 on first encounter and Poise by 1`` () =
+  let ``a won fight raises Prowess by 1 globally, Poise by 1, and records 5 species familiarity`` () =
     let before = TierFactory.createClassTier CharacterClass.Fighter CombatTier.Master
     let pack = [ foe CharacterClass.Warrior CombatTier.Novice ]
+    let foeSpecies = ProgressionProfile.NormalizeSpeciesName (List.head pack).Name
     let grown = Combatant.growFromEncounter pack before
 
-    Assert.Equal(statOf StatId.Prowess before + 25, statOf StatId.Prowess grown)
+    Assert.Equal(statOf StatId.Prowess before + 1, statOf StatId.Prowess grown)
     Assert.Equal(statOf StatId.Poise before + 1, statOf StatId.Poise grown)
+    let knowledge = grown.Progression.BestiaryKnowledge |> Map.tryFind foeSpecies |> Option.defaultValue 0
+    Assert.Equal(5, knowledge)
 
   [<Fact>]
-  let ``Prowess encounters diminish from 25 to 5, 3, 2, and 1 uncapped`` () =
+  let ``Bestiary familiarity encounters diminish from 5 to 3 and 1 uncapped while global Prowess rises by 1 per fight`` () =
     let before = TierFactory.createClassTier CharacterClass.Fighter CombatTier.Veteran
     let enemy = foe CharacterClass.Warrior CombatTier.Novice
+    let foeSpecies = ProgressionProfile.NormalizeSpeciesName enemy.Name
 
-    // Encounter 1: +25
+    // Encounter 1: Global +1, Familiarity 5
     let e1 = Combatant.growFromEncounter [ enemy ] before
-    Assert.Equal(statOf StatId.Prowess before + 25, statOf StatId.Prowess e1)
+    Assert.Equal(statOf StatId.Prowess before + 1, statOf StatId.Prowess e1)
+    Assert.Equal(5, e1.Progression.BestiaryKnowledge.[foeSpecies])
 
-    // Encounter 2: +5
+    // Encounter 2: Global +2, Familiarity 5 + 3 = 8
     let e2 = Combatant.growFromEncounter [ enemy ] e1
-    Assert.Equal(statOf StatId.Prowess e1 + 5, statOf StatId.Prowess e2)
+    Assert.Equal(statOf StatId.Prowess before + 2, statOf StatId.Prowess e2)
+    Assert.Equal(8, e2.Progression.BestiaryKnowledge.[foeSpecies])
 
-    // Encounter 3: +3
+    // Encounter 3: Global +3, Familiarity 8 + 1 = 9
     let e3 = Combatant.growFromEncounter [ enemy ] e2
-    Assert.Equal(statOf StatId.Prowess e2 + 3, statOf StatId.Prowess e3)
+    Assert.Equal(statOf StatId.Prowess before + 3, statOf StatId.Prowess e3)
+    Assert.Equal(9, e3.Progression.BestiaryKnowledge.[foeSpecies])
 
-    // Encounter 4: +2
+    // Encounter 4: Global +4, Familiarity 9 + 1 = 10
     let e4 = Combatant.growFromEncounter [ enemy ] e3
-    Assert.Equal(statOf StatId.Prowess e3 + 2, statOf StatId.Prowess e4)
+    Assert.Equal(statOf StatId.Prowess before + 4, statOf StatId.Prowess e4)
+    Assert.Equal(10, e4.Progression.BestiaryKnowledge.[foeSpecies])
 
-    // Encounter 5+: +1 uncapped
+    // Encounter 5+: Global +5, Familiarity 10 + 1 = 11
     let e5 = Combatant.growFromEncounter [ enemy ] e4
-    Assert.Equal(statOf StatId.Prowess e4 + 1, statOf StatId.Prowess e5)
+    Assert.Equal(statOf StatId.Prowess before + 5, statOf StatId.Prowess e5)
+    Assert.Equal(11, e5.Progression.BestiaryKnowledge.[foeSpecies])
 
     let e6 = Combatant.growFromEncounter [ enemy ] e5
-    Assert.Equal(statOf StatId.Prowess e5 + 1, statOf StatId.Prowess e6)
+    Assert.Equal(statOf StatId.Prowess before + 6, statOf StatId.Prowess e6)
+    Assert.Equal(12, e6.Progression.BestiaryKnowledge.[foeSpecies])
 
   [<Fact>]
-  let ``multiple different species in a pack award their individual familiarity grants`` () =
+  let ``multiple different species in a pack award their individual familiarity grants while global Prowess rises by 1`` () =
     let before = TierFactory.createClassTier CharacterClass.Fighter CombatTier.Master
 
-    let pack =
-      [ foe CharacterClass.Warrior CombatTier.GrandMaster
-        foe CharacterClass.Rogue CombatTier.GrandMaster ]
+    let foe1 = foe CharacterClass.Warrior CombatTier.GrandMaster
+    let foe2 = foe CharacterClass.Rogue CombatTier.GrandMaster
+    let sp1 = ProgressionProfile.NormalizeSpeciesName foe1.Name
+    let sp2 = ProgressionProfile.NormalizeSpeciesName foe2.Name
+    let pack = [ foe1; foe2 ]
 
-    // First time fighting both Warrior and Rogue: 25 + 25 = 50 Prowess
     let grown = Combatant.growFromEncounter pack before
-    Assert.Equal(statOf StatId.Prowess before + 50, statOf StatId.Prowess grown)
+    Assert.Equal(statOf StatId.Prowess before + 1, statOf StatId.Prowess grown)
+    Assert.Equal(5, grown.Progression.BestiaryKnowledge.[sp1])
+    Assert.Equal(5, grown.Progression.BestiaryKnowledge.[sp2])
 
   [<Fact>]
   let ``both player classes harden Resolve, Intuition and Composure, and neither grows the other's tick`` () =
@@ -76,8 +90,8 @@ module EncounterGrowthTests =
     Assert.Equal(statOf StatId.Finesse fighter, statOf StatId.Finesse grownFighter)
 
     let grownMage = Combatant.growFromEncounter novices mage
-    // Mage gains Acumen (25 on first encounter) and Composure (1 + 1 = 2)
-    Assert.Equal(statOf StatId.Acumen mage + 25, statOf StatId.Acumen grownMage)
+    // Mage gains Acumen (+1 per encounter) and Composure (1 + 1 = 2)
+    Assert.Equal(statOf StatId.Acumen mage + 1, statOf StatId.Acumen grownMage)
     Assert.Equal(statOf StatId.Composure mage + 2, statOf StatId.Composure grownMage)
     Assert.Equal(statOf StatId.Resolve mage + 1, statOf StatId.Resolve grownMage)
     Assert.Equal(statOf StatId.Intuition mage + 1, statOf StatId.Intuition grownMage)
@@ -91,12 +105,20 @@ module EncounterGrowthTests =
     let before = TierFactory.createClassTier CharacterClass.Warrior CombatTier.Master
     let grown = Combatant.growFromEncounter [ foe CharacterClass.Warrior CombatTier.Novice ] before
 
-    Assert.Equal(statOf StatId.Prowess before + 25, statOf StatId.Prowess grown)
+    Assert.Equal(statOf StatId.Prowess before + 1, statOf StatId.Prowess grown)
     Assert.Equal(statOf StatId.Poise before + 1, statOf StatId.Poise grown)
     Assert.Equal(statOf StatId.Resolve before + 1, statOf StatId.Resolve grown)
     Assert.Equal(statOf StatId.Composure before + 1, statOf StatId.Composure grown)
     Assert.Equal(statOf StatId.Force before, statOf StatId.Force grown)
     Assert.Equal(statOf StatId.Finesse before, statOf StatId.Finesse grown)
+
+  [<Fact>]
+  let ``NormalizeSpeciesName strips level prefixes correctly for bestiary grouping`` () =
+    Assert.Equal("Forest Wolf", ProgressionProfile.NormalizeSpeciesName "Lv.1 Forest Wolf")
+    Assert.Equal("Forest Wolf", ProgressionProfile.NormalizeSpeciesName "Lv.35 Forest Wolf")
+    Assert.Equal("Bandit Leader", ProgressionProfile.NormalizeSpeciesName "Bandit Leader")
+    Assert.Equal("Bandit Leader", ProgressionProfile.NormalizeSpeciesName "Lv.11 Bandit Leader")
+    Assert.Equal("", ProgressionProfile.NormalizeSpeciesName "")
 
   [<Fact>]
   let ``grantBossPoise awards milestone +3 Poise`` () =

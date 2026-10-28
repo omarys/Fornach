@@ -1172,8 +1172,6 @@ module TowerSession =
         for lvl in profile.Level .. targetLevel - 1 do
           needed <- needed + ProgressionProfile.ExperienceForNextLevel lvl
         newXp <- baseXp + max 0 needed
-      | None when state.IsStoryMode && state.CurrentFloor.FloorNumber = 1 ->
-        newXp <- baseXp + 2500
       | None ->
         newXp <- baseXp
       // Look up monster loot in Bestiary

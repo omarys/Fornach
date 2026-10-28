@@ -738,3 +738,30 @@ The system SHALL validate NarrativeState according to these rules:
 - **GIVEN** A NarrativeState containing awarded memories
 - **WHEN** HasMemory is called with an existing memory ID
 - **THEN** Returns true indicating the memory has been unlocked
+
+### Requirement: IntroductionOfCollapsedecisiveWinCondition
+
+The system SHALL support decisive collapse resolution as a distinct win condition containing the associated collapse reason.
+
+> Decision recorded: f2bfed90
+> Date: 2026-10-28
+
+#### Scenario: The decision requirement is enforced
+
+- **GIVEN** approved decision `f2bfed90`
+- **WHEN** the affected behavior is evaluated
+- **THEN** The system SHALL support decisive collapse resolution as a distinct win condition containing the associated collapse reason.
+
+## Decisions
+
+### Introduction of CollapseDecisive Win Condition
+
+**Status:** Approved
+**Date:** 2026-10-28
+**ID:** f2bfed90
+
+
+
+Enables combat and simulation resolutions to terminate decisively due to state collapse while capturing the underlying reason.
+
+**Consequences:** All match expressions on WinCondition across the module must handle the CollapseDecisive variant with its associated CollapseReason payload.

@@ -405,18 +405,20 @@ type Combatant =
     | Vector.Discipline -> { c with Focus = Math.Max(0, c.Focus - count) }
 
   /// Permanent growth on a won or survived encounter (ADR 0009):
-  /// Prowess grows based on species familiarity (25 -> 5 -> 3 -> 2 -> 1 uncapped),
-  /// Poise grows by +1 per survived encounter, and mental defences gain +1.
+  /// Global Prowess/Acumen grows by +1 per encounter, Poise/Composure grows by +1 per survived encounter,
+  /// mental defences gain +1, and species familiarity is recorded in ProgressionProfile.BestiaryKnowledge
+  /// (5 -> 3 -> 1 -> 1...).
   static member growFromEncounter (foes: Combatant list) (c: Combatant) =
     let mentalDefences =
       [ StatId.Resolve, 1; StatId.Intuition, 1; StatId.Composure, 1 ]
 
-    let updatedProg, prowessGain =
+    let updatedProg =
       foes
-      |> List.fold (fun (p: ProgressionProfile, totalProwess) foe ->
-          let pNext, gain = p.RecordBestiaryEncounter foe.Name
-          pNext, totalProwess + gain) (c.Progression, 0)
+      |> List.fold (fun (p: ProgressionProfile) foe ->
+          let pNext, _ = p.RecordBestiaryEncounter foe.Name
+          pNext) c.Progression
 
+    let prowessGain = 1
     let poiseGain = 1
 
     let disciplinePair =

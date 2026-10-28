@@ -293,7 +293,11 @@ This document provides a comprehensive handoff of the recent combat balance tuni
   - Failure inflicts **Stagger** (action loss / turn skipped) and a meter surge (**+25 Overwhelm**, **+15 Exhaustion**). Guarded in `PainShockTests.fs`.
 - **Diegetic Bestiary Knowledge Progression**:
   - Replaced legacy flat `masteryMultiplier` (+2% damage dealt / -1% taken per kill) with diegetic encounter familiarity.
-  - Defeating or surviving species encounters grants diminishing Prowess: **+25** on first encounter, then **+5, +3, +2, +1 floor** uncapped thereafter, plus **+1 Poise** per survived encounter. Tracked in `ProgressionProfile.BestiaryKnowledge` and `EncounterCounts`.
+  - Global Prowess gains strictly **+1** per encounter (matching Poise at **+1** per survived encounter, plus **+1** mental defenses: Resolve, Intuition, Composure).
+  - Familiarity against specific enemy species is tracked separately per canonical species name in `ProgressionProfile.BestiaryKnowledge` with diminishing returns: **+5** on first encounter, **+3** on second, and **+1** thereafter.
+  - Normalized species names strip level prefixes (e.g. `"Lv.1 Forest Wolf"` -> `"Forest Wolf"`) so multi-level encounters contribute to a unified bestiary record.
+  - In combat, species knowledge applies as a targeted bonus to attacker Prowess/Acumen in `offDisciplineBonus` and tactical scrutiny in `TacticalAssessment.fs`, preserving baseline attribute integrity.
+  - Decoy interception and reactive disarm properly invoke `resolveWhiffTempo`, transferring the Vor to the defender.
   - Non-humanoid beasts compensate for 0 Prowess/Poise with higher baseline Force/Finesse.
   - Lone wounded beasts (<30% HP, player >70% HP, alone) attempt to limp away; players can choose to **Spare** (retaining full bestiary knowledge gain) or **Execute**.
 - **Status Meter Primacy & Strain Debuffs**:

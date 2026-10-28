@@ -1231,7 +1231,11 @@ module ActionResolver =
         off, def, mult, disp, upd
 
       | ProwessStrike isInvitational ->
-        let off = currentActor.GetCombatStat Prowess
+        let speciesBonus =
+          currentActor.Progression.BestiaryKnowledge
+          |> Map.tryFind (ProgressionProfile.NormalizeSpeciesName currentTarget.Name)
+          |> Option.defaultValue 0
+        let off = currentActor.GetCombatStat Prowess + speciesBonus
         let def = currentTarget.GetGuard(plane, true)
         let mult = strikeMultiplier atk stackSpend currentActor.Stance
         let ratio = float off / Math.Max(1.0, float def)
@@ -1276,7 +1280,11 @@ module ActionResolver =
 
 
       | CalculatedFlawStrike ->
-        let off = currentActor.GetCombatStat Prowess
+        let speciesBonus =
+          currentActor.Progression.BestiaryKnowledge
+          |> Map.tryFind (ProgressionProfile.NormalizeSpeciesName currentTarget.Name)
+          |> Option.defaultValue 0
+        let off = currentActor.GetCombatStat Prowess + speciesBonus
         let def = currentTarget.GetGuard(plane, true)
         let disparity = Math.Max(0, off - def)
         let mult = strikeMultiplier atk stackSpend currentActor.Stance
@@ -1290,7 +1298,11 @@ module ActionResolver =
         off, def, mult, disp, upd
 
       | MasterfulDisarm _ ->
-        let off = currentActor.GetCombatStat Prowess
+        let speciesBonus =
+          currentActor.Progression.BestiaryKnowledge
+          |> Map.tryFind (ProgressionProfile.NormalizeSpeciesName currentTarget.Name)
+          |> Option.defaultValue 0
+        let off = currentActor.GetCombatStat Prowess + speciesBonus
         let def = currentTarget.GetGuard(plane, true)
         let disp = fun _ -> Some DisarmOrLimbDisable
 
@@ -1668,7 +1680,11 @@ module ActionResolver =
       let atkReflex = currentActor.GetStat Reflex
       let agilityDelta = defFinesse - atkReflex
 
-      let defProwess = currentTarget.GetStat Prowess
+      let defSpeciesBonus =
+        currentTarget.Progression.BestiaryKnowledge
+        |> Map.tryFind (ProgressionProfile.NormalizeSpeciesName currentActor.Name)
+        |> Option.defaultValue 0
+      let defProwess = currentTarget.GetStat Prowess + defSpeciesBonus
       let atkPoise = currentActor.GetStat Poise
       let disciplineDelta = defProwess - atkPoise
 
@@ -1976,12 +1992,21 @@ module ActionResolver =
           attackDamageMitigation <- Math.Min(attackDamageMitigation, 0.70)
 
     if decoyIntercepted then
-      let finalActor = Combatant.evaluateCollapse currentActor
-      let finalTarget = Combatant.evaluateCollapse currentTarget
+      let yielder, taker, moved = resolveWhiffTempo currentActor currentTarget
+      let interceptEvents =
+        if moved then
+          [ CombatEvent.TempoShifted(
+              taker.Id,
+              yielder.Id,
+              sprintf "%s's decoy absorbed the blow and seized the Vor." taker.Name
+            ) ]
+        else []
+      let finalActor = Combatant.evaluateCollapse yielder
+      let finalTarget = Combatant.evaluateCollapse taker
       let finalActorWithFluid, fluidEvts = applyFluidTransition finalActor
       { Actor = finalActorWithFluid
         Target = finalTarget
-        Events = events @ fluidEvts
+        Events = events @ interceptEvents @ fluidEvts
         Contest = None }
     else
 
@@ -1995,7 +2020,11 @@ module ActionResolver =
     if plane = Physical && defenderStacks > 0 then
       let counterChance = Math.Min(70, defenderStacks * 14)
       if roller 1 100 <= counterChance then
-        let defProwess = currentTarget.GetStat Prowess
+        let defSpeciesBonus =
+          currentTarget.Progression.BestiaryKnowledge
+          |> Map.tryFind (ProgressionProfile.NormalizeSpeciesName currentActor.Name)
+          |> Option.defaultValue 0
+        let defProwess = currentTarget.GetStat Prowess + defSpeciesBonus
         let atkPoise = if currentActor.IsHumanoid then currentActor.GetStat Poise else currentActor.GetStat Fortitude
         let isDisarmPossible = currentActor.IsHumanoid && defProwess >= int (Math.Round(float atkPoise * 0.75))
         let requiredStacksForDisarm =
@@ -2014,7 +2043,7 @@ module ActionResolver =
           defenderDisarmedAttacker <- true
         else
           // Riposte counter: deals reactive damage using defender's Prowess
-          let riposteDmg = Math.Max(5, int (float (currentTarget.GetStat Prowess) * 0.75))
+          let riposteDmg = Math.Max(5, int (float defProwess * 0.75))
           currentActor <-
             { currentActor with
                 Health = currentActor.Health.ApplyDelta -riposteDmg }
@@ -2022,12 +2051,21 @@ module ActionResolver =
           events <- CombatEvent.RiposteExecuted(currentTarget.Id, currentActor.Id, riposteDmg) :: events
 
     if defenderDisarmedAttacker then
-      let finalActor = Combatant.evaluateCollapse currentActor
-      let finalTarget = Combatant.evaluateCollapse currentTarget
+      let yielder, taker, moved = resolveWhiffTempo currentActor currentTarget
+      let disarmTempoEvents =
+        if moved then
+          [ CombatEvent.TempoShifted(
+              taker.Id,
+              yielder.Id,
+              sprintf "%s disarmed the attack and seized the Vor." taker.Name
+            ) ]
+        else []
+      let finalActor = Combatant.evaluateCollapse yielder
+      let finalTarget = Combatant.evaluateCollapse taker
       let finalActorWithFluid, fluidEvts = applyFluidTransition finalActor
       { Actor = finalActorWithFluid
         Target = finalTarget
-        Events = events @ fluidEvts
+        Events = events @ disarmTempoEvents @ fluidEvts
         Contest = None }
     else
 
@@ -2062,15 +2100,21 @@ module ActionResolver =
     // Passive Discipline Bonuses (Prowess to Offense, Poise to Defense) (ADR 0009)
     // Discipline advantage reflects out-reading / out-poising the opponent's martial discipline.
     let offDisciplineBonus, defDisciplineBonus =
+      let canonicalTarget = ProgressionProfile.NormalizeSpeciesName currentTarget.Name
+      let speciesBonus =
+        currentActor.Progression.BestiaryKnowledge
+        |> Map.tryFind canonicalTarget
+        |> Option.defaultValue 0
+
       if plane = Physical then
-        let atkProwess = if currentActor.IsHumanoid then currentActor.GetCombatStat Prowess else 0
+        let atkProwess = (if currentActor.IsHumanoid then currentActor.GetCombatStat Prowess else 0) + speciesBonus
         let defPoise = if currentTarget.IsHumanoid then currentTarget.GetCombatStat Poise else 0
         let disparity = atkProwess - defPoise
         let offBonus = if disparity > 0 then Math.Min(int (float offStat * 0.25), int (Math.Round(float disparity * 0.25))) else 0
         let defBonus = if priorDefenses = 0 && disparity < 0 then Math.Min(int (float defStat * 0.25), int (Math.Round(float (-disparity) * 0.25))) else 0
         offBonus, defBonus
       elif plane = Mental then
-        let atkAcumen = if currentActor.IsHumanoid then currentActor.GetCombatStat Acumen else 0
+        let atkAcumen = (if currentActor.IsHumanoid then currentActor.GetCombatStat Acumen else 0) + speciesBonus
         let defComposure = if currentTarget.IsHumanoid then currentTarget.GetCombatStat Composure else 0
         let disparity = atkAcumen - defComposure
         let offBonus = if disparity > 0 then Math.Min(int (float offStat * 0.25), int (Math.Round(float disparity * 0.25))) else 0

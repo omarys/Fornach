@@ -103,6 +103,26 @@ module ProgressionTests =
     | None -> failwith "Floor 1 generated no enemies to defeat"
 
   [<Fact>]
+  let ``defeating a normal mob on story floor 1 awards standard baseXp without geyser`` () =
+    let player = TierFactory.createClassLevel CharacterClass.Fighter 1
+    let state = TowerSession.initSessionWithMode player 42 1 true
+    let enemyOpt =
+      state.CurrentFloor.Entities
+      |> Map.toList
+      |> List.tryPick (fun (_, ent) ->
+        match ent with
+        | EntityEnemy e when not e.IsDefeated && not e.IsBoss -> Some e
+        | _ -> None)
+
+    match enemyOpt with
+    | Some enemy ->
+      let after = TowerSession.resolveEnemyDefeat enemy.Id state
+      let expectedXp = enemy.Combatant.Level * 10 + 25
+      Assert.Equal(expectedXp, after.Player.Progression.CurrentXP)
+      Assert.Equal(1, after.Player.Level)
+    | None -> failwith "Floor 1 generated no non-boss enemies"
+
+  [<Fact>]
   let ``defeating an enemy records mastery of its species`` () =
     let player = TierFactory.createClassLevel CharacterClass.Fighter 32
     let state = TowerSession.initSessionWithMode player 99 2 true

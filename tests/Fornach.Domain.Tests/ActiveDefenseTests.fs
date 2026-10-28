@@ -181,3 +181,90 @@ module ActiveDefenseTests =
       outcomeAgility.Events
       |> List.tryPick (function CombatEvent.DefenseAffinityResolved (_, _, isCounter, _) -> Some isCounter | _ -> None)
     Assert.Equal(Some true, agilAffinity)
+
+  [<Fact>]
+  let ``Decoy interception absorbs blow and yields Vor to defender`` () =
+    let roller min max = if max = 100 then 1 else 3
+    let attacker =
+      TierFactory.createClassLevel CharacterClass.Warrior 1
+      |> fun c -> { c with Tempo = TacticalTiming.Vor }
+    let defender =
+      TierFactory.createClassLevel CharacterClass.Mage 1
+      |> fun c -> { c with Tempo = TacticalTiming.Nach; MirrorClones = 1 }
+
+    let outcome =
+      ActionResolver.resolveExWithDefense
+        roller
+        (StandardAttack (ForceStrike false))
+        None
+        attacker
+        defender
+        0
+
+    // Defender was protected by decoy
+    Assert.Equal(0, outcome.Target.MirrorClones)
+    // Attacker must have yielded the Vor and defender seized it
+    Assert.True(outcome.Target.IsInVor, "Defender must seize Vor when decoy intercepts strike")
+    Assert.True(outcome.Actor.IsInNach, "Attacker must yield Vor when decoy intercepts strike")
+    let tempoEvent =
+      outcome.Events
+      |> List.tryPick (function CombatEvent.TempoShifted (taker, yielder, _) -> Some (taker, yielder) | _ -> None)
+    Assert.Equal(Some (defender.Id, attacker.Id), tempoEvent)
+
+  [<Fact>]
+  let ``Defender reactive disarm defuses attack and yields Vor to defender`` () =
+    // Roller returns 1 so 1d100 <= counterChance succeeds
+    let roller _min _max = 1
+    let attacker =
+      TierFactory.createClassLevel CharacterClass.Warrior 1
+      |> fun c -> { c with Tempo = TacticalTiming.Vor }
+    let defender =
+      TierFactory.createClassLevel CharacterClass.Fighter 10
+      |> fun c ->
+        { c with
+            Tempo = TacticalTiming.Nach
+            Momentum = 5
+            Stats = c.Stats.Modify(StatId.Prowess, 50) }
+
+    let outcome =
+      ActionResolver.resolveExWithDefense
+        roller
+        (StandardAttack (ForceStrike false))
+        None
+        attacker
+        defender
+        0
+
+    Assert.True(outcome.Target.IsInVor, "Defender must seize Vor on successful reactive disarm")
+    Assert.True(outcome.Actor.IsInNach, "Attacker must yield Vor on successful reactive disarm")
+    let disarmEvent =
+      outcome.Events
+      |> List.tryPick (function CombatEvent.DisarmExecuted _ -> Some true | _ -> None)
+    Assert.Equal(Some true, disarmEvent)
+
+  [<Fact>]
+  let ``BestiaryKnowledge adds targeted discipline bonus against matching enemy species`` () =
+    let roller _min _max = 50
+    let wolfTarget =
+      TierFactory.createClassLevel CharacterClass.Warrior 1
+      |> fun c -> { c with Name = "Lv.1 Forest Wolf" }
+    let banditTarget =
+      TierFactory.createClassLevel CharacterClass.Warrior 1
+      |> fun c -> { c with Name = "Lv.1 Bandit" }
+
+    // Attacker with 0 Prowess but +20 BestiaryKnowledge against "Forest Wolf"
+    let attacker =
+      TierFactory.createClassLevel CharacterClass.Fighter 1
+      |> fun c ->
+        let prog = { c.Progression with BestiaryKnowledge = Map [ "Forest Wolf", 20 ] }
+        { c with Progression = prog }
+
+    // Scrutiny against Forest Wolf includes the +20 bonus
+    let scrutinyWolf = TacticalAssessment.calculateEffectiveScrutinyAgainst wolfTarget attacker
+    let scrutinyBandit = TacticalAssessment.calculateEffectiveScrutinyAgainst banditTarget attacker
+    Assert.Equal(scrutinyBandit + 20, scrutinyWolf)
+
+    // Assessment insight is heightened against known species
+    let assessWolf = attacker.AssessTarget wolfTarget
+    let assessBandit = attacker.AssessTarget banditTarget
+    Assert.True(assessWolf.EffectiveAcumen > assessBandit.EffectiveAcumen)

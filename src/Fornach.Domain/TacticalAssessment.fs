@@ -51,6 +51,15 @@ module TacticalAssessment =
     let studyBonus = observer.Focus * 15
     Math.Max(1, acumen + (intuition / 4) + studyBonus)
 
+  /// Calculates effective scrutiny for an observer against a specific target, including bestiary familiarity:
+  let calculateEffectiveScrutinyAgainst (target: Combatant) (observer: Combatant) : int =
+    let baseScrutiny = calculateEffectiveScrutiny observer
+    let speciesBonus =
+      observer.Progression.BestiaryKnowledge
+      |> Map.tryFind (ProgressionProfile.NormalizeSpeciesName target.Name)
+      |> Option.defaultValue 0
+    baseScrutiny + speciesBonus
+
   /// Calculates effective concealing composure for a target
   let calculateEffectiveMasking (target: Combatant) : int =
     Math.Max(1, target.GetStat StatId.Composure)
@@ -165,7 +174,7 @@ module TacticalAssessment =
 
   /// Evaluates an observer's tactical assessment of a target combatant
   let assess (observer: Combatant) (target: Combatant) : TacticalAssessment =
-    let effAcumen = calculateEffectiveScrutiny observer
+    let effAcumen = calculateEffectiveScrutinyAgainst target observer
     let effMasking = calculateEffectiveMasking target
     let ratio = float effAcumen / float effMasking
 
