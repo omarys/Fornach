@@ -68,3 +68,31 @@ let ``roaming density beats the old ceiling on every floor past the tutorial`` (
       let average = counts |> List.averageBy float
       let oldAverage = 3.0 + float floorNumber / 2.0 + 1.0
       Assert.True(average > oldAverage, sprintf "floor %d (story %b): %.1f mobs, old curve averaged %.1f" floorNumber story average oldAverage)
+
+[<Fact>]
+let ``entrance room past floor 1 contains no roaming mobs`` () =
+  for story in [ false; true ] do
+    for floorNumber in [ 2; 3; 4; 5; 6; 7 ] do
+      for seed in [ 1; 7; 42; 999; 31337 ] do
+        let floor = TowerGenerator.generateFloorWithMode seed floorNumber story
+        let spawn = floor.SpawnLocation
+        let nearSpawnMobs =
+          placesOf floor (fun e ->
+            match e with
+            | EntityEnemy enemy when not enemy.IsBoss -> true
+            | _ -> false)
+          |> List.filter (fun pt -> abs (pt.X - spawn.X) <= 4 && abs (pt.Y - spawn.Y) <= 4)
+        Assert.Empty(nearSpawnMobs)
+
+[<Fact>]
+let ``story stage 2 fields controlled packs of 2 to 3 mobs per occupied chamber`` () =
+  for seed in [ 1; 7; 42; 999; 31337 ] do
+    let floor = TowerGenerator.generateFloorWithMode seed 2 true
+    let grindMobs =
+      floor.Entities
+      |> Map.values
+      |> Seq.choose (function
+        | EntityEnemy e when e.Id.StartsWith "grind_mob_" -> Some e
+        | _ -> None)
+      |> Seq.toList
+    Assert.True(grindMobs.Length >= 14 && grindMobs.Length <= 30, sprintf "seed %d: expected 14-30 mobs across stage 2, got %d" seed grindMobs.Length)

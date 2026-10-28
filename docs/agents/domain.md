@@ -298,6 +298,20 @@ This document provides a comprehensive handoff of the recent combat balance tuni
   - Normalized species names strip level prefixes (e.g. `"Lv.1 Forest Wolf"` -> `"Forest Wolf"`) so multi-level encounters contribute to a unified bestiary record.
   - In combat, species knowledge applies as a targeted bonus to attacker Prowess/Acumen in `offDisciplineBonus` and tactical scrutiny in `TacticalAssessment.fs`, preserving baseline attribute integrity.
   - Decoy interception and reactive disarm properly invoke `resolveWhiffTempo`, transferring the Vor to the defender.
+
+### AB. Safe Entrance Plazas & Controlled Group Combat Swarm Density (ADR 0005)
+- **Safe Entrance Plazas (Floor 2+)**:
+  - `spawnPlaza` on Floor 2+ is designated as a safe arrival threshold: 0 roaming enemies spawn directly in the entrance chamber.
+  - The player arrives safely at the stairway landing, can interact with thematic staging NPCs (e.g., Quarry Foreman), and initiates engagement intentionally when crossing into adjacent chambers.
+- **Controlled Story Chamber Scaling**:
+  - Replaced the abrupt jump from 2 mobs (Floor 1) to 5–6 mobs (Floor 2).
+  - Story Floor 2 (The Obsidian Quarry Plazas / Guilt stage) fields controlled packs of 2 to 3 mobs per occupied chamber (`2 + rng(0, 2)`).
+  - Floors 3–4 field 3 to 4 mobs; deeper floors gradually scale up to full saturation.
+- **Group Combat Frontline Caps & Active Defense Integration**:
+  - `packPhase` caps simultaneous melee attackers per round to at most **4** (or **3** when `BastionZoneControl` is active).
+  - Reinforcements joining from pursuit are throttled when the active melee frontline already has 4 living combatants, preventing cascading swarms during longer duels.
+  - Interactive group combat in `Program.fs` now integrates the player's chosen `ActiveDefense` counter (e.g. `FortitudeGuard`, `ReflexSlip`) against incoming attacks via `resolveExWithDefense`, allowing clean affinity counters, 25% damage mitigation, and *Vor* seizure from the Nach.
+  - Disengage parting strikes are capped at 4 frontline attackers.
   - Non-humanoid beasts compensate for 0 Prowess/Poise with higher baseline Force/Finesse.
   - Lone wounded beasts (<30% HP, player >70% HP, alone) attempt to limp away; players can choose to **Spare** (retaining full bestiary knowledge gain) or **Execute**.
 - **Status Meter Primacy & Strain Debuffs**:

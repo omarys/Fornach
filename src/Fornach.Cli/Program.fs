@@ -1097,12 +1097,18 @@ module Program =
     let mutable turnNum = 1
     // The foe whose technique the player interrupted this round; its strike defuses into a recovery.
     let mutable interruptedTarget : CombatantId option = None
+    // Active defense chosen by the player this round to counter the primary incoming attack.
+    let mutable playerActiveDefenseOpt : DefenseClassification option = None
 
-    // The pack's phase: each surviving foe that can still reach the player strikes, capped at the
-    // eight surrounding tiles. Shared rather than inlined because it runs before the player's action
-    // when the pack holds the Vor, and after it when the player does.
+    // The pack's phase: each surviving frontline foe that can reach the player strikes.
+    // Capped at 3 with BastionZoneControl, or 4 normal frontline attackers, so tactical counterplay
+    // remains viable and the player cannot be hit by 8 attackers at once.
     let packPhase () =
-      for e in living () |> List.truncate 8 do
+      let maxPackSwings =
+        if currentPlayer.HasActivePreparation PreparationType.BastionZoneControl then 3
+        else 4
+
+      for e in living () |> List.truncate maxPackSwings do
         if not combatOver then
           let playerBeforeTurn = currentPlayer
           let isStaggered = Some e.Combatant.Id = interruptedTarget
@@ -1110,6 +1116,12 @@ module Program =
           let intent =
             if isStaggered then RecoveryAction SteadyForm
             else AI.chooseIntent e.Combatant currentPlayer
+          let defOpt =
+            if priorDefenses = 0 && currentPlayer.IsHumanoid then
+              match playerActiveDefenseOpt with
+              | Some def -> Some def
+              | None -> Some (AI.chooseActiveDefense currentPlayer e.Combatant)
+            else None
           let r =
             if isStaggered then
               AnsiConsole.MarkupLine(sprintf "\n[bold %s]⚡ %s is staggered from the technique interrupt! Attack defused![/]" Theme.Yellow e.Name)
@@ -1117,7 +1129,7 @@ module Program =
             elif floorNumber = 1 then
               ActionResolver.resolveWithoutLethal roller intent e.Combatant currentPlayer
             else
-              ActionResolver.resolveEx roller intent e.Combatant currentPlayer priorDefenses
+              ActionResolver.resolveExWithDefense roller intent defOpt e.Combatant currentPlayer priorDefenses
           CombatLogger.recordTurn session round turnNum (sprintf "%A" intent) e.Combatant playerBeforeTurn r
           turnNum <- turnNum + 1
           appendTurn (sprintf "Round %d — %s strikes %s — %s" round e.Name currentPlayer.Name (Display.intentLogLabel intent e.Combatant)) r.Events
@@ -1138,6 +1150,7 @@ module Program =
     while not combatOver && not (living ()).IsEmpty do
       priorDefenses <- 0
       interruptedTarget <- None
+      playerActiveDefenseOpt <- None
       renderGroupHud currentPlayer currentEnemies round (logLines ())
       let livingNow = living ()
       RuntimeLog.write (sprintf "group combat round %d: %d foe(s) standing" round livingNow.Length)
@@ -1171,10 +1184,10 @@ module Program =
           (fun () -> renderGroupHud currentPlayer currentEnemies round (logLines ()))
 
       if choice.Contains("Disengage") then
-        // Parting strikes from the living enemies that can reach you (eight surrounding tiles at most).
+        // Parting strikes from the frontline living enemies (at most 4).
         AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s breaks away, but the pack lashes out![/]" Theme.Yellow currentPlayer.Name)
         let mutable survived = true
-        for e in living () |> List.truncate 8 do
+        for e in living () |> List.truncate 4 do
           let intent = AI.chooseIntent e.Combatant currentPlayer
           let playerBeforeTurn = currentPlayer
           let r =
@@ -1196,6 +1209,11 @@ module Program =
           outcome <- TowerDisplay.GroupDuelOutcome.Defeated
         combatOver <- true
       else
+        let intent = parseActionChoice choice
+        match intent with
+        | ActiveDefense def -> playerActiveDefenseOpt <- Some def
+        | _ -> playerActiveDefenseOpt <- None
+
         // 3a. The pack opens when it holds the Vor and the player does not: it strikes before the
         // player's action, and its end-of-round answer is skipped so neither side strikes twice.
         let openedByPack = packHasVor ()
@@ -1205,7 +1223,6 @@ module Program =
 
         if not combatOver then
           // 3. Player action via the group-turn resolver (cleave/splash onto nearby foes)
-          let intent = parseActionChoice choice
           let otherLiving = livingNow |> List.filter (fun e -> e.Id <> target.Id) |> List.map (fun e -> e.Combatant)
           AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes %s...[/]" Theme.Green currentPlayer.Name choice)
           let playerBefore = currentPlayer
@@ -1247,18 +1264,19 @@ module Program =
           packPhase ()
 
       if not combatOver then
-        // Between rounds the pack may grow: pursuers keep closing and whoever reaches the player joins.
-        match reinforce with
-        | Some join ->
-          let before = currentEnemies.Length
-          let playerAfterJoin, enemiesAfterJoin = join currentPlayer currentEnemies
-          currentPlayer <- playerAfterJoin
-          currentEnemies <- enemiesAfterJoin
-          let joined = currentEnemies.Length - before
-          if joined > 0 then
-            RuntimeLog.write (sprintf "group combat round %d: %d reinforcement(s) joined" round joined)
-            AnsiConsole.MarkupLine(sprintf "\n[bold %s]%d more foe(s) close in and join the fight![/]" Theme.Pink joined)
-        | None -> ()
+        // Between rounds the pack may grow if the frontline is not saturated (< 4 active foes):
+        if (living ()).Length < 4 then
+          match reinforce with
+          | Some join ->
+            let before = currentEnemies.Length
+            let playerAfterJoin, enemiesAfterJoin = join currentPlayer currentEnemies
+            currentPlayer <- playerAfterJoin
+            currentEnemies <- enemiesAfterJoin
+            let joined = currentEnemies.Length - before
+            if joined > 0 then
+              RuntimeLog.write (sprintf "group combat round %d: %d reinforcement(s) joined" round joined)
+              AnsiConsole.MarkupLine(sprintf "\n[bold %s]%d more foe(s) close in and join the fight![/]" Theme.Pink joined)
+          | None -> ()
 
         AnsiConsole.WriteLine()
         AnsiConsole.Markup(sprintf "[%s]Press any key to proceed to next round...[/]" Theme.Comment)

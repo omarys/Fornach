@@ -742,13 +742,17 @@ module TowerGenerator =
 
     for roomIndex in 0 .. plazas.Length - 1 do
       let room = plazas.[roomIndex]
-      // Roaming density climbs with depth: 4-6 mobs per chamber on the shallow floors, saturating the
-      // ten mobOffsets by the deep ones. The opening floor answers with a pair instead: a level-1
-      // protagonist facing a chamber's four Slag Hounds plus whoever joins from the next chamber has
-      // no play (reported from play as "surrounded by 6 Slag Hounds"), and --run-sim's 98% floor-1
-      // clear only models four attackers at once, never the six real pursuit piles on.
+      // Entrance chambers past Floor 1 are safe arrival thresholds (e.g. Quarry Foreman staging area)
+      // and do not spawn roaming mob packs directly on top of the stairway landing.
+      // Roaming density climbs smoothly with depth: Floor 1 tutorial fields 2 mobs/room;
+      // Floor 2 (Quarry stage) fields 2 to 3 mobs/chamber so tactical duels remain readable;
+      // deeper floors gradually scale up to full pack density.
       let targetCount =
-        if floorNumber <= 1 then 2
+        if room = spawnPlaza && (not isStory || floorNumber > 1) then 0
+        elif isStory && floorNumber <= 1 then 2
+        elif isStory && floorNumber <= 2 then 2 + rng.Next(0, 2)
+        elif isStory && floorNumber <= 4 then 3 + rng.Next(0, 2)
+        elif floorNumber <= 1 then 2
         else Math.Min(mobOffsets.Length, 4 + floorNumber / 2 + rng.Next(0, 2))
       let mutable placedCount = 0
       let mutable offsetIndex = 0
