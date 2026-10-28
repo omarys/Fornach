@@ -20,5 +20,3 @@ Baseline Prowess remains modest (+1/fight) while tactical advantages against kno
 
 > Recorded by openlore decisions on 2026-10-28
 > Decision ID: 90d31d33
-
-

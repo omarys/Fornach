@@ -20,5 +20,3 @@ Entrance chambers on Floor 2+ are safe thresholds; Story Floor 2 density scales 
 
 > Recorded by openlore decisions on 2026-10-28
 > Decision ID: 39ac2214
-
-
