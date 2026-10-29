@@ -1,8 +1,8 @@
 # Fornach Balance, Combat Mechanics & Class Progression Handoff
 
-## Status: 555 Tests Passing (308 `Fornach.Tests` + 224 `Fornach.Domain.Tests` + 23 `Fornach.Spatial.Tests`, 0 Warnings)
+## Status: 562 Tests Passing (311 `Fornach.Tests` + 228 `Fornach.Domain.Tests` + 23 `Fornach.Spatial.Tests`, 0 Warnings)
 
-Latest commit / worktree: *Prowess, Poise and Asymmetric Tempo Redesign* ([ADR 0009](file:///home/omary/Dev/fornach/docs/adr/0009-prowess-poise-and-asymmetric-tempo-redesign.md), OpenLore decisions `c5838dca`, `d2e94057`, `6f3c46db`, `f2bfed90`), on top of *Enemy level spread capped by depth* ([ADR 0008](file:///home/omary/Dev/fornach/docs/adr/0008-cap-enemy-level-spread-by-depth.md)), *Tempo turns on a decisive answer* ([ADR 0007](file:///home/omary/Dev/fornach/docs/adr/0007-tempo-turns-on-decisive-answers.md)) and *Vor / Nach / Indes Tactical Tempo Integration* ([ADR 0006](file:///home/omary/Dev/fornach/docs/adr/0006-vor-nach-indes-tactical-tempo-integration.md), OpenLore decision `1198520b`).
+Latest commit / worktree: *Safe entrance plaza, controlled swarm density, and species familiarity overhaul* ([ADR 0005](file:///home/omary/Dev/fornach/openspec/decisions/adr-0005-safe-entrance-plaza-and-controlled-group-combat-sw.md), [ADR 0004](file:///home/omary/Dev/fornach/openspec/decisions/adr-0004-separate-species-familiarity-from-global-prowess-p.md), OpenLore decisions `39ac2214`, `90d31d33`, `c90d4717`, `f2bfed90`), on top of *Prowess, Poise and Asymmetric Tempo Redesign* ([ADR 0009](file:///home/omary/Dev/fornach/docs/adr/0009-prowess-poise-and-asymmetric-tempo-redesign.md)), *Enemy level spread capped by depth* ([ADR 0008](file:///home/omary/Dev/fornach/docs/adr/0008-cap-enemy-level-spread-by-depth.md)), *Tempo turns on a decisive answer* ([ADR 0007](file:///home/omary/Dev/fornach/docs/adr/0007-tempo-turns-on-decisive-answers.md)) and *Vor / Nach / Indes Tactical Tempo Integration* ([ADR 0006](file:///home/omary/Dev/fornach/docs/adr/0006-vor-nach-indes-tactical-tempo-integration.md), OpenLore decision `1198520b`).
 
 This document provides a comprehensive handoff of the recent combat balance tuning, archetype progression overhauls, tactical preparation enhancements, swarm simulation refinements, and a solution-wide performance profile (see §4) completed in the `Fornach` codebase.
 
@@ -262,7 +262,7 @@ This document provides a comprehensive handoff of the recent combat balance tuni
 - **The Progression Curve, Measured**: `dotnet run --project src/Fornach.Cli -- --run-sim 40 --floors 8` before the cap: **55% floor-1 clear, 55% floor 2, 33% floor 3**, avg depth **1.23**, 1/40 finishing. After: **98% / 90% / 69% / 58%** on floors 1–4, avg depth **3.48**, 5/40 finishing; over 14 floors the shape holds (teach → bite at 3–4 → attrition as average health drifts 60% → 33%). The softer alternative `1 + floor/2` was also measured (100/100/85/76/77, avg depth 4.88, 7/40) and rejected as too flat. Harness: `Simulation.runProgressionSim` → `renderProgressionDashboard`, built on `runPreparedGroupMatch` (`runSingleGroupMatch` is now a thin wrapper), whole pack up to 4 at once with no rest/honing/consumables/gear — deliberately pessimistic.
 - **Guards**: Added 4 unit tests in [`PreparationTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Domain.Tests/PreparationTests.fs) covering dynamic threshold calculation with wind-up/recklessness, Indes seizure tempo updates, recovery tempo yielding, and landed Nach strikes claiming the Vor; plus 6 dice-independent facts on the tempo helpers in [`CombatTacticsTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Tests/CombatTacticsTests.fs) (scratch does not steal, a two-hit answer does, whiff hands over, whiff from a Nach defender does not disturb a Vor holder, a Nach defender that answers takes the Vor, Nach posture blunts by exactly one and can convert a hit into a whiff), plus the group knock-back test in `ProlongedBattleTests.fs`. All 538 tests passing cleanly across the solution (0 warnings).
 
-### AA. Prowess, Poise and Asymmetric Tempo Redesign (ADR 0009)
+### AA. Prowess, Poise and Asymmetric Tempo Redesign (ADR 0009 / ADR 0004)
 - **Passive Discipline Model (Prowess & Poise)**:
   - Retired active `Prowess` attacks (`ProwessStrike`, `CalculatedFlawStrike`, `MasterfulDisarm`) and removed the `Focus` resource entirely.
   - `Prowess` is now the passive martial reading skill:
@@ -274,6 +274,8 @@ This document provides a comprehensive handoff of the recent combat balance tuni
     - Provides damage-spike shock resistance against physical `Pain`.
   - Mental Plane Mirror: `Acumen` provides intent reading and bonuses to `Intellect`/`Acuity`; `Composure` provides mental shock resistance and bonuses to `Resolve`/`Intuition`.
   - Only humanoids possess Prowess and Poise. Non-humanoids (beasts, constructs) have 0 Prowess and 0 Poise with Fortitude fallback for defense checks.
+  - Non-humanoid beasts compensate for 0 Prowess/Poise with higher baseline Force/Finesse.
+  - Lone wounded beasts (<30% HP, player >70% HP, alone) attempt to limp away; players can choose to **Spare** (retaining full bestiary knowledge gain) or **Execute**.
   - Gambits are folded into passive triggers when combatants hold 5/5 Momentum/Flow and maintain a Prowess advantage.
 - **Asymmetric Tempo Roles (`Vor` / `Nach` / `Indes`) & Active Defenses**:
   - In `Vor` (Attacker): Combatants choose between Power (`ForceStrike`) and Agility (`FinesseCadence`) vectors, plus preparations / recovery.
@@ -291,13 +293,25 @@ This document provides a comprehensive handoff of the recent combat balance tuni
 - **Transient Pain Shock System**:
   - Physical HP damage $\ge 15\%$ Max HP in a single round triggers a Pain Shock test: $\text{Poise} \ge \text{Damage\%} \times 2$.
   - Failure inflicts **Stagger** (action loss / turn skipped) and a meter surge (**+25 Overwhelm**, **+15 Exhaustion**). Guarded in `PainShockTests.fs`.
-- **Diegetic Bestiary Knowledge Progression**:
+- **Diegetic Bestiary Knowledge Progression (ADR 0004)**:
   - Replaced legacy flat `masteryMultiplier` (+2% damage dealt / -1% taken per kill) with diegetic encounter familiarity.
   - Global Prowess gains strictly **+1** per encounter (matching Poise at **+1** per survived encounter, plus **+1** mental defenses: Resolve, Intuition, Composure).
   - Familiarity against specific enemy species is tracked separately per canonical species name in `ProgressionProfile.BestiaryKnowledge` with diminishing returns: **+5** on first encounter, **+3** on second, and **+1** thereafter.
   - Normalized species names strip level prefixes (e.g. `"Lv.1 Forest Wolf"` -> `"Forest Wolf"`) so multi-level encounters contribute to a unified bestiary record.
   - In combat, species knowledge applies as a targeted bonus to attacker Prowess/Acumen in `offDisciplineBonus` and tactical scrutiny in `TacticalAssessment.fs`, preserving baseline attribute integrity.
   - Decoy interception and reactive disarm properly invoke `resolveWhiffTempo`, transferring the Vor to the defender.
+- **Status Meter Primacy & Strain Debuffs**:
+  - Direct HP damage scaled down by -30% across the board to allow tactical strain meters to determine duel outcomes.
+  - Reaching $\ge 75$ on any meter inflicts severe operational debuffs:
+    - `Exhaustion >= 75`: -25% Force and Fortitude.
+    - `Overwhelm >= 75`: -25% Finesse and Reflex.
+    - `Frustration >= 75`: -50% Poise / Intent reading masked.
+    - `Recklessness >= 75`: -25% Defense, all incoming attacks crit, whiff gate bypassed.
+    - `Cognitive Fatigue >= 75`: -25% Intellect & Acuity, incoming mental attacks crit, whiff bypassed.
+  - Reaching 100 on any meter triggers immediate decisive victory / collapse (`CollapseDecisive`).
+- **Guards & Verification**:
+  - Added `tests/Fornach.Domain.Tests/PainShockTests.fs` (10 tests) and `tests/Fornach.Domain.Tests/ActiveDefenseTests.fs` (6 tests).
+  - Bestiary knowledge and diminished growth guarded in `EncounterGrowthTests.fs`. OpenLore decisions `c5838dca`, `d2e94057`, `6f3c46db`, `f2bfed90`, `39ac2214`.
 
 ### AB. Safe Entrance Plazas & Controlled Group Combat Swarm Density (ADR 0005)
 - **Safe Entrance Plazas (Floor 2+)**:
@@ -312,20 +326,21 @@ This document provides a comprehensive handoff of the recent combat balance tuni
   - Reinforcements joining from pursuit are throttled when the active melee frontline already has 4 living combatants, preventing cascading swarms during longer duels.
   - Interactive group combat in `Program.fs` now integrates the player's chosen `ActiveDefense` counter (e.g. `FortitudeGuard`, `ReflexSlip`) against incoming attacks via `resolveExWithDefense`, allowing clean affinity counters, 25% damage mitigation, and *Vor* seizure from the Nach.
   - Disengage parting strikes are capped at 4 frontline attackers.
-  - Non-humanoid beasts compensate for 0 Prowess/Poise with higher baseline Force/Finesse.
-  - Lone wounded beasts (<30% HP, player >70% HP, alone) attempt to limp away; players can choose to **Spare** (retaining full bestiary knowledge gain) or **Execute**.
-- **Status Meter Primacy & Strain Debuffs**:
-  - Direct HP damage scaled down by -30% across the board to allow tactical strain meters to determine duel outcomes.
-  - Reaching $\ge 75$ on any meter inflicts severe operational debuffs:
-    - `Exhaustion >= 75`: -25% Force and Fortitude.
-    - `Overwhelm >= 75`: -25% Finesse and Reflex.
-    - `Frustration >= 75`: -50% Poise / Intent reading masked.
-    - `Recklessness >= 75`: -25% Defense, all incoming attacks crit, whiff gate bypassed.
-    - `Cognitive Fatigue >= 75`: -25% Intellect & Acuity, incoming mental attacks crit, whiff bypassed.
-  - Reaching 100 on any meter triggers immediate decisive victory / collapse (`CollapseDecisive`).
 - **Guards & Verification**:
-  - Added `tests/Fornach.Domain.Tests/PainShockTests.fs` (10 tests) and `tests/Fornach.Domain.Tests/ActiveDefenseTests.fs` (6 tests).
-  - All 555 tests passing cleanly across 3 test projects with 0 warnings. OpenLore decisions `c5838dca`, `d2e94057`, `6f3c46db`, `f2bfed90`.
+  - Safe entrance plaza spawning and frontline group clamping verified in story runs and progression suites. OpenLore decisions `90d31d33`, `c90d4717`.
+
+### AC. Tactical Assessment & Intent Reading Readouts (`★ Opening` vs `⚠ Apex Guard`)
+- **Three-Tier Insight Progression (`TacticalAssessment.fs`)**:
+  - Opponent assessment is governed by the observer's effective Acumen / Prowess (augmented by `BestiaryKnowledge`) contested against the target's Composure / Poise.
+  - **`Obscured`**: The observer lacks sufficient familiarity or insight; opponent intent, best/weakest defenses, and relative stat margins remain concealed.
+  - **`Discerning`**: Vector affinities and orientation are recognized. The target's strongest defense on that plane is flagged as `Apex Guard`, and their weakest defense is flagged as `Opening`.
+  - **`ClearIntent` (and above)**: Complete situational transparency. The HUD reveals exact stance-adjusted contest deltas (e.g. `+12 ★ Opening` or `-8 ⚠ Apex Guard`).
+- **Meaning of `⚠ Apex Guard`**:
+  - Represents the opponent's **highest defense stat on that plane** (e.g., peak Fortitude against Force, or peak Reflex against Finesse).
+  - **Tactical Implication**: Striking into an Apex Guard carries the highest likelihood of a negative contest margin or outright whiff. Under the asymmetric tempo rules (ADR 0007 / ADR 0009), an attacker who whiffs while holding the *Vor* forfeits the initiative and hands the *Vor* over to the defender.
+- **Meaning of `★ Opening`**:
+  - Represents the opponent's **lowest defense stat on that plane** (e.g., lower Reflex on an armored brute with towering Fortitude).
+  - **Tactical Implication**: Striking into an Opening maximizes the net contest margin ($+N$), yielding the highest critical hit chance, accelerating strain meter accumulation, and reliably retaining or seizing the *Vor*.
 
 ---
 
