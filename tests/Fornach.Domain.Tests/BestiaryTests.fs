@@ -150,7 +150,7 @@ module BestiaryTests =
     let golem = Bestiary.createMonster golemTemplate
 
     let lightTarget = { TierFactory.createClassTier CharacterClass.Rogue CombatTier.Veteran with Armor = ArmorIntegrity.Create 30 }
-    let heavyTarget = { TierFactory.createClassTier CharacterClass.Soldier CombatTier.Veteran with Armor = ArmorIntegrity.Create 150 }
+    let heavyTarget = { TierFactory.createClassTier CharacterClass.Warrior CombatTier.Veteran with Armor = ArmorIntegrity.Create 150 }
 
     let chosen = AI.chooseGroupTarget golem [ lightTarget; heavyTarget ]
     Assert.Equal(150, chosen.Armor.Max)
@@ -160,7 +160,7 @@ module BestiaryTests =
     let specterTemplate = Bestiary.byId "siren_specter" |> Option.get
     let specter = Bestiary.createMonster specterTemplate
 
-    let stoicTarget = { TierFactory.createClassTier CharacterClass.Soldier CombatTier.GrandMaster with Morale = Pool.Create 10000 }
+    let stoicTarget = { TierFactory.createClassTier CharacterClass.Warrior CombatTier.GrandMaster with Morale = Pool.Create 10000 }
     let shakenTarget = { TierFactory.createClassTier CharacterClass.Warrior CombatTier.GrandMaster with Morale = Pool.Create 1500 }
 
     let chosen = AI.chooseGroupTarget specter [ stoicTarget; shakenTarget ]

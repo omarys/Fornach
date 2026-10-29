@@ -103,10 +103,9 @@ module CombatTacticsTests =
     let result = ActionResolver.resolve roller intent damagedPlayer dummyTarget
 
     Assert.True(result.Actor.Armor.Current > damagedPlayer.Armor.Current, "Raise shield should restore armor integrity")
-    // Every swing raises all three ramps, so a raised shield leaves them level with each other.
+    // Every swing raises both ramps, so a raised shield leaves them level with each other.
     Assert.True(result.Actor.Flow >= 2, "Raise shield should feed the Flow ramp")
     Assert.Equal(result.Actor.Flow, result.Actor.Momentum)
-    Assert.Equal(result.Actor.Flow, result.Actor.Focus)
     Assert.True(result.Actor.Meters.Recklessness.Value < damagedPlayer.Meters.Recklessness.Value, "Raise shield should bleed recklessness")
 
     let raisedEvt =

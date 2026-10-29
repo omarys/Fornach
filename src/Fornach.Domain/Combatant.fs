@@ -61,12 +61,12 @@ type Combatant =
     Stats: StatBlock
     Meters: StatusMeters
     Collapse: CollapseState
-    /// Combat ramp: rises on every attack, sharpens Finesse/Reflex, cashed by Agility specials.
+    /// Combat ramp: rises on every attack, sharpens Finesse/Reflex and Acuity/Intuition,
+    /// cashed by Agility specials.
     Flow: int
-    /// Combat ramp: rises on every attack, sharpens Force/Fortitude, cashed by Power specials.
+    /// Combat ramp: rises on every attack, sharpens Force/Fortitude and the Discipline stats,
+    /// cashed by Power and Discipline specials.
     Momentum: int
-    /// Retired Discipline combat ramp (ADR 0009). Deprecated; removed in Phase 3.
-    Focus: int
     Armor: ArmorIntegrity
     WeaponCondition: WeaponCondition
     Stance: CombatStance
@@ -220,14 +220,17 @@ type Combatant =
       else
         strainAdjusted
 
-    // Combat ramp: each meter sharpens the stat pair it feeds, so a sustained fight compounds.
-    // Flow is deliberately the sharpest (10%/stack vs 1%) — it is the Agility glass cannon meter.
+    // Combat ramp: each meter sharpens the stats it feeds, across both planes, so a sustained fight
+    // compounds. Flow carries the Agility stats (Finesse/Reflex, Acuity/Intuition); Momentum carries
+    // Power and Discipline (Force/Fortitude/Intellect/Resolve, Prowess/Poise/Acumen/Composure), so a
+    // caster's stacks and guard are worth holding too.
+    // Flow is deliberately the sharpest (6%/stack vs 1%) — it is the Agility glass cannon meter. At
+    // 10% it was ~1.9x the Momentum meter once Finesse's 2.5x crit was counted in.
     let ramp =
       match stat with
-      | Finesse | Reflex -> 1.0 + 0.10 * float (Math.Clamp(this.Flow, 0, Combatant.StackCap))
-      | Force | Fortitude -> 1.0 + 0.01 * float (Math.Clamp(this.Momentum, 0, Combatant.StackCap))
-      | Prowess | Poise -> 1.0 + 0.01 * float (Math.Clamp(this.Focus, 0, Combatant.StackCap))
-      | _ -> 1.0
+      | Finesse | Reflex | Acuity | Intuition -> 1.0 + 0.06 * float (Math.Clamp(this.Flow, 0, Combatant.StackCap))
+      | Force | Fortitude | Intellect | Resolve
+      | Prowess | Poise | Acumen | Composure -> 1.0 + 0.01 * float (Math.Clamp(this.Momentum, 0, Combatant.StackCap))
 
     if ramp = 1.0 then
       stanceAdjusted
@@ -282,7 +285,6 @@ type Combatant =
       Collapse = CollapseState.Stable
       Flow = 0
       Momentum = 0
-      Focus = 0
       Armor = ArmorIntegrity.Create 50
       WeaponCondition = WeaponCondition.Pristine
       Stance = CombatStance.PowerStance
@@ -328,7 +330,6 @@ type Combatant =
       Collapse = CollapseState.Stable
       Flow = 0
       Momentum = 0
-      Focus = 0
       Armor = ArmorIntegrity.Create 50
       WeaponCondition = WeaponCondition.Pristine
       Stance = defaultStance
@@ -377,32 +378,31 @@ type Combatant =
   /// Every combat ramp meter shares one ceiling: five stacks, so a full pile cashes at 2.75x.
   static member StackCap = 5
 
-  /// Raises kinetic ramp meters together.
+  /// Raises both ramp meters together.
   static member addStacks delta (c: Combatant) =
     { c with
         Flow = Math.Clamp(c.Flow + delta, 0, Combatant.StackCap)
-        Momentum = Math.Clamp(c.Momentum + delta, 0, Combatant.StackCap)
-        Focus = Math.Clamp(c.Focus + delta, 0, Combatant.StackCap) }
+        Momentum = Math.Clamp(c.Momentum + delta, 0, Combatant.StackCap) }
 
   /// One stack off every meter: the end-of-turn decay when nothing is engaged.
   static member decayStacks (c: Combatant) = Combatant.addStacks -1 c
 
   /// Wipes active ramp meters. Recovery breaks the ramp outright.
-  static member clearStacks (c: Combatant) = { c with Flow = 0; Momentum = 0; Focus = 0 }
+  static member clearStacks (c: Combatant) = { c with Flow = 0; Momentum = 0 }
 
   /// Stacks currently held in the meter that gates a given attack vector.
   static member stacksIn (vector: Vector) (c: Combatant) =
     match vector with
     | Vector.Agility -> c.Flow
     | Vector.Power -> c.Momentum
-    | Vector.Discipline -> c.Focus
+    | Vector.Discipline -> c.Momentum
 
   /// Drains one meter by `count`, clamping at zero.
   static member drainStacks (vector: Vector) count (c: Combatant) =
     match vector with
     | Vector.Agility -> { c with Flow = Math.Max(0, c.Flow - count) }
     | Vector.Power -> { c with Momentum = Math.Max(0, c.Momentum - count) }
-    | Vector.Discipline -> { c with Focus = Math.Max(0, c.Focus - count) }
+    | Vector.Discipline -> { c with Momentum = Math.Max(0, c.Momentum - count) }
 
   /// Permanent growth on a won or survived encounter (ADR 0009):
   /// Global Prowess/Acumen grows by +1 per encounter, Poise/Composure grows by +1 per survived encounter,

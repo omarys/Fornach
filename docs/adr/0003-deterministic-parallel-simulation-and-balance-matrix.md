@@ -6,7 +6,7 @@ Accepted
 ## Context
 Fornach uses Monte-Carlo combat simulation in `Fornach.Cli` (`--sim`, `--group`, and `--balance-matrix`) to balance class archetypes, preparations, combat stances, and swarm survivability:
 - Monte-Carlo duel and group simulations run up to 200,000 iterations to verify statistical win rates and combat event distributions.
-- The 96-matchup Archetype Balance Benchmark ([`renderBalanceMatrix`](file:///home/omary/Dev/fornach/src/Fornach.Cli/Simulation.fs#L744-L860)) sweeps 24 archetype-tier combinations (Novice through GrandMaster across 6 champion classes) against 4 opponent types (Warrior, Assassin, Soldier, Mage) up to 100 mobs using binary search tipping point detection.
+- The 72-matchup Archetype Balance Benchmark ([`renderBalanceMatrix`](file:///home/omary/Dev/fornach/src/Fornach.Cli/Simulation.fs#L744-L860)) sweeps 24 archetype-tier combinations (Novice through GrandMaster across 6 champion classes) against 3 opponent types (Warrior, Assassin, Mage) up to 100 mobs using binary search tipping point detection.
 
 Historically, [`renderBalanceMatrix`](file:///home/omary/Dev/fornach/src/Fornach.Cli/Simulation.fs#L744) was executed entirely serially on a single thread using a single `Random(42)` instance, taking ~6 to 11 seconds to render. While Monte-Carlo batch loops had already migrated to `Array.Parallel.init`, parallelizing balance matrix sweeps and multi-combatant simulations is constrained by three critical architectural factors:
 

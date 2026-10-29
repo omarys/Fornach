@@ -147,9 +147,16 @@ type AltarCost =
 
 /// Reward granted upon fulfilling an altar's sacrifice.
 type AltarReward =
-  /// Authored form: sharpens one of the bearer's two class pairs by a flat `bonus` points each.
-  | PairBuff of boon: StatBoon * bonus: int
-  /// Resolved form of `PairBuff`: carries the concrete attributes so the grant can be described.
+  /// Authored form: a theme relic whose percentages land on one of the bearer's two class pairs,
+  /// plus enlightenment — `temper` points on each defensive attribute of the bearer's *other*
+  /// plane. Flat points on the bearer's own pair were the old rule and are gone: +40 is a fifth of
+  /// a level-40 attribute and nothing at level 185, so an altar was either enormous or free
+  /// depending on when it was found.
+  | TemperedRelic of relic: EquipmentItem * boon: StatBoon * pairPercent: int * temper: int
+  /// Resolved form of `TemperedRelic`: the relic's pair made concrete and the defences named.
+  | Tempered of relic: EquipmentItem * defences: StatId list * temper: int
+  /// A hand-authored single stat, still plane-projected below. No altar ships one any more; the
+  /// case stays because it is the primitive the altar tests drive the cost paths with.
   | StatBuff of stats: StatId list * bonus: int
   | VitalitySurge of healthPct: int * moralePct: int
   | KeyReward of keyId: string * keyName: string
@@ -157,23 +164,45 @@ type AltarReward =
 
   member this.Description : string =
     match this with
-    | PairBuff (boon, bonus) -> sprintf "+%d %s pair" bonus boon.Description
+    | TemperedRelic (relic, boon, pairPercent, temper) ->
+      sprintf "Relic: %s (+%d%% %s) and +%d enlightenment" relic.Name pairPercent boon.Description temper
+    | Tempered (relic, defences, temper) ->
+      let names list =
+        list |> List.map (fun stat -> (Attributes.descriptorOf stat).CanonicalName) |> String.concat "/"
+
+      sprintf
+        "Relic: %s (+%s) and +%d %s"
+        relic.Name
+        (relic.StatPercentBonuses
+         |> List.map (fun (stat, pct) -> sprintf "%d%% %s" pct (Attributes.descriptorOf stat).CanonicalName)
+         |> String.concat ", ")
+        temper
+        (names defences)
     | StatBuff (stats, bonus) ->
       sprintf "+%d %s" bonus (stats |> List.map (sprintf "%A") |> String.concat " and ")
     | VitalitySurge (hpPct, morPct) -> sprintf "+%d%% HP and +%d%% Morale" hpPct morPct
     | KeyReward (_, keyName) -> sprintf "Keystone: %s" keyName
     | RelicReward item -> sprintf "Relic: %s" item.Name
 
+  /// The three defensive attributes on the plane the bearer does not walk: a Fighter's
+  /// enlightenment is mental, a Mage's is physical.
+  static member offPlaneDefences (plane: Plane) : StatId list =
+    Attributes.all
+    |> List.filter (fun stat ->
+      let descriptor = Attributes.descriptorOf stat
+      descriptor.Plane <> plane && descriptor.Orientation = Defense)
+
   /// The reward as a given plane can actually receive it. A Fighter may only be granted physical
-  /// attributes and a Mage only mental ones, so a pair buff is resolved against the bearer's plane
-  /// here and nothing authored can name a stat on the other side of the veil. Surges, keystones and
-  /// relics are plane-neutral. Callers must describe and apply the resolved reward, so the offer a
-  /// player reads is the boon they are handed.
+  /// attributes and a Mage only mental ones, so a relic's pair is resolved against the bearer's
+  /// plane here and nothing authored can name a stat on the other side of the veil. The
+  /// enlightenment deliberately crosses that veil — it lands on the plane the bearer does *not*
+  /// walk, which is the point of it. Surges and keystones are plane-neutral. Callers must describe
+  /// and apply the resolved reward, so the offer a player reads is the boon they are handed.
   member this.ResolvedFor(plane: Plane) : AltarReward =
     match this with
-    | PairBuff (boon, bonus) ->
+    | TemperedRelic (relic, boon, pairPercent, temper) ->
       let first, second = StatBoon.pairOf plane boon
-      StatBuff([ first; second ], bonus)
+      Tempered({ relic with StatPercentBonuses = [ first, pairPercent; second, pairPercent ] }, AltarReward.offPlaneDefences plane, temper)
     | StatBuff (stats, bonus) ->
       // A hand-authored single stat still cannot cross the veil: it lands on its counterpart.
       StatBuff(
@@ -260,7 +289,8 @@ type MemoryEchoData =
     Title: string
     SensoryDetail: string
     MemoryTranscript: string list
-    MoraleRecovery: int
+    /// Permanent widening of the Morale pool, as a percentage of its current maximum.
+    MoraleGrowth: int
     IsCommuned: bool }
 
 /// Dynamic world and Tower floor encounter types (ADR 0004 Phase 3)
@@ -307,6 +337,9 @@ type TowerFloor =
     SpawnLocation: Point
     Explored: Set<Point>
     Visible: Set<Point>
+    /// Ids of enemies the player has actually had in view on this floor. A foe missing from this set
+    /// is unseen, and the engagement it starts opens with the foe in the Vor and the player in the Nach.
+    SeenEnemies: Set<string>
     ActiveQuests: TowerQuest list }
 
   /// Checks if a tile is valid and unobstructed for movement

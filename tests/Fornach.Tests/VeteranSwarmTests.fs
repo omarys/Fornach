@@ -13,7 +13,6 @@ let private roller (seed: int) : DiceRoller =
 let private mobClasses =
   [ CharacterClass.Warrior
     CharacterClass.Rogue
-    CharacterClass.Soldier
     CharacterClass.Mage ]
 
 /// There is no Legend case in CombatTier (it ends at GrandMaster, level 200); Legend is level 1000 on
@@ -22,7 +21,7 @@ let private championTiers =
   [ "GrandMaster", (fun (cls: CharacterClass) -> TierFactory.createClassTier cls CombatTier.GrandMaster)
     "Legend", (fun (cls: CharacterClass) -> TierFactory.createClassLevel cls 1000) ]
 
-let private swarmCap = 32
+let private swarmCap = 64
 let private trialsPerProbe = 10
 
 [<Fact>]

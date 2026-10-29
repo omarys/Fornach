@@ -32,6 +32,7 @@ let private grantedItems (theme: FloorTheme) (floorNum: int) : (string * Equipme
   let altarRelic =
     match altar.Reward with
     | AltarReward.RelicReward item -> [ altar.Name, item ]
+    | AltarReward.TemperedRelic (item, _, _, _) -> [ altar.Name, item ]
     | _ -> []
 
   [ altarRelic

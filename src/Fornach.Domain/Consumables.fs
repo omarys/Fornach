@@ -23,7 +23,7 @@ type ConsumableKind =
     match this with
     | ArmorRepairKit -> "Restores armor to full — past anything resting can do."
     | GrindingStone -> "Hones a weapon back to Pristine — past anything resting can do."
-    | Ration -> "Restores Health to maximum."
+    | Ration -> "Raises Health to 80% of maximum."
     | SpiritSeed -> "Restores Morale to maximum."
     | WeaponMaterial -> "Works a permanent +8 into the class's offensive stat."
     | MentalMaterial -> "Works a permanent +8 into the class's mental offensive stat."
@@ -77,7 +77,6 @@ module Consumables =
         | Fighter
         | Warrior -> StatId.Force
         | Rogue -> StatId.Finesse
-        | Soldier -> StatId.Prowess
         | Mage -> StatId.Intellect
       )
     | MentalMaterial ->
@@ -138,7 +137,10 @@ module Consumables =
     match kind with
     | ArmorRepairKit -> { player with Armor = ArmorIntegrity.Create player.Armor.Max }
     | GrindingStone -> { player with WeaponCondition = WeaponCondition.Pristine }
-    | Ration -> { player with Health = Pool.Create player.Health.Maximum }
+    | Ration ->
+      // Raises to 80% of max, never lowers it: eating at 95% must not cost health.
+      let target = player.Health.Maximum * 4 / 5
+      { player with Health = player.Health.ApplyDelta(max 0 (target - player.Health.Current)) }
     | SpiritSeed -> { player with Morale = Pool.Create player.Morale.Maximum }
     | WeaponMaterial
     | MentalMaterial ->

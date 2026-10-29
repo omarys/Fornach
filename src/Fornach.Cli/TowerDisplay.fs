@@ -272,8 +272,8 @@ module TowerDisplay =
             if e.IsCommuned then
               Some (sprintf "[%s]✧ Awakened Memory: %s[/] [grey](Communed)[/]" Theme.Comment e.Title)
             else
-              Some (sprintf "[bold %s]✧ DORMANT MEMORY ECHO: %s[/] [grey]| \"%s\" (+%d Morale upon contact)[/]"
-                Theme.Green e.Title e.SensoryDetail e.MoraleRecovery)
+              Some (sprintf "[bold %s]✧ DORMANT MEMORY ECHO: %s[/] [grey]| \"%s\" (+%d%% Morale pool upon contact)[/]"
+                Theme.Green e.Title e.SensoryDetail e.MoraleGrowth)
           | AmbushLair a ->
             if a.IsTriggered then
               Some (sprintf "[%s]! Cleared Ambush Site[/] [grey](All foes vanquished or dispersed)[/]" Theme.Comment)
@@ -909,7 +909,7 @@ module TowerDisplay =
       grid.AddRow(Markup(sprintf "[%s]%s[/]" Theme.Foreground line)) |> ignore
 
     grid.AddRow(Rule().RuleStyle(Theme.StyleComment)) |> ignore
-    grid.AddRow(Markup(sprintf "[bold %s]󰄬 Cognitive clarity restored: +%d Morale[/]" Theme.Green echo.MoraleRecovery)) |> ignore
+    grid.AddRow(Markup(sprintf "[bold %s]󰄬 Resolve deepened for good: +%d%% Morale pool, restored in full[/]" Theme.Green echo.MoraleGrowth)) |> ignore
     grid.AddRow(Markup(sprintf "\n[%s]Press any key to awaken and continue...[/]" Theme.Comment)) |> ignore
 
     let panel =
@@ -1155,7 +1155,9 @@ module TowerDisplay =
             TowerSession.reinforceFromPursuit state (active |> List.map (fun e -> e.Id))
 
           state <- advanced
-          midFightPlayer, active @ joined
+          // A joiner the player has never seen closes with the Vor and knocks the player back into the
+          // Nach. The in-fight card keeps its damage; only the stance is taken from the engine's verdict.
+          { midFightPlayer with Tempo = advanced.Player.Tempo }, active @ joined
 
         let result = onGroupCombat floorNum state.Player engaged canFlee (Some reinforce)
         // Armour and weapon wear outlasts the fight: it is repaired by resting, by walking, or at a
@@ -1518,9 +1520,15 @@ module TowerDisplay =
           for ev in events do
             debugLogEvent ev
             match ev with
-            | TowerEvent.CombatTriggered _ when (TowerSession.adjacentEnemies state).Length > 1 ->
-              // More than one foe is on us: resolve the whole pack as a group engagement.
-              handleGroup state.CurrentFloor.FloorNumber (TowerSession.adjacentEnemies state)
+            | TowerEvent.CombatTriggered enemy when (TowerSession.adjacentEnemies state).Length > 1 ->
+              // More than one foe is on us: resolve the whole pack as a group engagement. The foe that was
+              // walked into carries the opening tempo from ambushTempo, so the pack uses that record rather
+              // than re-deriving a fresh one that would come back holding the Vor.
+              let pack = TowerSession.adjacentEnemies state
+
+              handleGroup
+                state.CurrentFloor.FloorNumber
+                (pack |> List.map (fun e -> if e.Id = enemy.Id then enemy else e))
 
             | TowerEvent.CombatTriggered enemy ->
               AnsiConsole.WriteLine()
@@ -1763,8 +1771,14 @@ module TowerDisplay =
               AnsiConsole.MarkupLine(sprintf "[italic %s]%s[/]" Theme.Foreground ambush.TriggerDescription)
               AnsiConsole.MarkupLine(sprintf "[bold %s]%d monsters emerge from the surrounding colonnades![/]" Theme.Yellow spawned.Length)
               Thread.Sleep(1000)
-              // The ambush pack is already adjacent: hand the encounter to the group combat path.
-              handleGroup state.CurrentFloor.FloorNumber spawned
+              // The ambush pack is already adjacent: hand the encounter to the group combat path. No foe
+              // here was in view a moment ago, so the pack holds the Vor and the player opens in the Nach.
+              state <- { state with Player = Combatant.yieldVor state.Player }
+
+              handleGroup
+                state.CurrentFloor.FloorNumber
+                (spawned
+                 |> List.map (fun e -> { e with Combatant = Combatant.seizeVor e.Combatant }))
 
             | TowerEvent.TrapTriggered(_, msg) ->
               AnsiConsole.MarkupLine(sprintf "\n[bold red]⚠ %s[/]" msg)
@@ -1827,10 +1841,10 @@ module TowerDisplay =
 
             | _ -> ()
 
-          // Out-of-combat recovery: 10% of max Health and Morale per step, only when no enemy is hunting you.
+          // Out-of-combat recovery: 10% of max Health and 1% of max Morale per step, only when no enemy is hunting you.
           if state.PlayerPosition <> posBefore && TowerSession.isSafe state then
             let heal = Math.Max(1, int (float state.Player.Health.Maximum * 0.10))
-            let morale = Math.Max(1, int (float state.Player.Morale.Maximum * 0.10))
+            let morale = Math.Max(1, int (float state.Player.Morale.Maximum * 0.01))
             let tendedArmor = Math.Max(1, int (float state.Player.Armor.Max * 0.05))
             let weaponBefore = state.Player.WeaponCondition
             state <-
@@ -1866,7 +1880,7 @@ module TowerDisplay =
           | ConsoleKey.Spacebar | ConsoleKey.OemPeriod | ConsoleKey.NumPad5 ->
             let safe = TowerSession.isSafe state
             let heal = if safe then Math.Max(1, int (float state.Player.Health.Maximum * 0.33)) else 0
-            let morale = if safe then Math.Max(1, int (float state.Player.Morale.Maximum * 0.33)) else 0
+            let morale = if safe then Math.Max(1, int (float state.Player.Morale.Maximum * 0.10)) else 0
             let armorRepair = Math.Max(1, int (float state.Player.Armor.Max * 0.33))
             let honedWeapon = TowerSession.restHoneWeapon state.Player.WeaponCondition
             let recovered =

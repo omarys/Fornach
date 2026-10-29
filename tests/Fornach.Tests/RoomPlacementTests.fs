@@ -66,15 +66,16 @@ let ``the entrance room and the stairway are different rooms`` () =
         $"seed {seed} floor {floorNumber}: stairway shares the entrance room"
       )
 
-/// The guardian path has always clamped its template to the level this stage's progression assumes.
-/// The roaming mobs did not, so story floor 5 placed a level-175 Storm Drake three tiles from a level
-/// 105 spawn — a GrandMaster template with `EtherealCarapace 0.30` in the entrance chamber.
+/// The guardian path has always clamped its template to the bestiary magnitude this stage's
+/// template ladder assumes. The roaming mobs did not, so story floor 5 placed a level-175 Storm Drake
+/// three tiles from the spawn — a GrandMaster template with `EtherealCarapace 0.30` in the entrance
+/// chamber.
 [<Fact>]
 let ``no roaming mob on a story stage is authored above its progression ceiling`` () =
   for seed in seeds do
     for floorNumber in 1..7 do
       let floor = TowerGenerator.generateFloorWithMode seed floorNumber true
-      let ceiling = ProgressionScale.storyGuardianLevel floorNumber
+      let ceiling = ProgressionScale.stageTemplateCeiling floorNumber
 
       for (pt, name) in enemies floor do
         if not (isStoryBoss name) then

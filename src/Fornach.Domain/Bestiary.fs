@@ -79,7 +79,7 @@ type MonsterTemplate =
     let nearestClass =
       match this.Family, this.Role with
       // Monster families borrow the surviving class whose plane and vector match most closely.
-      | MonsterFamily.Construct, (MonsterRole.Brute | MonsterRole.Colossus) -> CharacterClass.Soldier
+      | MonsterFamily.Construct, (MonsterRole.Brute | MonsterRole.Colossus) -> CharacterClass.Warrior
       | MonsterFamily.Beast, (MonsterRole.Swarmer | MonsterRole.Brute) -> CharacterClass.Warrior
       | MonsterFamily.Beast, (MonsterRole.Skirmisher | MonsterRole.Stalker) -> CharacterClass.Rogue
       | MonsterFamily.UndeadWraith, _ -> CharacterClass.Mage

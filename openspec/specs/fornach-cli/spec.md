@@ -484,7 +484,7 @@ The system SHALL the service shall compute and render an archetype balance bench
 #### Scenario: FullArchetypeBalanceMatrixSweep
 - **GIVEN** Player classes (Fighter, Mage) and four tiers (Novice, Veteran, Master, GrandMaster)
 - **WHEN** renderBalanceMatrix is executed
-- **THEN** Tipping points against Warrior, Rogue, Soldier, and Mage archetypes are calculated and rendered in a
+- **THEN** Tipping points against Warrior, Rogue, and Mage archetypes are calculated and rendered in a
 tabular console matrix
 
 ### Requirement: RenderPeerBalanceMatrix

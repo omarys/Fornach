@@ -25,7 +25,7 @@ module TacticalAssessmentTests =
     Assert.True(assess.Ratio < 0.40)
     Assert.Equal((StatId.Fortitude, 220), assess.WeakestDefense)
     Assert.Equal("GUARDED POSTURE", assess.Headline)
-    Assert.True(assess.StrategicAdvice.Contains("build Focus"))
+    Assert.True(assess.StrategicAdvice.Contains("build Momentum"))
 
   [<Fact>]
   let ``Prologue Mage scrutiny still reads Stone Gargoyle as guarded at level 1`` () =
@@ -72,17 +72,17 @@ module TacticalAssessmentTests =
     Assert.Equal((StatId.Reflex, 95), assess.WeakestDefense)
     // A level-1 Warden cannot read a Guilt Aspect's exact form yet.
     Assert.Equal(TacticalInsightLevel.Obscured, assess.InsightLevel)
-    Assert.True(assess.StrategicAdvice.Contains("build Focus"))
+    Assert.True(assess.StrategicAdvice.Contains("build Momentum"))
 
   [<Fact>]
-  let ``Focus stacks sharpen tactical insight from Obscured to Discerning`` () =
+  let ``Momentum stacks sharpen tactical insight from Obscured to Discerning`` () =
     let player = StoryBosses.createProloguePlayer "berserker" // Acumen 19 + Intuition 34/4 (8) = 27
     let gargoyle = Bestiary.stoneGargoyle.ToCombatant (CombatantId.New())
 
     let initialAssess = TacticalAssessment.assess player gargoyle
     Assert.Equal(TacticalInsightLevel.Obscured, initialAssess.InsightLevel)
 
-    // Add 3 Focus stacks (+45 effective Acumen: 27 + 45 = 72 / 150 = 0.48 -> Discerning)
+    // Add 3 Momentum stacks (+45 effective Acumen: 27 + 45 = 72 / 150 = 0.48 -> Discerning)
     let studiedPlayer = { player with Stats = player.Stats.ApplyModifiers [ StatId.Acumen, 45 ] }
     let studiedAssess = TacticalAssessment.assess studiedPlayer gargoyle
 
@@ -101,14 +101,14 @@ module TacticalAssessmentTests =
     Assert.True(assess.Ratio > 10.0)
 
   [<Fact>]
-  let ``High composure gap yields Obscured posture with advice to build Focus`` () =
+  let ``High composure gap yields Obscured posture with advice to build Momentum`` () =
     let noviceWarrior = TierFactory.createClassLevel CharacterClass.Warrior 1
     let overseer = Bestiary.quarryOverseer.ToCombatant (CombatantId.New()) // Composure 390
 
     let assess = TacticalAssessment.assess noviceWarrior overseer
     Assert.Equal(TacticalInsightLevel.Obscured, assess.InsightLevel)
     Assert.Equal("GUARDED POSTURE", assess.Headline)
-    Assert.True(assess.StrategicAdvice.Contains("build Focus"))
+    Assert.True(assess.StrategicAdvice.Contains("build Momentum"))
 
   [<Fact>]
   let ``Mental plane combatant correctly evaluates mental attributes as primary`` () =

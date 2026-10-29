@@ -11,7 +11,7 @@ open Fornach.Cli
 // a display, so every test module that calls it must share this collection to stay serial.
 //
 // The Monte-Carlo frontier measures the two player classes against plain opposition: the mobs are the
-// generic NPC archetypes (Warrior / Rogue / Soldier / Mage) with no preparations, no stance or Complex
+// generic NPC archetypes (Warrior / Rogue / Mage) with no preparations, no stance or Complex
 // Form transitions, and a single basic attack type (see Combatant.PlayerStyle). Fluid stances, Complex
 // Forms and varied attacks are exactly what sets the player apart, so they only appear on the Fighter
 // and Mage side of these simulations.
@@ -35,14 +35,14 @@ module MonteCarloSwarmTests =
     Assert.True(aoosPerRound >= 2.0, sprintf "Fighter should punish the press with opportunity attacks every round (Actual: %.1f per round, %.1f over %.0f rounds)" aoosPerRound summary.AvgAoOsTriggered summary.AvgRounds)
 
   [<Fact>]
-  let ``Monte-Carlo: Grandmaster Fighter dismantles 12 novice soldiers`` () =
+  let ``Monte-Carlo: Grandmaster Fighter dismantles 12 novice warriors`` () =
     let soloArch = Archetypes.findByName "Grandmaster Fighter" |> Option.get
-    let mobArch = Archetypes.findByName "Soldier" |> Option.get
+    let mobArch = Archetypes.findByName "Warrior" |> Option.get
 
     let summary = Simulation.runGroupBatch soloArch mobArch 12 10
 
-    Assert.True(summary.SoloWinRate >= 95.0, sprintf "Fighter should beat 12 soldiers (Actual: %.1f%%)" summary.SoloWinRate)
-    Assert.True(summary.AvgEliminations >= 10.0, sprintf "Fighter should clear most soldiers (Actual: %.1f)" summary.AvgEliminations)
+    Assert.True(summary.SoloWinRate >= 95.0, sprintf "Fighter should beat 12 warriors (Actual: %.1f%%)" summary.SoloWinRate)
+    Assert.True(summary.AvgEliminations >= 10.0, sprintf "Fighter should clear most warriors (Actual: %.1f)" summary.AvgEliminations)
 
   [<Fact>]
   let ``Monte-Carlo: Grandmaster Fighter outclasses 10 novice rogues`` () =
@@ -72,13 +72,13 @@ module MonteCarloSwarmTests =
     Assert.True(summary.SoloWinRate >= 95.0, sprintf "Mage should repel 8 warriors (Actual: %.1f%%)" summary.SoloWinRate)
 
   [<Fact>]
-  let ``Monte-Carlo: Grandmaster Mage outlasts 8 novice soldiers`` () =
+  let ``Monte-Carlo: Grandmaster Mage outlasts 8 novice warriors`` () =
     let soloArch = Archetypes.findByName "Grandmaster Mage" |> Option.get
-    let mobArch = Archetypes.findByName "Soldier" |> Option.get
+    let mobArch = Archetypes.findByName "Warrior" |> Option.get
 
     let summary = Simulation.runGroupBatch soloArch mobArch 8 10
 
-    Assert.True(summary.SoloWinRate >= 95.0, sprintf "Mage should outlast 8 soldiers (Actual: %.1f%%)" summary.SoloWinRate)
+    Assert.True(summary.SoloWinRate >= 95.0, sprintf "Mage should outlast 8 warriors (Actual: %.1f%%)" summary.SoloWinRate)
 
   [<Fact>]
   let ``Monte-Carlo: a Novice Fighter is overrun where the Grandmaster is not`` () =

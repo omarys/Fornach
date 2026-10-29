@@ -233,17 +233,18 @@ module Display =
         sprintf "[%s]%d / %d[/] [%s](%d%% soak)[/]" Theme.Comment c.Armor.Current c.Armor.Max Theme.Yellow armorPct
     grid.AddRow(Markup(sprintf "%-22s %s" " Armor Integrity" armorText)) |> ignore
 
-    // Combat ramp: rises on every attack, cashed by a same-vector special.
-    if c.Flow > 0 || c.Momentum > 0 || c.Focus > 0 then
+    // Combat ramp: rises on every attack, cashed by a same-vector special. Flow pays 6% a stack,
+    // Momentum 1% — the label has to match `Combatant.GetCombatStat`'s ramp.
+    if c.Flow > 0 || c.Momentum > 0 then
       let rampText =
         sprintf
-          "[bold %s]Flow %d[/] [%s]/ Momentum %d / Focus %d[/] [grey](+%d%% Finesse/Reflex)[/]"
+          "[bold %s]Flow %d[/] [%s]/ Momentum %d[/] [grey](+%d%% Finesse/Reflex, +%d%% Force/Prowess)[/]"
           Theme.Green
           c.Flow
           Theme.Comment
           c.Momentum
-          c.Focus
-          (c.Flow * 10)
+          (c.Flow * 6)
+          c.Momentum
 
       grid.AddRow(Markup(sprintf "%-22s %s" " Combat Ramp" rampText)) |> ignore
 
@@ -284,9 +285,9 @@ module Display =
 
     // Shared Entropy & Momentum
     grid.AddRow(Markup(renderMeter "󰈸 Recklessness" c.Meters.Recklessness Theme.Orange)) |> ignore
-    // The three ramp meters, in the shorthand players see in the strike menu: Flow / Momentum / Focus.
+    // The ramp meters, in the shorthand players see in the strike menu: Flow / Momentum.
     let comboText =
-      sprintf "[%s]F%d · M%d · C%d ramp[/] | [%s]%d combo[/]" Theme.Purple c.Flow c.Momentum c.Focus Theme.Pink c.ComboTracker.ConsecutiveHits
+      sprintf "[%s]F%d · M%d ramp[/] | [%s]%d combo[/]" Theme.Purple c.Flow c.Momentum Theme.Pink c.ComboTracker.ConsecutiveHits
     grid.AddRow(Markup(sprintf "%-22s %s" "󰓥 Tactical Combo" comboText)) |> ignore
     grid.AddRow(Rule().RuleStyle(Theme.StyleCurrentLine)) |> ignore
 
@@ -1117,7 +1118,7 @@ module Display =
     entityTable.AddRow(Markup("[bold #50fa7b] † [/]"), Markup("[bold #50fa7b]Runic Shrine[/]"), Markup("Ancient monolith; communing restores +40 Morale and resets Recklessness to 0.")) |> ignore
     entityTable.AddRow(Markup("[bold #bd93f9] ♨ [/]"), Markup("[bold #bd93f9]Sacrificial Altar[/]"), Markup("Dark stone offering permanent combat buffs in exchange for Health, Morale, or Armor.")) |> ignore
     entityTable.AddRow(Markup("[bold #8be9fd] $ [/]"), Markup("[bold #8be9fd]Spectral Merchant[/]"), Markup("Wandering trader exchanging rare equipment for Souls and alchemical trophies.")) |> ignore
-    entityTable.AddRow(Markup("[bold #50fa7b] ✦ [/]"), Markup("[bold #50fa7b]Dormant Memory Echo[/]"), Markup("Sensory fragment of repressed trauma from the real world. Restores Morale.")) |> ignore
+    entityTable.AddRow(Markup("[bold #50fa7b] ✦ [/]"), Markup("[bold #50fa7b]Dormant Memory Echo[/]"), Markup("Sensory fragment of repressed trauma from the real world. Permanently deepens the Morale pool.")) |> ignore
     entityTable.AddRow(Markup("[#6272a4] ✧ [/]"), Markup("[#6272a4]Communed Memory Echo[/]"), Markup("Previously awakened narrative echo. Safely walkable.")) |> ignore
     entityTable.AddRow(Markup("[bold #ff5555] ✕ [/]"), Markup("[bold #ff5555]Mechanical Trap[/]"), Markup("Concealed spikes, gas, or discharge. Disarms with Reflex/Perception; triggers on fail.")) |> ignore
     entityTable.AddRow(Markup("[bold #50fa7b] ▲ [/]"), Markup("[bold #50fa7b]Ascension Stairway[/]"), Markup("Open stairway portal leading up to the next tier of the Infinite Tower.")) |> ignore

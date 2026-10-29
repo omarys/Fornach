@@ -30,13 +30,30 @@ module ProgressionScale =
     elif level >= 40 then Veteran
     else Novice
 
-  /// Level a story stage's guardian hands the protagonist, chosen to match what the *next* stage's
-  /// biome monsters assume: per-kill experience alone (~0.3 levels per floor after the tutorial)
-  /// would leave the protagonist at level 33 walking into the Basalt Calderas' level-95 Master golem
-  /// and the Elysian Sanctuaries' level-185 GrandMasters. Floor 1 is the tutorial's authored
-  /// landing (level 32) and the last stage hands over nothing further.
-  /// Also the enemy-level ceiling for a floor's guardian, so placement cannot outrun progression.
+  /// Level a story stage's guardian hands the protagonist: a six-level ramp per stage that lands the
+  /// protagonist on the Veteran threshold (level 40) at the end of the sixth grief stage, so the
+  /// Infinite Tower (story floor 8) is entered as a Veteran rather than a GrandMaster. Floor 1 is the
+  /// tutorial's landing (level 6) and the last stage hands over nothing further (40, not 45) — the
+  /// gate tops up to this level and only carries a capped lead beyond it.
+  /// The story's own enemies are re-levelled to the protagonist by `TowerSession.rescaleFloorEnemies`,
+  /// so this ladder is the protagonist's level, not the bestiary's authored magnitude.
   let storyGuardianLevel (floorNumber: int) : int =
+    match floorNumber with
+    | 1 -> 6
+    | 2 -> 11
+    | 3 -> 17
+    | 4 -> 23
+    | 5 -> 29
+    | 6 -> 35
+    | _ -> 40
+
+  /// Authored bestiary levels the *story* stages may field, as opposed to `storyGuardianLevel`,
+  /// which is the protagonist's own level. Templates are authored against the old tier magnitudes
+  /// (Quarry 15/35/75, Calderas 40/95/160, the Sanctuaries 185), and `towerSession` re-levels every
+  /// placement to the protagonist anyway, so this ladder only decides which kits a stage may draw
+  /// from. It must stay the old ladder: folding the two together collapsed the deep stages onto a
+  /// single `List.minBy Level` template once the protagonist's ladder dropped below 40.
+  let stageTemplateCeiling (floorNumber: int) : int =
     match floorNumber with
     | 1 -> 32
     | 2 -> 45
@@ -112,13 +129,7 @@ module TierFactory =
   /// Creates a fully equipped combatant for a designated class archetype and exact level
   let createClassLevel (cls: CharacterClass) (level: int) : Combatant =
     let id = CombatantId.New()
-    let health, baseMorale, baseArmor = ProgressionScale.poolsForLevel cls.Plane level
-    let morale, armor =
-      match cls with
-      | CharacterClass.Soldier ->
-        int (Math.Round(float baseMorale * 1.15)),
-        int (Math.Round(float baseArmor * 1.15))
-      | _ -> baseMorale, baseArmor
+    let health, morale, armor = ProgressionScale.poolsForLevel cls.Plane level
 
     let statMap =
       if cls.Plane = Physical then
@@ -149,14 +160,6 @@ module TierFactory =
             Intellect, min; Resolve, offDef
             Acuity, min; Intuition, offDef
             Acumen, offOff; Composure, offDef ]
-        | CharacterClass.Soldier ->
-          // Generic Discipline NPC
-          [ Prowess, prim; Poise, prim
-            Force, sec; Fortitude, sec
-            Finesse, sec; Reflex, sec
-            Intellect, min; Resolve, offDef
-            Acuity, min; Intuition, offDef
-            Acumen, min; Composure, offDef ]
         | _ ->
           [ Force, prim; Fortitude, prim
             Finesse, sec; Reflex, sec
@@ -175,13 +178,19 @@ module TierFactory =
         let offPoise = min + int (Math.Round(float (physLevel - 1) * 1.5))
         let offPhys = physTert
 
+        /// Physical defence on the secondary curve. The mental plane's own defences are all `prim`, so
+        /// a caster's Reflex sat on `min` (15 + 1/level) — 54 at level 40 against a mob's 201 Prowess
+        /// — while `spellArmorBonus` is still zero below level 50, i.e. for the whole story. All three
+        /// physical defences now climb on the physical curve, which `physLevel` freezes at 49.
+        let physSec = int (Math.Round(float physPrim * 0.75))
+
         let spellArmorPct = ProgressionScale.spellArmorBonus level
 
         let baseFortitude, baseReflex, basePoise, resolveVal, intuitionVal, composureVal =
           match cls with
           | CharacterClass.Mage ->
             // Normalized mental stats: all mental defenses are prim, so spell armor scales from prim across all 3 defenses
-            offPhys, min, offPoise, prim, prim, prim
+            offPhys, physSec, offPoise, prim, prim, prim
           | _ ->
             offPhys, min, offPoise, prim, sec, sec
 
@@ -216,7 +225,6 @@ module TierFactory =
       | CharacterClass.Warrior
       | CharacterClass.Mage -> CombatStance.PowerStance
       | CharacterClass.Rogue -> CombatStance.AgilityStance
-      | CharacterClass.Soldier -> CombatStance.DisciplineStance
 
     { Combatant.createWithClass id name health morale stats cls level with
         Armor = ArmorIntegrity.Create armor
@@ -231,8 +239,7 @@ module TierFactory =
       match cls with
       | CharacterClass.Fighter
       | CharacterClass.Warrior
-      | CharacterClass.Mage
-      | CharacterClass.Soldier -> CombatStance.PowerStance
+      | CharacterClass.Mage -> CombatStance.PowerStance
       | CharacterClass.Rogue -> CombatStance.AgilityStance
     { fighter with Name = tierName; Stance = mobStance }
 
@@ -337,7 +344,7 @@ module TierFactory =
 
   /// Clamps an enemy to a level the player's current build can plausibly contest.
   /// Bestiary levels are floor-themed rather than progression-aware, so mid-floor spawns can field a
-  /// level 185/190 foe against a player near level 36, whose contested defense sat far above the
+  /// level 185/190 foe against a player near level 40, whose contested defense sat far above the
   /// player's best attack stat. Floor-entry scaling (`TowerSession`) keeps authored levels in range;
   /// this is the backstop for everything summoned after the floor is laid out.
   /// Only ever scales down: an enemy at or below the allowance is returned unchanged.

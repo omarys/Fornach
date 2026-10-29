@@ -22,12 +22,6 @@ let ``Physical sub-classes follow exact 1.0 to 0.75 to 0.75 stat ratios`` () =
   Assert.Equal(631, rogue.GetStat Prowess)
   Assert.Equal(631, rogue.GetStat Force)
 
-  // 3. Soldier: Discipline Primary (Discipline 1.0, Power 0.75, Agility 0.75)
-  let soldier = TierFactory.createClassLevel CharacterClass.Soldier level
-  Assert.Equal(841, soldier.GetStat Prowess)
-  Assert.Equal(631, soldier.GetStat Force)
-  Assert.Equal(631, soldier.GetStat Finesse)
-
 [<Fact>]
 let ``Mage mental stats grow at the full 1.0 ratio on all three mental axes`` () =
   let level = 200 // GrandMaster tier
@@ -80,15 +74,15 @@ let ``A Mage's Destabilizing Ground Ward disrupts incoming attacker mid-swing in
 
 [<Fact>]
 let ``A Mage's Synaptic Mind-Shock disrupts attacker focus in the Nach`` () =
-  // A d100 of 100 beats the mirror-clone weave and a Soldier's Poise (841) beats the ground ward's margin,
+  // A d100 of 100 beats the mirror-clone weave and a Fighter's Poise (841) holds the ground ward back,
   // so mind-shock is the defense left to answer the strike
   let roller : DiceRoller = fun min max -> if min = 1 && max = 100 then 100 else 6
   let mage = TierFactory.createClassTier CharacterClass.Mage CombatTier.GrandMaster
-  let soldier = TierFactory.createClassTier CharacterClass.Soldier CombatTier.GrandMaster
+  let target = TierFactory.createClassTier CharacterClass.Fighter CombatTier.GrandMaster
 
   let attack = AttackClassification.ForceStrike false
   let intent = ActionIntent.StandardAttack attack
-  let result = ActionResolver.resolve roller intent soldier mage
+  let result = ActionResolver.resolve roller intent target mage
 
   let shockEvent =
     result.Events
@@ -172,13 +166,12 @@ let ``Physical archetypes all carry real mental defence and keep only their offe
   let level = 200 // GrandMaster tier
   let gmRogue = TierFactory.createClassLevel CharacterClass.Rogue level
   let gmWarrior = TierFactory.createClassLevel CharacterClass.Warrior level
-  let gmSoldier = TierFactory.createClassLevel CharacterClass.Soldier level
   let gmMage = TierFactory.createClassLevel CharacterClass.Mage level
 
   // Mental defence is no longer a dump stat for physical archetypes: Resolve, Intuition and Composure
   // all sit at the secondary tier (631 at GrandMaster) for every one of them. Only the off-plane
   // *offence* stays deliberately low, which is the trade-off that survived the class reduction.
-  for fighter in [ gmRogue; gmWarrior; gmSoldier ] do
+  for fighter in [ gmRogue; gmWarrior ] do
     Assert.Equal(631, fighter.GetStat Resolve)
     Assert.Equal(631, fighter.GetStat Intuition)
     Assert.Equal(631, fighter.GetStat Composure)
@@ -190,14 +183,10 @@ let ``Physical archetypes all carry real mental defence and keep only their offe
   // Power archetype: Acumen is its off-plane offence
   Assert.Equal(317, gmWarrior.GetStat Acumen)
 
-  // Discipline archetype: neither mental offence is developed
-  Assert.Equal(214, gmSoldier.GetStat Acuity)
-  Assert.Equal(214, gmSoldier.GetStat Acumen)
-
   // Magic user: physical stat growth stopped developing after level 49; physical defense boosted by spell armor (80% at GM tier)
   Assert.Equal(63, gmMage.GetStat Force) // Physical offense stopped developing after level 49
   Assert.Equal(740, gmMage.GetStat Poise) // 135 base + 80% of Composure (756)
-  Assert.Equal(668, gmMage.GetStat Reflex) // 63 base + 80% of Intuition (756)
+  Assert.Equal(765, gmMage.GetStat Reflex) // 160 base + 80% of Intuition (756)
 
 [<Fact>]
 let ``Mage mirror decoy shatters upon being attacked, inflicting retaliatory Morale blast damage`` () =
@@ -262,11 +251,11 @@ let ``Magic character cannot execute physical martial attacks and action is bloc
 let ``Physical character successfully executes physical strike and produces contest`` () =
   let roller : DiceRoller = fun _ _ -> 4
   let warrior = TierFactory.createClassTier CharacterClass.Warrior CombatTier.GrandMaster
-  let soldier = TierFactory.createClassTier CharacterClass.Soldier CombatTier.GrandMaster
+  let target = TierFactory.createClassTier CharacterClass.Warrior CombatTier.GrandMaster
 
   let attack = AttackClassification.ForceStrike false
   let intent = ActionIntent.StandardAttack attack
-  let result = ActionResolver.resolve roller intent warrior soldier
+  let result = ActionResolver.resolve roller intent warrior target
 
   Assert.True(result.Contest.IsSome, "Valid physical attack must produce contest.")
 
@@ -460,13 +449,7 @@ let ``Combat action choices are ordered by class archetype vector`` () =
   Assert.Contains("Finesse Cadence: Rapid Probing", duelistChoices.[0])
   Assert.Contains("Finesse Cadence: Relentless Blitz", duelistChoices.[1])
 
-  // 3. Soldier (Discipline Vector): in Nach, active defenses (Fortitude Guard / Reflex Slip) lead (ADR 0009)
-  let soldier = TierFactory.createClassLevel CharacterClass.Soldier 1
-  let wardenChoices = Program.buildActionChoices (soldier |> Combatant.yieldVor) dummyEnemy
-  Assert.Contains("Fortitude Guard", wardenChoices.[0])
-  Assert.Contains("Reflex Slip", wardenChoices.[1])
-
-  // 4. Mage (Power Mental Vector): its own mental strikes must lead. A plain Warrior dummy is
+  // 3. Mage (Power Mental Vector): its own mental strikes must lead. A plain Warrior dummy is
   // defensively opaque to mental attacks, so every Mage strike lands near-zero there and the exact
   // winner is noise — assert the family, not one action.
   let mage = TierFactory.createClassLevel CharacterClass.Mage 1
@@ -483,7 +466,6 @@ let ``All built action choices parse successfully to non-fallback ActionIntent``
   let classes = [
     CharacterClass.Warrior
     CharacterClass.Rogue
-    CharacterClass.Soldier
     CharacterClass.Fighter
     CharacterClass.Mage
   ]
@@ -506,7 +488,7 @@ let ``meter-gated gambit labels parse to their intended intents`` () =
   for cls in [ CharacterClass.Warrior; CharacterClass.Rogue ] do
     let player = TierFactory.createClassLevel cls 1
     // Each cash-out gambit unlocks at two stacks in its own meter.
-    let readied = { player with Momentum = 2; Flow = 2; Focus = 3 }
+    let readied = { player with Momentum = 2; Flow = 2 }
     let choices = Program.buildActionChoices readied dummyEnemy
     Assert.Contains(choices, fun (c: string) -> c.Contains("Force Strike: Insight Cleave"))
     Assert.Contains(choices, fun (c: string) -> c.Contains("Finesse Cadence: Threaded Opening"))
@@ -523,7 +505,7 @@ let ``meter-gated gambit labels parse to their intended intents`` () =
     | other -> Assert.True(false, sprintf "Finesse threaded opening parsed to %A" other)
 
   // The gambits stay hidden below their 2-stack floor
-  let spent = { TierFactory.createClassLevel CharacterClass.Warrior 1 with Momentum = 1; Flow = 1; Focus = 2 }
+  let spent = { TierFactory.createClassLevel CharacterClass.Warrior 1 with Momentum = 1; Flow = 1 }
   let spentChoices = Program.buildActionChoices spent dummyEnemy
   Assert.DoesNotContain(spentChoices, fun (c: string) -> c.Contains("Insight Cleave"))
   Assert.DoesNotContain(spentChoices, fun (c: string) -> c.Contains("Threaded Opening"))

@@ -632,9 +632,9 @@ module TowerGenerator =
             let idx = Math.Min(list.Length - 1, (floorNumber - 1) % list.Length)
             let rotated = list.[idx]
             // The rotation alone used to drop GrandMaster templates on early floors (the Obsidian
-            // Fiend, level 160, as the tower-floor-3 guardian). Clamp to the level this floor's
-            // progression assumes and take the strongest legal template instead.
-            let ceiling = ProgressionScale.storyGuardianLevel floorNumber
+            // Fiend, level 160, as the tower-floor-3 guardian). Clamp to the authored magnitude this
+            // floor's template ladder assumes and take the strongest legal template instead.
+            let ceiling = ProgressionScale.stageTemplateCeiling floorNumber
             if rotated.Level <= ceiling then rotated
             else
               match list |> List.filter (fun m -> m.Level <= ceiling) with
@@ -703,6 +703,17 @@ module TowerGenerator =
           let cls = if (i / 2) % 2 = 0 then CharacterClass.Rogue else CharacterClass.Warrior
           let name = if cls = CharacterClass.Rogue then "Forest Wolf" else "Bramble Boar"
           let combatant = TierFactory.createClassLevel cls tutorialLevel
+          // The boar is a beast, not a Warrior wearing a boar's name: `MonsterFamily` is what
+          // `Combatant.IsBeast`, the lone-beast mercy rule and the beast AI instinct profile read.
+          // It stays a tutorial-only spawn (not in `Bestiary.allMonsters`, whose 21-species
+          // distribution is spec'd), so its pools keep the level-3 template shape above.
+          let combatant =
+            if cls = CharacterClass.Rogue then
+              combatant
+            else
+              { combatant with
+                  MonsterFamily = Some MonsterFamily.Beast
+                  MonsterTraits = [ RelentlessFerocity 20 ] }
           name, { combatant with Name = name }
       else
         let mobTemplate =
@@ -722,11 +733,11 @@ module TowerGenerator =
                 // Floors 2-3: Novice and Veteran mobs
                 biomeMonsters |> List.truncate 2
               else
-                // Floors 4+: Full spectrum of biome mobs, clamped to what this stage's progression
-                // assumes. The clamp existed for the guardian only, so story floor 5 happily placed a
-                // level-175 Storm Drake three tiles from the player's spawn while the protagonist was
-                // level 105. Same ceiling, same lowest-legal fallback.
-                let ceiling = ProgressionScale.storyGuardianLevel floorNumber
+                // Floors 4+: Full spectrum of biome mobs, clamped to what this stage's template
+                // ladder assumes. The clamp existed for the guardian only, so story floor 5 happily placed a
+                // level-175 Storm Drake three tiles from the player's spawn. Same ceiling, same
+                // lowest-legal fallback.
+                let ceiling = ProgressionScale.stageTemplateCeiling floorNumber
 
                 if not isStory then
                   biomeMonsters
@@ -808,6 +819,7 @@ module TowerGenerator =
       SpawnLocation = spawn
       Explored = Set.empty.Add spawn
       Visible = Set.empty.Add spawn
+      SeenEnemies = Set.empty
       ActiveQuests = npc.Quest |> Option.toList }
 
   /// Generates a complete Tower floor layout with open architectural plazas

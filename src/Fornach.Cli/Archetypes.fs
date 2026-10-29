@@ -45,10 +45,6 @@ module Archetypes =
     let c = TierFactory.createClassLevel CharacterClass.Rogue 1
     { c with Name = "Rogue" }
 
-  let createNoviceSoldier () =
-    let c = TierFactory.createClassLevel CharacterClass.Soldier 1
-    { c with Name = "Soldier" }
-
   let createNoviceMage () =
     let c = TierFactory.createClassLevel CharacterClass.Mage 1
     { c with Name = "Mage" }
@@ -119,12 +115,6 @@ module Archetypes =
       Discipline = CombatMode.Physical
       Description = "Generic Finesse NPC: agile skirmisher relying on Finesse and speed (no preparations)."
       Factory = createNoviceRogue }
-
-    { Name = "Soldier"
-      Tier = Novice
-      Discipline = CombatMode.Physical
-      Description = "Generic Discipline NPC: rank-and-file guard maintaining formation and Prowess (no preparations)."
-      Factory = createNoviceSoldier }
 
     { Name = "Mage"
       Tier = Novice

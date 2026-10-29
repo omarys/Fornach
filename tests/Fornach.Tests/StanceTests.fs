@@ -28,7 +28,7 @@ module StanceTests =
 
   [<Fact>]
   let ``Discipline stance boosts Discipline-vector combat stats and penalizes the plane's other vectors`` () =
-    let warden = TierFactory.createClassLevel CharacterClass.Soldier 40 // DisciplineStance
+    let warden = { TierFactory.createClassLevel CharacterClass.Warrior 40 with Stance = CombatStance.DisciplineStance }
 
     Assert.Equal(CombatStance.DisciplineStance, warden.Stance)
     Assert.True(warden.GetCombatStat Prowess > warden.Stats.Get Prowess)

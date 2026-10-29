@@ -240,7 +240,7 @@ let ``a grinding stone is the only way back to pristine`` () =
   Assert.Equal(WeaponCondition.Pristine, (Consumables.apply ConsumableKind.GrindingStone damaged).WeaponCondition)
 
 [<Fact>]
-let ``a ration and a spirit seed exceed the eighty percent rest cap`` () =
+let ``a ration and a spirit seed exceed the rest caps`` () =
   let spent =
     let p = delver ()
 
@@ -249,9 +249,12 @@ let ``a ration and a spirit seed exceed the eighty percent rest cap`` () =
         Morale = { p.Morale with Current = 40 }
     }
 
-  Assert.Equal(160, (TowerSession.restRecoverPool spent.Health 1000).Current)
-  Assert.Equal(160, (TowerSession.restRecoverPool spent.Morale 1000).Current)
-  Assert.Equal(200, (Consumables.apply ConsumableKind.Ration spent).Health.Current)
+  // Health rests only to 60%; Morale rests to full.
+  Assert.Equal(120, (TowerSession.restRecoverHealth spent.Health 1000).Current)
+  Assert.Equal(200, (TowerSession.restRecoverMorale spent.Morale 1000).Current)
+  // A ration raises Health to 80% of max, and never lowers a healthier one.
+  Assert.Equal(160, (Consumables.apply ConsumableKind.Ration spent).Health.Current)
+  Assert.Equal(190, (Consumables.apply ConsumableKind.Ration { spent with Health = { spent.Health with Current = 190 } }).Health.Current)
   Assert.Equal(200, (Consumables.apply ConsumableKind.SpiritSeed spent).Morale.Current)
 
 // ---------------------------------------------------------------------------
@@ -495,14 +498,14 @@ let ``a health altar from full lands below the rest cap and cannot kill`` () =
   let altarPos, state = stateWithAltar (AltarCost.SacrificeHealth 25) (delver ())
 
   let restCap =
-    int (float state.Player.Health.Maximum * TowerSession.restRecoveryFraction)
+    int (float state.Player.Health.Maximum * TowerSession.restHealthRecoveryFraction)
 
   match TowerSession.applyAltarSacrifice altarPos state with
   | Error e -> Assert.Fail e
   | Ok paid ->
-    // 25% of 200 leaves 150: strictly under the 160 rest cap, and still standing.
+    // 25% of 200 leaves 150: above the 120 rest cap, and still standing.
     Assert.Equal(150, paid.Player.Health.Current)
-    Assert.True(paid.Player.Health.Current < restCap)
+    Assert.True(paid.Player.Health.Current > restCap)
     Assert.True(paid.Player.Health.Current > 0)
 
   // The same toll on a ten-times bigger pool still costs a quarter of it, not a flat 25.

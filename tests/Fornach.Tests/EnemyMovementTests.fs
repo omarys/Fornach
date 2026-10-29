@@ -51,6 +51,7 @@ let private makeState
       SpawnLocation = playerPos
       Explored = Set.empty
       Visible = Set.empty
+      SeenEnemies = Set.empty
       ActiveQuests = [] }
 
   { Player = createPlayer ()

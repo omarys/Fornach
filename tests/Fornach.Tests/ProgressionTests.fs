@@ -14,7 +14,7 @@ module ProgressionTests =
 
   [<Fact>]
   let ``GrantXP below threshold accumulates without levelling`` () =
-    let profile = ProgressionProfile.create CharacterClass.Soldier 5
+    let profile = ProgressionProfile.create CharacterClass.Warrior 5
     let after, gained = profile.GrantXP 10
 
     Assert.Equal(0, gained)
@@ -158,6 +158,27 @@ module ProgressionTests =
     Assert.Equal(ProgressionScale.storyGuardianLevel 2 + 2, withLead.Player.Level)
 
   [<Fact>]
+  let ``clearing the last story stage lands the protagonist on the Veteran threshold`` () =
+    // The Infinite Tower (story floor 8) is entered as a Veteran, not a GrandMaster.
+    let player = TierFactory.createClassLevel CharacterClass.Fighter 1
+    let state = TowerSession.initSessionWithMode player 77 7 true
+    let after = TowerSession.resolveEnemyDefeat "boss_stage_7" state
+
+    Assert.Equal(40, after.Player.Level)
+    Assert.Equal(CombatTier.Veteran, ProgressionScale.levelToTier after.Player.Level)
+
+  [<Fact>]
+  let ``the story level ladder climbs every stage and stops at the Veteran threshold`` () =
+    let ladder = [ for floor in 1 .. 7 -> ProgressionScale.storyGuardianLevel floor ]
+    Assert.Equal<int list>(List.sort ladder, ladder)
+    Assert.Equal(40, List.last ladder)
+    Assert.True(ladder |> List.forall (fun level -> level <= 40))
+
+    // Template eligibility stays on the authored bestiary magnitudes, so the deep stages keep their
+    // roster instead of collapsing onto the single lowest-level template.
+    Assert.Equal(185, ProgressionScale.stageTemplateCeiling 6)
+
+  [<Fact>]
   let ``Spell armor bonus progression matches the 5% per 10 levels table from level 50 to 200`` () =
     // Sub-50 levels have zero spell armor
     Assert.Equal(0.0, ProgressionScale.spellArmorBonus 1)
@@ -230,26 +251,53 @@ module ProgressionTests =
     let inq100 = TierFactory.createClassLevel CharacterClass.Mage 100
     let inq200 = TierFactory.createClassLevel CharacterClass.Mage 200
 
-    // Level 49: 0% spell armor, base Fortitude = 106, Reflex = 63, Poise = 135
+    // Level 49: 0% spell armor, base Fortitude = 106, Reflex = 160, Poise = 135. The physical
+    // defences climb on the physical curve (160 = 75% of the 213 primary), which is what gives a
+    // caster a guard worth rolling against a martial foe before any spell armour exists.
     Assert.Equal(0.0, inq49.SpellArmorBonus, 3)
     Assert.Equal(106, inq49.GetStat Fortitude)
-    Assert.Equal(63, inq49.GetStat Reflex)
+    Assert.Equal(160, inq49.GetStat Reflex)
     Assert.Equal(135, inq49.GetStat Poise)
 
     // Level 50: 5% spell armor (the Mage's Resolve, Intuition and Composure are all primary = 216 -> +11 each)
     Assert.Equal(0.05, inq50.SpellArmorBonus, 3)
     Assert.Equal(106 + 11, inq50.GetStat Fortitude)
-    Assert.Equal(63 + 11, inq50.GetStat Reflex)
+    Assert.Equal(160 + 11, inq50.GetStat Reflex)
     Assert.Equal(135 + 11, inq50.GetStat Poise)
 
     // Level 100: 30% spell armor (all mental attributes = 396 -> +119 each)
     Assert.Equal(0.30, inq100.SpellArmorBonus, 3)
     Assert.Equal(106 + 119, inq100.GetStat Fortitude)
-    Assert.Equal(63 + 119, inq100.GetStat Reflex)
+    Assert.Equal(160 + 119, inq100.GetStat Reflex)
     Assert.Equal(135 + 119, inq100.GetStat Poise)
 
     // Level 200: 80% spell armor (all mental attributes = 756 -> +605 each)
     Assert.Equal(0.80, inq200.SpellArmorBonus, 3)
     Assert.Equal(106 + 605, inq200.GetStat Fortitude)
-    Assert.Equal(63 + 605, inq200.GetStat Reflex)
+    Assert.Equal(160 + 605, inq200.GetStat Reflex)
     Assert.Equal(135 + 605, inq200.GetStat Poise)
+
+  [<Fact>]
+  let ``sparing a beast still grows a stat past the class curve`` () =
+    let player = TierFactory.createClassLevel CharacterClass.Fighter 40
+    let state = TowerSession.initSession player 4242 1
+
+    let enemy =
+      state.CurrentFloor.Entities
+      |> Map.toList
+      |> List.pick (fun (_, entity) ->
+        match entity with
+        | EntityEnemy e when not e.IsDefeated -> Some e
+        | _ -> None)
+
+    let atCurve = state.Player.Stats.Get Prowess
+    let spared = TowerSession.resolveBeastFlee enemy.Id true state
+
+    // Growth is unbounded: a spared beast pays a real point even at the curve, alongside the
+    // steadying morale and the familiarity.
+    Assert.Equal((TierFactory.createClassLevel CharacterClass.Fighter 40).Stats.Get Prowess, atCurve)
+    Assert.Equal(atCurve + 1, spared.Player.Stats.Get Prowess)
+
+    let species = ProgressionProfile.NormalizeSpeciesName enemy.Combatant.Name
+
+    Assert.Equal(5, spared.Player.Progression.BestiaryKnowledge |> Map.tryFind species |> Option.defaultValue 0)

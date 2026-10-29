@@ -17,7 +17,7 @@ let ``statPair mirrors the stats ActionResolver contests against`` () =
 [<Fact>]
 let ``a DisciplineStance defender is estimated against its real Poise guard`` () =
   let attacker = TierFactory.createClassLevel CharacterClass.Rogue 100
-  let baseTarget = TierFactory.createClassLevel CharacterClass.Soldier 100
+  let baseTarget = TierFactory.createClassLevel CharacterClass.Warrior 100
   let prowl = AttackClassification.ProwessStrike false
 
   let stanced stance = { baseTarget with Stance = stance }
@@ -35,7 +35,7 @@ let ``a DisciplineStance defender is estimated against its real Poise guard`` ()
 [<Fact>]
 let ``a strike is estimated in the stance it transitions into, not the one held`` () =
   let power = TierFactory.createClassLevel CharacterClass.Fighter 100 // holds PowerStance
-  let target = TierFactory.createClassLevel CharacterClass.Soldier 100
+  let target = TierFactory.createClassLevel CharacterClass.Warrior 100
   let agility = { power with Stance = CombatStance.AgilityStance }
   let discipline = { power with Stance = CombatStance.DisciplineStance }
 
@@ -49,13 +49,13 @@ let ``a strike is estimated in the stance it transitions into, not the one held`
 let ``each strike scales with its own meter`` () =
   let fighter = TierFactory.createClassLevel CharacterClass.Fighter 100
   // Soft target: every vector must actually land damage, or the floors hide the ramp.
-  let baseTarget = TierFactory.createClassLevel CharacterClass.Soldier 100
+  let baseTarget = TierFactory.createClassLevel CharacterClass.Warrior 100
   let target =
     { baseTarget with
         Stats = baseTarget.Stats.With(Fortitude, 1).With(Reflex, 1).With(Poise, 1) }
-  let charged = { fighter with Flow = 5; Momentum = 5; Focus = 5 }
+  let charged = { fighter with Flow = 5; Momentum = 5 }
 
-  // Momentum/Flow/Focus are read by GetCombatStat, so a charged pile must raise every vector's strike.
+  // Flow and Momentum are read by GetCombatStat, so a charged pile must raise every vector's strike.
   for attack in
     [ AttackClassification.ForceStrike false
       AttackClassification.FinesseCadence false
@@ -68,7 +68,7 @@ let ``each strike scales with its own meter`` () =
 [<Fact>]
 let ``a flagged strike variant estimates higher than its plain form`` () =
   let fighter = TierFactory.createClassLevel CharacterClass.Fighter 100
-  let baseTarget = TierFactory.createClassLevel CharacterClass.Soldier 100
+  let baseTarget = TierFactory.createClassLevel CharacterClass.Warrior 100
   // Soft target, so the variance bars are wide enough for both variants to land.
   let soft =
     { baseTarget with
@@ -90,7 +90,7 @@ let ``a mental strike is estimated against the defender's mental grounding`` () 
 [<Fact>]
 let ``a softer defense estimates more damage than a hardened one`` () =
   let attacker = TierFactory.createClassLevel CharacterClass.Rogue 100
-  let baseTarget = TierFactory.createClassLevel CharacterClass.Soldier 100
+  let baseTarget = TierFactory.createClassLevel CharacterClass.Warrior 100
   let cadence = AttackClassification.FinesseCadence false
 
   let glassJaw =
@@ -110,7 +110,7 @@ let ``the duel menu promotes the strike the scouted enemy is softest to`` () =
 
   // Agility-poised duelist against an enemy who shrugs off agility but folds to force:
   // the archetype's own order lists Finesse first, so a correct ranking has to reorder it.
-  let baseEnemy = TierFactory.createClassLevel CharacterClass.Soldier 100
+  let baseEnemy = TierFactory.createClassLevel CharacterClass.Warrior 100
 
   let enemy =
     { baseEnemy with

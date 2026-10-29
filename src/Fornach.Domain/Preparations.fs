@@ -156,7 +156,7 @@ type PreparationType =
         Math.Max(this.BaseDuration, this.BaseDuration + bonus)
 
   /// Retrieves the preparations belonging to a class: the Fighter carries the physical kit and the
-  /// Mage the mental one. Generic NPC classes (Warrior, Rogue, Soldier) possess none.
+  /// Mage the mental one. Generic NPC classes (Warrior, Rogue) possess none.
   static member ForClass (cls: CharacterClass) : PreparationType list =
     match cls with
     | CharacterClass.Fighter ->
@@ -175,8 +175,7 @@ type PreparationType =
         HeraldicTreatise
         SocraticDossier ]
     | CharacterClass.Warrior
-    | CharacterClass.Rogue
-    | CharacterClass.Soldier -> []
+    | CharacterClass.Rogue -> []
 
 /// Individual preparation slot tracking usage availability
 type PreparationSlot = {

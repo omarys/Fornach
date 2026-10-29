@@ -322,7 +322,7 @@ let ``MechanicalTrapGauntlet disarms on high stat and triggers damage on low sta
   Assert.Contains(disarmEvents, (function TowerEvent.TrapDisarmed _ -> true | _ -> false))
 
 [<Fact>]
-let ``MemoryEchoFragment restores morale and adds to discovered echoes`` () =
+let ``MemoryEchoFragment deepens the morale pool and adds to discovered echoes`` () =
   let player = createTestPlayer ()
   let strainedPlayer = { player with Morale = player.Morale.ApplyDelta -50 }
   let baseState = TowerSession.initSession strainedPlayer 42 1
@@ -335,7 +335,7 @@ let ``MemoryEchoFragment restores morale and adds to discovered echoes`` () =
       Title = "The Scent of Wet Asphalt"
       SensoryDetail = "Cold rain on slick tires."
       MemoryTranscript = [ "\"Are you ready to head home?\"" ]
-      MoraleRecovery = 30
+      MoraleGrowth = 5
       IsCommuned = false }
 
   let floorWithEcho =
@@ -352,7 +352,14 @@ let ``MemoryEchoFragment restores morale and adds to discovered echoes`` () =
   let nextState, events = TowerSession.stepPlayer Direction.East stepState
 
   Assert.Equal(echoPos, nextState.PlayerPosition)
-  Assert.Equal(strainedPlayer.Morale.Current + 30, nextState.Player.Morale.Current)
+
+  // A permanent widening of the pool, not a top-up: maximum grows by 5% and current morale rises
+  // with it, so the gain is still there on the next floor.
+  let expected =
+    Math.Max(1, int (Math.Round(float strainedPlayer.Morale.Maximum * 0.05)))
+
+  Assert.Equal(strainedPlayer.Morale.Maximum + expected, nextState.Player.Morale.Maximum)
+  Assert.Equal(strainedPlayer.Morale.Current + expected, nextState.Player.Morale.Current)
   Assert.True(nextState.DiscoveredEchoes.Contains "echo_wet_asphalt")
   Assert.Contains(events, (function TowerEvent.EchoDiscovered _ -> true | _ -> false))
 

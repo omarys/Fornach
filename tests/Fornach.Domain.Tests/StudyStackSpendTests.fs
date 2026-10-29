@@ -5,7 +5,7 @@ open Xunit
 open Fornach.Domain
 open Fornach.Engine
 
-/// Pins the shape of the combat-ramp ladder that replaced Study Stacks: three meters sharing one
+/// Pins the shape of the combat-ramp ladder that replaced Study Stacks: two meters sharing one
 /// ceiling of five, and a same-vector special that cashes its own meter at half a stack per point.
 /// A pile is meant to pay off; these assertions exist so a future magnitude change is a deliberate
 /// decision, not a quiet drift.
@@ -26,37 +26,31 @@ module StudyStackSpendTests =
     let fresh = master ()
     Assert.Equal(0, fresh.Flow)
     Assert.Equal(0, fresh.Momentum)
-    Assert.Equal(0, fresh.Focus)
     Assert.Equal(5, Combatant.StackCap)
 
   [<Fact>]
-  let ``addStacks raises all three meters and clamps them at the cap`` () =
+  let ``addStacks raises both meters and clamps them at the cap`` () =
     let raised = master () |> Combatant.addStacks 3
     Assert.Equal(3, raised.Flow)
     Assert.Equal(3, raised.Momentum)
-    Assert.Equal(3, raised.Focus)
 
     let flooded = raised |> Combatant.addStacks 100
     Assert.Equal(Combatant.StackCap, flooded.Flow)
     Assert.Equal(Combatant.StackCap, flooded.Momentum)
-    Assert.Equal(Combatant.StackCap, flooded.Focus)
 
     let drained = flooded |> Combatant.addStacks -100
     Assert.Equal(0, drained.Flow)
     Assert.Equal(0, drained.Momentum)
-    Assert.Equal(0, drained.Focus)
 
   [<Fact>]
   let ``decayStacks takes one off every meter and floors at zero`` () =
     let holding = master () |> Combatant.addStacks 2 |> Combatant.decayStacks
     Assert.Equal(1, holding.Flow)
     Assert.Equal(1, holding.Momentum)
-    Assert.Equal(1, holding.Focus)
 
     let floored = master () |> Combatant.decayStacks
     Assert.Equal(0, floored.Flow)
     Assert.Equal(0, floored.Momentum)
-    Assert.Equal(0, floored.Focus)
 
   [<Fact>]
   let ``drainStacks empties only the meter that gates the vector`` () =
@@ -64,7 +58,6 @@ module StudyStackSpendTests =
     let drainedOnce = holding |> Combatant.drainStacks Vector.Power 2
     Assert.Equal(4, drainedOnce.Flow)
     Assert.Equal(2, drainedOnce.Momentum)
-    Assert.Equal(4, drainedOnce.Focus)
 
     // stacksIn reads back the meter that gates each vector.
     Assert.Equal(4, Combatant.stacksIn Vector.Power holding)
@@ -73,9 +66,11 @@ module StudyStackSpendTests =
 
     // An over-drain clamps at zero instead of going negative.
     let overDrained = holding |> Combatant.drainStacks Vector.Discipline 99
-    Assert.Equal(0, overDrained.Focus)
+    Assert.Equal(0, overDrained.Momentum)
     Assert.Equal(4, overDrained.Flow)
-    Assert.Equal(4, overDrained.Momentum)
+    // Power and Discipline share one meter now, so a Discipline drain leaves nothing for a Force strike.
+    Assert.Equal(0, Combatant.stacksIn Vector.Power overDrained)
+    Assert.Equal(0, Combatant.stacksIn Vector.Discipline overDrained)
 
   [<Fact>]
   let ``a cash-out pays 1.0 + 0.35n and nothing extra on an empty meter`` () =
@@ -89,14 +84,13 @@ module StudyStackSpendTests =
 
   [<Fact>]
   let ``resolving a special cashes the whole meter and leaves the swing's own stack behind`` () =
-    let actor = { master () with Focus = Combatant.StackCap }
+    let actor = { master () with Momentum = Combatant.StackCap }
     let target = master ()
 
     let res = ActionResolver.resolve topRoll (StandardAttack CalculatedFlawStrike) actor target
 
     Assert.Equal(Combatant.StackCap, spentBy res)
-    // The cash-out empties Focus, then every attack feeds one stack back to all three meters.
-    Assert.Equal(1, res.Actor.Focus)
+    // The cash-out empties Momentum, then every attack feeds one stack back to both meters.
     Assert.Equal(1, res.Actor.Flow)
     Assert.Equal(1, res.Actor.Momentum)
 
@@ -110,7 +104,7 @@ module StudyStackSpendTests =
 
     let dealt stacks =
       let target = master ()
-      let actor = { master () with Focus = stacks }
+      let actor = { master () with Momentum = stacks }
       let res = ActionResolver.resolve topRoll (StandardAttack CalculatedFlawStrike) actor target
       target.Health.Current - res.Target.Health.Current
 
@@ -133,7 +127,7 @@ module StudyStackSpendTests =
 
     let dealt stacks =
       let target = master ()
-      let actor = { master () with Focus = stacks }
+      let actor = { master () with Momentum = stacks }
       let res = ActionResolver.resolve topRoll (StandardAttack CalculatedFlawStrike) actor target
       target.Health.Current - res.Target.Health.Current
 

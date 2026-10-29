@@ -29,7 +29,7 @@ module StoryTutorialTests =
       | "mage" -> CharacterClass.Mage
       | "berserker" -> CharacterClass.Warrior
       | "duelist" -> CharacterClass.Rogue
-      | "warden" -> CharacterClass.Soldier
+      | "warden" -> CharacterClass.Warrior
       | "mesmer" -> CharacterClass.Mage
       | "abjurer" -> CharacterClass.Mage
       | _ -> CharacterClass.Mage
@@ -151,24 +151,23 @@ module StoryTutorialTests =
     let cleared = enemyIds |> List.fold (fun s id -> TowerSession.resolveEnemyDefeat id s) state
 
     // The tutorial floor carries 2 roaming mobs per chamber (16-24 across seeds), each paying the
-    // flat tutorial bonus, so a completionist clears it in the low forties. The band stays tight
-    // around that so a later density or XP inflation cannot slip through unnoticed.
+    // flat tutorial bonus, so a completionist clears it at the stage gate's level. The band stays
+    // tight around that so a later density or XP inflation cannot slip through unnoticed.
     Assert.True(
-      cleared.Player.Level >= 30 && cleared.Player.Level <= 48,
-      sprintf "Clearing the tutorial floor should land the protagonist in levels 30-48, got %d" cleared.Player.Level)
+      cleared.Player.Level >= 5 && cleared.Player.Level <= 9,
+      sprintf "Clearing the tutorial floor should land the protagonist in levels 5-9, got %d" cleared.Player.Level)
 
     Assert.Contains("keystone_stage_1", cleared.CollectedKeys)
 
   [<Fact>]
   let ``Each story stage gate levels the protagonist for the next biome's monsters`` () =
-    // Per-kill experience (~0.3 levels per floor after the tutorial) cannot keep pace with the biome
-    // tiers, so each stage's keystone guardian grants the level the next biome's monsters assume.
-    // Without it the protagonist entered the Basalt Calderas at level 33 against a level-95 Master
-    // golem.
+    // Per-kill experience (~0.3 levels per floor after the tutorial) cannot keep pace with the story
+    // curve, so each stage's keystone guardian grants the level the next biome's monsters assume.
+    // The ramp is six levels per stage and lands on 40 — the Veteran threshold — for the tower.
     let player = StoryBosses.createProloguePlayer "berserker"
     let mutable state = TowerSession.initSessionWithMode player 4242 1 true
 
-    let gateLevels = [ 1, 32; 2, 45; 3, 95; 4, 105; 5, 110; 6, 185 ]
+    let gateLevels = [ 1, 6; 2, 11; 3, 17; 4, 23; 5, 29; 6, 35; 7, 40 ]
 
     for floorNumber, expectedLevel in gateLevels do
       Assert.Equal(floorNumber, state.CurrentFloor.FloorNumber)

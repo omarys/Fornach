@@ -41,7 +41,7 @@ let ``a level one mage can barely scratch a Master or Grandmaster champion`` (ti
     | "GrandMaster" -> CombatTier.GrandMaster
     | other -> failwithf "unexpected tier %s" other
 
-  for cls in [ CharacterClass.Fighter; CharacterClass.Warrior; CharacterClass.Rogue; CharacterClass.Soldier ] do
+  for cls in [ CharacterClass.Fighter; CharacterClass.Warrior; CharacterClass.Rogue ] do
     let champ = TierFactory.createClassTier cls tier
 
     for (intent, moraleLost) in worstMoraleLoss champ do
@@ -56,7 +56,7 @@ let ``physical classes carry respectable mental defence`` () =
   // defence should sit close to the primary, not at half of it.
   let prim = 45 + (40 - 1) * 4 // physical primary at Veteran
 
-  for cls in [ CharacterClass.Fighter; CharacterClass.Warrior; CharacterClass.Rogue; CharacterClass.Soldier ] do
+  for cls in [ CharacterClass.Fighter; CharacterClass.Warrior; CharacterClass.Rogue ] do
     let champ = TierFactory.createClassTier cls CombatTier.Veteran
 
     let mentalDefence =

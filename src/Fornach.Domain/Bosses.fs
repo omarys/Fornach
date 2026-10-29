@@ -459,7 +459,7 @@ module StoryBosses =
           Triggers = [] },
         None
       | "warden" ->
-        CharacterClass.Soldier,
+        CharacterClass.Warrior,
         { Name = "Iron Arming Sword & Tower Buckler"
           Slot = EquipmentSlot.Weapon
           Description = "A notched steel blade paired with an iron-banded buckler for unyielding defense."

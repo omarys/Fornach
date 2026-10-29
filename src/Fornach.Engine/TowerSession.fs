@@ -62,19 +62,33 @@ module TowerSession =
     let visibleTiles = Fov.compute state.CurrentFloor.IsOpaque cone
     let updatedExplored = Set.union state.CurrentFloor.Explored visibleTiles
 
+    // Remember every foe the player has actually had in view; unseen foes are what an ambush is made of.
+    let seenNow =
+      state.CurrentFloor.Entities
+      |> Map.toSeq
+      |> Seq.choose (fun (pt, ent) ->
+        match ent with
+        | EntityEnemy e when Set.contains pt visibleTiles -> Some e.Id
+        | _ -> None)
+      |> Set.ofSeq
+
     let updatedFloor =
       { state.CurrentFloor with
           Visible = visibleTiles
-          Explored = updatedExplored }
+          Explored = updatedExplored
+          SeenEnemies = Set.union state.CurrentFloor.SeenEnemies seenNow }
 
     { state with CurrentFloor = updatedFloor }
 
   /// Chebyshev radius within which a living enemy takes notice of the player and gives chase
   let aggroRadius = 8
 
-  /// Resting and waiting top out here. Only a shrine restores Health, Morale, Armor or a weapon
-  /// to full, so a long rest can never substitute for finding one.
-  let restRecoveryFraction = 0.80
+  /// Resting and waiting top out here for the body. Passing this mark takes a shrine — a long rest
+  /// can never substitute for finding one.
+  let restHealthRecoveryFraction = 0.60
+
+  /// Gear is maintained a little further than flesh is mended.
+  let restGearRecoveryFraction = 0.80
 
   /// Number of consecutive waits/steps taken as the player's current focus depth.
   let private focusDepth (locomotion: LocomotionState) =
@@ -95,16 +109,24 @@ module TowerSession =
     | depth when depth > 1 -> LocomotionState.Stationary(depth - 1)
     | _ -> LocomotionState.Walking
 
-  let private restCap (maximum: int) = max 1 (int (float maximum * restRecoveryFraction))
+  let private restCapOf (fraction: float) (maximum: int) = max 1 (int (float maximum * fraction))
 
-  /// Heals toward the rest cap, never past it, and never downward.
-  let restRecoverPool (pool: Pool) (amount: int) =
-    let cap = restCap pool.Maximum
+  /// Heals toward a cap, never past it, and never downward.
+  let private restRecoverTo (capOf: int -> int) (pool: Pool) (amount: int) =
+    let cap = capOf pool.Maximum
     if pool.Current >= cap then pool else pool.ApplyDelta(min amount (cap - pool.Current))
 
-  /// Repairs toward the rest cap, never past it.
+  /// Health stops at the rest cap: everything past it is shrine work.
+  let restRecoverHealth (pool: Pool) (amount: int) =
+    restRecoverTo (restCapOf restHealthRecoveryFraction) pool amount
+
+  /// Morale rests all the way back to full. Resolve is the one pool that comes back on its own —
+  /// the body is what stays broken until something mends it.
+  let restRecoverMorale (pool: Pool) (amount: int) = restRecoverTo id pool amount
+
+  /// Repairs toward the gear cap, never past it.
   let restRepairArmor (armor: ArmorIntegrity) (amount: int) =
-    let cap = restCap armor.Max
+    let cap = restCapOf restGearRecoveryFraction armor.Max
 
     if armor.Current >= cap then armor
     else { armor with Current = min cap (armor.Current + amount) }
@@ -118,8 +140,11 @@ module TowerSession =
 
   /// Health and Morale cannot regenerate while the wound is open; the pool comes back untouched so
   /// the caller can say why.
-  let restRecoverPoolWhenWoundClosed (bleedStacks: int) (pool: Pool) (amount: int) =
-    if bleedStacks > 0 then pool else restRecoverPool pool amount
+  let restRecoverHealthWhenWoundClosed (bleedStacks: int) (pool: Pool) (amount: int) =
+    if bleedStacks > 0 then pool else restRecoverHealth pool amount
+
+  let restRecoverMoraleWhenWoundClosed (bleedStacks: int) (pool: Pool) (amount: int) =
+    if bleedStacks > 0 then pool else restRecoverMorale pool amount
 
   /// One turn of out-of-combat recovery. Bleeding closes first, and Health and Morale only
   /// regenerate once that has stopped the wound. Armor is tended either way — gear is maintained
@@ -130,8 +155,8 @@ module TowerSession =
 
     { Combatant.decayStacks player with
         BleedStacks = bleed
-        Health = restRecoverPoolWhenWoundClosed bleed player.Health heal
-        Morale = restRecoverPoolWhenWoundClosed bleed player.Morale morale
+        Health = restRecoverHealthWhenWoundClosed bleed player.Health heal
+        Morale = restRecoverMoraleWhenWoundClosed bleed player.Morale morale
         Armor = restRepairArmor player.Armor armorRepair }
 
   /// One step short of Pristine: resting hones a ruined weapon but cannot restore it.
@@ -239,10 +264,18 @@ module TowerSession =
     summary @ boonLine
 
   /// Foes scale to the player the moment they engage, so a guardian authored for tower floor 6
-  /// (level 185) is not fielded against a level 36 player. The authored state is untouched;
+  /// (level 185) is not fielded against a level-40 player. The authored state is untouched;
   /// only the combatant handed to the duel is scaled.
   let private engagedAtPlayerLevel (state: TowerRunState) (e: TowerEnemy) : TowerEnemy =
     { e with Combatant = TierFactory.clampEngagedToPlayerLevel e.Combatant state.Player }
+
+  /// Opens an engagement's tempo. A foe the player has not yet had in view takes the Vor and the
+  /// player opens in the Nach; a foe already seen meets a player who still holds the Vor.
+  let ambushTempo (state: TowerRunState) (enemy: TowerEnemy) : Combatant * TowerEnemy =
+    if state.CurrentFloor.SeenEnemies.Contains enemy.Id then
+      state.Player, enemy
+    else
+      Combatant.yieldVor state.Player, { enemy with Combatant = Combatant.seizeVor enemy.Combatant }
 
   /// Living enemies within the aggro radius that have an unobstructed line of sight to the player
   let enemiesAggroed (state: TowerRunState) : TowerEnemy list =
@@ -399,9 +432,24 @@ module TowerSession =
 
     let adjacent = adjacentEnemies workingState
 
+    // A pack the player never saw closes to contact: the foe holds the Vor, the player opens in the Nach.
+    let unseen =
+      adjacent |> List.filter (fun e -> not (workingState.CurrentFloor.SeenEnemies.Contains e.Id))
+
+    if not unseen.IsEmpty then
+      workingState <- { workingState with Player = Combatant.yieldVor workingState.Player }
+
+    let engaged =
+      adjacent
+      |> List.map (fun e ->
+        if unseen |> List.exists (fun u -> u.Id = e.Id) then
+          { e with Combatant = Combatant.seizeVor e.Combatant }
+        else
+          e)
+
     let events =
-      if List.isEmpty adjacent then []
-      else [ TowerEvent.GroupCombatTriggered adjacent ]
+      if List.isEmpty engaged then []
+      else [ TowerEvent.GroupCombatTriggered engaged ]
 
     workingState, events
 
@@ -600,9 +648,14 @@ module TowerSession =
       match Map.tryFind targetPt state.CurrentFloor.Entities with
       | Some (EntityEnemy enemy) when not enemy.IsDefeated ->
         let engaged = engagedAtPlayerLevel state enemy
+        let player, engaged = ambushTempo state engaged
         events <- [ TowerEvent.CombatTriggered engaged ]
-        let logMsg = sprintf "Encountered %s! Initiating duel..." enemy.Name
-        { nextState with MessageLog = logMsg :: nextState.MessageLog }, events
+        let logMsg =
+          if player.IsInNach then
+            sprintf "%s strikes from the dark - it holds the Vor, you open in the Nach." enemy.Name
+          else
+            sprintf "Encountered %s! Initiating duel..." enemy.Name
+        { nextState with Player = player; MessageLog = logMsg :: nextState.MessageLog }, events
 
       | Some (EntityNpc npc) ->
         // Check if quest can be completed (e.g. at least one enemy was defeated on this floor)
@@ -837,8 +890,19 @@ module TowerSession =
         | MemoryEchoFragment echo when not echo.IsCommuned ->
           let updatedEcho = { echo with IsCommuned = true }
           let updatedEntities = Map.add targetPt (EntityEncounter (MemoryEchoFragment updatedEcho)) state.CurrentFloor.Entities
-          let restoredPlayer = { state.Player with Morale = state.Player.Morale.ApplyDelta echo.MoraleRecovery }
-          let logMsg = sprintf "󰔱 Discovered Memory Echo: [%s]. %s (+%d Morale)" echo.Title echo.SensoryDetail echo.MoraleRecovery
+          // The echo widens the Morale pool for good rather than topping it up: current Morale drains
+          // and refills every floor, so a one-off refill is spent before the next room.
+          let growth =
+            Math.Max(1, int (Math.Round(float state.Player.Morale.Maximum * float echo.MoraleGrowth / 100.0)))
+
+          let widened =
+            { state.Player.Morale with Maximum = state.Player.Morale.Maximum + growth }
+              .ApplyDelta(growth)
+
+          let restoredPlayer = { state.Player with Morale = widened }
+
+          let logMsg =
+            sprintf "󰔱 Discovered Memory Echo: [%s]. %s (+%d Morale pool)" echo.Title echo.SensoryDetail growth
           events <- [ TowerEvent.EchoDiscovered echo; TowerEvent.Moved targetPt ]
           let updatedFloor = { state.CurrentFloor with Entities = updatedEntities }
           let movedState =
@@ -962,12 +1026,21 @@ module TowerSession =
 
       match reward with
       | StatBuff (stats, bonus) ->
-        // Flat points, not a percentage: the pair is resolved against the bearer's plane, so the
+        // Flat points, not a percentage: the stat is resolved against the bearer's plane, so the
         // number has to mean the same thing for a level-1 delver and a level-185 guardian.
         let updatedStats = stats |> List.fold (fun (s: StatBlock) stat -> s.Modify(stat, bonus)) costPlayer.Stats
         rewardedPlayer <- { costPlayer with Stats = updatedStats }
-      | PairBuff _ ->
-        // Unreachable: `ResolvedFor` above turns every authored pair buff into concrete stats.
+      | Tempered (relic, defences, temper) ->
+        // The relic's percentages resolve against the bearer inside `applyItemBonus`; the
+        // enlightenment is a flat temper on the defences of the plane the bearer does not walk.
+        newItems <- relic :: newItems
+        let attended = Combatant.applyItemBonus relic costPlayer
+
+        rewardedPlayer <-
+          { attended with
+              Stats = defences |> List.fold (fun (s: StatBlock) stat -> s.Modify(stat, temper)) attended.Stats }
+      | TemperedRelic _ ->
+        // Unreachable: `ResolvedFor` above turns every authored tempered relic into a concrete one.
         rewardedPlayer <- costPlayer
       | VitalitySurge (hpPct, morPct) ->
         // ApplyDelta clamps at the pool maximum, so a surge gifted at full health is not banked.

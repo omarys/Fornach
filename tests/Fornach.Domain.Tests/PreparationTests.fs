@@ -113,10 +113,10 @@ module PreparationTests =
         Assert.False(String.IsNullOrWhiteSpace(p.Description))
 
   [<Fact>]
-  let ``All 3 generic NPC classes (Warrior, Rogue, Soldier) map correctly and possess zero preparations`` () =
+  let ``All 2 generic NPC classes (Warrior, Rogue) map correctly and possess zero preparations`` () =
     let genericClasses = CharacterClass.GenericClasses
-    Assert.Equal(3, genericClasses.Length)
-    Assert.Equal(5, CharacterClass.All.Length)
+    Assert.Equal(2, genericClasses.Length)
+    Assert.Equal(4, CharacterClass.All.Length)
 
     for cls in genericClasses do
       Assert.True(cls.IsGeneric)
@@ -132,9 +132,6 @@ module PreparationTests =
 
     Assert.Equal(Vector.Agility, CharacterClass.Rogue.Vector)
     Assert.Equal(Plane.Physical, CharacterClass.Rogue.Plane)
-
-    Assert.Equal(Vector.Discipline, CharacterClass.Soldier.Vector)
-    Assert.Equal(Plane.Physical, CharacterClass.Soldier.Plane)
 
   [<Fact>]
   let ``The core player classes are Fighter and Mage, each carrying its full preparation kit`` () =
@@ -163,7 +160,7 @@ module PreparationTests =
     // Fixed roller of 4 so defense hits and attack hits are consistent.
     let roller = fixedRoller 4
     let attacker = createFighterWithClass CharacterClass.Warrior 1 60 40 40 40 40 40 10 10 10 10 10 10
-    let baseDefender = createFighterWithClass CharacterClass.Soldier 5 40 30 40 40 40 40 10 10 10 10 10 10
+    let baseDefender = createFighterWithClass CharacterClass.Warrior 5 40 30 40 40 40 40 10 10 10 10 10 10
 
     // Without BastionZoneControl at priorDefenses = 5 (6th attacker in a round)
     let resWithoutBastion = ActionResolver.resolveEx roller (StandardAttack (ForceStrike false)) attacker baseDefender 5
@@ -248,7 +245,7 @@ module PreparationTests =
 
   [<Fact>]
   let ``ParryingBuckler reduces Indes threshold by 1, widening window to seize the Vor`` () =
-    let standardJusticar = createStandardFighter CharacterClass.Soldier 1
+    let standardJusticar = createStandardFighter CharacterClass.Warrior 1
     Assert.Equal(Indes.defaultThreshold, Indes.calculateThreshold standardJusticar)
     Assert.Equal(3, Indes.calculateThreshold standardJusticar)
 
@@ -264,7 +261,7 @@ module PreparationTests =
     // With Parrying Buckler, threshold is 2, so IndesSeized should trigger.
     let attacker = createFighterWithClass CharacterClass.Warrior 1 20 20 20 20 20 20 10 10 10 10 10 10
     let defender =
-      createFighterWithClass CharacterClass.Soldier 5 40 80 40 40 40 40 10 10 10 10 10 10
+      createFighterWithClass CharacterClass.Warrior 5 40 80 40 40 40 40 10 10 10 10 10 10
       |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ParryingBuckler None 3)
 
     // Roller where defender rolls hits and attacker rolls whiffs
@@ -283,7 +280,7 @@ module PreparationTests =
 
   [<Fact>]
   let ``Indes dynamic threshold reduces with heavy wind-up attacks and high recklessness`` () =
-    let defender = createStandardFighter CharacterClass.Soldier 1
+    let defender = createStandardFighter CharacterClass.Warrior 1
     let standardAttacker = createStandardFighter CharacterClass.Warrior 1
     let recklessAttacker =
       standardAttacker
@@ -313,7 +310,7 @@ module PreparationTests =
       createFighterWithClass CharacterClass.Warrior 1 20 20 20 20 20 20 10 10 10 10 10 10
       |> Combatant.seizeVor
     let defender =
-      createFighterWithClass CharacterClass.Soldier 5 40 80 40 40 40 40 10 10 10 10 10 10
+      createFighterWithClass CharacterClass.Warrior 5 40 80 40 40 40 40 10 10 10 10 10 10
       |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ParryingBuckler None 3)
       |> Combatant.yieldVor
 
@@ -360,7 +357,7 @@ module PreparationTests =
       createFighterWithClass CharacterClass.Warrior 10 150 150 150 150 150 150 50 50 50 50 50 50
       |> Combatant.yieldVor
     let defenderInVor =
-      createFighterWithClass CharacterClass.Soldier 1 20 20 20 20 20 20 10 10 10 10 10 10
+      createFighterWithClass CharacterClass.Warrior 1 20 20 20 20 20 20 10 10 10 10 10 10
       |> Combatant.seizeVor
 
     Assert.True(attackerInNach.IsInNach)
@@ -437,12 +434,12 @@ module PreparationTests =
 
 
   [<Fact>]
-  let ``TierFactory initializes all 20 archetypes across 5 classes and 4 tiers correctly`` () =
+  let ``TierFactory initializes all 16 archetypes across 4 classes and 4 tiers correctly`` () =
     let tiers = [ Novice; Veteran; Master; GrandMaster ]
     let classes = CharacterClass.All
 
-    Assert.Equal(5, classes.Length)
-    Assert.Equal(20, classes.Length * tiers.Length)
+    Assert.Equal(4, classes.Length)
+    Assert.Equal(16, classes.Length * tiers.Length)
 
     for cls in classes do
       for tier in tiers do
@@ -547,7 +544,7 @@ module PreparationTests =
   [<Fact>]
   let ``Duel: Master Justicar with Parrying Buckler seizes Vor in Indes against Master Duelist`` () =
     let justicar =
-      TierFactory.createClassTier CharacterClass.Soldier Master
+      TierFactory.createClassTier CharacterClass.Warrior Master
       |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ParryingBuckler None 3)
     let duelist = TierFactory.createClassTier CharacterClass.Rogue Master
 
@@ -612,7 +609,7 @@ module PreparationTests =
   let ``Duel: Novice Warrior Force strike cleanly whiffs against GrandMaster Justicar with 0 Overwhelm`` () =
     // Novice has Force 45; GrandMaster Justicar has Poise 841 & Fortitude 841 (56 floor hits)
     let novice = TierFactory.createClassTier CharacterClass.Warrior Novice
-    let grandmaster = TierFactory.createClassTier CharacterClass.Soldier GrandMaster
+    let grandmaster = TierFactory.createClassTier CharacterClass.Warrior GrandMaster
     let roller = fixedRoller 4
 
     let res = ActionResolver.resolve roller (StandardAttack (ForceStrike false)) novice grandmaster
@@ -646,15 +643,15 @@ module PreparationTests =
     Assert.Equal(0, res.Target.Meters.Recklessness.Value)
 
   [<Fact>]
-  let ``Duel: Generic Novice Soldier vs Novice Rogue duels without preparations testing pure martial mechanics`` () =
-    let soldier = TierFactory.createClassTier CharacterClass.Soldier Novice
+  let ``Duel: Generic Novice Warrior vs Novice Rogue duels without preparations testing pure martial mechanics`` () =
+    let warrior = TierFactory.createClassTier CharacterClass.Warrior Novice
     let rogue = TierFactory.createClassTier CharacterClass.Rogue Novice
     let roller = fixedRoller 4
 
-    Assert.Empty(soldier.Preparations)
+    Assert.Empty(warrior.Preparations)
     Assert.Empty(rogue.Preparations)
 
-    let res = ActionResolver.resolve roller (StandardAttack (ProwessStrike false)) soldier rogue
+    let res = ActionResolver.resolve roller (StandardAttack (ProwessStrike false)) warrior rogue
 
     Assert.NotNull(res.Contest)
     // No preparation events should be emitted
@@ -689,31 +686,31 @@ module PreparationTests =
     Assert.True(res.Target.Health.Current < mage.Health.Current, "Mage should take physical damage from Warrior Force strike.")
 
   [<Fact>]
-  let ``Duel: Generic Master Soldier vs Master Duelist duels with high defense poise`` () =
-    let soldier = TierFactory.createClassTier CharacterClass.Soldier Master
+  let ``Duel: Generic Master Warrior vs Master Duelist duels with high defense poise`` () =
+    let warrior = TierFactory.createClassTier CharacterClass.Warrior Master
     let duelist = TierFactory.createClassTier CharacterClass.Rogue Master
     let roller = fixedRoller 4
 
-    // Duelist attacks Soldier with ProwessStrike (duelist secStat vs soldier primStat) -> Whiffs
-    let res = ActionResolver.resolve roller (StandardAttack (ProwessStrike false)) duelist soldier
+    // Duelist attacks Warrior with ProwessStrike (duelist secStat vs warrior primStat) -> Whiffs
+    let res = ActionResolver.resolve roller (StandardAttack (ProwessStrike false)) duelist warrior
     Assert.NotNull(res.Contest)
-    Assert.True(res.Contest.Value.IsWhiff, "Duelist secondary Prowess strike whiffs against Soldier Master Poise.")
+    Assert.True(res.Contest.Value.IsWhiff, "Duelist secondary Prowess strike whiffs against Warrior Master Poise.")
 
   [<Fact>]
-  let ``Duel: Generic GrandMaster Warrior vs GrandMaster Soldier duels in clash of brute force and guard`` () =
+  let ``Duel: Generic GrandMaster Warrior vs GrandMaster Warrior duels in clash of brute force and guard`` () =
     let warrior = TierFactory.createClassTier CharacterClass.Warrior GrandMaster
-    let soldier = TierFactory.createClassTier CharacterClass.Soldier GrandMaster
+    let warrior = TierFactory.createClassTier CharacterClass.Warrior GrandMaster
     // Attacker rolls high (6s) while defender rolls lower (4s)
     let mutable rollCount = 0
     let roller _ _ =
       rollCount <- rollCount + 1
       if rollCount <= 10 then 6 else 4
 
-    // Warrior Force strike against Soldier Fortitude (both primStat 841)
-    let res = ActionResolver.resolve roller (StandardAttack (ForceStrike false)) warrior soldier
+    // Warrior Force strike against Warrior Fortitude (both primStat 841)
+    let res = ActionResolver.resolve roller (StandardAttack (ForceStrike false)) warrior warrior
     Assert.NotNull(res.Contest)
     Assert.False(res.Contest.Value.IsWhiff, "High rolling GrandMaster Warrior strike overcomes guard.")
-    Assert.True(res.Target.Health.Current < soldier.Health.Current)
+    Assert.True(res.Target.Health.Current < warrior.Health.Current)
 
   // =========================================================================
   // 10. 1 vs N Swarm Matchups Across Tiers
@@ -757,7 +754,7 @@ module PreparationTests =
   [<Fact>]
   let ``1vsN: GrandMaster Justicar with Bastion Zone Control completely negates encirclement penalties against 4 Novice Warriors`` () =
     let justicar =
-      TierFactory.createClassTier CharacterClass.Soldier GrandMaster
+      TierFactory.createClassTier CharacterClass.Warrior GrandMaster
       |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.BastionZoneControl None 3)
 
     let novices = List.init 4 (fun _ -> TierFactory.createClassTier CharacterClass.Warrior Novice)
@@ -786,12 +783,12 @@ module PreparationTests =
       currentJusticar <- res.Target
 
   [<Fact>]
-  let ``1vsN: GrandMaster Duelist with Caltrop Pouch strips flank penalties and uses AoO to defuse 4 Novice Soldiers`` () =
+  let ``1vsN: GrandMaster Duelist with Caltrop Pouch strips flank penalties and uses AoO to defuse 4 Novice Warriors`` () =
     let duelist =
       TierFactory.createClassTier CharacterClass.Rogue GrandMaster
       |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.CaltropPouch None 2)
 
-    let noviceFlanker = TierFactory.createClassTier CharacterClass.Soldier Novice
+    let noviceFlanker = TierFactory.createClassTier CharacterClass.Warrior Novice
     let roller = fixedRoller 1 // triggers AoO
 
     // Novice attacks as 3rd flanker (priorDefenses = 2)
@@ -860,10 +857,10 @@ module PreparationTests =
       Assert.True(sec.Meters.CognitiveFatigue.Value >= 25, "Each flanker should suffer +25 Cognitive Fatigue from Dread Warhorn.")
 
   [<Fact>]
-  let ``1vsN: GrandMaster Strategist with Heraldic Treatise tops out the ramp across a swarm of 5 Novice Soldiers`` () =
+  let ``1vsN: GrandMaster Strategist with Heraldic Treatise tops out the ramp across a swarm of 5 Novice Warriors`` () =
     let strategist = TierFactory.createClassTier CharacterClass.Mage GrandMaster
-    let primaryNovice = TierFactory.createClassTier CharacterClass.Soldier Novice
-    let flankers = List.init 4 (fun _ -> TierFactory.createClassTier CharacterClass.Soldier Novice)
+    let primaryNovice = TierFactory.createClassTier CharacterClass.Warrior Novice
+    let flankers = List.init 4 (fun _ -> TierFactory.createClassTier CharacterClass.Warrior Novice)
     let roller = fixedRoller 3
 
     let groupRes =
@@ -876,7 +873,7 @@ module PreparationTests =
 
     // Base deployment grants +2 ramp; group deployment across 4 flankers adds +8 (2 per flanker) = 10,
     // clamped to the meter ceiling — the treatise fills the pile, it does not stack past it.
-    Assert.Equal(Combatant.StackCap, groupRes.Actor.Focus)
+    Assert.Equal(Combatant.StackCap, groupRes.Actor.Momentum)
 
   [<Fact>]
   let ``1vsN Control: Novice Warrior without preparations suffers escalating encirclement against 4 Novice Rogues`` () =
@@ -900,7 +897,7 @@ module PreparationTests =
     let noviceFighter = TierFactory.createClassTier CharacterClass.Fighter Novice
     let vetFighter = TierFactory.createClassTier CharacterClass.Fighter Veteran
     let gmFighter = TierFactory.createClassTier CharacterClass.Fighter GrandMaster
-    let opponent = TierFactory.createClassTier CharacterClass.Soldier Novice
+    let opponent = TierFactory.createClassTier CharacterClass.Warrior Novice
     let roller = fixedRoller 3
 
     let resNovice = ActionResolver.resolve roller (DeployPreparation (PreparationType.CaltropPouch, None)) noviceFighter opponent
@@ -956,25 +953,25 @@ module PreparationTests =
   let ``Mesmer and Strategist attacks inflict heavy disparity-scaled Recklessness on opponents`` () =
     let mesmer = TierFactory.createClassTier CharacterClass.Mage GrandMaster
     let strategist = TierFactory.createClassTier CharacterClass.Mage GrandMaster
-    let noviceSoldier = TierFactory.createClassTier CharacterClass.Soldier Novice
+    let noviceWarrior = TierFactory.createClassTier CharacterClass.Warrior Novice
     let roller = fixedRoller 4
 
     // Mesmer Synaptic Glamour
-    let resMesmer = ActionResolver.resolve roller (StandardAttack (SynapticGlamour false)) mesmer noviceSoldier
+    let resMesmer = ActionResolver.resolve roller (StandardAttack (SynapticGlamour false)) mesmer noviceWarrior
     Assert.True(resMesmer.Target.Meters.Recklessness.Value >= 40,
       sprintf "Mesmer should inflict heavy Recklessness with GrandMaster disparity (Actual: %d)" resMesmer.Target.Meters.Recklessness.Value)
 
     // Strategist Acumen Interrogation
-    let resStrat = ActionResolver.resolve roller (StandardAttack (AcumenInterrogation false)) strategist noviceSoldier
+    let resStrat = ActionResolver.resolve roller (StandardAttack (AcumenInterrogation false)) strategist noviceWarrior
     Assert.True(resStrat.Target.Meters.Recklessness.Value >= 50,
       sprintf "Strategist should inflict massive Recklessness with GrandMaster disparity (Actual: %d)" resStrat.Target.Meters.Recklessness.Value)
 
   [<Fact>]
   let ``Mental attacks resonate Area of Effect psychic shockwave to adjacent flankers`` () =
     let mesmer = TierFactory.createClassTier CharacterClass.Mage GrandMaster
-    let primary = TierFactory.createClassTier CharacterClass.Soldier Novice
-    let flanker1 = TierFactory.createClassTier CharacterClass.Soldier Novice
-    let flanker2 = TierFactory.createClassTier CharacterClass.Soldier Novice
+    let primary = TierFactory.createClassTier CharacterClass.Warrior Novice
+    let flanker1 = TierFactory.createClassTier CharacterClass.Warrior Novice
+    let flanker2 = TierFactory.createClassTier CharacterClass.Warrior Novice
     let roller = fixedRoller 4
 
     let groupRes = ActionResolver.resolveGroupTurn roller (StandardAttack (SynapticGlamour false)) mesmer primary [ flanker1; flanker2 ]
@@ -990,7 +987,7 @@ module PreparationTests =
   [<Fact>]
   let ``AegisOfRetribution reduces incoming damage taken by 35% and reflects 50% back as retribution with Frustration`` () =
     let abjurer = TierFactory.createClassTier CharacterClass.Mage Veteran
-    let ally = TierFactory.createClassTier CharacterClass.Soldier Veteran
+    let ally = TierFactory.createClassTier CharacterClass.Warrior Veteran
     let attacker = TierFactory.createClassTier CharacterClass.Warrior Veteran
     let roller = fixedRoller 4
 
@@ -1046,8 +1043,8 @@ module PreparationTests =
   [<Fact>]
   let ``Grandmaster Fighter cleaves up to 5 adjacent targets with massive Force and Shockwave synergy`` () =
     let gmFighter = { TierFactory.createClassTier CharacterClass.Fighter GrandMaster with Stance = CombatStance.PowerStance }
-    let primaryTarget = TierFactory.createClassTier CharacterClass.Soldier Novice
-    let flankers = [ for i in 1 .. 6 -> TierFactory.createClassTier CharacterClass.Soldier Novice ]
+    let primaryTarget = TierFactory.createClassTier CharacterClass.Warrior Novice
+    let flankers = [ for i in 1 .. 6 -> TierFactory.createClassTier CharacterClass.Warrior Novice ]
     let roller = fixedRoller 5
 
     // GM Fighter executes ForceStrike against primary target with 6 adjacent flankers

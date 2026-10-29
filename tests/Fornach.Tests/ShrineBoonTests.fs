@@ -130,13 +130,28 @@ let ``every themed altar resolves onto the bearer's own plane, one per pair`` ()
         let altar = WorldEvents.createAltar theme 3 boon
 
         match altar.Reward.ResolvedFor plane with
+        | Tempered (relic, defences, temper) ->
+          // The relic vaults the altar's own pair, on the bearer's plane; the enlightenment lands on
+          // the other plane's three defences, which the bearer cannot reach through their own pair.
+          let first, second = StatBoon.pairOf plane boon
+          Assert.Equal<StatId list>([ first; second ], relic.StatPercentBonuses |> List.map fst)
+          Assert.True(relic.StatPercentBonuses |> List.forall (fun (_, pct) -> pct > 0))
+
+          let expectedDefences =
+            if plane = Physical then
+              [ Resolve; Intuition; Composure ]
+            else
+              [ Fortitude; Reflex; Poise ]
+
+          Assert.Equal<StatId list>(expectedDefences, defences)
+          Assert.Equal(5, temper)
         | StatBuff (stats, _) ->
           let first, second = StatBoon.pairOf plane boon
           Assert.Equal<StatId list>([ first; second ], stats)
         | _ -> () // surges, keystones and relics are plane-neutral
 
 [<Fact>]
-let ``a fighter's two altars sharpen the two physical pairs by a flat forty`` () =
+let ``a fighter's two altars sharpen the two physical pairs and temper every mental defence`` () =
   let apply (boon: StatBoon) =
     let altar = WorldEvents.createAltar FloorTheme.PineCloisters 3 boon
     let player = playerOf Fighter
@@ -149,28 +164,31 @@ let ``a fighter's two altars sharpen the two physical pairs by a flat forty`` ()
             { state.CurrentFloor with
                 Entities = state.CurrentFloor.Entities |> Map.add pt (EntityEncounter (FloorEncounter.SacrificialAltar altar)) } }
 
-    let after =
-      match TowerSession.applyAltarSacrifice pt placed with
-      | Ok s -> s
-      | Error e -> failwith e
+    match TowerSession.applyAltarSacrifice pt placed with
+    | Ok s -> s
+    | Error e -> failwith e
+
+  // PineCloisters authors 18% on the altar's pair and +5 enlightenment. A fighter's pairs are
+  // Force/Fortitude and Finesse/Reflex, so every mental defence — the plane they do not walk — takes
+  // the temper instead, and no other attribute moves.
+  let check (boon: StatBoon) =
+    let baseline = playerOf Fighter
+    let after = apply boon
+    let first, second = StatBoon.pairOf Physical boon
+    let pair = set [ first; second ]
+    let mentalDefences = set [ Resolve; Intuition; Composure ]
 
     for stat in allStats do
-      let before = state.Player.Stats.Get stat
-      let now = after.Player.Stats.Get stat
+      let before = baseline.Stats.Get stat
+      let expected =
+        if pair.Contains stat then before + StatBonus.percentOf before 18
+        elif mentalDefences.Contains stat then before + 5
+        else before
 
-      if mental.Contains stat then Assert.Equal(before, now)
+      Assert.Equal(expected, after.Player.Stats.Get stat)
 
-    allStats |> List.map (fun stat -> stat, after.Player.Stats.Get stat - state.Player.Stats.Get stat)
-
-  // PineCloisters authored +15% Resolve — a mental stat. Both of its altars must now hand a fighter
-  // physical pairs instead, forty flat points each.
-  let risen boon =
-    apply boon
-    |> List.choose (fun (stat, delta) -> if delta > 0 then Some (stat, delta) else None)
-    |> Set.ofList
-
-  Assert.Equal<Set<StatId * int>>(set [ Force, 40; Fortitude, 40 ], risen PrimaryPair)
-  Assert.Equal<Set<StatId * int>>(set [ Finesse, 40; Reflex, 40 ], risen SecondaryPair)
+  check PrimaryPair
+  check SecondaryPair
 
 [<Fact>]
 let ``every stage fields one altar of each pair`` () =
@@ -189,16 +207,22 @@ let ``every stage fields one altar of each pair`` () =
       Assert.Equal(2, altars.Length)
       Assert.Equal(2, altars |> List.map (fun a -> a.Id) |> Set.ofList |> Set.count)
 
-      let bonuses =
+      // Themed altars hand a tempered relic: the relic lands on that altar's own pair, so a stage's
+      // second altar is not a duplicate of the first. Basalt and Tempest hand plane-neutral relics
+      // and surges instead, so a floor of those yields no pairs at all.
+      let pairs =
         altars
         |> List.choose (fun a ->
-          match a.Reward with
-          | PairBuff (boon, bonus) -> Some (boon, bonus)
+          match a.Reward.ResolvedFor Physical with
+          | Tempered (relic, defences, temper) ->
+            Assert.Equal(5, temper)
+            Assert.Equal<StatId list>([ Resolve; Intuition; Composure ], defences)
+            Some(relic.StatPercentBonuses |> List.map fst |> Set.ofList)
           | _ -> None)
 
-      // Basalt and Tempest altars hand relics and surges instead of stats; the rest are pair buffs.
-      for (_, bonus) in bonuses do
-        Assert.Equal(40, bonus)
+      if not pairs.IsEmpty then
+        Assert.Equal(2, pairs.Length)
+        Assert.Equal(2, pairs |> List.map (fun pair -> pair |> Set.toList |> List.sort) |> List.distinct |> List.length)
 
 [<Fact>]
 let ``a shrine grants its stat boon once and cannot be farmed`` () =

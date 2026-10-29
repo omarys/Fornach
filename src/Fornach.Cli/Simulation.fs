@@ -889,7 +889,6 @@ module Simulation =
     matrixTable.AddColumn(TableColumn(sprintf "[bold %s]Tier[/]" Theme.Cyan)) |> ignore
     matrixTable.AddColumn(TableColumn(sprintf "[bold %s]vs. Warrior (Power)[/]" Theme.Red)) |> ignore
     matrixTable.AddColumn(TableColumn(sprintf "[bold %s]vs. Rogue (Finesse)[/]" Theme.Green)) |> ignore
-    matrixTable.AddColumn(TableColumn(sprintf "[bold %s]vs. Soldier (Discipline)[/]" Theme.Yellow)) |> ignore
     matrixTable.AddColumn(TableColumn(sprintf "[bold %s]vs. Mage (Arcane)[/]" Theme.Pink)) |> ignore
     matrixTable.AddColumn(TableColumn(sprintf "[bold %s]Tactical Dynamics & Observations[/]" Theme.Comment)) |> ignore
 
@@ -902,7 +901,7 @@ module Simulation =
         RemainingTimeColumn() :> ProgressColumn
       |])
       .Start(fun ctx ->
-        let task = ctx.AddTask(sprintf "[bold %s]Sweeping 24 Archetype Tiers across 4 Base Classes (96 Matchups x 100 Trials)...[/]" Theme.Cyan, maxValue = 24.0)
+        let task = ctx.AddTask(sprintf "[bold %s]Sweeping 24 Archetype Tiers across 3 Base Classes (72 Matchups x 100 Trials)...[/]" Theme.Cyan, maxValue = 24.0)
 
         for (clsIndex, cls) in List.indexed championClasses do
           for (tierIndex, tier) in List.indexed tiers do
@@ -910,7 +909,6 @@ module Simulation =
             let cellSeed (mobIndex: int) = 1000 + clsIndex * 400 + tierIndex * 100 + mobIndex * 10
             let warriorTP = findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Warrior Novice) maxMobCount iterations (cellRoller (cellSeed 0))
             let rogueTP = findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Rogue Novice) maxMobCount iterations (cellRoller (cellSeed 1))
-            let soldierTP = findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Soldier Novice) maxMobCount iterations (cellRoller (cellSeed 2))
             let mageTP = findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Mage Novice) maxMobCount iterations (cellRoller (cellSeed 3))
 
             let displayName =
@@ -944,7 +942,6 @@ module Simulation =
               Markup(sprintf "[bold %s]%A[/]" tierColor tier),
               Markup(formatTP warriorTP Theme.Red),
               Markup(formatTP rogueTP Theme.Green),
-              Markup(formatTP soldierTP Theme.Yellow),
               Markup(formatTP mageTP Theme.Pink),
               Markup(sprintf "[%s]%s[/]" Theme.Comment notes)
             ) |> ignore

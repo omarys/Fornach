@@ -207,7 +207,7 @@ module ProlongedBattleTests =
     let roller = fixedRoller 5
     let weakAttacker =
       { (createFighter 50 50 50 50 30 50) with
-          Focus = Combatant.StackCap }
+          Momentum = Combatant.StackCap }
     let strongDefender = createFighter 50 50 50 50 50 120
 
     let res = ActionResolver.resolve roller (StandardAttack (MasterfulDisarm 5)) weakAttacker strongDefender
@@ -221,18 +221,18 @@ module ProlongedBattleTests =
     Assert.True(hasDisarmFail, "Disarm should report failure due to commanding Poise")
 
   [<Fact>]
-  let ``Discipline gambits cash the Focus meter with zero Recklessness cost`` () =
+  let ``Discipline gambits cash the Momentum meter with zero Recklessness cost`` () =
     let roller = fixedRoller 5
     let duelist =
       { (createFighter 50 50 50 50 120 100) with
-          Focus = Combatant.StackCap }
+          Momentum = Combatant.StackCap }
     let target = createFighter 50 50 50 50 50 80
 
     let startReck = duelist.Meters.Recklessness.Value
     let res = ActionResolver.resolve roller (StandardAttack CalculatedFlawStrike) duelist target
 
     // The whole pile of 5 is cashed, then every attack feeds one stack back to every meter
-    Assert.Equal(1, res.Actor.Focus)    // Recklessness should NOT have spiked from the gambit
+    Assert.Equal(1, res.Actor.Momentum)    // Recklessness should NOT have spiked from the gambit
     Assert.Equal(startReck, res.Actor.Meters.Recklessness.Value)
 
   [<Fact>]
@@ -511,12 +511,12 @@ module ProlongedBattleTests =
         groupResLow.Actor.Meters.Recklessness.Value groupResGM.Actor.Meters.Recklessness.Value)
 
   [<Fact>]
-  let ``Discipline Stance Chaining flows across engaged opponents with zero recklessness and feeds the Focus meter`` () =
+  let ``Discipline Stance Chaining flows across engaged opponents with zero recklessness and feeds the Momentum meter`` () =
     let roller = fixedRoller 6 // always lands penetrating hit
     let master =
       { createFighter 180 200 180 200 300 280 with
           Stance = CombatStance.DisciplineStance
-          Focus = 2 } // With 2 Focus, capacity = 1 + (2/2) = 2 chained targets
+          Momentum = 2 } // With 2 Momentum, capacity = 1 + (2/2) = 2 chained targets
     let target1 = createFighter 45 40 25 25 30 30
     let target2 = createFighter 45 40 25 25 30 30
     let target3 = createFighter 45 40 25 25 30 30
@@ -536,9 +536,9 @@ module ProlongedBattleTests =
     // Chaining incurred 0 extra Recklessness (disciplined martial economy)
     Assert.Equal(0, groupRes.Actor.Meters.Recklessness.Value)
 
-    // Every swing — primary plus both chains — feeds one stack to all three meters, so the
+    // Every swing — primary plus both chains — feeds one stack to both meters, so the
     // discipline chain tops the pile out.
-    Assert.Equal(Combatant.StackCap, groupRes.Actor.Focus)
+    Assert.Equal(Combatant.StackCap, groupRes.Actor.Momentum)
 
   [<Fact>]
   let ``a chained secondary is knocked out of the Vor, not left holding it`` () =
@@ -546,7 +546,7 @@ module ProlongedBattleTests =
     let master =
       { createFighter 180 200 180 200 300 280 with
           Stance = CombatStance.DisciplineStance
-          Focus = 2 }
+          Momentum = 2 }
     let primary = createFighter 45 40 25 25 30 30
 
     let flanks =
@@ -562,6 +562,25 @@ module ProlongedBattleTests =
       let after = res.SecondaryTargets |> List.find (fun (c: Combatant) -> c.Id = before.Id)
       Assert.True(after.Health.Current < before.Health.Current, "the flanker should have been chained")
       Assert.True(after.IsInNach, "a chained secondary should be knocked out of the Vor")
+
+  [<Fact>]
+  let ``a group strike from the Nach seizes the Vor from the pack`` () =
+    let roller = fixedRoller 6
+
+    let master =
+      { createFighter 180 200 180 200 300 280 with
+          Stance = CombatStance.DisciplineStance
+          Momentum = 2 }
+
+    // Everyone starts in the Nach, so nothing but the group strike itself can hand the attacker the Vor.
+    let primary = createFighter 45 40 25 25 30 30
+    let flanks = [ createFighter 45 40 25 25 30 30; createFighter 45 40 25 25 30 30 ]
+
+    let res =
+      ActionResolver.resolveGroupTurn roller (StandardAttack (ProwessStrike false)) master primary flanks
+
+    Assert.True(res.Actor.IsInVor, "a connecting group strike should claim the Vor for the attacker")
+    Assert.True(res.PrimaryTarget.IsInNach, "the primary must yield the Vor the attacker took")
 
   [<Fact>]
   let ``Agility / Finesse Stance strictly duels single target with zero cleave or chain`` () =
@@ -784,7 +803,6 @@ module ProlongedBattleTests =
     // The gain is clamped to 6 from 42, and the meters themselves cap at 5 — never 42 stacks!
     Assert.Equal(Combatant.StackCap, resSteady.Actor.Flow)
     Assert.Equal(Combatant.StackCap, resSteady.Actor.Momentum)
-    Assert.Equal(Combatant.StackCap, resSteady.Actor.Focus)
 
     let stabilizedEvt =
       resSteady.Events
@@ -797,13 +815,12 @@ module ProlongedBattleTests =
     // CenterMind with Acumen 170
     let mentalFighter = createMage 100 100 100 100 170 140
     let resCenter = ActionResolver.resolve roller (RecoveryAction CenterMind) mentalFighter opponent
-    Assert.Equal(Combatant.StackCap, resCenter.Actor.Focus)
+    Assert.Equal(Combatant.StackCap, resCenter.Actor.Momentum)
 
     // Combatant.addStacks is clamped at StackCap
     let flooded = resSteady.Actor |> Combatant.addStacks 100
     Assert.Equal(Combatant.StackCap, flooded.Flow)
     Assert.Equal(Combatant.StackCap, flooded.Momentum)
-    Assert.Equal(Combatant.StackCap, flooded.Focus)
 
   [<Fact>]
   let ``SteadyForm vents all dynamic status meters and restores Morale`` () =
@@ -1022,39 +1039,42 @@ module ProlongedBattleTests =
 
   [<Fact>]
   let ``a held stack sharpens only the stat pair its own meter feeds`` () =
-    // PowerStance leaves Reflex and Poise at their base values, so each ramp shows undiluted.
-    let armed flow momentum focus =
+      // PowerStance leaves Reflex and Poise at their base values, so each ramp shows undiluted.
+    let armed flow momentum =
       { createFighter 50 50 50 80 120 120 with
           Flow = flow
-          Momentum = momentum
-          Focus = focus }
+          Momentum = momentum }
 
-    Assert.Equal(120, (armed 0 0 0).GetCombatStat Poise)
-    Assert.Equal(126, (armed 0 0 Combatant.StackCap).GetCombatStat Poise) // 1% Focus per stack
-    Assert.Equal(80, (armed 0 0 0).GetCombatStat Reflex)
-    Assert.Equal(120, (armed Combatant.StackCap 0 0).GetCombatStat Reflex) // 10% Flow per stack
+    Assert.Equal(120, (armed 0 0).GetCombatStat Poise)
+    Assert.Equal(126, (armed 0 Combatant.StackCap).GetCombatStat Poise) // 1% Momentum per stack
+    Assert.Equal(80, (armed 0 0).GetCombatStat Reflex)
+    Assert.Equal(104, (armed Combatant.StackCap 0).GetCombatStat Reflex) // 6% Flow per stack, 5 stacks
 
     // The meters do not bleed into each other's stats.
-    Assert.Equal(80, (armed 0 0 Combatant.StackCap).GetCombatStat Reflex)
-    Assert.Equal(120, (armed Combatant.StackCap 0 0).GetCombatStat Poise)
-    Assert.Equal(120, (armed 0 Combatant.StackCap 0).GetCombatStat Poise)
+    Assert.Equal(80, (armed 0 Combatant.StackCap).GetCombatStat Reflex)
+    Assert.Equal(120, (armed Combatant.StackCap 0).GetCombatStat Poise)
 
-    // A discipline strike reads Prowess, so only Focus moves its damage. (The old pile paid 10% per
-    // stack here — 10 stacks were 2.0x — where Focus now pays 1%, capped at 5 stacks = 1.05x.)
+    // The mental plane rides the same two meters: Acuity and Intuition take Flow's 6%, Intellect and
+    // Resolve — the mental guard — take Momentum's 1%. No stat is left off the ramp.
+    let ratio stat flow momentum = float ((armed flow momentum).GetCombatStat stat) / float ((armed 0 0).GetCombatStat stat)
+    Assert.Equal(1.3, ratio Acuity Combatant.StackCap 0, 1)
+    Assert.Equal(1.05, ratio Intellect 0 Combatant.StackCap, 1)
+    Assert.Equal(1.3, ratio Intuition Combatant.StackCap 0, 1)
+    Assert.Equal(1.05, ratio Resolve 0 Combatant.StackCap, 1)
+
+    // A discipline strike reads Prowess, so Momentum moves its damage and Flow does not.
     let target = createFighter 50 50 50 50 50 50
-    let dmgZero, _ = damageTaken (armed 0 0 0) (ProwessStrike false) target
-    let dmgFocus, _ = damageTaken (armed 0 0 Combatant.StackCap) (ProwessStrike false) target
-    let dmgFlow, _ = damageTaken (armed Combatant.StackCap 0 0) (ProwessStrike false) target
-    let dmgMomentum, _ = damageTaken (armed 0 Combatant.StackCap 0) (ProwessStrike false) target
+    let dmgZero, _ = damageTaken (armed 0 0) (ProwessStrike false) target
+    let dmgMomentum, _ = damageTaken (armed 0 Combatant.StackCap) (ProwessStrike false) target
+    let dmgFlow, _ = damageTaken (armed Combatant.StackCap 0) (ProwessStrike false) target
 
     Assert.Equal(dmgZero, dmgFlow)
-    Assert.Equal(dmgZero, dmgMomentum)
-    Assert.True(dmgFocus > dmgZero, sprintf "A full Focus meter (%d) must outhit an empty one (%d)" dmgFocus dmgZero)
+    Assert.True(dmgMomentum > dmgZero, sprintf "A full Momentum meter (%d) must outhit an empty one (%d)" dmgMomentum dmgZero)
 
   [<Fact>]
   let ``Calculated flaw strike pays 0.35 multiplier per stack and follows the spent amount`` () =
     let target = punchingBag ()
-    let mk stacks = { createFighter 50 50 50 50 120 50 with Focus = stacks }
+    let mk stacks = { createFighter 50 50 50 50 120 50 with Momentum = stacks }
 
     let dmgWith stacks = fst (damageTaken (mk stacks) CalculatedFlawStrike target)
     let d2, d3, d4 = dmgWith 2, dmgWith 3, dmgWith 4
@@ -1069,7 +1089,7 @@ module ProlongedBattleTests =
     // Nothing is left behind: the whole pile is cashed, and every attack feeds one stack back.
     let _, res = damageTaken (mk Combatant.StackCap) CalculatedFlawStrike target
     Assert.Equal(Combatant.StackCap, stacksSpentOf res)
-    Assert.Equal(1, res.Actor.Focus)
+    Assert.Equal(1, res.Actor.Momentum)
 
   [<Fact>]
   let ``Discipline stance guard anchors on Poise alone`` () =

@@ -29,7 +29,8 @@ let private wounded (bleedStacks: int) =
       Armor = { c.Armor with Current = 25 }
       BleedStacks = bleedStacks }
 
-/// The out-of-combat recovery the safe-step branch runs: 10% pools, 5% armor, one bleed stack closed.
+/// The out-of-combat recovery the safe-step branch runs: 10% Health, 5% armor, one bleed stack closed.
+/// Morale regen is far stingier (1%), so these cases pass a flat amount the test controls.
 let private safeStep (state: TowerRunState) =
   let player = TowerSession.recoverOutOfCombat state.Player TowerSession.bleedClosedPerStep 20 20 3
   TowerSession.honeOnSafeStep { state with Player = player }
@@ -94,8 +95,9 @@ let ``the turn that closes the wound is the turn the regen resumes`` () =
   // A wait closes five, so five stacks are the last of the wound too.
   let rested = TowerSession.recoverOutOfCombat (wounded 5) TowerSession.bleedClosedPerRest 66 66 10
   Assert.Equal(0, rested.BleedStacks)
-  Assert.Equal(160, rested.Health.Current)
-  Assert.Equal(160, rested.Morale.Current)
+  // Health stops at the 60% rest cap; Morale carries on to whatever the turn bought it.
+  Assert.Equal(120, rested.Health.Current)
+  Assert.Equal(166, rested.Morale.Current)
 
 [<Fact>]
 let ``a bleeding delver who keeps waiting clears the wound and then starts healing`` () =
@@ -114,17 +116,17 @@ let ``a bleeding delver who keeps waiting clears the wound and then starts heali
       Assert.True(player.Armor.Current > before.Armor.Current || player.Armor.Current = 40)
     else
       // Waiting closed the wound this turn, so the regen resumed on the same turn.
-      Assert.Equal(160, player.Health.Current)
-      Assert.Equal(160, player.Morale.Current)
+      Assert.Equal(120, player.Health.Current)
+      Assert.Equal(166, player.Morale.Current)
 
   Assert.Equal(3, turns) // 12 -> 7 -> 2 -> 0
   Assert.Equal(0, player.BleedStacks)
-  Assert.Equal(160, player.Health.Current) // capped at 80% of 200 by restRecoverPool
-  Assert.Equal(160, player.Morale.Current)
+  Assert.Equal(120, player.Health.Current) // capped at 60% of 200 by restRecoverHealth
+  Assert.Equal(166, player.Morale.Current) // no cap: Morale rests back to full
   Assert.Equal(40, player.Armor.Current) // repaired every single turn, capped at 80% of 50
 
   // Healthy and unbloodied, the patient keeps healing up toward the rest cap.
   let damaged = { player with Health = { player.Health with Current = 100 } }
   let rested = TowerSession.recoverOutOfCombat damaged TowerSession.bleedClosedPerRest 66 66 16
-  Assert.Equal(160, rested.Health.Current)
+  Assert.Equal(120, rested.Health.Current)
   Assert.Equal(0, rested.BleedStacks)

@@ -35,7 +35,7 @@ module BalanceRegressionTests =
         // Story floors 1-7 hand the guardian to an authored boss instead of the biome roster.
         if not isStory || floorNumber > 7 then
           let floor = TowerGenerator.generateFloorWithMode 4242 floorNumber isStory
-          let ceiling = ProgressionScale.storyGuardianLevel floorNumber
+          let ceiling = ProgressionScale.stageTemplateCeiling floorNumber
           let roster = Bestiary.byBiome floor.Theme
 
           let guardians =
@@ -96,35 +96,36 @@ module BalanceRegressionTests =
   [<Fact>]
   let ``every story stage boss arrives at the tier its stage assumes`` () =
     // The Aspects were authored at Veteran magnitude and built with Combatant.create, so all six
-    // used to enter their stage at Level 1 next to level-185 mobs. scaleToStage lifts each one to
-    // the level the floor's progression hands the protagonist.
+    // used to enter their stage at Level 1 beside mobs a tier above them. scaleToStage lifts each one
+    // to the level the floor's progression hands the protagonist.
     for floorNumber in 2..7 do
-      let floor = TowerGenerator.generateFloorWithMode 4242 floorNumber true
-
-      let boss =
+      let pick (prefix: string) (floor: TowerFloor) =
         floor.Entities
         |> Map.toList
         |> List.pick (function
-          | _, EntityEnemy e when e.Id.StartsWith("boss_stage_") -> Some e
+          | _, EntityEnemy e when e.Id.StartsWith(prefix) -> Some e
           | _ -> None)
 
+      let stage = TowerGenerator.generateFloorWithMode 4242 floorNumber true
+
+      let boss = pick "boss_stage_" stage
       let expected = ProgressionScale.storyGuardianLevel floorNumber
       Assert.Equal(expected, boss.Combatant.Level)
 
-      let mob =
-        floor.Entities
-        |> Map.toList
-        |> List.pick (function
-          | _, EntityEnemy e when e.Id.StartsWith("grind_mob_") -> Some e.Combatant
-          | _ -> None)
+      // Compare toughness on the magnitudes the player actually meets: story enemies are re-levelled
+      // to the protagonist on entry, so an un-rescaled floor is not what anyone fights.
+      let player = TierFactory.createClassLevel CharacterClass.Fighter (ProgressionScale.storyGuardianLevel (floorNumber - 1))
+      let engaged = TowerSession.rescaleFloorEnemies player stage
+      let engagedBoss = pick "boss_stage_" engaged
+      let mob = (pick "grind_mob_" engaged).Combatant
 
       Assert.True(
-        boss.Combatant.Health.Maximum > mob.Health.Maximum,
+        engagedBoss.Combatant.Health.Maximum > mob.Health.Maximum,
         sprintf
           "stage %d boss %s has %d HP, no tougher than a %s at %d"
           floorNumber
-          boss.Name
-          boss.Combatant.Health.Maximum
+          engagedBoss.Name
+          engagedBoss.Combatant.Health.Maximum
           mob.Name
           mob.Health.Maximum
       )

@@ -144,8 +144,8 @@ module StorySpatialTests =
     Assert.Contains("Rapier", duelist.EquippedItems.Head.Name)
 
     let warden = StoryBosses.createProloguePlayer "warden"
-    Assert.Equal(CharacterClass.Soldier, warden.Class)
-    Assert.Equal(CombatStance.DisciplineStance, warden.Stance)
+    Assert.Equal(CharacterClass.Warrior, warden.Class)
+    Assert.Equal(CombatStance.PowerStance, warden.Stance)
     Assert.Contains("Buckler", warden.EquippedItems.Head.Name)
 
     let inquisitor = StoryBosses.createProloguePlayer "inquisitor"
@@ -269,7 +269,7 @@ module StorySpatialTests =
     Assert.Equal(70, berserker.Stats.Get StatId.Force) // 45 + greatsword 56% (was 25)
     Assert.Equal(45, berserker.Stats.Get StatId.Reflex) // 34 + caltrops 33% (was 15)
     Assert.Equal(85, duelist.Stats.Get StatId.Finesse) // 45 + stiletto 56% then caltrops 22%
-    Assert.Equal(65, warden.Stats.Get StatId.Poise) // 45 + buckler 44% (was 20)
+    Assert.Equal(65, warden.Stats.Get StatId.Fortitude) // 45 + buckler 44% (was 20)
     Assert.Equal(62, inquisitor.Stats.Get StatId.Intellect) // 40 + staff 56% (was 25)
 
   [<Fact>]
@@ -287,5 +287,7 @@ module StorySpatialTests =
     // A mix of low-level bandits and PineCloisters woodland creatures.
     Assert.Contains(mobs, (fun e -> e.Name = "Bandit" || e.Name = "Bandit Scout"))
     Assert.Contains(mobs, (fun e -> e.Name = "Forest Wolf" || e.Name = "Bramble Boar"))
+    for boar in mobs |> List.filter (fun e -> e.Name = "Bramble Boar") do
+      Assert.True(boar.Combatant.IsBeast, "The Bramble Boar must spawn as a beast, not a re-skinned Warrior")
     for mob in mobs |> List.filter (fun e -> e.Name.StartsWith "Bandit") do
       Assert.True(mob.Combatant.Level <= 8, sprintf "Bandits must be fightable at level 1 (got %s lvl %d)" mob.Name mob.Combatant.Level)

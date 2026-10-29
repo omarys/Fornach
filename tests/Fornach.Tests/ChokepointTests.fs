@@ -51,6 +51,7 @@ let private makeState (tiles: Map<Point, TowerTile>) (playerPos: Point) (entitie
       SpawnLocation = playerPos
       Explored = Set.empty
       Visible = Set.empty
+      SeenEnemies = Set.empty
       ActiveQuests = [] }
 
   { Player = combatant "Delver"

@@ -315,7 +315,7 @@ module ActionResolver =
       let updatedOwner = owner |> Combatant.addStacks count
 
       let desc =
-        sprintf "Combat ramp +%d (Flow %d / Momentum %d / Focus %d)" count updatedOwner.Flow updatedOwner.Momentum updatedOwner.Focus
+        sprintf "Combat ramp +%d (Flow %d / Momentum %d)" count updatedOwner.Flow updatedOwner.Momentum
 
       let evt = CombatEvent.EquipmentProcTriggered(sourceItemName, owner.Id, desc)
       (updatedOwner, opponent, [ evt ])
@@ -1028,7 +1028,7 @@ module ActionResolver =
       | FinesseCadence true -> true, "Physical Gambit: Relentless Cadence", 25
       | ProwessStrike true -> true, "Martial Gambit: Invitational Bait", 35
       | ShieldBash true -> true, "Martial Gambit: Heavy Shield Slam", 30
-      // Each school cashes its own meter: Momentum (Power), Flow (Agility), Focus (Discipline).
+      // Each school cashes the meter it feeds: Momentum (Power and Discipline), Flow (Agility).
       | ForceInsightStrike -> cashPile "Force Insight Cleave"
       | FinesseInsightStrike -> cashPile "Threaded Opening"
       | CalculatedFlawStrike -> cashPile "Calculated Flaw Strike"
@@ -1043,7 +1043,7 @@ module ActionResolver =
         if isPossible && held >= required then
           currentActor <- currentActor |> Combatant.drainStacks atk.Vector required
           events <- CombatEvent.DisciplineGambitExecuted(currentActor.Id, "Masterful Disarm", required) :: events
-          false, "", 0 // Consumes Focus with 0 Recklessness self-spike!
+          false, "", 0 // Consumes Momentum with 0 Recklessness self-spike!
         else
           false, "", 0
       | AuthorityDecree true -> true, "Social Gambit: Imperious Demand", 30
@@ -3289,7 +3289,27 @@ module ActionResolver =
 
     if knockedBack.IsEmpty then result
     else
-      { result with
-          SecondaryTargets =
-            result.SecondaryTargets
-            |> List.map (fun (c: Combatant) -> if Set.contains c.Id knockedBack then Combatant.yieldVor c else c) }
+      let secondaries =
+        result.SecondaryTargets
+        |> List.map (fun (c: Combatant) -> if Set.contains c.Id knockedBack then Combatant.yieldVor c else c)
+
+      // The primary goes through `resolveEx`, so it can already claim the tempo; a chained or
+      // cleaved secondary never could, which left the player unable to win the initiative back
+      // from a pack except through whichever foe happened to be primary. A group strike that
+      // connected with anyone in reach claims the Vor the way a duel strike does.
+      // The primary keeps the strict two-net-hit bar; the core exports no hit count for
+      // secondaries, so the bar here is "the chain connected".
+      if result.Actor.IsInNach then
+        { result with
+            Actor = Combatant.seizeVor result.Actor
+            PrimaryTarget = Combatant.yieldVor result.PrimaryTarget
+            SecondaryTargets = secondaries
+            Events =
+              result.Events
+              @ [ CombatEvent.TempoShifted(
+                    result.Actor.Id,
+                    result.PrimaryTarget.Id,
+                    sprintf "%s swept through the pack from the Nach, seizing the Vor!" result.Actor.Name
+                  ) ] }
+      else
+        { result with SecondaryTargets = secondaries }

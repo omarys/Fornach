@@ -54,9 +54,27 @@ module WorldEvents =
   /// Every number here is a percentage, not a flat sum: costs take a slice of the protagonist's maximum
   /// and rewards are read back off their own attributes at commune time, so neither side fades as they
   /// climb. The per-theme numbers keep their relative severity.
-  /// Flat points each attribute of the pair gains. Flat, not a percentage: the pair is resolved
-  /// against the bearer's plane, so the number has to mean the same thing for every class.
-  let altarStatBonus = 40
+  /// Enlightenment points each defensive attribute of the bearer's *other* plane gains. Small on
+  /// purpose: it is a temper, not a tier, and it lands on defences rather than on the pair the
+  /// altar's relic already sharpens.
+  let altarEnlightenment = 5
+
+  /// A theme relic. Percentages, never flat points — the resolution onto the bearer's pair happens
+  /// in `AltarReward.ResolvedFor`, so the authored list here is always empty.
+  let private altarRelic (name: string) (description: string) : EquipmentItem =
+    { Name = name
+      Slot = EquipmentSlot.MentalRelic
+      Description = description
+      StatPercentBonuses = []
+      HealthBonus = 0
+      MoraleBonus = 0
+      StartingRecklessnessDelta = 0
+      Triggers = [] }
+
+  /// The five themed altars hand a relic and an enlightenment. They used to hand a flat `+40` on
+  /// the pair itself, which was a fifth of a level-40 attribute and a rounding error at 185.
+  let private tempered (relic: EquipmentItem) (boon: StatBoon) (pairPercent: int) =
+    AltarReward.TemperedRelic(relic, boon, pairPercent, altarEnlightenment)
 
   let createAltar (theme: FloorTheme) (floorNum: int) (boon: StatBoon) : AltarChoice =
     let boonIdSuffix =
@@ -70,7 +88,11 @@ module WorldEvents =
         Name = "Altar of the Iron Quarryman"
         Description = "A dark granite crucible bearing the scorched handprints of broken miners."
         Cost = AltarCost.SacrificeHealth 25
-        Reward = AltarReward.PairBuff(boon, altarStatBonus)
+        Reward =
+          tempered
+            (altarRelic "Miner's Last Ember" "A palm-sized lump of quarry iron that never quite cools.")
+            boon
+            15
         IsUsed = false }
 
     | PineCloisters ->
@@ -78,7 +100,11 @@ module WorldEvents =
         Name = "Shrine of the Weeping Willow"
         Description = "An ancient, moss-hung pine stump weeping sap that smells of sorrow."
         Cost = AltarCost.SacrificeMorale 30
-        Reward = AltarReward.PairBuff(boon, altarStatBonus)
+        Reward =
+          tempered
+            (altarRelic "Weeping-Willow Locket" "Its sap was sealed in silver, and it still remembers every grief.")
+            boon
+            18
         IsUsed = false }
 
     | BasaltCalderas ->
@@ -112,7 +138,11 @@ module WorldEvents =
         Name = "Font of the Drowned King"
         Description = "A flooded marble baptismal font reflecting undisturbed abyssal waters."
         Cost = AltarCost.SacrificeMorale 25
-        Reward = AltarReward.PairBuff(boon, altarStatBonus)
+        Reward =
+          tempered
+            (altarRelic "Drowned King's Signet" "A tarnished ring whose crest the tides wore featureless.")
+            boon
+            15
         IsUsed = false }
 
     | ElysianSanctuaries ->
@@ -120,7 +150,11 @@ module WorldEvents =
         Name = "Seraphic Mirror of White Lilies"
         Description = "A crystal mirror surrounded by blossoming white lilies that hum with serene quiet."
         Cost = AltarCost.SacrificeHealth 15
-        Reward = AltarReward.PairBuff(boon, altarStatBonus)
+        Reward =
+          tempered
+            (altarRelic "Lily-Bound Circlet" "White lilies wound into a circlet that will not stop humming.")
+            boon
+            10
         IsUsed = false }
 
     | CelestialSpires ->
@@ -128,7 +162,11 @@ module WorldEvents =
         Name = "Astral Pyre of Transcendence"
         Description = "A pillar of quiet starlight suspended over the cosmic abyss."
         Cost = AltarCost.SacrificeHealth 30
-        Reward = AltarReward.PairBuff(boon, altarStatBonus)
+        Reward =
+          tempered
+            (altarRelic "Starfall Reliquary" "A shard of quiet starlight, cold enough to burn.")
+            boon
+            20
         IsUsed = false }
 
   let private themeMonstersForTrophy (theme: FloorTheme) : AlchemicalTrophy option =
@@ -295,7 +333,7 @@ module WorldEvents =
           [ "\"Are you ready to head home? It's pouring outside...\""
             "Lyra's laugh. The windshield wipers rhythmic thumping: back and forth, back and forth."
             "A sudden blinding glare of twin high-beams piercing through the dark rain." ]
-        MoraleRecovery = 30
+        MoraleGrowth = 5
         IsCommuned = false }
 
     | PineCloisters ->
@@ -306,7 +344,7 @@ module WorldEvents =
           [ "A notification glowing in the dark: 'Mom - Where are you two? Dinner is getting cold.'"
             "\"Look out—!\""
             "A scream choked by the sound of tearing metal and shattering safety glass." ]
-        MoraleRecovery = 30
+        MoraleGrowth = 5
         IsCommuned = false }
 
     | BasaltCalderas ->
@@ -317,7 +355,7 @@ module WorldEvents =
           [ "No horn. Just the violent, screeching skid of twelve tons of steel out of control."
             "Why didn't they stop? Why was the truck on our side of the divider?"
             "The world flips upside down in an instant of crushing thunder." ]
-        MoraleRecovery = 35
+        MoraleGrowth = 6
         IsCommuned = false }
 
     | TempestTerraces ->
@@ -328,7 +366,7 @@ module WorldEvents =
           [ "\"Driver is conscious, but pulse is thready. What about the passenger?!\""
             "\"Get the hydraulic cutters! She's pinned—we're losing her rhythm!\""
             "Please... anyone... take me instead. Don't let her go." ]
-        MoraleRecovery = 35
+        MoraleGrowth = 6
         IsCommuned = false }
 
     | SunkenBoulevards ->
@@ -339,7 +377,7 @@ module WorldEvents =
           [ "A hand limp and cold between trembling fingers."
             "The flatline tone that never ends."
             "You closed your eyes, wishing you had never woken up." ]
-        MoraleRecovery = 40
+        MoraleGrowth = 7
         IsCommuned = false }
 
     | ElysianSanctuaries ->
@@ -350,7 +388,7 @@ module WorldEvents =
           [ "\"Promise me you won't get lost in the dark, okay?\""
             "\"You still have so much to live for. You have to climb back up.\""
             "A warm smile fading into the golden mist." ]
-        MoraleRecovery = 50
+        MoraleGrowth = 8
         IsCommuned = false }
 
     | CelestialSpires ->
@@ -360,7 +398,7 @@ module WorldEvents =
         MemoryTranscript =
           [ "\"I was never trapped in the Tower... I was waiting for you to forgive yourself.\""
             "\"Take the final step. Awaken.\"" ]
-        MoraleRecovery = 60
+        MoraleGrowth = 10
         IsCommuned = false }
 
   /// Procedurally generates 2 to 4 diverse dynamic encounters for a floor based on biome and layout

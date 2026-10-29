@@ -16,7 +16,6 @@ module BestiarySwarmTests =
     let canonicalClasses = [
       CharacterClass.Warrior
       CharacterClass.Rogue
-      CharacterClass.Soldier
       CharacterClass.Mage
       CharacterClass.Mage
       CharacterClass.Mage
@@ -101,7 +100,7 @@ module BestiarySwarmTests =
       let hound = Bestiary.byId "slag_hound" |> Option.get
       let crawler = Bestiary.byId "magma_crawler" |> Option.get
 
-      let wardenFactory () = TierFactory.createClassTier CharacterClass.Soldier tier
+      let wardenFactory () = TierFactory.createClassTier CharacterClass.Warrior tier
       for m in [ hound; crawler ] do
         let mobFactory () = Bestiary.createMonster m
         let tp = Simulation.findSwarmTippingPoint wardenFactory mobFactory maxMob iters roller

@@ -620,7 +620,7 @@ The system SHALL the system shall determine whether a character class represents
 - **THEN** Returns true
 
 #### Scenario: GenericNPCClassVerification
-- **GIVEN** A generic NPC class such as Warrior, Rogue, or Soldier
+- **GIVEN** A generic NPC class such as Warrior or Rogue
 - **WHEN** IsPlayerClass is evaluated
 - **THEN** Returns false
 
@@ -629,7 +629,7 @@ The system SHALL the system shall determine whether a character class represents
 The system SHALL the system shall identify whether a character class is a generic non-player character lacking specialized player preparations.
 
 #### Scenario: GenericNPCVerification
-- **GIVEN** A generic class Warrior, Rogue, or Soldier
+- **GIVEN** A generic class Warrior or Rogue
 - **WHEN** IsGeneric is evaluated
 - **THEN** Returns true
 
@@ -653,7 +653,7 @@ The system SHALL the system shall resolve the governing stat vector (power, agil
 - **THEN** Returns Agility
 
 #### Scenario: DisciplineVectorResolution
-- **GIVEN** A Discipline-based class such as Warden or Soldier
+- **GIVEN** A Discipline-based class such as Warrior
 - **WHEN** Vector is queried
 - **THEN** Returns Discipline
 
@@ -676,7 +676,7 @@ The system SHALL the system shall resolve the primary governing attribute (stati
 The system SHALL the system shall identify the operative combat plane (physical or mental) for a character class.
 
 #### Scenario: PhysicalCombatPlane
-- **GIVEN** A martial class such as Fighter, Duelist, or Soldier
+- **GIVEN** A martial class such as Fighter
 - **WHEN** Plane is queried
 - **THEN** Returns Physical
 
@@ -1137,7 +1137,7 @@ The system SHALL retrieves the specialized tactical preparation assets associate
 - **THEN** The operation MUST return [ShockwaveSlam; BerserkTincture]
 
 #### Scenario: GenericOrUnspecializedClassLookup
-- **GIVEN** A generic NPC class without specialized preparations (e.g., Warrior, Rogue, Soldier)
+- **GIVEN** A generic NPC class without specialized preparations (e.g., Warrior or Rogue)
 - **WHEN** ForClass is invoked with the unspecialized class
 - **THEN** The operation SHALL return an empty preparation list
 
@@ -1198,13 +1198,22 @@ returned
 
 ### Requirement: StoryGuardianLevel
 
-The system SHALL determines the guardian level and enemy-level ceiling for a designated story floor.
+The system SHALL determine the protagonist level a story stage's gate hands over, and the authored enemy-level ceiling
+that decides which bestiary templates a story stage may field.
 
 #### Scenario: FloorGuardianLevelDetermination
 - **GIVEN** A valid story floor number
 - **WHEN** storyGuardianLevel is called
-- **THEN** The designated guardian level SHALL be returned (32 for floor 1, 45 for floor 2, 95 for floor 3, 105
-for floor 4, 110 for floor 5, and 185 for floor 6 and above)
+- **THEN** The stage's protagonist level SHALL be returned (6 for floor 1, 11 for floor 2, 17 for floor 3, 23 for
+floor 4, 29 for floor 5, 35 for floor 6, and 40 for floor 7 and above) — a climb of six per stage that lands the
+protagonist on the Veteran threshold (40) when the Infinite Tower opens at story floor 8
+
+#### Scenario: StageTemplateCeilingDetermination
+- **GIVEN** A valid stage number, story or tower
+- **WHEN** stageTemplateCeiling is called
+- **THEN** The authored bestiary ceiling SHALL be returned (32 for floor 1, 45 for floor 2, 95 for floor 3, 105 for
+floor 4, 110 for floor 5, and 185 for floor 6 and above), so template eligibility does not follow the protagonist's
+curve down and collapse a deep stage onto its single lowest-level template
 
 ### Requirement: PhysicalStatsForLevel
 

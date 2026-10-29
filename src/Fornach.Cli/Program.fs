@@ -732,8 +732,13 @@ module Program =
     let rng = Random()
     let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
 
-    let mutable currentCombatant = player |> Combatant.seizeVor
-    let mutable currentBoss = boss |> Combatant.yieldVor
+    // The opening tempo is the caller's: an unseen foe arrives holding the Vor with the player in the
+    // Nach (TowerSession.ambushTempo), a foe already in view yields it. Whoever comes in with no stance
+    // of their own is given the complement of the player's so the duel never opens with two holders.
+    let mutable currentCombatant = player
+
+    let mutable currentBoss =
+      if player.IsInNach then Combatant.seizeVor boss else Combatant.yieldVor boss
     let mutable round = 1
     let mutable combatOver = false
     let mutable outcome = CombatOutcome.PlayerDefeated

@@ -14,16 +14,24 @@ let private armor current maximum : ArmorIntegrity =
     Max = maximum }
 
 [<Fact>]
-let ``resting heals toward eighty percent of maximum and stops there`` () =
-  let healed = TowerSession.restRecoverPool (pool 50 100) 33
-  Assert.Equal(80, healed.Current)
+let ``resting heals toward sixty percent of maximum and stops there`` () =
+  let healed = TowerSession.restRecoverHealth (pool 50 100) 33
+  Assert.Equal(60, healed.Current)
 
-  let alreadyThere = TowerSession.restRecoverPool (pool 80 100) 33
+  let alreadyThere = TowerSession.restRecoverHealth (pool 80 100) 33
   Assert.Equal(80, alreadyThere.Current)
 
   // A shrine or any other full restore is not undone by resting afterwards.
-  let aboveCap = TowerSession.restRecoverPool (pool 100 100) 33
+  let aboveCap = TowerSession.restRecoverHealth (pool 100 100) 33
   Assert.Equal(100, aboveCap.Current)
+
+[<Fact>]
+let ``morale has no rest cap and comes back the whole way`` () =
+  let healed = TowerSession.restRecoverMorale (pool 50 100) 33
+  Assert.Equal(83, healed.Current)
+
+  let allTheWay = TowerSession.restRecoverMorale (pool 50 100) 1000
+  Assert.Equal(100, allTheWay.Current)
 
 [<Fact>]
 let ``resting repairs armor toward eighty percent and never past it`` () =
