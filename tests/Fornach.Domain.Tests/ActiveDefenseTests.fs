@@ -22,7 +22,7 @@ module ActiveDefenseTests =
     let atkIntent = StandardAttack (ForceStrike false)
     let defChoice = FortitudeGuard false
 
-    let outcome = ActionResolver.resolveExWithDefense roller atkIntent (Some defChoice) attacker defender 0
+    let outcome = ActionResolver.resolveExWithDefense roller atkIntent (Some(Guard defChoice)) attacker defender 0
 
     // Affinity counter event must be emitted
     let affinityEventOpt =
@@ -50,7 +50,7 @@ module ActiveDefenseTests =
     let atkIntent = StandardAttack (FinesseCadence false)
     let defChoice = ReflexSlip false
 
-    let outcome = ActionResolver.resolveExWithDefense roller atkIntent (Some defChoice) attacker defender 0
+    let outcome = ActionResolver.resolveExWithDefense roller atkIntent (Some(Guard defChoice)) attacker defender 0
 
     let affinityEventOpt =
       outcome.Events
@@ -74,7 +74,7 @@ module ActiveDefenseTests =
       ActionResolver.resolveExWithDefense
         roller
         (StandardAttack (FinesseCadence false))
-        (Some (FortitudeGuard false))
+        (Some(Guard(FortitudeGuard false)))
         attacker
         defender
         0
@@ -157,7 +157,7 @@ module ActiveDefenseTests =
       ActionResolver.resolveExWithDefense
         roller
         (StandardAttack (ArcaneCataclysm false))
-        (Some (ResolveAnchor false))
+        (Some(Guard(ResolveAnchor false)))
         attacker
         defender
         0
@@ -172,7 +172,7 @@ module ActiveDefenseTests =
       ActionResolver.resolveExWithDefense
         roller
         (StandardAttack (SynapticGlamour false))
-        (Some (IntuitionPerception false))
+        (Some(Guard(IntuitionPerception false)))
         attacker
         defender
         0
@@ -268,3 +268,65 @@ module ActiveDefenseTests =
     let assessWolf = attacker.AssessTarget wolfTarget
     let assessBandit = attacker.AssessTarget banditTarget
     Assert.True(assessWolf.EffectiveAcumen > assessBandit.EffectiveAcumen)
+
+  [<Fact>]
+  let ``Seize Indes that wins the exchange stops the strike and takes the Vor`` () =
+    let roller = fixedRoller 5
+    // The defender outclasses the attacker, so its counter out-rolls the incoming strike outright.
+    let attacker =
+      TierFactory.createClassLevel CharacterClass.Warrior 1
+      |> fun c -> { c with Tempo = TacticalTiming.Vor }
+    let defender =
+      TierFactory.createClassLevel CharacterClass.Fighter 40
+      |> fun c -> { c with Tempo = TacticalTiming.Nach }
+
+    let atkIntent = StandardAttack (ForceStrike false)
+    let counter = SeizeIndes(ForceStrike false)
+
+    let outcome =
+      ActionResolver.resolveExWithDefense roller atkIntent (Some counter) attacker defender 0
+
+    // The counter that wins reports itself as a seizure, so the log shows a strike answered by a strike.
+    let seizedNote =
+      outcome.Events
+      |> List.tryPick (function
+        | CombatEvent.TempoShifted (_, _, reason) when reason.Contains("seized the Indes") -> Some reason
+        | _ -> None)
+
+    Assert.True(seizedNote.IsSome, "a winning counter must report an Indes seizure")
+
+    // A counter that wins stops the blow as surely as a read does, and the Vor changes hands.
+    Assert.Equal(defender.Health.Current, outcome.Target.Health.Current)
+    Assert.Equal(defender.Morale.Current, outcome.Target.Morale.Current)
+    Assert.True(outcome.Target.IsInVor, "the countering defender must take the Vor")
+    Assert.True(outcome.Actor.IsInNach, "the stopped attacker must fall into the Nach")
+
+  [<Fact>]
+  let ``Seize Indes that loses the exchange lands half again as hard and spends every stack`` () =
+    let roller = fixedRoller 5
+    let attacker =
+      TierFactory.createClassLevel CharacterClass.Warrior 40
+      |> fun c -> { c with Tempo = TacticalTiming.Vor }
+    let defender =
+      TierFactory.createClassLevel CharacterClass.Fighter 1
+      |> fun c -> { c with Tempo = TacticalTiming.Nach; Health = Pool.Create 1_000_000 }
+      |> Combatant.addStacks 3
+
+    let atkIntent = StandardAttack (ForceStrike false)
+
+    // Baseline: the same strike against a defender who did not answer it at all.
+    let undefended = ActionResolver.resolveEx roller atkIntent attacker defender 0
+
+    let countered =
+      ActionResolver.resolveExWithDefense roller atkIntent (Some(SeizeIndes(ForceStrike false))) attacker defender 0
+
+    // A counter that loses answered nothing: the strike it invited lands half again as hard as an unopposed one.
+    let undefendedDamage = defender.Health.Current - undefended.Target.Health.Current
+    let counteredDamage = defender.Health.Current - countered.Target.Health.Current
+
+    Assert.True(undefendedDamage > 0, "the strike must land for this test to mean anything")
+    Assert.Equal(1.5, float counteredDamage / float undefendedDamage, 1)
+
+    // The gamble was made of the banked stacks, and they do not survive a counter that failed.
+    Assert.Equal(0, countered.Target.Momentum)
+    Assert.Equal(0, countered.Target.Flow)

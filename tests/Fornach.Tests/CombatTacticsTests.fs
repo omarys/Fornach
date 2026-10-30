@@ -155,7 +155,7 @@ module CombatTacticsTests =
 
     // 1. Enemy telegraphs Power strike -> Agility gets Counter-Evasion, Shield Bash gets INTERRUPT
     let powerWindup = ActionIntent.StandardAttack (AttackClassification.ForceStrike true)
-    let powerChoices = Program.buildActionChoicesWithTelegraph player enemy (Some powerWindup)
+    let powerChoices = Program.buildActionChoicesWithTelegraph player enemy (Some powerWindup) false
 
     let hasEvasiveTag = powerChoices |> List.exists (fun c -> c.Contains("Counter-Evasion"))
     let hasInterruptTag = powerChoices |> List.exists (fun c -> c.Contains("SHIELD INTERRUPT") || c.Contains("INTERRUPT OPPORTUNITY"))
@@ -165,7 +165,7 @@ module CombatTacticsTests =
     // 2. Enemy telegraphs Agility flurry -> In Nach, Reflex Slip gets Affinity Counter, Raise Shield gets Parry Opening (ADR 0009)
     let agilityWindup = ActionIntent.StandardAttack (AttackClassification.FinesseCadence true)
     let defendingPlayer = player |> Combatant.yieldVor
-    let agilityChoices = Program.buildActionChoicesWithTelegraph defendingPlayer enemy (Some agilityWindup)
+    let agilityChoices = Program.buildActionChoicesWithTelegraph defendingPlayer enemy (Some agilityWindup) false
 
     let hasAffinityTag = agilityChoices |> List.exists (fun c -> c.Contains("Affinity Counter (Mitigates Finesse)"))
     let hasParryTag = agilityChoices |> List.exists (fun c -> c.Contains("Parry Opening"))
@@ -181,7 +181,7 @@ module CombatTacticsTests =
       [ ActionIntent.StandardAttack(AttackClassification.ForceStrike false)
         ActionIntent.StandardAttack(AttackClassification.FinesseCadence false)
         ActionIntent.StandardAttack(AttackClassification.ProwessStrike false) ] do
-      let choices = Program.buildActionChoicesWithTelegraph player enemy (Some intent)
+      let choices = Program.buildActionChoicesWithTelegraph player enemy (Some intent) false
       Assert.DoesNotContain(choices, (fun c -> c.Contains("Shield Bash")))
       Assert.DoesNotContain(choices, (fun c -> c.Contains("INTERRUPT")))
 
@@ -189,7 +189,7 @@ module CombatTacticsTests =
     let heavy = ActionIntent.StandardAttack(AttackClassification.ForceStrike true)
 
     let bashes =
-      Program.buildActionChoicesWithTelegraph player enemy (Some heavy)
+      Program.buildActionChoicesWithTelegraph player enemy (Some heavy) false
       |> List.filter (fun c -> c.Contains("Shield Bash"))
 
     Assert.Equal(1, List.length bashes)

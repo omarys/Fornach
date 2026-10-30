@@ -77,6 +77,24 @@ module ActionResolver =
 
     int (Math.Round(float rawDef * multiplier))
 
+  /// The defence an attack is actually contested against: a DisciplineStance guard blends Poise and
+  /// Composure at 1.5x, other pairs average, and the mental plane passes through the defender conversion.
+  /// Shared with `AttackEstimator` so menu ranking cannot drift from resolution.
+  let defenseValue (actor: Combatant) (defender: Combatant) (attack: AttackClassification) : int =
+    let _, defenseStats = attack.StatPair
+
+    let raw =
+      match defenseStats with
+      | [ single ] -> defender.GetCombatStat single
+      | [ first; second ] when first = Poise && second = Composure -> defender.GetGuard(attack.Plane, true)
+      | [ first; second ] -> (defender.GetCombatStat first + defender.GetCombatStat second) / 2
+      | _ -> defender.GetCombatStat (List.head defenseStats)
+
+    if attack.Plane = Mental then
+      resolveMentalDefenseFor actor defender raw
+    else
+      raw
+
   /// Tiered NetHits multiplier mapping contest outcome to damage lethality
   let computeTierMultiplier (netHits: int) : float =
     if netHits <= 0 then 0.0
@@ -962,7 +980,7 @@ module ActionResolver =
   let private resolveAttack
     (roller: DiceRoller)
     (atk: AttackClassification)
-    (defenseOpt: DefenseClassification option)
+    (defenseOpt: DefenseChoice option)
     (actor: Combatant)
     (target: Combatant)
     (priorDefenses: int)
@@ -2083,7 +2101,7 @@ module ActionResolver =
     // --- Active Defense & Affinity Evaluation (ADR 0009) ---
     let isAffinityCounter, affinityMitigationMult =
       match defenseOpt with
-      | Some activeDefense ->
+      | Some (Guard activeDefense) ->
         let isCounter, mult =
           match plane, activeDefense with
           | Physical, FortitudeGuard _ ->
@@ -2105,6 +2123,10 @@ module ActionResolver =
           | _ -> false, 1.0
         events <- CombatEvent.DefenseAffinityResolved(currentTarget.Id, currentActor.Id, isCounter, (if isCounter then 25 else -15)) :: events
         isCounter, mult
+      | Some (SeizeIndes _) ->
+        // A counter-attack is its own defence: it either beats the incoming roll outright or it does not,
+        // so there is no guard affinity to mitigate with. The wager is resolved at Step C.2.
+        false, 1.0
       | None ->
         false, 1.0
 
@@ -2154,8 +2176,34 @@ module ActionResolver =
     if contest.EncirclementPenalty > 0 then
       events <- CombatEvent.EncirclementPenalized(currentTarget.Id, effectivePriorDefenses, contest.EncirclementPenalty) :: events
 
+    // --- Step C.2: Seize Indes — the defender spent its guard on a counter-attack (ADR 0006) ---
+    // The wager is the whole point. A counter that out-rolls the incoming strike stops it outright and
+    // takes the Vor, so committing to one is a real defence rather than a tempo trick. A counter that
+    // loses has answered nothing: the blow lands 1.5x, every banked stack is gone, and the attempt itself
+    // frustrates. `None` means no counter was declared and the strike resolves against the guard alone.
+    let indesCounter : bool option =
+      match defenseOpt with
+      | Some (SeizeIndes counterAtk) when counterAtk.IsAllowedFor currentTarget ->
+        let counterOffStat, _ = counterAtk.StatPair
+
+        let counterContest =
+          DicePool.resolveContestEx
+            roller
+            counterAtk.Vector
+            (currentTarget.GetCombatStat counterOffStat)
+            (Combatant.stacksIn counterAtk.Vector currentTarget)
+            (defenseValue currentTarget currentActor counterAtk)
+            (Combatant.stacksIn counterAtk.Vector currentActor)
+            0
+
+        Some(counterContest.Attacker.TotalHits > contest.Attacker.TotalHits)
+      | _ -> None
+
     // --- Step D: Whiff vs. Landed Hit Branching ---
-    let isWhiff = contest.IsWhiff && not (currentTarget.Meters.Recklessness.Value >= 75 || currentTarget.Meters.CognitiveFatigue.Value >= 75)
+    // A counter that wins the exchange stops the strike as surely as a clean read does.
+    let isWhiff =
+      (contest.IsWhiff || indesCounter = Some true)
+      && not (currentTarget.Meters.Recklessness.Value >= 75 || currentTarget.Meters.CognitiveFatigue.Value >= 75)
 
     // A gambit pays its declared exposure here, once the contest is known. The spike stops at 99, one
     // short of the break: driving yourself to the brink is what a gambit is for, and a clean hit that
@@ -2188,32 +2236,48 @@ module ActionResolver =
         :: events
 
       // Evaluate Indes tempo seizure opportunity (enhanced by Parrying Buckler, windup commitment, and high recklessness)
-      let updatedDef, updatedAtk, indesEvents, seized =
-        IndesResolver.resolveIndesOpportunityWithWindup currentTarget currentActor atk.IsHeavyWindup contest
-      if seized then
-        currentTarget <- updatedDef
-        currentActor <- updatedAtk
-        events <- events @ indesEvents
-      elif isAffinityCounter && currentTarget.IsInNach then
+      if indesCounter = Some true then
+        // The counter won the exchange. A strike stopped by a strike is the Indes made real: the blow never
+        // lands, and the tempo changes hands without the attacker ever having been read.
         let newVor, newNach = Combatant.seizeVor currentTarget, Combatant.yieldVor currentActor
-        events <- CombatEvent.TempoShifted(newVor.Id, newNach.Id, sprintf "%s countered the attack cleanly from the Nach, seizing the Vor!" newVor.Name) :: events
+
+        events <-
+          CombatEvent.TempoShifted(
+            newVor.Id,
+            newNach.Id,
+            sprintf "%s seized the Indes, answering the strike with one of their own and taking the Vor!" newVor.Name
+          )
+          :: events
         currentTarget <- newVor
         currentActor <- newNach
       else
-        // No Indes: the defense still answered, so a held Vor passes rather than surviving on a whiff.
-        let yielder, taker, moved = resolveWhiffTempo currentActor currentTarget
+        let updatedDef, updatedAtk, indesEvents, seized =
+          IndesResolver.resolveIndesOpportunityWithWindup currentTarget currentActor atk.IsHeavyWindup contest
 
-        if moved then
-          events <-
-            events
-            @ [ CombatEvent.TempoShifted(
-                  taker.Id,
-                  yielder.Id,
-                  sprintf "%s read the strike and took the Vor." taker.Name
-                ) ]
+        if seized then
+          currentTarget <- updatedDef
+          currentActor <- updatedAtk
+          events <- events @ indesEvents
+        elif isAffinityCounter && currentTarget.IsInNach then
+          let newVor, newNach = Combatant.seizeVor currentTarget, Combatant.yieldVor currentActor
+          events <- CombatEvent.TempoShifted(newVor.Id, newNach.Id, sprintf "%s countered the attack cleanly from the Nach, seizing the Vor!" newVor.Name) :: events
+          currentTarget <- newVor
+          currentActor <- newNach
+        else
+          // No Indes: the defense still answered, so a held Vor passes rather than surviving on a whiff.
+          let yielder, taker, moved = resolveWhiffTempo currentActor currentTarget
 
-          currentActor <- yielder
-          currentTarget <- taker
+          if moved then
+            events <-
+              events
+              @ [ CombatEvent.TempoShifted(
+                    taker.Id,
+                    yielder.Id,
+                    sprintf "%s read the strike and took the Vor." taker.Name
+                  ) ]
+
+            currentActor <- yielder
+            currentTarget <- taker
 
       // Evaluate collapse on actor in case gambit self-spiked Recklessness
       let finalActor = Combatant.evaluateCollapse currentActor
@@ -2268,6 +2332,24 @@ module ActionResolver =
       let gambitMult = if isGambit then 1.5 else 1.0
       let weaponEff = if plane = Mental then 1.0 else WeaponCondition.effectiveness currentActor.WeaponCondition
       let berserkMult = if currentActor.HasActivePreparation PreparationType.BerserkTincture then 1.35 else 1.0
+
+      // A counter that lost the exchange has answered nothing, so the strike it invited lands worse. Every
+      // banked stack goes with it: the gamble was made of those stacks, and a defender who spent them on a
+      // counter that failed does not get to keep the ramp it built. The attempt itself frustrates.
+      let indesPenaltyMult =
+        match indesCounter with
+        | Some false ->
+          currentTarget <- currentTarget |> Combatant.clearStacks
+          currentTarget <-
+            currentTarget
+            |> Combatant.updateMeters (fun m -> { m with Frustration = m.Frustration + 25 })
+
+          events <-
+            CombatEvent.ComboReset(currentTarget.Id, "The Indes counter failed: every banked stack is spent.")
+            :: events
+
+          1.5
+        | _ -> 1.0
 
       // If strike landed while defender was encircled, apply flank overwhelm pressure scaled by disparity
       if contest.EncirclementPenalty > 0 then
@@ -2348,7 +2430,7 @@ module ActionResolver =
         else
           // ADR 0009: Base physical HP damage scaled down by 30% on standard attacks to prioritize tactical meter collapses
           let scaledBase = if isFinisherOrGambit || plane = Mental then float baseDamage else float baseDamage * 0.70
-          Math.Max(1, int (scaledBase * tierMult * gambitMult * classMult * weaponEff * critDmgMult * berserkMult * formDmgMult * attackDamageMitigation * ferocityMult * packMult * recklessnessDmgMult * affinityMitigationMult * passiveFinisherBonusDmg))
+          Math.Max(1, int (scaledBase * tierMult * gambitMult * classMult * weaponEff * critDmgMult * berserkMult * indesPenaltyMult * formDmgMult * attackDamageMitigation * ferocityMult * packMult * recklessnessDmgMult * affinityMitigationMult * passiveFinisherBonusDmg))
 
       // Aegis of Retribution: 35% damage reduction applied to recipient
       let rawDmg =
@@ -2741,7 +2823,7 @@ module ActionResolver =
   /// are owned by the combat ramp (Momentum, Flow) and by gear; a won encounter pays the Discipline
   /// pair (`Combatant.growFromEncounter`), never Force/Finesse/Intellect/Acuity.
 
-  let resolveExWithDefense (roller: DiceRoller) (intent: ActionIntent) (defenseOpt: DefenseClassification option) (actor: Combatant) (target: Combatant) (priorDefenses: int) : ActionResult =
+  let resolveExWithDefense (roller: DiceRoller) (intent: ActionIntent) (defenseOpt: DefenseChoice option) (actor: Combatant) (target: Combatant) (priorDefenses: int) : ActionResult =
     let upkeepActor, upkeepEvents = applyTurnUpkeep actor
     if upkeepActor.Health.IsDepleted then
       { Actor = upkeepActor
@@ -2800,7 +2882,7 @@ module ActionResolver =
   let resolveExchange (roller: DiceRoller) (attackerIntent: ActionIntent) (attacker: Combatant) (defenderIntent: ActionIntent) (defender: Combatant) : ActionResult =
     match defenderIntent with
     | ActiveDefense def ->
-      resolveExWithDefense roller attackerIntent (Some def) attacker defender 0
+      resolveExWithDefense roller attackerIntent (Some(Guard def)) attacker defender 0
     | _ ->
       resolveEx roller attackerIntent attacker defender 0
 

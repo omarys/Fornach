@@ -28,7 +28,7 @@ module Simulation =
         let intent = AI.chooseIntent actor target
         let defOpt =
           if target.IsHumanoid && target.IsInNach then
-            Some (AI.chooseActiveDefense target actor)
+            Some(Guard(AI.chooseActiveDefense target actor))
           else None
         let res = ActionResolver.resolveExWithDefense roller intent defOpt actor target 0
         if actorIsA then
@@ -505,7 +505,7 @@ module Simulation =
         while mobIdx < mob.Length && swingsCount < availableSwings && winnerIsSolo.IsNone do
           let attacker = mob.[mobIdx]
           let intentMob = AI.chooseIntent attacker solo
-          let defOpt = if priorDefenses = 0 && solo.IsHumanoid then Some (policy.ChooseDefense solo attacker) else None
+          let defOpt = if priorDefenses = 0 && solo.IsHumanoid then Some(Guard(policy.ChooseDefense solo attacker)) else None
           let mobRes = ActionResolver.resolveExWithDefense roller intentMob defOpt attacker solo priorDefenses
           let newAttacker = mobRes.Actor
           solo <- mobRes.Target

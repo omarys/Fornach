@@ -7,31 +7,9 @@ open Fornach.Domain
 module AttackEstimator =
 
   /// Offensive stat and the (one or two) defensive stats an attack is contested against.
-  /// Mirrors the stat selection in ActionResolver.resolveAttack.
-  let statPair (attack: AttackClassification) : StatId * StatId list =
-    match attack with
-    | ForceStrike _
-    | ForceInsightStrike
-    | TraumaAttack BasaltEruption -> Force, [ Fortitude; Resolve ]
-    | FinesseCadence _
-    | FinesseInsightStrike
-    | TraumaAttack DenialPhaseShift -> Finesse, [ Reflex; Intuition ]
-    | ProwessStrike _
-    | ShieldBash _
-    | CalculatedFlawStrike
-    | MasterfulDisarm _ -> Prowess, [ Poise; Composure ]
-    | AuthorityDecree _
-    | ArcaneCataclysm _ -> Intellect, [ Fortitude; Resolve ]
-    | GuileDeception _
-    | SynapticGlamour _
-    | MirrorIllusion _ -> Acuity, [ Reflex; Intuition ]
-    | AcumenInterrogation _
-    | RunicWardTrap _
-    | DisorientingShockwave _
-    | StaffSiphon
-    | TraumaAttack CoerciveBargain -> Acumen, [ Poise; Composure ]
-    | TraumaAttack ApathyDoldrums -> Fortitude, [ Poise; Composure ]
-    | TraumaAttack SereneResolution -> Composure, [ Fortitude; Resolve ]
+  /// The table lives on `AttackClassification.StatPair` so the resolver, the estimator and the Indes
+  /// counter cannot disagree about what a strike is rolled against.
+  let statPair (attack: AttackClassification) : StatId * StatId list = attack.StatPair
 
   /// The combatant a strike is actually contested as. `ActionResolver.applyFluidTransition` runs *before*
   /// the contest, so a physical strike always lands in the stance its vector selects and a mental one in
@@ -98,19 +76,7 @@ module AttackEstimator =
   /// DisciplineStance guard blends Poise and Composure at 1.5x, other pairs average, and the mental
   /// plane passes through the caster's defence conversion.
   let defenseValue (actor: Combatant) (defender: Combatant) (attack: AttackClassification) : int =
-    let _, defenseStats = statPair attack
-
-    let raw =
-      match defenseStats with
-      | [ single ] -> defender.GetCombatStat single
-      | [ first; second ] when first = Poise && second = Composure -> defender.GetGuard(attack.Plane, true)
-      | [ first; second ] -> (defender.GetCombatStat first + defender.GetCombatStat second) / 2
-      | _ -> defender.GetCombatStat (List.head defenseStats)
-
-    if attack.Plane = Mental then
-      ActionResolver.resolveMentalDefenseFor actor defender raw
-    else
-      raw
+    ActionResolver.defenseValue actor defender attack
 
   /// The whole contest in one number, and both halves are read on the attack's own vector: how far the
   /// actor's attack outclasses the defence it faces, plus how far the actor's guard against that same

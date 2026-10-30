@@ -170,7 +170,7 @@ module Program =
       | _ -> false
     | _ -> false
 
-  let buildActionChoicesWithTelegraph (player: Combatant) (enemy: Combatant) (enemyIntentOpt: ActionIntent option) : string list =
+  let private buildActionChoicesCore (player: Combatant) (enemy: Combatant) (enemyIntentOpt: ActionIntent option) : string list =
     [
       // Finisher (only for the player's operative discipline)
       if enemy.IsExecuteEligible then
@@ -348,8 +348,35 @@ module Program =
 
     ]
 
+  let buildActionChoicesWithTelegraph (player: Combatant) (enemy: Combatant) (enemyIntentOpt: ActionIntent option) (allowIndes: bool) : string list =
+    let choices = buildActionChoicesCore player enemy enemyIntentOpt
+
+    // Seize Indes: the wager. Answer the incoming strike with one of your own — out-roll it and the blow is
+    // stopped and the Vor changes hands; lose it and the blow lands half again as hard with every banked
+    // stack spent. Only offered where a defence slot exists (tower combat), and the counter is always a
+    // strike of the player's own vector so the offer is never one the build cannot make.
+    if not (allowIndes && player.IsInNach) then
+      choices
+    else
+      let counterStrike =
+        if player.Plane = Physical then
+          match player.Class.Vector with
+          | Vector.Agility -> "Finesse Cadence: Rapid Probing"
+          | _ -> "Force Strike: Standard Cleave"
+        else
+          match player.Class.Vector with
+          | Vector.Agility -> "Guile Deception: Rhetorical Misdirection"
+          | Vector.Discipline -> "Acumen Interrogation: Procedural Pressure"
+          | _ -> "Authority Decree: Imperious Command"
+
+      choices
+      @ [ sprintf
+            "⚔️  [bold %s]Seize Indes: %s[/] (Gambit: win the roll to stop the strike and take the Vor; lose it and the blow lands 1.5x with every banked stack spent)"
+            Theme.Yellow
+            counterStrike ]
+
   let buildActionChoices (player: Combatant) (enemy: Combatant) : string list =
-    buildActionChoicesWithTelegraph player enemy None
+    buildActionChoicesWithTelegraph player enemy None false
 
   let private runInteractiveDuel (playerArch: ArchetypeInfo) (enemyArch: ArchetypeInfo) =
     let rng = Random()
@@ -417,7 +444,7 @@ module Program =
         Display.renderHUDWithTelegraph player enemy round (Some enemyIntent)
 
         let doPlayerTurn (turnNumber: int) =
-          let choices = buildActionChoicesWithTelegraph player enemy (if playerHasVor then Some enemyIntent else None)
+          let choices = buildActionChoicesWithTelegraph player enemy (if playerHasVor then Some enemyIntent else None) false
           let choice =
             Display.promptSelectionWithHelp
               (sprintf "[bold %s]Round %d - Select Tactical Action for %s (Press '?' or F1 for Symbol Legend):[/]" Theme.Yellow round player.Name)
@@ -801,7 +828,7 @@ module Program =
         Display.renderHUDWithTelegraph currentCombatant currentBoss round (Some enemyIntent)
 
         let doPlayerTurn (turnNumber: int) =
-          let choices = buildActionChoicesWithTelegraph currentCombatant currentBoss (if playerHasVor then Some enemyIntent else None)
+          let choices = buildActionChoicesWithTelegraph currentCombatant currentBoss (if playerHasVor then Some enemyIntent else None) false
           let choice =
             Display.promptSelectionWithHelp
               (sprintf "[bold %s]Round %d - Tactical Action against %s (Press '?' or F1 for Symbol Legend):[/]" Theme.Yellow round currentBoss.Name)
@@ -1103,7 +1130,7 @@ module Program =
     // The foe whose technique the player interrupted this round; its strike defuses into a recovery.
     let mutable interruptedTarget : CombatantId option = None
     // Active defense chosen by the player this round to counter the primary incoming attack.
-    let mutable playerActiveDefenseOpt : DefenseClassification option = None
+    let mutable playerActiveDefenseOpt : DefenseChoice option = None
 
     // The pack's phase: each surviving frontline foe that can reach the player strikes.
     // Capped at 3 with BastionZoneControl, or 4 normal frontline attackers, so tactical counterplay
@@ -1125,7 +1152,7 @@ module Program =
             if priorDefenses = 0 && currentPlayer.IsHumanoid then
               match playerActiveDefenseOpt with
               | Some def -> Some def
-              | None -> Some (AI.chooseActiveDefense currentPlayer e.Combatant)
+              | None -> Some(Guard(AI.chooseActiveDefense currentPlayer e.Combatant))
             else None
           let r =
             if isStaggered then
@@ -1178,7 +1205,7 @@ module Program =
       let targetCombatant = target.Combatant
       let targetIntent = AI.chooseIntent targetCombatant currentPlayer
       let actionChoices =
-        buildActionChoicesWithTelegraph currentPlayer targetCombatant (Some targetIntent)
+        buildActionChoicesWithTelegraph currentPlayer targetCombatant (Some targetIntent) true
         @ (if canFlee then [ "🏃  Disengage (withdraw — each foe strikes as you break away)" ] else [])
 
       let choice =
@@ -1216,7 +1243,8 @@ module Program =
       else
         let intent = parseActionChoice choice
         match intent with
-        | ActiveDefense def -> playerActiveDefenseOpt <- Some def
+        | ActiveDefense def -> playerActiveDefenseOpt <- Some(Guard def)
+        | StandardAttack atk when choice.Contains("Seize Indes") -> playerActiveDefenseOpt <- Some(SeizeIndes atk)
         | _ -> playerActiveDefenseOpt <- None
 
         // 3a. The pack opens when it holds the Vor and the player does not: it strikes before the

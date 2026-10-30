@@ -159,6 +159,35 @@ type AttackClassification =
     | TraumaAttack _ -> true
     | _ -> false
 
+  /// Offensive stat and the (one or two) defensive stats an attack is contested against. Lives here so the
+  /// resolver, the estimator and the Indes counter all read one table: `ActionResolver.resolveAttack`,
+  /// `AttackEstimator.contestMargin` and the counter-attack in `ActionResolver.resolveAttack` must agree on
+  /// what a given strike is rolled against, or the ranking and the resolution drift apart.
+  member this.StatPair : StatId * StatId list =
+    match this with
+    | ForceStrike _
+    | ForceInsightStrike
+    | TraumaAttack BasaltEruption -> Force, [ Fortitude; Resolve ]
+    | FinesseCadence _
+    | FinesseInsightStrike
+    | TraumaAttack DenialPhaseShift -> Finesse, [ Reflex; Intuition ]
+    | ProwessStrike _
+    | ShieldBash _
+    | CalculatedFlawStrike
+    | MasterfulDisarm _ -> Prowess, [ Poise; Composure ]
+    | AuthorityDecree _
+    | ArcaneCataclysm _ -> Intellect, [ Fortitude; Resolve ]
+    | GuileDeception _
+    | SynapticGlamour _
+    | MirrorIllusion _ -> Acuity, [ Reflex; Intuition ]
+    | AcumenInterrogation _
+    | RunicWardTrap _
+    | DisorientingShockwave _
+    | StaffSiphon
+    | TraumaAttack CoerciveBargain -> Acumen, [ Poise; Composure ]
+    | TraumaAttack ApathyDoldrums -> Fortitude, [ Poise; Composure ]
+    | TraumaAttack SereneResolution -> Composure, [ Fortitude; Resolve ]
+
 /// Classifies active defensive counters in the Nach across Physical and Mental planes (ADR 0009)
 type DefenseClassification =
   /// Fortitude Guard (Power Defense): Braced guard countering ForceStrike (+25% mitigation, seizes Vor on success); vulnerable to FinesseCadence (-15% mitigation)
@@ -186,6 +215,16 @@ type DefenseClassification =
     | ReflexSlip _ -> StatId.Reflex
     | ResolveAnchor _ -> StatId.Resolve
     | IntuitionPerception _ -> StatId.Intuition
+
+/// What a defender commits to when a strike comes in: a guard posture, or a counter-attack thrown into
+/// the attacker's tempo (ADR 0006, Indes).
+type DefenseChoice =
+  /// An active guard in the Nach: mitigates by affinity and answers the strike.
+  | Guard of DefenseClassification
+  /// Seize Indes: answer the strike with a strike. Win the exchange and the incoming blow never lands and
+  /// the Vor changes hands; lose it and every banked stack is gone, the hit lands worse, and the attempt
+  /// itself frustrates.
+  | SeizeIndes of AttackClassification
 
 /// Defensive recoveries used to bleed accumulated Recklessness and re-center posture
 type DefensiveReset =
