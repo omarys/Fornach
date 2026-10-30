@@ -27,8 +27,7 @@ module Generators =
       return
         { Recklessness = r
           Exhaustion = ex
-          Overwhelm = ov
-          Frustration = fr
+          Frustration = ov
           CognitiveFatigue = cf
           Confusion = cn
           Provoke = pr }

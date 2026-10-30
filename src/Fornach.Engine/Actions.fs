@@ -6,7 +6,7 @@ open Fornach.Domain
 type TraumaGambit =
   /// Denial (Agility/Mental): Asserts reality never happened; conjures a mirror clone, evades, and inflicts Confusion
   | DenialPhaseShift
-  /// Anger (Power/Physical): Volcanic fury that smashes molten basalt into the target, shredding armor and inflicting Overwhelm
+  /// Anger (Power/Physical): Volcanic fury that smashes molten basalt into the target, shredding armor and inflicting Frustration
   | BasaltEruption
   /// Bargaining (Discipline/Mental): A predatory transaction stealing Morale to restore vitality, inflicting Provoke and Frustration
   | CoerciveBargain
@@ -22,7 +22,7 @@ type AttackClassification =
   // -------------------------------------------------------------------------
   /// Power (Force vs. Fortitude): Heavy cleave or wild smash causing Exhaustion & Stagger
   | ForceStrike of isWildBlow: bool
-  /// Agility (Finesse vs. Reflex): Rapid cadence seeking openings to inflict Overwhelm & Hemorrhage
+  /// Agility (Finesse vs. Reflex): Rapid cadence seeking openings to inflict Frustration & Hemorrhage
   | FinesseCadence of isRelentlessCadence: bool
   /// Martial Discipline (Prowess vs. Poise): Stance pressure and tactical disarms causing Frustration
   | ProwessStrike of isInvitationalBait: bool

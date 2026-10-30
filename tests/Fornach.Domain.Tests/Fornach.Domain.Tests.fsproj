@@ -28,6 +28,7 @@
     <Compile Include="StatBonusTests.fs" />
     <Compile Include="PainShockTests.fs" />
     <Compile Include="ActiveDefenseTests.fs" />
+    <Compile Include="GuardRampTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -26,19 +26,20 @@ module PainShockTests =
     Assert.Equal(int (System.Math.Round(float normalFort * 0.75)), exhausted.GetCombatStat StatId.Fortitude)
     Assert.Equal(normalFinesse, exhausted.GetCombatStat StatId.Finesse)
 
-    // 2. Overwhelm >= 75 debuffs Finesse and Reflex by -25%
+    // 2. Frustration >= 75 debuffs Finesse and Reflex by -25%
     let overwhelmed =
       baseFighter
-      |> Combatant.updateMeters (fun m -> { m with Overwhelm = m.Overwhelm + 75 })
+      |> Combatant.updateMeters (fun m -> { m with Frustration = m.Frustration + 75 })
     Assert.Equal(int (System.Math.Round(float normalFinesse * 0.75)), overwhelmed.GetCombatStat StatId.Finesse)
     Assert.Equal(int (System.Math.Round(float normalReflex * 0.75)), overwhelmed.GetCombatStat StatId.Reflex)
     Assert.Equal(normalForce, overwhelmed.GetCombatStat StatId.Force)
 
-    // 3. Frustration >= 75 debuffs Poise by -50%
+    // 3. There is no Poise strain band any more: the Prowess/Poise `Frustration` meter is gone, and the
+    //    surviving Frustration is the Finesse/Reflex one, so 75% of it buys nothing from Poise.
     let frustrated =
       baseFighter
       |> Combatant.updateMeters (fun m -> { m with Frustration = m.Frustration + 75 })
-    Assert.Equal(int (System.Math.Round(float normalPoise * 0.50)), frustrated.GetCombatStat StatId.Poise)
+    Assert.Equal(normalPoise, frustrated.GetCombatStat StatId.Poise)
 
   [<Fact>]
   let ``Single-turn damage under 15 percent does not trigger Pain Shock`` () =
@@ -73,7 +74,7 @@ module PainShockTests =
     Assert.True(pct >= 15, sprintf "Damage percentage should be >= 15%% (Actual: %d%%)" pct)
     if not resisted then
       Assert.True(outcome.Target.IsStaggered, "Target should be staggered upon failing Pain Shock check")
-      Assert.True(outcome.Target.Meters.Overwhelm.Value >= 25, "Overwhelm should surge +25 on Pain Shock failure")
+      Assert.True(outcome.Target.Meters.Frustration.Value >= 25, "Frustration should surge +25 on Pain Shock failure")
       Assert.True(outcome.Target.Meters.Exhaustion.Value >= 15, "Exhaustion should surge +15 on Pain Shock failure")
 
   [<Fact>]

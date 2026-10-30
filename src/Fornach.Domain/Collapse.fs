@@ -2,8 +2,7 @@ namespace Fornach.Domain
 
 type CollapseReason =
   | SomaticAnoxia // 100% Exhaustion
-  | Exsanguination // 100% Overwhelm
-  | StanceFailure // 100% Frustration
+  | Exsanguination // 100% Frustration (Finesse/Reflex meter)
   | CatatonicStupor // 100% Cognitive Fatigue
   | ContradictionLock // 100% Confusion
   | HystericalMeltdown // 100% Provoke

@@ -93,7 +93,7 @@ module Program =
       StandardAttack (ShieldBash true)
     elif choice.Contains("Authority Decree: Imperious Command") then
       StandardAttack (AuthorityDecree false)
-    elif choice.Contains("Authority Decree: Overwhelming Demand") then
+    elif choice.Contains("Authority Decree: Frustrationing Demand") then
       StandardAttack (AuthorityDecree true)
     elif choice.Contains("Guile Deception: Rhetorical Misdirection") then
       StandardAttack (GuileDeception false)

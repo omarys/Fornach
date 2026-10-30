@@ -12,7 +12,7 @@ module AI =
 
   /// Evaluates an actor's specialization and chooses the optimal defensive reset
   let private chooseRecovery (self: Combatant) : ActionIntent =
-    // SteadyForm drains Recklessness, Exhaustion, Overwhelm and Frustration, but not
+    // SteadyForm drains Recklessness, Exhaustion, Frustration and Frustration, but not
     // CognitiveFatigue, Confusion or Provoke. Those three also trip the recovery gate, so routing
     // a physical actor to SteadyForm on mental pressure locks it out permanently: the offending
     // meter never falls back under the threshold, so every later turn is another no-op recovery.
@@ -184,7 +184,7 @@ module AI =
   let chooseIntentWithContext (self: Combatant) (opponent: Combatant) (surroundingOpponents: int) : ActionIntent =
     if self.Meters.Recklessness.Value >= 75
        || self.Meters.Exhaustion.Value >= 75
-       || self.Meters.Overwhelm.Value >= 75
+       || self.Meters.Frustration.Value >= 75
        || self.Meters.CognitiveFatigue.Value >= 75
        || self.Meters.Confusion.Value >= 75
        || self.Meters.Provoke.Value >= 75 then
@@ -279,7 +279,7 @@ module AI =
       // 2. If self is reaching dangerous entropy or status debuff levels, bleed Recklessness
       elif (if self.Name.Contains("Anger") then self.Meters.Recklessness.Value >= 95 else self.Meters.Recklessness.Value >= 40)
            || self.Meters.Exhaustion.Value >= 65
-           || self.Meters.Overwhelm.Value >= 65
+           || self.Meters.Frustration.Value >= 65
            || self.Meters.CognitiveFatigue.Value >= 65
            || self.Meters.Confusion.Value >= 65
            || self.Meters.Provoke.Value >= 65 then
@@ -332,7 +332,7 @@ module AI =
             list
             |> List.filter (fun m ->
               m.Meters.Exhaustion.Value >= 75
-              || m.Meters.Overwhelm.Value >= 75
+              || m.Meters.Frustration.Value >= 75
               || m.Meters.Frustration.Value >= 75
               || m.Meters.CognitiveFatigue.Value >= 75
               || m.Meters.Confusion.Value >= 75

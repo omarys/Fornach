@@ -12,7 +12,7 @@ type DamageEvent =
 type DisparityOutcome =
   // Physical Disparities
   | CrushingBlow of bonusExhaustion: int
-  | ArterialRupture of bonusOverwhelm: int
+  | ArterialRupture of bonusFrustration: int
   | DisarmOrLimbDisable
   // Mental / Social / Arcane Disparities
   | CognitiveRupture of bonusFatigue: int
@@ -124,7 +124,7 @@ type CombatEvent =
   /// Disorienting shockwave disrupted enemy balance, resetting tempo and inflicting confusion
   | OpponentDisoriented of casterId: CombatantId * targetId: CombatantId * reason: string
 
-  /// Overwhelming cataclysmic blast splashed destructive energy to adjacent swarm targets
+  /// Frustrationing cataclysmic blast splashed destructive energy to adjacent swarm targets
   | CataclysmSplashed of casterId: CombatantId * secondaryTargetId: CombatantId * splashDamage: int
 
   /// Tactical preparation deployed by combatant

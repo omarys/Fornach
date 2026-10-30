@@ -157,7 +157,7 @@ module TacticalAssessment =
       let warning =
         match stat with
         | StatId.Force ->
-          sprintf "Colossal Force (%d) — Massive kinetic cleaves will shred Armor and inflict crushing Overwhelm. Evade with Agility Stance or mitigate with Bastion control!" value
+          sprintf "Colossal Force (%d) — Massive kinetic cleaves will shred Armor and inflict crushing Frustration. Evade with Agility Stance or mitigate with Bastion control!" value
         | StatId.Finesse ->
           sprintf "Deadly Finesse (%d) — Swift multi-strike cadences exploit vital openings for high critical damage. Close openings with high Poise or Discipline guard!" value
         | StatId.Prowess ->

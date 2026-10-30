@@ -122,8 +122,32 @@ let ``a pack of unseen foes closing on the player also opens in the Nach`` () =
       | TowerEvent.GroupCombatTriggered enemies -> Some enemies
       | _ -> None)
 
-  // The pack is handed to the fight already holding the Vor, not relying on the constructor default.
-  Assert.All(pack, fun e -> Assert.Equal(TacticalTiming.Vor, e.Combatant.Tempo))
+  // One foe springs the ambush and carries the initiative; the rest of the pack piles on from the Nach.
+  Assert.Single(pack |> List.filter (fun e -> e.Combatant.Tempo = TacticalTiming.Vor)) |> ignore
+  Assert.Equal(TacticalTiming.Nach, after.Player.Tempo)
+
+[<Fact>]
+let ``only one foe of an unseen pack carries the Vor`` () =
+  let playerPos = { X = 10; Y = 4 }
+
+  let entities =
+    Map.ofList
+      [ { X = 11; Y = 4 }, EntityEnemy(makeEnemy "mob_0")
+        { X = 9; Y = 4 }, EntityEnemy(makeEnemy "mob_1") ]
+
+  let state = makeState openRoom playerPos entities
+  let after, events = TowerSession.stepEnemies state
+
+  let pack =
+    events
+    |> List.pick (function
+      | TowerEvent.GroupCombatTriggered enemies -> Some enemies
+      | _ -> None)
+
+  // Handing the Vor to every unseen foe let each one "insist" on it (resolveLandedTempo), so a player who
+  // seized it back lost it again to the next foe in the same phase.
+  Assert.Equal(1, pack |> List.filter (fun e -> e.Combatant.Tempo = TacticalTiming.Vor) |> List.length)
+  Assert.Equal(pack.Length - 1, pack |> List.filter (fun e -> e.Combatant.Tempo = TacticalTiming.Nach) |> List.length)
   Assert.Equal(TacticalTiming.Nach, after.Player.Tempo)
 
 [<Fact>]

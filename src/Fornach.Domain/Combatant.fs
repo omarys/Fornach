@@ -67,6 +67,12 @@ type Combatant =
     /// Combat ramp: rises on every attack, sharpens Force/Fortitude and the Discipline stats,
     /// cashed by Power and Discipline specials.
     Momentum: int
+    /// Guard ramp: rises only on an action taken from the Nach, and sharpens the physical defensive
+    /// attributes (Fortitude/Poise) at a steeper rate than Momentum does.
+    Inertia: int
+    /// Guard ramp: rises only on an action taken from the Nach, and sharpens the mental defensive
+    /// attributes (Resolve/Composure) at a steeper rate than Momentum does.
+    Focus: int
     Armor: ArmorIntegrity
     WeaponCondition: WeaponCondition
     Stance: CombatStance
@@ -177,10 +183,8 @@ type Combatant =
     let baseAdjusted =
       if (stat = Force || stat = Fortitude) && this.Meters.Exhaustion.Value >= 75 then
         int (Math.Round(float baseValue * 0.75))
-      elif (stat = Finesse || stat = Reflex) && this.Meters.Overwhelm.Value >= 75 then
+      elif (stat = Finesse || stat = Reflex) && this.Meters.Frustration.Value >= 75 then
         int (Math.Round(float baseValue * 0.75))
-      elif stat = Poise && this.Meters.Frustration.Value >= 75 then
-        int (Math.Round(float baseValue * 0.50))
       elif this.Meters.CognitiveFatigue.Value >= 75 && (stat = Intellect || stat = Acuity || (this.Plane = Mental && (stat = Fortitude || stat = Reflex || stat = Resolve || stat = Intuition))) then
         int (Math.Round(float baseValue * 0.75))
       else
@@ -226,11 +230,17 @@ type Combatant =
     // caster's stacks and guard are worth holding too.
     // Flow is deliberately the sharpest (6%/stack vs 1%) — it is the Agility glass cannon meter. At
     // 10% it was ~1.9x the Momentum meter once Finesse's 2.5x crit was counted in.
+    let momentumRamp = 1.0 + 0.01 * float (Math.Clamp(this.Momentum, 0, Combatant.StackCap))
+    // The guard meters pay 2.5%/stack against the offensive ramp's 1%: acting from the Nach is a losing
+    // exchange on the attack, so it buys defence instead.
+    let guardRamp (stacks: int) = 1.0 + 0.025 * float (Math.Clamp(stacks, 0, Combatant.StackCap))
+
     let ramp =
       match stat with
       | Finesse | Reflex | Acuity | Intuition -> 1.0 + 0.06 * float (Math.Clamp(this.Flow, 0, Combatant.StackCap))
-      | Force | Fortitude | Intellect | Resolve
-      | Prowess | Poise | Acumen | Composure -> 1.0 + 0.01 * float (Math.Clamp(this.Momentum, 0, Combatant.StackCap))
+      | Fortitude | Poise -> momentumRamp * guardRamp this.Inertia
+      | Resolve | Composure -> momentumRamp * guardRamp this.Focus
+      | Force | Intellect | Prowess | Acumen -> momentumRamp
 
     if ramp = 1.0 then
       stanceAdjusted
@@ -285,6 +295,8 @@ type Combatant =
       Collapse = CollapseState.Stable
       Flow = 0
       Momentum = 0
+      Inertia = 0
+      Focus = 0
       Armor = ArmorIntegrity.Create 50
       WeaponCondition = WeaponCondition.Pristine
       Stance = CombatStance.PowerStance
@@ -330,6 +342,8 @@ type Combatant =
       Collapse = CollapseState.Stable
       Flow = 0
       Momentum = 0
+      Inertia = 0
+      Focus = 0
       Armor = ArmorIntegrity.Create 50
       WeaponCondition = WeaponCondition.Pristine
       Stance = defaultStance
@@ -365,15 +379,9 @@ type Combatant =
   /// Clears stagger after lost action
   static member clearStagger (c: Combatant) = { c with IsStaggered = false }
 
-  /// Pure helper to update status meters. Non-humanoids are immune to martial Frustration (ADR 0009).
+  /// Pure helper to update status meters.
   static member updateMeters (updater: StatusMeters -> StatusMeters) (c: Combatant) =
-    let updated = updater c.Meters
-    let finalMeters =
-      if not c.IsHumanoid && updated.Frustration.Value > 0 then
-        { updated with Frustration = Meter.Zero }
-      else
-        updated
-    { c with Meters = finalMeters }
+    { c with Meters = updater c.Meters }
 
   /// Every combat ramp meter shares one ceiling: five stacks, so a full pile cashes at 2.75x.
   static member StackCap = 5
@@ -384,11 +392,25 @@ type Combatant =
         Flow = Math.Clamp(c.Flow + delta, 0, Combatant.StackCap)
         Momentum = Math.Clamp(c.Momentum + delta, 0, Combatant.StackCap) }
 
+  /// Raises both guard meters together: they accrue only on an action taken from the Nach.
+  static member addGuardStacks delta (c: Combatant) =
+    { c with
+        Inertia = Math.Clamp(c.Inertia + delta, 0, Combatant.StackCap)
+        Focus = Math.Clamp(c.Focus + delta, 0, Combatant.StackCap) }
+
   /// One stack off every meter: the end-of-turn decay when nothing is engaged.
-  static member decayStacks (c: Combatant) = Combatant.addStacks -1 c
+  static member decayStacks (c: Combatant) =
+    { Combatant.addStacks -1 c with
+        Inertia = Math.Max(0, c.Inertia - 1)
+        Focus = Math.Max(0, c.Focus - 1) }
 
   /// Wipes active ramp meters. Recovery breaks the ramp outright.
-  static member clearStacks (c: Combatant) = { c with Flow = 0; Momentum = 0 }
+  static member clearStacks (c: Combatant) =
+    { c with
+        Flow = 0
+        Momentum = 0
+        Inertia = 0
+        Focus = 0 }
 
   /// Stacks currently held in the meter that gates a given attack vector.
   static member stacksIn (vector: Vector) (c: Combatant) =
@@ -530,10 +552,8 @@ type Combatant =
         // Physical Status Breaks
         elif m.Exhaustion.Value >= 100 then
           Some SomaticAnoxia
-        elif m.Overwhelm.Value >= 100 then
-          Some Exsanguination
         elif m.Frustration.Value >= 100 then
-          Some StanceFailure
+          Some Exsanguination
         // Mental Status Breaks
         elif m.CognitiveFatigue.Value >= 100 then
           Some CatatonicStupor
@@ -558,7 +578,6 @@ type Combatant =
       let hasBreached =
         m.Recklessness.Value >= 100
         || m.Exhaustion.Value >= 100
-        || m.Overwhelm.Value >= 100
         || m.Frustration.Value >= 100
         || m.CognitiveFatigue.Value >= 100
         || m.Confusion.Value >= 100

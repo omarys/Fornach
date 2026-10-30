@@ -68,7 +68,7 @@ module IndesResolver =
     let updatedAttacker =
       { attacker with
           Health = attacker.Health.ApplyDelta -punctureDmg }
-      |> Combatant.updateMeters (fun m -> { m with Overwhelm = m.Overwhelm + 15 })
+      |> Combatant.updateMeters (fun m -> { m with Frustration = m.Frustration + 15 })
 
     // Attack is disrupted if attacker collapsed, died, or if finesse disparity significantly overwhelms reflex (>= 1.6x)
     let isDisrupted =

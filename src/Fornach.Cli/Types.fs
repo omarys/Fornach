@@ -52,7 +52,7 @@ type GroupSingleResult =
     SoloRemainingHPPct: float
     SoloRemainingMoralePct: float
     SoloExhaustion: int
-    SoloOverwhelm: int
+    SoloFrustration: int
     TotalCritsDealtByMob: int
     PeakEncirclementPenalty: int
     TotalAoOsTriggered: int

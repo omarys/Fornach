@@ -591,7 +591,7 @@ module TowerDisplay =
 
     // Emotional Meters
     row (Display.renderMeter "󰈸 Recklessness" p.Meters.Recklessness Theme.Red) |> ignore
-    row (Display.renderMeter "󰓎 Overwhelm" p.Meters.Overwhelm Theme.Yellow) |> ignore
+    row (Display.renderMeter "󰓎 Frustration" p.Meters.Frustration Theme.Yellow) |> ignore
     row (Display.renderMeter "󰒓 Exhaustion" p.Meters.Exhaustion Theme.Purple) |> ignore
 
     row (sprintf "[bold %s]─── 󰒋 ASCENSION STATUS ───[/]" Theme.Cyan) |> ignore

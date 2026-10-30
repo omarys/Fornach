@@ -226,12 +226,15 @@ module ProlongedBattleTests =
     let duelist =
       { (createFighter 50 50 50 50 120 100) with
           Momentum = Combatant.StackCap }
-    let target = createFighter 50 50 50 50 50 80
+    // Guard low enough that the cashed strike penetrates: the refill only happens on a landed hit.
+    let target = createFighter 50 50 50 50 20 20
 
     let startReck = duelist.Meters.Recklessness.Value
     let res = ActionResolver.resolve roller (StandardAttack CalculatedFlawStrike) duelist target
 
-    // The whole pile of 5 is cashed, then every attack feeds one stack back to every meter
+    Assert.False(res.Contest |> Option.exists (fun c -> c.IsWhiff), "the cashed strike should land")
+    // The whole pile of 5 is cashed, then the landed strike feeds one stack back to every meter.
+    // (A whiffed gambit ends on an empty meter instead — see the whiff-spend test.)
     Assert.Equal(1, res.Actor.Momentum)    // Recklessness should NOT have spiked from the gambit
     Assert.Equal(startReck, res.Actor.Meters.Recklessness.Value)
 
@@ -271,7 +274,7 @@ module ProlongedBattleTests =
     Assert.Equal(5, adeptPen)
 
   [<Fact>]
-  let ``ActionResolver with priorDefenses emits EncirclementPenalized event and landed strikes inflate Overwhelm`` () =
+  let ``ActionResolver with priorDefenses emits EncirclementPenalized event and landed strikes inflate Frustration`` () =
     let roller = fixedRoller 6 // always hits
     let attacker = createFighter 110 110 110 110 110 110
     let defender = createFighter 110 110 110 110 110 110
@@ -288,10 +291,10 @@ module ProlongedBattleTests =
     let _, prior, pen = encOpt.Value
     Assert.Equal(3, prior)
     Assert.True(pen > 0, "Penalty hits must be positive")
-    Assert.True(res.Target.Meters.Overwhelm.Value > 0, "Landed strike under surround pressure should increase Overwhelm meter")
+    Assert.True(res.Target.Meters.Frustration.Value > 0, "Landed strike under surround pressure should increase Frustration meter")
 
   [<Fact>]
-  let ``Defended attacks under encirclement do NOT inflate defender Overwhelm on whiffs`` () =
+  let ``Defended attacks under encirclement do NOT inflate defender Frustration on whiffs`` () =
     let roller = fixedRoller 4 // whiffs against high defense
     let attacker = createFighter 40 40 40 40 40 40
     // Pure Fortitude defender with low agility/discipline (no AoO triggered)
@@ -300,7 +303,7 @@ module ProlongedBattleTests =
     let res = ActionResolver.resolveEx roller (StandardAttack (ForceStrike false)) attacker defender 3
 
     Assert.True(res.Contest.IsSome && res.Contest.Value.IsWhiff, "Attack should be cleanly deflected/whiffed")
-    Assert.Equal(0, res.Target.Meters.Overwhelm.Value)
+    Assert.Equal(0, res.Target.Meters.Frustration.Value)
 
   [<Fact>]
   let ``Agile or Disciplined defender triggers Attack of Opportunity on flank attempt and defuses strike`` () =
@@ -830,8 +833,7 @@ module ProlongedBattleTests =
       |> Combatant.updateMeters (fun _ ->
         { Recklessness = Meter.Create 50
           Exhaustion = Meter.Create 60
-          Overwhelm = Meter.Create 55
-          Frustration = Meter.Create 65
+          Frustration = Meter.Create 55
           CognitiveFatigue = Meter.Create 50
           Confusion = Meter.Create 70
           Provoke = Meter.Create 45 })
@@ -844,7 +846,7 @@ module ProlongedBattleTests =
     // All 7 meters must be substantially reduced
     Assert.True(m.Recklessness.Value < 50, "Recklessness should be reduced")
     Assert.True(m.Exhaustion.Value < 60, "Exhaustion should be reduced")
-    Assert.True(m.Overwhelm.Value < 55, "Overwhelm should be reduced")
+    Assert.True(m.Frustration.Value < 55, "Frustration should be reduced")
     Assert.True(m.Frustration.Value < 65, "Frustration should be reduced")
     Assert.True(m.CognitiveFatigue.Value < 50, "CognitiveFatigue should be reduced")
     Assert.True(m.Confusion.Value < 70, "Confusion should be reduced")
@@ -888,14 +890,13 @@ module ProlongedBattleTests =
     Assert.True(hasRecoveredEvt, "CollapseRecovered event must be emitted")
 
   [<Fact>]
-  let ``SteadyForm drains Frustration and Overwhelm in addition to Exhaustion`` () =
+  let ``SteadyForm drains Frustration and Frustration in addition to Exhaustion`` () =
     let roller = fixedRoller 1
     let strainedFighter =
       createFighter 100 100 100 100 100 100
       |> Combatant.updateMeters (fun _ ->
         { StatusMeters.Zero with
             Exhaustion = Meter.Create 50
-            Overwhelm = Meter.Create 50
             Frustration = Meter.Create 50 })
     let opponent = createFighter 100 100 100 100 100 100
 
@@ -903,7 +904,7 @@ module ProlongedBattleTests =
     let m = res.Actor.Meters
 
     Assert.True(m.Exhaustion.Value < 50, "SteadyForm should drain Exhaustion")
-    Assert.True(m.Overwhelm.Value < 50, "SteadyForm should drain Overwhelm")
+    Assert.True(m.Frustration.Value < 50, "SteadyForm should drain Frustration")
     Assert.True(m.Frustration.Value < 50, "SteadyForm should drain Frustration")
 
   [<Fact>]

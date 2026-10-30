@@ -436,14 +436,22 @@ module TowerSession =
     let unseen =
       adjacent |> List.filter (fun e -> not (workingState.CurrentFloor.SeenEnemies.Contains e.Id))
 
+    // The pack seizes the initiative once, as a unit. Every foe arrives holding the Vor by constructor default
+    // (Combatant.create), and resolveLandedTempo lets a holder "insist" on it — so with more than one holder a
+    // player who seized the Vor back lost it to the next foe in the same phase. A 3-sprite ambush reverted 5 of
+    // 5 claims and the pack opened every round of 1200.
+    let ambusher = unseen |> List.tryHead |> Option.map (fun e -> e.Id)
+
     if not unseen.IsEmpty then
       workingState <- { workingState with Player = Combatant.yieldVor workingState.Player }
 
     let engaged =
       adjacent
       |> List.map (fun e ->
-        if unseen |> List.exists (fun u -> u.Id = e.Id) then
+        if Some e.Id = ambusher then
           { e with Combatant = Combatant.seizeVor e.Combatant }
+        elif unseen |> List.exists (fun u -> u.Id = e.Id) then
+          { e with Combatant = Combatant.yieldVor e.Combatant }
         else
           e)
 

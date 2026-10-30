@@ -127,7 +127,7 @@ module ActiveDefenseTests =
       |> fun c -> { c with Tempo = TacticalTiming.Nach }
       |> Combatant.updateMeters (fun m ->
         { m with
-            Overwhelm = m.Overwhelm + 50
+            Frustration = m.Frustration + 50
             Exhaustion = m.Exhaustion + 50 })
 
     let opponent =
@@ -136,7 +136,7 @@ module ActiveDefenseTests =
 
     let outcome = ActionResolver.resolveActiveDefense (ReflexSlip true) rogue opponent
 
-    Assert.True(outcome.Actor.Meters.Overwhelm.Value < 50, "ReflexSlip must vent Overwhelm")
+    Assert.True(outcome.Actor.Meters.Frustration.Value < 50, "ReflexSlip must vent Frustration")
     Assert.True(outcome.Actor.Meters.Exhaustion.Value < 50, "ReflexSlip must vent Exhaustion")
     Assert.Equal(1, outcome.Actor.Flow)
     Assert.Equal(CombatStance.AgilityStance, outcome.Actor.Stance)

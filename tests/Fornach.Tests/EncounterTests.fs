@@ -493,8 +493,7 @@ let ``ascendFloor resets player combat strain meters to zero`` () =
     |> Combatant.updateMeters (fun _ ->
       { Recklessness = Meter.Create 45
         Exhaustion = Meter.Create 60
-        Overwhelm = Meter.Create 30
-        Frustration = Meter.Create 70
+        Frustration = Meter.Create 30
         CognitiveFatigue = Meter.Create 40
         Confusion = Meter.Create 55
         Provoke = Meter.Create 20 })

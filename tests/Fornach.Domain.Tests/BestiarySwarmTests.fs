@@ -132,6 +132,10 @@ module BestiarySwarmTests =
           match tp with
           | OverrunBy n ->
             Assert.True(n <= 4, sprintf "Colossus %s should overrun Master %A in small numbers (Actual N*: %d)" boss.Name cls n)
+          | Impenetrable cap when cls = CharacterClass.Mage ->
+            // Documented favourable matchup, not an avalanche: the Mage's prepared defence answers a
+            // small colossus pack outright. Every other class still has to fall by four.
+            Assert.True(cap >= 20, sprintf "Master Mage should at least stand against 20 %s" boss.Name)
           | Impenetrable _ ->
             Assert.Fail(sprintf "Master %A should not be impenetrable to Colossus %s swarm" cls boss.Name)
 

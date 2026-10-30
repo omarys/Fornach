@@ -60,8 +60,8 @@ module VisionResolver =
     let disciplineBonus = float (poise + prowess) / 20.0
 
     // 3. Status Meter Penalties
-    // Overwhelm and Recklessness induce panic and adrenaline tunnel-vision
-    let overwhelmPenalty = float meters.Overwhelm.Value * 0.4
+    // Frustration and Recklessness induce panic and adrenaline tunnel-vision
+    let overwhelmPenalty = float meters.Frustration.Value * 0.4
     let recklessnessPenalty = float meters.Recklessness.Value * 0.2
     let meterPenalty = overwhelmPenalty + recklessnessPenalty
 

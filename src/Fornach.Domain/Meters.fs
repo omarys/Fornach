@@ -38,7 +38,8 @@ type StatusMeters =
     Recklessness: Meter
     // Physical status meters
     Exhaustion: Meter
-    Overwhelm: Meter
+    /// The Finesse/Reflex meter: a fighter whose strikes keep being read loses precision and poise of
+    /// hand. (Formerly `Overwhelm`; the old Prowess/Poise `Frustration` is gone.)
     Frustration: Meter
     // Mental status meters
     CognitiveFatigue: Meter
@@ -48,7 +49,6 @@ type StatusMeters =
   static member Zero =
     { Recklessness = Meter.Zero
       Exhaustion = Meter.Zero
-      Overwhelm = Meter.Zero
       Frustration = Meter.Zero
       CognitiveFatigue = Meter.Zero
       Confusion = Meter.Zero

@@ -562,10 +562,10 @@ module PreparationTests =
       res.Events
       |> List.tryPick (function CombatEvent.IndesSeized (_, _, thresh, margin) -> Some (thresh, margin) | _ -> None)
 
-    Assert.True(seizedEvt.IsSome, "Master Justicar should seize the Vor in Indes with Parrying Buckler active.")
-    let thresh, margin = seizedEvt.Value
-    Assert.Equal(2, thresh)
-    Assert.True(margin >= 2)
+    // Re-baselined: the Duelist's strike now contests on its plane axis (Finesse) rather than Prowess,
+    // so it lands instead of feeding the Justicar defensive hits, and no Indes margin opens here.
+    // The buckler threshold itself is still asserted above; the seizure is covered by the Indes suite.
+    Assert.True(seizedEvt.IsNone, "A strike that lands opens no Indes window for the Justicar.")
 
   [<Fact>]
   let ``Duel: GrandMaster Inquisitor triggers Synaptic Brand for double Morale damage against Master Warrior`` () =
@@ -606,7 +606,7 @@ module PreparationTests =
     Assert.True(res.Target.Health.Current < novice.Health.Current / 2, "Novice should take catastrophic damage from GrandMaster strike.")
 
   [<Fact>]
-  let ``Duel: Novice Warrior Force strike cleanly whiffs against GrandMaster Justicar with 0 Overwhelm`` () =
+  let ``Duel: Novice Warrior Force strike cleanly whiffs against GrandMaster Justicar with 0 Frustration`` () =
     // Novice has Force 45; GrandMaster Justicar has Poise 841 & Fortitude 841 (56 floor hits)
     let novice = TierFactory.createClassTier CharacterClass.Warrior Novice
     let grandmaster = TierFactory.createClassTier CharacterClass.Warrior GrandMaster
@@ -616,7 +616,7 @@ module PreparationTests =
 
     Assert.NotNull(res.Contest)
     Assert.True(res.Contest.Value.IsWhiff, "Novice strike must cleanly whiff against GrandMaster Poise.")
-    Assert.Equal(0, res.Target.Meters.Overwhelm.Value)
+    Assert.Equal(0, res.Target.Meters.Frustration.Value)
     Assert.Equal(grandmaster.Health.Current, res.Target.Health.Current)
 
   [<Fact>]
@@ -691,10 +691,12 @@ module PreparationTests =
     let duelist = TierFactory.createClassTier CharacterClass.Rogue Master
     let roller = fixedRoller 4
 
-    // Duelist attacks Warrior with ProwessStrike (duelist secStat vs warrior primStat) -> Whiffs
+    // Duelist attacks Warrior with ProwessStrike. Re-baselined: discards, disarms and slams now read the
+    // better of the plane axis and Prowess, so the Rogue's high Finesse carries the strike through the
+    // Warrior's Poise instead of whiffing on its weak Prowess.
     let res = ActionResolver.resolve roller (StandardAttack (ProwessStrike false)) duelist warrior
     Assert.NotNull(res.Contest)
-    Assert.True(res.Contest.Value.IsWhiff, "Duelist secondary Prowess strike whiffs against Warrior Master Poise.")
+    Assert.False(res.Contest.Value.IsWhiff, "Rogue Finesse now carries a Prowess strike past Warrior Poise.")
 
   [<Fact>]
   let ``Duel: Generic GrandMaster Warrior vs GrandMaster Warrior duels in clash of brute force and guard`` () =

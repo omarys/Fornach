@@ -287,13 +287,22 @@ module Display =
     grid.AddRow(Markup(renderMeter "󰈸 Recklessness" c.Meters.Recklessness Theme.Orange)) |> ignore
     // The ramp meters, in the shorthand players see in the strike menu: Flow / Momentum.
     let comboText =
-      sprintf "[%s]F%d · M%d ramp[/] | [%s]%d combo[/]" Theme.Purple c.Flow c.Momentum Theme.Pink c.ComboTracker.ConsecutiveHits
+      sprintf
+        "[%s]F%d · M%d ramp[/] | [%s]I%d · F%d guard[/] | [%s]%d combo[/]"
+        Theme.Purple
+        c.Flow
+        c.Momentum
+        Theme.Orange
+        c.Inertia
+        c.Focus
+        Theme.Pink
+        c.ComboTracker.ConsecutiveHits
     grid.AddRow(Markup(sprintf "%-22s %s" "󰓥 Tactical Combo" comboText)) |> ignore
     grid.AddRow(Rule().RuleStyle(Theme.StyleCurrentLine)) |> ignore
 
     // Physical Status Meters
     grid.AddRow(Markup(renderMeter "󰒓 Exhaustion" c.Meters.Exhaustion Theme.Yellow)) |> ignore
-    grid.AddRow(Markup(renderMeter "󰓎 Overwhelm" c.Meters.Overwhelm Theme.Pink)) |> ignore
+    grid.AddRow(Markup(renderMeter "󰓎 Frustration" c.Meters.Frustration Theme.Pink)) |> ignore
     grid.AddRow(Markup(renderMeter "󰞷 Frustration" c.Meters.Frustration Theme.Orange)) |> ignore
     grid.AddRow(Rule().RuleStyle(Theme.StyleCurrentLine)) |> ignore
 
@@ -405,7 +414,7 @@ module Display =
       | ProwessStrike false ->
         sprintf "⚔️ [%s]Prowess Pressure[/]" Theme.Purple,
         "Circling with measured poise to probe flaws and build the combat ramp.",
-        sprintf "Overwhelm defensive poise with [bold %s]Power Guard-Break[/]." Theme.Red,
+        sprintf "Frustration defensive poise with [bold %s]Power Guard-Break[/]." Theme.Red,
         "Discipline"
       | ShieldBash true ->
         sprintf "⚡ [bold %s]SHIELD SLAM WINDUP[/]" Theme.Purple,
@@ -833,7 +842,7 @@ module Display =
       | CrushingBlow bonus ->
         AnsiConsole.MarkupLine(sprintf "  [bold %s]󰈸 DISPARITY:[/] Crushing Blow! Target suffered [bold %s]+%d Exhaustion[/] and is staggered!" Theme.Yellow Theme.Yellow bonus)
       | ArterialRupture bonus ->
-        AnsiConsole.MarkupLine(sprintf "  [bold %s]󰈸 DISPARITY:[/] Arterial Rupture! Target suffered [bold %s]+%d Overwhelm / Hemorrhage[/]!" Theme.Pink Theme.Pink bonus)
+        AnsiConsole.MarkupLine(sprintf "  [bold %s]󰈸 DISPARITY:[/] Arterial Rupture! Target suffered [bold %s]+%d Frustration / Hemorrhage[/]!" Theme.Pink Theme.Pink bonus)
       | DisarmOrLimbDisable ->
         AnsiConsole.MarkupLine(sprintf "  [bold %s]󰈸 DISPARITY:[/] Disarm & Disable! Target's weapon arm posture compromised!" Theme.Orange)
       | CognitiveRupture bonus ->
@@ -940,7 +949,7 @@ module Display =
       AnsiConsole.MarkupLine(sprintf "  [bold %s]🌀 DISORIENTED:[/] %s" Theme.Orange reason)
 
     | CombatEvent.CataclysmSplashed (_, _, dmg) ->
-      AnsiConsole.MarkupLine(sprintf "  [bold %s]💥 CATACLYSM SPLASH:[/] Overwhelming arcane rupture splashed [bold %s]%d mental damage[/] to adjacent target!" Theme.Purple Theme.Cyan dmg)
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]💥 CATACLYSM SPLASH:[/] Frustrationing arcane rupture splashed [bold %s]%d mental damage[/] to adjacent target!" Theme.Purple Theme.Cyan dmg)
 
     | CombatEvent.PreparationDeployed (_, prepType, _, desc) ->
       AnsiConsole.MarkupLine(sprintf "  [bold %s]🎯 PREPARATION DEPLOYED:[/] [bold underline %s]%s[/] - %s" Theme.Green Theme.Cyan prepType.Name desc)
@@ -977,10 +986,10 @@ module Display =
       AnsiConsole.MarkupLine(sprintf "  [bold %s]📖 HERALDIC TREATISE:[/] Tactical dossiers reviewed; granted [bold %s]+%d ramp stacks[/] on all visible foes!" Theme.Purple Theme.Green stacks)
 
     | CombatEvent.PsychicHemorrhageInflicted (_, _, bleedStacks, disparity) ->
-      AnsiConsole.MarkupLine(sprintf "  [bold %s]🩸 CRANIAL HEMORRHAGE:[/] Overwhelming cognitive disparity (%+d) ruptured cerebral vessels! Inflicted [bold %s]+%d Bleed Stacks[/]!" Theme.Red disparity Theme.Red bleedStacks)
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🩸 CRANIAL HEMORRHAGE:[/] Frustrationing cognitive disparity (%+d) ruptured cerebral vessels! Inflicted [bold %s]+%d Bleed Stacks[/]!" Theme.Red disparity Theme.Red bleedStacks)
 
     | CombatEvent.PsychicShockwaveResonated (_, _, dmg) ->
-      AnsiConsole.MarkupLine(sprintf "  [bold %s]🔮 PSYCHIC RESONANCE:[/] Overwhelming mental shockwave resonated into flanker for [bold %s]%d damage[/]!" Theme.Purple Theme.Cyan dmg)
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]🔮 PSYCHIC RESONANCE:[/] Frustrationing mental shockwave resonated into flanker for [bold %s]%d damage[/]!" Theme.Purple Theme.Cyan dmg)
 
     | CombatEvent.PhantasmalSwapExecuted (_, _, success, note) ->
       let color = if success then Theme.Cyan else Theme.Orange
@@ -1156,7 +1165,7 @@ module Display =
     vitalsTable.AddRow(Markup("[bold #8be9fd]󰧑[/]"), Markup("Morale"), Markup("Psychological resolve. Reaching 0 triggers mental collapse.")) |> ignore
     vitalsTable.AddRow(Markup("[bold #f1fa8c][/]"), Markup("Armor Integrity"), Markup("Absorbs incoming attack damage based on durability absorption ratio.")) |> ignore
     vitalsTable.AddRow(Markup("[bold #ff5555]󰈸[/]"), Markup("Recklessness (0-100)"), Markup("Offensive momentum; amplifies damage, but increases vulnerability if unchecked.")) |> ignore
-    vitalsTable.AddRow(Markup("[bold #f1fa8c]󰓎[/]"), Markup("Overwhelm (0-100)"), Markup("Mental clutter and pressure from rapid tactical exchanges.")) |> ignore
+    vitalsTable.AddRow(Markup("[bold #f1fa8c]󰓎[/]"), Markup("Frustration (0-100)"), Markup("Mental clutter and pressure from rapid tactical exchanges.")) |> ignore
     vitalsTable.AddRow(Markup("[bold #bd93f9]󰒓[/]"), Markup("Exhaustion (0-100)"), Markup("Physical stamina depletion. Increases dice difficulty for physical strikes.")) |> ignore
     vitalsTable.AddRow(Markup("[bold #50fa7b]󰓥[/]"), Markup("Martial Stance"), Markup("Physical combat stance (Power, Agility, Discipline).")) |> ignore
     vitalsTable.AddRow(Markup("[bold #ff79c6]🧵[/]"), Markup("Complex Form"), Markup("Arcane mental stance (Resonance Spike, Phantasmal Diffusion, Aegis Lattice).")) |> ignore

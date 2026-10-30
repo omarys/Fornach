@@ -59,7 +59,7 @@ let ``Agile combatant retains wider peripheral vision during sprinting`` () =
   Assert.True(clumsyCone.ArcDegrees <= 70.0) // Severe tunnel vision
 
 [<Fact>]
-let ``High Overwhelm and Recklessness force severe tunnel vision`` () =
+let ``High Frustration and Recklessness force severe tunnel vision`` () =
   let calm = createFighter [ Poise, 50; Prowess, 50 ]
   let pos = { X = 0; Y = 0 }
   let facing = Some Direction.East
@@ -69,7 +69,7 @@ let ``High Overwhelm and Recklessness force severe tunnel vision`` () =
     { calm with
         Meters =
           { calm.Meters with
-              Overwhelm = Meter.Create 80
+              Frustration = Meter.Create 80
               Recklessness = Meter.Create 70 } }
 
   let calmCone =

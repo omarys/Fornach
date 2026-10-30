@@ -116,8 +116,12 @@ module StudyStackSpendTests =
     )
 
     // ... but it is still the finisher: it takes the great majority of that pool.
+    // The bar is 70% rather than 85% because wards/disarms/slams/trauma strikes now contest on the
+    // plane's axis with Prowess contributing only a quarter of itself (`offensiveAxis`), so a
+    // discipline build's cash-out multiplier sits on a smaller base. Raise `spentPerStack` if the
+    // finisher should bite as hard as it did before that change.
     Assert.True(
-      dealt Combatant.StackCap * 100 >= pool * 85,
+      dealt Combatant.StackCap * 100 >= pool * 70,
       sprintf "a full meter should still be near-lethal: %d of %d" (dealt Combatant.StackCap) pool
     )
 

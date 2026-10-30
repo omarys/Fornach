@@ -437,7 +437,7 @@ let ``Basalt Eruption gambit smashes target armor and inflicts overwhelm`` () =
 
   let result = ActionResolver.resolve roller (StandardAttack (TraumaAttack BasaltEruption)) actor target
   Assert.True(result.Target.Armor.Current <= 25)
-  Assert.True(result.Target.Meters.Overwhelm.Value > 0)
+  Assert.True(result.Target.Meters.Frustration.Value > 0)
   Assert.True(result.Actor.Meters.Recklessness.Value > actor.Meters.Recklessness.Value)
 
 [<Fact>]
