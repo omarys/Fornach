@@ -29,16 +29,16 @@ module TacticalAssessmentTests =
 
   [<Fact>]
   let ``Prologue Mage scrutiny still reads Stone Gargoyle as guarded at level 1`` () =
-    // The Mage's inquisitor loadout: Acumen 40 + Intuition 40/4 (10) = 50
+    // The Mage's inquisitor loadout: Acumen 45 + Intuition 45/4 (11) = 56
     let player = StoryBosses.createProloguePlayer "inquisitor"
     let gargoyle = Bestiary.stoneGargoyle.ToCombatant (CombatantId.New())
 
     let assess = TacticalAssessment.assess player gargoyle
 
-    // Acumen 40 + Intuition 40/4 (10) = 50 vs Composure 150 (Ratio ~0.33)
+    // Acumen 45 + Intuition 45/4 (11) = 56 vs Composure 150 (Ratio ~0.37)
     Assert.Equal(TacticalInsightLevel.Obscured, assess.InsightLevel)
     Assert.Equal("GUARDED POSTURE", assess.Headline)
-    Assert.Equal(40 + 40 / 4, assess.EffectiveAcumen)
+    Assert.Equal(45 + 45 / 4, assess.EffectiveAcumen)
     Assert.Equal(StatId.Reflex, assess.PrimaryStat)
     Assert.Equal(240, assess.PrimaryStatValue)
     Assert.True(assess.VulnerabilitySummary.IsNone)

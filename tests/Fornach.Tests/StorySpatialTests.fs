@@ -265,12 +265,13 @@ module StorySpatialTests =
 
     // Starting weapon and caltrops bonuses are real, folded into the base stats at creation. They are
     // percentages of the stat they land on (the number in brackets is what they were as flat points
-    // on the level-1 scale), so they keep mattering as attributes grow.
+    // on the level-1 scale), so they keep mattering as attributes grow. Both planes share one level-1
+    // primary of 45 now, so a caster's Intellect starts where a fighter's Force does.
     Assert.Equal(70, berserker.Stats.Get StatId.Force) // 45 + greatsword 56% (was 25)
     Assert.Equal(45, berserker.Stats.Get StatId.Reflex) // 34 + caltrops 33% (was 15)
     Assert.Equal(85, duelist.Stats.Get StatId.Finesse) // 45 + stiletto 56% then caltrops 22%
     Assert.Equal(65, warden.Stats.Get StatId.Fortitude) // 45 + buckler 44% (was 20)
-    Assert.Equal(62, inquisitor.Stats.Get StatId.Intellect) // 40 + staff 56% (was 25)
+    Assert.Equal(70, inquisitor.Stats.Get StatId.Intellect) // 45 + staff 56% (was 25)
 
   [<Fact>]
   let ``Stage 1 grinding mobs mix woodland creatures and bandits ahead of the Bandit Leader`` () =

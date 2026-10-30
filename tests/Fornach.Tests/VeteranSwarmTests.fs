@@ -56,9 +56,12 @@ let ``Grandmaster and Legend champions are not overrun by swarming veterans`` ()
     |> List.map (fun (label, tp) -> sprintf "  %-45s %d" label tp)
     |> String.concat "\n"
 
-  // GrandMaster is 160 levels above a Veteran mob, and still beatable by a warband.
+  // GrandMaster is 160 levels above a Veteran mob, and still beatable by a warband. The floor is 8 rather
+  // than 10 because a GrandMaster Fighter guards with (Poise 841 + Composure 631) / 2 = 736: Composure is
+  // a mental stat and the off plane grows a step behind the own plane. Re-pin this if the guard rule
+  // changes again.
   for (label, value) in cellsOf "GrandMaster" do
-    Assert.True(value >= 10, sprintf "%s fell to only %d Veteran mobs.\n\nFull table:\n%s" label value table)
+    Assert.True(value >= 8, sprintf "%s fell to only %d Veteran mobs.\n\nFull table:\n%s" label value table)
     Assert.True(value < swarmCap, sprintf "%s saturated the %d-mob cap; GrandMaster is no longer measurable against Veterans.\n\nFull table:\n%s" label swarmCap table)
 
   // Legend (level 1000) is not merely tough against level-40 Veterans, it is structurally untouchable:

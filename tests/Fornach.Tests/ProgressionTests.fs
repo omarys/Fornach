@@ -215,27 +215,28 @@ module ProgressionTests =
     Assert.Equal(0.80, ProgressionScale.spellArmorBonus 500, 3)
 
   [<Fact>]
-  let ``Magic classes physical stat growth stops developing after level 49`` () =
+  let ``Magic classes keep growing physically on the off plane instead of freezing`` () =
     let inq49 = TierFactory.createClassLevel CharacterClass.Mage 49
     let inq50 = TierFactory.createClassLevel CharacterClass.Mage 50
     let inq100 = TierFactory.createClassLevel CharacterClass.Mage 100
     let inq200 = TierFactory.createClassLevel CharacterClass.Mage 200
 
-    // Physical offensive stats must stop developing after level 49
-    Assert.Equal(63, inq49.GetStat Force)
-    Assert.Equal(63, inq50.GetStat Force)
-    Assert.Equal(63, inq100.GetStat Force)
-    Assert.Equal(63, inq200.GetStat Force)
+    // The off plane grows at half the primary's rate instead of stopping, so a Master or GrandMaster caster
+    // keeps improving physically without ever matching its own plane.
+    Assert.Equal(118, inq49.GetStat Force)
+    Assert.Equal(120, inq50.GetStat Force)
+    Assert.Equal(220, inq100.GetStat Force)
+    Assert.Equal(420, inq200.GetStat Force)
 
-    Assert.Equal(63, inq49.GetStat Finesse)
-    Assert.Equal(63, inq50.GetStat Finesse)
-    Assert.Equal(63, inq100.GetStat Finesse)
-    Assert.Equal(63, inq200.GetStat Finesse)
+    Assert.Equal(118, inq49.GetStat Finesse)
+    Assert.Equal(120, inq50.GetStat Finesse)
+    Assert.Equal(220, inq100.GetStat Finesse)
+    Assert.Equal(420, inq200.GetStat Finesse)
 
-    Assert.Equal(63, inq49.GetStat Prowess)
-    Assert.Equal(63, inq50.GetStat Prowess)
-    Assert.Equal(63, inq100.GetStat Prowess)
-    Assert.Equal(63, inq200.GetStat Prowess)
+    Assert.Equal(118, inq49.GetStat Prowess)
+    Assert.Equal(120, inq50.GetStat Prowess)
+    Assert.Equal(220, inq100.GetStat Prowess)
+    Assert.Equal(420, inq200.GetStat Prowess)
 
     // Meanwhile, physical class (Berserker) continues physical growth unimpeded
     let ber49 = TierFactory.createClassLevel CharacterClass.Warrior 49
@@ -251,31 +252,33 @@ module ProgressionTests =
     let inq100 = TierFactory.createClassLevel CharacterClass.Mage 100
     let inq200 = TierFactory.createClassLevel CharacterClass.Mage 200
 
-    // Level 49: 0% spell armor, base Fortitude = 106, Reflex = 160, Poise = 135. The physical
-    // defences climb on the physical curve (160 = 75% of the 213 primary), which is what gives a
-    // caster a guard worth rolling against a martial foe before any spell armour exists.
+    // Level 49: 0% spell armor. The off-plane physical defences hold `offDef` (178), and the guard pair
+    // straddles the planes (Poise off, Composure own) so a caster guards exactly like a Fighter.
     Assert.Equal(0.0, inq49.SpellArmorBonus, 3)
-    Assert.Equal(106, inq49.GetStat Fortitude)
-    Assert.Equal(160, inq49.GetStat Reflex)
-    Assert.Equal(135, inq49.GetStat Poise)
+    Assert.Equal(178, inq49.GetStat Fortitude)
+    Assert.Equal(178, inq49.GetStat Reflex)
+    Assert.Equal(178, inq49.GetStat Poise)
+    Assert.Equal(237, inq49.GetStat Composure)
 
-    // Level 50: 5% spell armor (the Mage's Resolve, Intuition and Composure are all primary = 216 -> +11 each)
+    // Level 50: 5% spell armor on the physical defences (primary 241 -> +12 each); the guard stat takes no
+    // share.
     Assert.Equal(0.05, inq50.SpellArmorBonus, 3)
-    Assert.Equal(106 + 11, inq50.GetStat Fortitude)
-    Assert.Equal(160 + 11, inq50.GetStat Reflex)
-    Assert.Equal(135 + 11, inq50.GetStat Poise)
+    Assert.Equal(181 + 12, inq50.GetStat Fortitude)
+    Assert.Equal(181 + 12, inq50.GetStat Reflex)
+    Assert.Equal(181, inq50.GetStat Poise)
 
-    // Level 100: 30% spell armor (all mental attributes = 396 -> +119 each)
+    // Level 100: 30% spell armor (primary 441 -> +132 each) lifts both defences to the primary and stops
+    // there, so a martial of the same tier can still reach them
     Assert.Equal(0.30, inq100.SpellArmorBonus, 3)
-    Assert.Equal(106 + 119, inq100.GetStat Fortitude)
-    Assert.Equal(160 + 119, inq100.GetStat Reflex)
-    Assert.Equal(135 + 119, inq100.GetStat Poise)
+    Assert.Equal(441, inq100.GetStat Fortitude)
+    Assert.Equal(441, inq100.GetStat Reflex)
+    Assert.Equal(331, inq100.GetStat Poise)
 
-    // Level 200: 80% spell armor (all mental attributes = 756 -> +605 each)
+    // Level 200: 80% spell armor (primary 841 -> +673 each), still capped at the primary
     Assert.Equal(0.80, inq200.SpellArmorBonus, 3)
-    Assert.Equal(106 + 605, inq200.GetStat Fortitude)
-    Assert.Equal(160 + 605, inq200.GetStat Reflex)
-    Assert.Equal(135 + 605, inq200.GetStat Poise)
+    Assert.Equal(841, inq200.GetStat Fortitude)
+    Assert.Equal(841, inq200.GetStat Reflex)
+    Assert.Equal(631, inq200.GetStat Poise)
 
   [<Fact>]
   let ``sparing a beast still grows a stat past the class curve`` () =

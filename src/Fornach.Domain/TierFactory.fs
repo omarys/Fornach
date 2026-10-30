@@ -87,13 +87,14 @@ module ProgressionScale =
       let steps = (level - 40) / 10
       Math.Clamp(Math.Round(float steps * 0.05, 2), 0.05, 0.80)
 
-  /// Computes (primary, secondary, tertiary, minor, offPoise) for mental/magic classes based on 1.0 : 0.75 : 0.75 utility ratio.
-  /// Physical stat growth stops developing after level 49 to counter defense over-inflation.
+  /// Computes (primary, secondary, tertiary, minor, offPoise) for mental/magic classes.
+  /// One curve serves both planes up to level 50, so a Mage and a Fighter are mirrors of each other rather
+  /// than the caster sitting a step behind (`prim` used to run 40 + 3.6/level against the physical 45 +
+  /// 4/level).
   let magicStatsForLevel (level: int) : int * int * int * int * int =
     let l = Math.Max(1, level)
     let delta = l - 1
-    // Magic utility ratio (756 at GM) balanced across all 3 mental vectors
-    let prim = 40 + int (Math.Round(float delta * 3.6))
+    let prim = 45 + delta * 4
     let sec = int (Math.Round(float prim * 0.75))
     let tert = int (Math.Round(float prim * 0.50))
     // Physical stat growth stops developing after level 49
@@ -136,14 +137,22 @@ module TierFactory =
         let prim, sec, tert, min, offDef, offOff = ProgressionScale.physicalStatsForLevel level
         match cls with
         | CharacterClass.Fighter ->
-          // Normalized physical stats: all 6 physical attributes set to prim
-          // Off-plane mental attributes: Resolve, Intuition, Composure get offDef; mental offenses get min
+          // Own plane on the primary tier; off plane growing but a step behind — offence at half the primary,
+          // defence on `offDef` (0.75). Both planes keep growing, so a Fighter never carries a frozen block
+          // into a fight and never stops improving against a mind.
+          //
+          // `GetGuard` is (Poise + Composure) / 2 and ignores the plane, so the two stats it blends must sit
+          // at the same tier on both classes or the guard favours a plane: the Fighter's Poise is its
+          // physical own plane and its Composure the mental `offDef`, the Mage's Poise is its physical
+          // `offDef` and its Composure the mental own plane. Both then read (prim + offDef) / 2.
+          let halfPrim = prim / 2
+
           [ Force, prim; Fortitude, prim
             Finesse, prim; Reflex, prim
             Prowess, prim; Poise, prim
-            Intellect, min; Resolve, offDef
-            Acuity, min; Intuition, offDef
-            Acumen, min; Composure, offDef ]
+            Intellect, halfPrim; Resolve, offDef
+            Acuity, halfPrim; Intuition, offDef
+            Acumen, halfPrim; Composure, offDef ]
         | CharacterClass.Rogue ->
           // Generic Agility NPC
           [ Finesse, prim; Reflex, prim
@@ -168,52 +177,47 @@ module TierFactory =
             Acuity, min; Intuition, min
             Acumen, min; Composure, min ]
       else
-        // Magic / Mental Plane: 1.0 : 0.75 : 0.75 across Mental Vectors (normalized 1.0 for Mage)
-        // Physical stat growth stops developing after level 49 to counter over-inflation.
-        let physLevel = Math.Clamp(level, 1, 49)
-        let prim, sec, _, _, _ = ProgressionScale.magicStatsForLevel level
-        let physPrim = 40 + int (Math.Round(float (physLevel - 1) * 3.6))
-        let physTert = int (Math.Round(float physPrim * 0.50))
-        let min = 15 + int (Math.Round(float (physLevel - 1) * 1.0))
-        let offPoise = min + int (Math.Round(float (physLevel - 1) * 1.5))
-        let offPhys = physTert
-
-        /// Physical defence on the secondary curve. The mental plane's own defences are all `prim`, so
-        /// a caster's Reflex sat on `min` (15 + 1/level) — 54 at level 40 against a mob's 201 Prowess
-        /// — while `spellArmorBonus` is still zero below level 50, i.e. for the whole story. All three
-        /// physical defences now climb on the physical curve, which `physLevel` freezes at 49.
-        let physSec = int (Math.Round(float physPrim * 0.75))
-
+        // A Mage's own six mental stats sit on the primary tier and its six physical stats a step behind —
+        // offence at half the primary, defence on `offDef` — the mirror of a Fighter, whose physical block
+        // leads the same way. Both planes keep growing, so a Master or GrandMaster caster never carries a
+        // frozen block into the fight.
+        let prim, sec, _, _, offDef, _ = ProgressionScale.physicalStatsForLevel level
+        let halfPrim = prim / 2
         let spellArmorPct = ProgressionScale.spellArmorBonus level
-
-        let baseFortitude, baseReflex, basePoise, resolveVal, intuitionVal, composureVal =
-          match cls with
-          | CharacterClass.Mage ->
-            // Normalized mental stats: all mental defenses are prim, so spell armor scales from prim across all 3 defenses
-            offPhys, physSec, offPoise, prim, prim, prim
-          | _ ->
-            offPhys, min, offPoise, prim, sec, sec
-
-        let finalFortitude = baseFortitude + int (Math.Round(float resolveVal * spellArmorPct))
-        let finalReflex = baseReflex + int (Math.Round(float intuitionVal * spellArmorPct))
-        let finalPoise = basePoise + int (Math.Round(float composureVal * spellArmorPct))
+        // Spell armour adds a share of the caster's own mental stat to the physical defences it is genuinely
+        // weak in (Resolve->Fortitude, Intuition->Reflex), but never above the caster's own primary: 80% of
+        // primary stacked on `offDef` reached 1.55x primary, so a GrandMaster Mage's 1304 defence turned
+        // every GrandMaster Fighter strike aside and the ward underneath was never reached. Capped at `prim`
+        // the share closes the gap instead of walling it off.
+        // The guard stat takes no share: Poise is already the physical `offDef`, the same tier a Fighter's
+        // Composure holds, so the guard pair stays plane-neutral.
+        let armorShare = int (Math.Round(float prim * spellArmorPct))
+        let physicalDefence = min prim (offDef + armorShare)
 
         let mentalStats =
           match cls with
           | CharacterClass.Mage ->
-            // Normalized mental stats: all 6 mental attributes set to prim
+            // Normalized mental stats: every mental attribute on the primary tier, guard pair included.
             [ Intellect, prim; Resolve, prim
               Acuity, prim; Intuition, prim
               Acumen, prim; Composure, prim ]
           | _ ->
             [ Intellect, prim; Resolve, prim
-              Acuity, sec; Intuition, sec
-              Acumen, sec; Composure, sec ]
+              Acuity, halfPrim; Intuition, sec
+              Acumen, halfPrim; Composure, sec ]
 
+        // Mirror of the Fighter's off-plane block: physical offence at half the primary, physical defence on
+        // `offDef` plus the spell-armour share.
         let physicalStats =
-          [ Force, min; Fortitude, finalFortitude
-            Finesse, min; Reflex, finalReflex
-            Prowess, min; Poise, finalPoise ]
+          match cls with
+          | CharacterClass.Mage ->
+            [ Force, halfPrim; Fortitude, physicalDefence
+              Finesse, halfPrim; Reflex, physicalDefence
+              Prowess, halfPrim; Poise, sec ]
+          | _ ->
+            [ Force, prim; Fortitude, prim
+              Finesse, halfPrim; Reflex, physicalDefence
+              Prowess, halfPrim; Poise, sec ]
 
         mentalStats @ physicalStats
 

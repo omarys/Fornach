@@ -103,39 +103,39 @@ module StanceTests =
   [<Fact>]
   let ``Mage has normalized mental stats and complex form bonus creates primary vs off-stat ratios`` () =
     let mage = TierFactory.createClassLevel CharacterClass.Mage 200 // GrandMaster tier
-    Assert.Equal(756, mage.GetStat Intellect)
-    Assert.Equal(756, mage.GetStat Resolve)
-    Assert.Equal(756, mage.GetStat Acuity)
-    Assert.Equal(756, mage.GetStat Intuition)
-    Assert.Equal(756, mage.GetStat Acumen)
-    Assert.Equal(756, mage.GetStat Composure)
+    Assert.Equal(841, mage.GetStat Intellect)
+    Assert.Equal(841, mage.GetStat Resolve)
+    Assert.Equal(841, mage.GetStat Acuity)
+    Assert.Equal(841, mage.GetStat Intuition)
+    Assert.Equal(841, mage.GetStat Acumen)
+    Assert.Equal(841, mage.GetStat Composure) // own primary; spell armour only covers Fortitude/Reflex
 
     // Default form is ResonanceSpike (Power):
     Assert.Equal(Some ComplexForm.ResonanceSpike, mage.ComplexForm)
-    // Intellect and Resolve get +25% (945)
-    // Acuity and Acumen (off-vector offense) drop to 75% (567)
-    // Intuition and Composure (defenses) keep their guard at 756
-    Assert.Equal(945, mage.GetCombatStat Intellect)
-    Assert.Equal(945, mage.GetCombatStat Resolve)
-    Assert.Equal(567, mage.GetCombatStat Acuity)
-    Assert.Equal(756, mage.GetCombatStat Intuition)
-    Assert.Equal(567, mage.GetCombatStat Acumen)
-    Assert.Equal(756, mage.GetCombatStat Composure)
+    // Intellect and Resolve get +25% (1051)
+    // Acuity and Acumen (off-vector offense) drop to 75% (631)
+    // Intuition and Composure (defences) keep their guard at 841
+    Assert.Equal(1051, mage.GetCombatStat Intellect)
+    Assert.Equal(1051, mage.GetCombatStat Resolve)
+    Assert.Equal(631, mage.GetCombatStat Acuity)
+    Assert.Equal(841, mage.GetCombatStat Intuition)
+    Assert.Equal(631, mage.GetCombatStat Acumen)
+    Assert.Equal(841, mage.GetCombatStat Composure)
 
     // Thread PhantasmalDiffusion (Agility):
     let diffMage = { mage with ComplexForm = Some ComplexForm.PhantasmalDiffusion }
-    Assert.Equal(567, diffMage.GetCombatStat Intellect)
-    Assert.Equal(756, diffMage.GetCombatStat Resolve)
-    Assert.Equal(945, diffMage.GetCombatStat Acuity)
-    Assert.Equal(945, diffMage.GetCombatStat Intuition)
-    Assert.Equal(567, diffMage.GetCombatStat Acumen)
-    Assert.Equal(756, diffMage.GetCombatStat Composure)
+    Assert.Equal(631, diffMage.GetCombatStat Intellect)
+    Assert.Equal(841, diffMage.GetCombatStat Resolve)
+    Assert.Equal(1051, diffMage.GetCombatStat Acuity)
+    Assert.Equal(1051, diffMage.GetCombatStat Intuition)
+    Assert.Equal(631, diffMage.GetCombatStat Acumen)
+    Assert.Equal(841, diffMage.GetCombatStat Composure)
 
     // Thread AegisLattice (Discipline):
     let latticeMage = { mage with ComplexForm = Some ComplexForm.AegisLattice }
-    Assert.Equal(567, latticeMage.GetCombatStat Intellect)
-    Assert.Equal(756, latticeMage.GetCombatStat Resolve)
-    Assert.Equal(567, latticeMage.GetCombatStat Acuity)
-    Assert.Equal(756, latticeMage.GetCombatStat Intuition)
-    Assert.Equal(945, latticeMage.GetCombatStat Acumen)
-    Assert.Equal(945, latticeMage.GetCombatStat Composure)
+    Assert.Equal(631, latticeMage.GetCombatStat Intellect)
+    Assert.Equal(841, latticeMage.GetCombatStat Resolve)
+    Assert.Equal(631, latticeMage.GetCombatStat Acuity)
+    Assert.Equal(841, latticeMage.GetCombatStat Intuition)
+    Assert.Equal(1051, latticeMage.GetCombatStat Acumen)
+    Assert.Equal(1051, latticeMage.GetCombatStat Composure) // Discipline vector: 841 x1.25

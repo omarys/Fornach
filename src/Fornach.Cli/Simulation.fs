@@ -387,7 +387,20 @@ module Simulation =
 
   /// One pack fight starting from combatants that already exist. Returns the result plus the
   /// surviving solo, so a caller can carry a player forward between floors (`runProgressionSim`).
-  let runPreparedGroupMatch
+  /// How the solo side chooses its moves. Every existing sweep and the interactive tower use `aiPolicy`;
+  /// a balance harness injects a stronger policy here rather than forking the fight loop.
+  type GroupPolicy =
+    { ChooseTarget: Combatant -> Combatant list -> Combatant
+      ChooseIntent: Combatant -> Combatant -> int -> ActionIntent
+      ChooseDefense: Combatant -> Combatant -> DefenseClassification }
+
+  let aiPolicy =
+    { ChooseTarget = fun solo mob -> AI.chooseGroupTarget solo mob
+      ChooseIntent = fun solo target swings -> AI.chooseIntentWithContext solo target swings
+      ChooseDefense = fun solo attacker -> AI.chooseActiveDefense solo attacker }
+
+  let runPreparedGroupMatchWith
+    (policy: GroupPolicy)
     (roller: DiceRoller)
     (soloStart: Combatant)
     (mobsStart: Combatant list)
@@ -408,9 +421,9 @@ module Simulation =
     while winnerIsSolo.IsNone && round <= maxRounds do
       // Phase 1: Solo Turn (Focus fire optimal target + Cleave / Chain adjacent opponents)
       if not mob.IsEmpty then
-        let target = AI.chooseGroupTarget solo mob
+        let target = policy.ChooseTarget solo mob
         let adjacentTargets = mob |> List.filter (fun m -> m.Id <> target.Id)
-        let intentSolo = AI.chooseIntentWithContext solo target mob.Length
+        let intentSolo = policy.ChooseIntent solo target mob.Length
         let groupRes = ActionResolver.resolveGroupTurn roller intentSolo solo target adjacentTargets
         solo <- groupRes.Actor
 
@@ -439,7 +452,7 @@ module Simulation =
 
         // Enraged Berserker Frenzy Attack: Berserk Tincture unleashes an immediate savage follow-up swing!
         if solo.HasActivePreparation PreparationType.BerserkTincture && not mob.IsEmpty && not solo.Health.IsDepleted && not solo.Morale.IsDepleted then
-          let frenzyTarget = AI.chooseGroupTarget solo mob
+          let frenzyTarget = policy.ChooseTarget solo mob
           let frenzyAdjacent = mob |> List.filter (fun m -> m.Id <> frenzyTarget.Id)
           let frenzyIntent = StandardAttack (ForceStrike false)
           let frenzyRes = ActionResolver.resolveGroupTurn roller frenzyIntent solo frenzyTarget frenzyAdjacent
@@ -492,7 +505,7 @@ module Simulation =
         while mobIdx < mob.Length && swingsCount < availableSwings && winnerIsSolo.IsNone do
           let attacker = mob.[mobIdx]
           let intentMob = AI.chooseIntent attacker solo
-          let defOpt = if priorDefenses = 0 && solo.IsHumanoid then Some (AI.chooseActiveDefense solo attacker) else None
+          let defOpt = if priorDefenses = 0 && solo.IsHumanoid then Some (policy.ChooseDefense solo attacker) else None
           let mobRes = ActionResolver.resolveExWithDefense roller intentMob defOpt attacker solo priorDefenses
           let newAttacker = mobRes.Actor
           solo <- mobRes.Target
@@ -579,6 +592,14 @@ module Simulation =
       TotalCleaves = totalCleaves
       TotalChains = totalChains
       Condition = condition }, solo
+
+  let runPreparedGroupMatch
+    (roller: DiceRoller)
+    (soloStart: Combatant)
+    (mobsStart: Combatant list)
+    (maxRounds: int)
+    : GroupSingleResult * Combatant =
+    runPreparedGroupMatchWith aiPolicy roller soloStart mobsStart maxRounds
 
   let runSingleGroupMatch
     (roller: DiceRoller)
@@ -1268,7 +1289,12 @@ module Simulation =
 
   /// Plays whole runs: real floor generation, real level scaling, real growth and XP, no healing between
   /// floors (the tower heals only at shrines and rests, so a run that spends neither is the honest floor).
-  let runProgressionSim (runs: int) (maxFloors: int) : ProgressionSimReport =
+  let runProgressionSimWith
+    (policy: GroupPolicy)
+    (classFor: int -> CharacterClass)
+    (runs: int)
+    (maxFloors: int)
+    : ProgressionSimReport =
     let reached = Array.zeroCreate (maxFloors + 1)
     let wins = Array.zeroCreate (maxFloors + 1)
     let levels = Array.create (maxFloors + 1) 0.0
@@ -1283,7 +1309,7 @@ module Simulation =
       let roller: DiceRoller = fun min max -> rng.Next(min, max + 1)
 
       // Alternate the two player classes so the sweep does not report one class's curve twice.
-      let playerClass = if run % 2 = 0 then CharacterClass.Fighter else CharacterClass.Mage
+      let playerClass = classFor run
       let mutable player = TierFactory.createClassLevel playerClass 1 |> Combatant.seizeVor
       let mutable floor = 1
       let mutable alive = true
@@ -1297,7 +1323,7 @@ module Simulation =
           floor <- floor + 1
         else
           let maxRounds = Math.Max(60, foes.Length + 20)
-          let result, survivor = runPreparedGroupMatch roller player foes maxRounds
+          let result, survivor = runPreparedGroupMatchWith policy roller player foes maxRounds
 
           if result.SoloWon then
             wins.[floor] <- wins.[floor] + 1
@@ -1338,6 +1364,14 @@ module Simulation =
       RunsWon = clearedAll
       AvgFloorsReached = (if runs = 0 then 0.0 else float totalDepth / float runs)
       Floors = perFloor }
+
+  /// The interactive sweep: the AI policy, alternating Fighter and Mage run by run.
+  let runProgressionSim (runs: int) (maxFloors: int) : ProgressionSimReport =
+    runProgressionSimWith
+      aiPolicy
+      (fun run -> if run % 2 = 0 then CharacterClass.Fighter else CharacterClass.Mage)
+      runs
+      maxFloors
 
   let renderProgressionDashboard (report: ProgressionSimReport) =
     let table = Table().Border(TableBorder.Rounded).BorderColor(Theme.ColorCurrentLine)

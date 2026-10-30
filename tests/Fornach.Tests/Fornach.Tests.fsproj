@@ -6,6 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="OptimalPlayTests.fs" />
     <Compile Include="StoryBridgeTests.fs" />
     <Compile Include="StorySpatialTests.fs" />
     <Compile Include="StoryTutorialTests.fs" />

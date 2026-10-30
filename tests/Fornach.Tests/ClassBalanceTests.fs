@@ -28,9 +28,9 @@ let ``Mage mental stats grow at the full 1.0 ratio on all three mental axes`` ()
 
   // The Mage is the only arcane class left and normalizes Intellect, Acuity and Acumen at the primary 1.0 ratio
   let mage = TierFactory.createClassLevel CharacterClass.Mage level
-  Assert.Equal(756, mage.GetStat Intellect)
-  Assert.Equal(756, mage.GetStat Acuity)
-  Assert.Equal(756, mage.GetStat Acumen)
+  Assert.Equal(841, mage.GetStat Intellect)
+  Assert.Equal(841, mage.GetStat Acuity)
+  Assert.Equal(841, mage.GetStat Acumen)
 
 [<Fact>]
 let ``Mage active Phantasmal Decoy Swap defuses incoming kinetic strike in the Nach`` () =
@@ -169,7 +169,7 @@ let ``Physical archetypes all carry real mental defence and keep only their offe
   let gmMage = TierFactory.createClassLevel CharacterClass.Mage level
 
   // Mental defence is no longer a dump stat for physical archetypes: Resolve, Intuition and Composure
-  // all sit at the secondary tier (631 at GrandMaster) for every one of them. Only the off-plane
+  // all sit at the secondary tier (631 at GrandMaster) for both generic NPC classes. Only the off-plane
   // *offence* stays deliberately low, which is the trade-off that survived the class reduction.
   for fighter in [ gmRogue; gmWarrior ] do
     Assert.Equal(631, fighter.GetStat Resolve)
@@ -183,10 +183,13 @@ let ``Physical archetypes all carry real mental defence and keep only their offe
   // Power archetype: Acumen is its off-plane offence
   Assert.Equal(317, gmWarrior.GetStat Acumen)
 
-  // Magic user: physical stat growth stopped developing after level 49; physical defense boosted by spell armor (80% at GM tier)
-  Assert.Equal(63, gmMage.GetStat Force) // Physical offense stopped developing after level 49
-  Assert.Equal(740, gmMage.GetStat Poise) // 135 base + 80% of Composure (756)
-  Assert.Equal(765, gmMage.GetStat Reflex) // 160 base + 80% of Intuition (756)
+  // Magic user: the off-plane physical block grows a step behind the primary, so Force mirrors a Fighter's
+  // Intellect and Poise mirrors its Composure. The physical defences add the 80% spell-armour share (673)
+  // on the `offDef` base but cap at the primary, so an equal-tier martial can still reach them; the guard
+  // stat takes no share.
+  Assert.Equal(420, gmMage.GetStat Force) // off-plane offence at half the primary
+  Assert.Equal(631, gmMage.GetStat Poise) // off-plane defence: the guard's martial half
+  Assert.Equal(841, gmMage.GetStat Reflex) // 631 offDef + 80% share (673), capped at the primary
 
 [<Fact>]
 let ``Mage mirror decoy shatters upon being attacked, inflicting retaliatory Morale blast damage`` () =
@@ -509,3 +512,47 @@ let ``meter-gated gambit labels parse to their intended intents`` () =
   let spentChoices = Program.buildActionChoices spent dummyEnemy
   Assert.DoesNotContain(spentChoices, fun (c: string) -> c.Contains("Insight Cleave"))
   Assert.DoesNotContain(spentChoices, fun (c: string) -> c.Contains("Threaded Opening"))
+
+[<Fact>]
+let ``Mage and Fighter mirror each other to level 50, then the planes diverge`` () =
+  let physical = [ Force; Fortitude; Finesse; Reflex; Prowess; Poise ]
+  let mental = [ Intellect; Resolve; Acuity; Intuition; Acumen; Composure ]
+
+  // One curve, mirrored: whatever a Fighter has in Force the Mage has in Intellect, and so on down the
+  // block, so neither plane is a step behind before the split point.
+  for level in 1..49 do
+    let fighter = TierFactory.createClassLevel CharacterClass.Fighter level
+    let mage = TierFactory.createClassLevel CharacterClass.Mage level
+
+    for own, off in List.zip physical mental do
+      Assert.Equal(fighter.GetStat own, mage.GetStat off)
+      Assert.Equal(mage.GetStat own, fighter.GetStat off)
+
+    // Poise and Composure straddle the planes — Poise is the physical stat, Composure the mental one — so a
+    // Fighter's Poise is a Mage's Composure and vice versa. `GetGuard` is (Poise + Composure) / 2 and
+    // ignores the plane, so that straddle is what makes the guard plane-neutral: both classes read
+    // (prim + offDef) / 2. Putting the pair on the own plane instead would raise every guard to a full
+    // primary, which costs a discipline cash-out two thirds of its bite.
+    Assert.Equal(fighter.GetStat Poise, mage.GetStat Composure)
+    Assert.Equal(fighter.GetStat Composure, mage.GetStat Poise)
+    Assert.Equal(fighter.GetGuard(Physical, false), mage.GetGuard(Mental, false))
+
+  // Past 50 the split is deliberate: the Fighter's own plane outgrows its off-plane block, the Mage's
+  // own plane keeps climbing while its physical block froze at 49.
+  let fighter100 = TierFactory.createClassLevel CharacterClass.Fighter 100
+  let fighter200 = TierFactory.createClassLevel CharacterClass.Fighter 200
+  let mage100 = TierFactory.createClassLevel CharacterClass.Mage 100
+  let mage200 = TierFactory.createClassLevel CharacterClass.Mage 200
+
+  let fighterOwn = fighter200.GetStat Force - fighter100.GetStat Force
+  let fighterOff = fighter200.GetStat Intellect - fighter100.GetStat Intellect
+  Assert.True(fighterOwn > fighterOff, sprintf "fighter physical %d must outgrow mental %d" fighterOwn fighterOff)
+
+  let mageOwn = mage200.GetStat Intellect - mage100.GetStat Intellect
+  let mageOff = mage200.GetStat Force - mage100.GetStat Force
+  Assert.True(mageOwn > mageOff, sprintf "mage mental %d must outgrow physical %d" mageOwn mageOff)
+
+  // "Average stats before Master": both classes arrive at level 100 with their own plane on the same
+  // primary tier, so advancing to Master is a tier change rather than one class arriving undercooked.
+  Assert.Equal(441, fighter100.GetStat Force)
+  Assert.Equal(441, mage100.GetStat Intellect)
