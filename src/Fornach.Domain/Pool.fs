@@ -15,4 +15,11 @@ type Pool =
     { Current = Math.Clamp(this.Current + delta, 0, this.Maximum)
       Maximum = this.Maximum }
 
+  /// Grows the pool by an item's flat bonus, carrying the gain into `Current` so equipping it heals by the
+  /// same amount rather than leaving the bearer at the old ceiling.
+  member this.RaiseMaximum (bonus: int) =
+    let maximum = Math.Max(this.Maximum, this.Maximum + bonus)
+    { Current = Math.Min(this.Current + maximum - this.Maximum, maximum)
+      Maximum = maximum }
+
   member this.IsDepleted = this.Current <= 0

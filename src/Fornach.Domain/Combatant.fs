@@ -114,16 +114,9 @@ type Combatant =
   /// after level 20, capped at 8 (the eight tiles surrounding a fully encircled combatant).
   member this.AttackOfOpportunityCapacity = Math.Clamp((this.Level - 20) / 10, 0, 8)
 
-  /// Spell armor bonus percentage (0.0 to 0.80) for magic classes based on progression level.
-  /// Starts at level 50 (5%), increasing by 5% every 10 levels, capping at 80% at level 200.
-  member this.SpellArmorBonus : float =
-    if this.Plane = Mental then
-      if this.Level < 50 then 0.0
-      else
-        let steps = (this.Level - 40) / 10
-        Math.Clamp(Math.Round(float steps * 0.05, 2), 0.05, 0.80)
-    else
-      0.0
+  // `SpellArmorBonus` used to live here as a second copy of `ProgressionScale.spellArmorBonus`, gated on
+  // `Level < 50 -> 0.0`. Nothing in the game read it — `TierFactory` already bakes the share into the
+  // caster's Fortitude and Reflex — so the copy only served to drift out of step with the curve.
 
   /// Operative combat plane (Physical or Mental).
   /// Respects character class plane, or detects dominance for untyped combatants.
@@ -513,12 +506,20 @@ type Combatant =
     | Mental, CombatStance.AgilityStance -> Acuity, Intuition
     | Mental, CombatStance.DisciplineStance -> Acumen, Composure
 
-  /// Permanently folds an item's stat modifiers into a combatant's base Stats
-  /// (each stat clamped to a minimum of 1). Story pickups use this so that an
-  /// EquipmentItem's StatPercentBonuses are reflected by GetStat without an equip step.
+  /// Permanently folds an item's bonuses into a combatant: stat percentages, the flat health and morale
+  /// the item grants, and its opening Recklessness. Story pickups use this so a pickup is reflected without
+  /// an equip step.
   static member applyItemBonus (item: EquipmentItem) (c: Combatant) : Combatant =
-    if List.isEmpty item.StatPercentBonuses then c
-    else { c with Stats = c.Stats.ApplyPercentBonuses item.StatPercentBonuses }
+    // Every field an item declares has to land here, not just the percentages: a kit whose only bonus is
+    // health was skipped whole by the old `List.isEmpty item.StatPercentBonuses` guard, so the shield's
+    // +200 health, the robes' +300 morale and the caster weapons' health had never applied at all.
+    { c with
+        Stats = c.Stats.ApplyPercentBonuses item.StatPercentBonuses
+        Health = c.Health.RaiseMaximum item.HealthBonus
+        Morale = c.Morale.RaiseMaximum item.MoraleBonus
+        Meters =
+          { c.Meters with
+              Recklessness = c.Meters.Recklessness + item.StartingRecklessnessDelta } }
 
   /// Degrades weapon condition down one progressive stage
   static member degradeWeapon (c: Combatant) =

@@ -80,12 +80,14 @@ module ProgressionScale =
     (prim, sec, tert, min, offDef, offOff)
 
   /// Resolves the spell armor percentage for magic users based on level.
-  /// Starts at level 50 (5%), increasing by 5% every 10 levels, capping at 80% at level 200.
+  /// Floors at 5% from level 1, then 5% every 10 levels above 50, capping at 80% at level 200.
   let spellArmorBonus (level: int) : float =
-    if level < 50 then 0.0
-    else
-      let steps = (level - 40) / 10
-      Math.Clamp(Math.Round(float steps * 0.05, 2), 0.05, 0.80)
+    // A caster carries no physical stat percentage on its kit, so it leans on spell armour from level 1
+    // rather than only from 50: the prologue is the one stretch where it has nothing else on the physical
+    // plane. `steps` is negative below 40 and the clamp floors it at the 0.05 the ramp starts with, so the
+    // curve above 50 is unchanged (0.05 at 50, 0.30 at 100, 0.80 at 200).
+    let steps = (level - 40) / 10
+    Math.Clamp(Math.Round(float steps * 0.05, 2), 0.05, 0.80)
 
   /// Computes (primary, secondary, tertiary, minor, offPoise) for mental/magic classes.
   /// One curve serves both planes up to level 50, so a Mage and a Fighter are mirrors of each other rather

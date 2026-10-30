@@ -526,7 +526,17 @@ let ``Mage and Fighter mirror each other to level 50, then the planes diverge`` 
 
     for own, off in List.zip physical mental do
       Assert.Equal(fighter.GetStat own, mage.GetStat off)
-      Assert.Equal(mage.GetStat own, fighter.GetStat off)
+      // Fortitude and Reflex are the two physical defences spell armour lifts, so the Mage carries the
+      // share on top of the mirrored base; the other four mirror it exactly.
+      if own <> Fortitude && own <> Reflex then
+        Assert.Equal(mage.GetStat own, fighter.GetStat off)
+
+    let share = int (Math.Round(float (mage.GetStat Intellect) * (ProgressionScale.spellArmorBonus level)))
+
+    // Fortitude mirrors the Fighter's Resolve and Reflex its Intuition; the Mage carries the spell-armour
+    // share on top of that mirrored base.
+    for defence, mirror in [ Fortitude, Resolve; Reflex, Intuition ] do
+      Assert.Equal(fighter.GetStat mirror + share, mage.GetStat defence)
 
     // Poise and Composure straddle the planes — Poise is the physical stat, Composure the mental one — so a
     // Fighter's Poise is a Mage's Composure and vice versa. `GetGuard` is (Poise + Composure) / 2 and

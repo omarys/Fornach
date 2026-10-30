@@ -179,12 +179,13 @@ module ProgressionTests =
     Assert.Equal(185, ProgressionScale.stageTemplateCeiling 6)
 
   [<Fact>]
-  let ``Spell armor bonus progression matches the 5% per 10 levels table from level 50 to 200`` () =
-    // Sub-50 levels have zero spell armor
-    Assert.Equal(0.0, ProgressionScale.spellArmorBonus 1)
-    Assert.Equal(0.0, ProgressionScale.spellArmorBonus 20)
-    Assert.Equal(0.0, ProgressionScale.spellArmorBonus 40)
-    Assert.Equal(0.0, ProgressionScale.spellArmorBonus 49)
+  let ``Spell armor bonus floors at 5% from level 1 and climbs 5% per 10 levels to 80% at 200`` () =
+    // The prologue is the one stretch where a caster has nothing else on the physical plane, so the curve
+    // floors at the 5% its first post-50 step starts with rather than at zero.
+    Assert.Equal(0.05, ProgressionScale.spellArmorBonus 1, 3)
+    Assert.Equal(0.05, ProgressionScale.spellArmorBonus 20, 3)
+    Assert.Equal(0.05, ProgressionScale.spellArmorBonus 40, 3)
+    Assert.Equal(0.05, ProgressionScale.spellArmorBonus 49, 3)
 
     // Explicit 16-tier table from level 50 to level 200
     let expectedTiers = [
@@ -252,30 +253,31 @@ module ProgressionTests =
     let inq100 = TierFactory.createClassLevel CharacterClass.Mage 100
     let inq200 = TierFactory.createClassLevel CharacterClass.Mage 200
 
-    // Level 49: 0% spell armor. The off-plane physical defences hold `offDef` (178), and the guard pair
-    // straddles the planes (Poise off, Composure own) so a caster guards exactly like a Fighter.
-    Assert.Equal(0.0, inq49.SpellArmorBonus, 3)
-    Assert.Equal(178, inq49.GetStat Fortitude)
-    Assert.Equal(178, inq49.GetStat Reflex)
+    // Level 49: the 5% floor applies from level 1, so the off-plane defences carry a small share of the
+    // caster's own primary (237 -> +12) instead of standing bare. The guard pair straddles the planes
+    // (Poise off, Composure own) so a caster guards exactly like a Fighter, and the guard stat takes no share.
+    Assert.Equal(0.05, ProgressionScale.spellArmorBonus 49, 3)
+    Assert.Equal(178 + 12, inq49.GetStat Fortitude)
+    Assert.Equal(178 + 12, inq49.GetStat Reflex)
     Assert.Equal(178, inq49.GetStat Poise)
     Assert.Equal(237, inq49.GetStat Composure)
 
     // Level 50: 5% spell armor on the physical defences (primary 241 -> +12 each); the guard stat takes no
     // share.
-    Assert.Equal(0.05, inq50.SpellArmorBonus, 3)
+    Assert.Equal(0.05, ProgressionScale.spellArmorBonus 50, 3)
     Assert.Equal(181 + 12, inq50.GetStat Fortitude)
     Assert.Equal(181 + 12, inq50.GetStat Reflex)
     Assert.Equal(181, inq50.GetStat Poise)
 
     // Level 100: 30% spell armor (primary 441 -> +132 each) lifts both defences to the primary and stops
     // there, so a martial of the same tier can still reach them
-    Assert.Equal(0.30, inq100.SpellArmorBonus, 3)
+    Assert.Equal(0.30, ProgressionScale.spellArmorBonus 100, 3)
     Assert.Equal(441, inq100.GetStat Fortitude)
     Assert.Equal(441, inq100.GetStat Reflex)
     Assert.Equal(331, inq100.GetStat Poise)
 
     // Level 200: 80% spell armor (primary 841 -> +673 each), still capped at the primary
-    Assert.Equal(0.80, inq200.SpellArmorBonus, 3)
+    Assert.Equal(0.80, ProgressionScale.spellArmorBonus 200, 3)
     Assert.Equal(841, inq200.GetStat Fortitude)
     Assert.Equal(841, inq200.GetStat Reflex)
     Assert.Equal(631, inq200.GetStat Poise)
