@@ -254,13 +254,15 @@ module OptimalPlayer =
     [<InlineData("mesmer")>]
     [<InlineData("abjurer")>]
     [<InlineData("inquisitor")>]
-    member _.``mental archetypes rarely clear the prologue floor``(className: string) =
-      // A deliberate record of a defect, so a fix shows up as a failing test rather than a silent drift.
-      // Best play used to get a mental archetype through at most three chambers. Promoting Acumen and
-      // Composure to the same tier as Prowess and Poise, then letting the off plane keep growing, moved
-      // that: mage and inquisitor now stall at six of seven or eight, and abjurer and mesmer clear the
-      // whole floor in one seed of five and die with Morale untouched in the rest. The bound is therefore
-      // on how *often* a mental archetype clears, not on how far it gets.
+    member _.``mental archetypes clear the prologue floor``(className: string) =
+      // This was a defect record: best play used to get a mental archetype through at most three chambers.
+      // The cause was not enemy mental defence but the gambit self-tax — every declared gambit charged its
+      // whole Recklessness exposure before the roll, so three or four hits that all landed drove the caster
+      // into `RecklessExposure` at full HP and full Morale. Capping the self-spike one short of the break
+      // and firming early enemies' mental guard up only against a mental-plane attacker fixed it.
+      //
+      // The floor still is not won on the mental plane — the seeds that fail die at 0 HP with Morale
+      // untouched — so this bounds how *often* a caster clears, not how it clears.
       let mutable cleared = 0
 
       for trial in 0 .. 4 do
@@ -284,8 +286,8 @@ module OptimalPlayer =
           cleared <- cleared + 1
 
       Assert.True(
-        cleared <= 1,
-        sprintf "a mental archetype cleared the prologue floor in %d of 5 seeds: the prologue may have been fixed, tighten this test" cleared
+        cleared >= 3,
+        sprintf "a mental archetype cleared the prologue floor in only %d of 5 seeds: the caster self-tax has regressed" cleared
       )
 
     [<Theory>]

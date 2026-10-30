@@ -1310,7 +1310,13 @@ module Simulation =
 
       // Alternate the two player classes so the sweep does not report one class's curve twice.
       let playerClass = classFor run
-      let mutable player = TierFactory.createClassLevel playerClass 1 |> Combatant.seizeVor
+
+      // The climber is the protagonist, not a mob. `resolveMentalDefenseFor` picks its player branch off
+      // this name, and a generic class like Rogue would otherwise be defended as an enemy — which is how
+      // the early-level enemy relief below ended up shaving a third off the Rogue's own guard.
+      let mutable player =
+        { TierFactory.createClassLevel playerClass 1 with Name = "Protagonist" }
+        |> Combatant.seizeVor
       let mutable floor = 1
       let mutable alive = true
 

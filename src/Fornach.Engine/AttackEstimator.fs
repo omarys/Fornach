@@ -97,7 +97,7 @@ module AttackEstimator =
   /// The defence an attack is actually contested against, mirroring ActionResolver's selection: a
   /// DisciplineStance guard blends Poise and Composure at 1.5x, other pairs average, and the mental
   /// plane passes through the caster's defence conversion.
-  let defenseValue (defender: Combatant) (attack: AttackClassification) : int =
+  let defenseValue (actor: Combatant) (defender: Combatant) (attack: AttackClassification) : int =
     let _, defenseStats = statPair attack
 
     let raw =
@@ -108,7 +108,7 @@ module AttackEstimator =
       | _ -> defender.GetCombatStat (List.head defenseStats)
 
     if attack.Plane = Mental then
-      ActionResolver.resolveMentalDefenseFor defender raw
+      ActionResolver.resolveMentalDefenseFor actor defender raw
     else
       raw
 
@@ -120,8 +120,8 @@ module AttackEstimator =
   let contestMargin (actor: Combatant) (target: Combatant) (attack: AttackClassification) : int =
     let striker = contestedAs actor attack
     let offenseStat, _ = statPair attack
-    let offense = striker.GetCombatStat offenseStat - defenseValue target attack
-    let guard = defenseValue striker attack - target.GetCombatStat offenseStat
+    let offense = striker.GetCombatStat offenseStat - defenseValue actor target attack
+    let guard = defenseValue actor striker attack - target.GetCombatStat offenseStat
     offense + guard
 
   /// Estimated damage of an attack against a target; 0.0 when the strike is expected to whiff.
@@ -129,7 +129,7 @@ module AttackEstimator =
     let striker = contestedAs actor attack
     let offenseStat, _ = statPair attack
     let offValue = int (Math.Round(offenseValue striker offenseStat))
-    let defValue = defenseValue target attack
+    let defValue = defenseValue actor target attack
 
     // Study-Stack strikes pay more for spending, so the estimate has to weigh the stacks the
     // strike would actually burn — same helper the resolver uses, so the two cannot drift.

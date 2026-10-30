@@ -132,10 +132,10 @@ let ``the contest margin adds the guard half of the exchange`` () =
   let enemy = TierFactory.createClassLevel CharacterClass.Warrior 40
   let strike = AttackClassification.ForceStrike false
 
-  let offence = player.GetCombatStat StatId.Force - AttackEstimator.defenseValue enemy strike
+  let offence = player.GetCombatStat StatId.Force - AttackEstimator.defenseValue player enemy strike
 
   let guard =
-    AttackEstimator.defenseValue player strike - enemy.GetCombatStat StatId.Force
+    AttackEstimator.defenseValue player player strike - enemy.GetCombatStat StatId.Force
 
   Assert.Equal(offence + guard, AttackEstimator.contestMargin player enemy strike)
 

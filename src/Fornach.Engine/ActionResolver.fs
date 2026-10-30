@@ -52,7 +52,12 @@ module ActionResolver =
 
   /// Mental strikes land through the defender's class grounding / resilience. Shared with the menu's
   /// estimate so ranking cannot drift from resolution.
-  let resolveMentalDefenseFor (target: Combatant) (rawDef: int) : int =
+  ///
+  /// The early-level relief is granted only to an attacker fighting on the mental plane. A recruit's mind
+  /// is soft to a caster's art it has never met; it is not soft to a knife-fighter's trick. Handing the
+  /// relief to every mental strike provoked enemies into Recklessness instead — which buffs the provoked
+  /// party — and cost the Rogue a third of its tower climb.
+  let resolveMentalDefenseFor (attacker: Combatant) (target: Combatant) (rawDef: int) : int =
     let multiplier =
       if (target.Class.IsPlayerClass || target.Name = "Protagonist") && target.MonsterFamily.IsNone then
         if target.Plane = Physical then
@@ -60,6 +65,13 @@ module ActionResolver =
           if target.Class = CharacterClass.Fighter then 1.25 else 1.10
         else
           1.25
+      elif attacker.Plane = Mental then
+        // An enemy's mental guard firms up as it climbs. At the Novice end it is a green recruit and
+        // reads for exactly what it is; by the Veteran threshold it is as braced as anyone. A flat 1.0
+        // here made a level-1 bandit answer a caster's strike as well as a level-40 soldier, which is
+        // what kept early mental play from landing at all.
+        let level = Math.Clamp(target.Progression.Level, 1, 40)
+        0.70 + 0.30 * (float (level - 1) / 39.0)
       else
         1.0
 
@@ -1074,14 +1086,11 @@ module ActionResolver =
     // drain is a real gamble and a miss costs the whole swing. The guard meters are granted elsewhere:
     // the tempo-wide case once in `resolveExWithDefense`, and the whiff case in the miss branch below.
 
+    // A gambit is declared up front, but its Recklessness exposure is not charged here: the price is
+    // settled once the contest resolves, below. Charging it before the roll made every gambit a step
+    // toward `RecklessExposure` however well it landed — three or four clean hits collapsed the attacker
+    // at full HP and full Morale, so the better you played the faster you executed yourself.
     if isGambit then
-      currentActor <-
-        Combatant.updateMeters
-          (fun m ->
-            { m with
-                Recklessness = m.Recklessness + selfReckSpike })
-          currentActor
-
       events <- CombatEvent.GambitDeclared(currentActor.Id, gambitName, selfReckSpike) :: events
 
     // --- Step B: Determine Coordinates, Opposed Stats & Vector Parameters ---
@@ -1148,7 +1157,7 @@ module ActionResolver =
 
     // Mental strikes land through the defender's grounding/resilience, which the resolver applies on
     // top of the raw guard; without it every mental attack looks better than it is.
-    let resolveMentalDefense (rawDef: int) = resolveMentalDefenseFor currentTarget rawDef
+    let resolveMentalDefense (rawDef: int) = resolveMentalDefenseFor currentActor currentTarget rawDef
 
     let offStat, defStat, classMult, disparityFactory, meterUpdates =
       match atk with
@@ -2147,6 +2156,18 @@ module ActionResolver =
 
     // --- Step D: Whiff vs. Landed Hit Branching ---
     let isWhiff = contest.IsWhiff && not (currentTarget.Meters.Recklessness.Value >= 75 || currentTarget.Meters.CognitiveFatigue.Value >= 75)
+
+    // A gambit pays its declared exposure here, once the contest is known. The spike stops at 99, one
+    // short of the break: driving yourself to the brink is what a gambit is for, and a clean hit that
+    // lands should not also be the thing that executes you. Reaching 99 still earns the 1.25x that
+    // Recklessness pays an attacker, so the ramp a physical gambit kit climbs is untouched.
+    if isGambit then
+      currentActor <-
+        currentActor
+        |> Combatant.updateMeters (fun m ->
+          { m with
+              Recklessness = Meter.Create(Math.Min(99, m.Recklessness.Value + selfReckSpike)) })
+
     if isWhiff then
       // A whiff is the stalemate made concrete: the strike was read and turned aside. Holding the Vor
       // bought no exchange, so the guard meters answer here too — never per swing, only per failure.
