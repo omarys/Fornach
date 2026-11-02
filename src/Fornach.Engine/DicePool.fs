@@ -26,28 +26,21 @@ type ContestResult =
 
 module DicePool =
 
-  /// Computes the bounded dice pool size (between 4 and 20 dice) based on stat ratio
+  /// Computes the bounded dice pool size (between 4 and 20 dice) based on stat ratio.
+  /// The curve itself lives in `ProgressionScale.poolFor`: the tier boundaries are derived from it, so it
+  /// has a single definition rather than one here and one in the domain.
   let computePoolSize (statValue: int) (opposingStat: int) : int =
-    let safeOpponent = Math.Max(1.0, float opposingStat)
-    let ratio = float statValue / safeOpponent
-    let scaled = int (Math.Round(6.0 + 4.0 * ratio))
-    Math.Clamp(scaled, 4, 20)
+    ProgressionScale.poolFor statValue opposingStat
 
   /// Deterministic floor hits: guarantees 1 hit per 15 stat points
   let computeFloorHits (statValue: int) : int =
-    statValue / 15
+    ProgressionScale.floorFor statValue
 
   /// The extremes a pool can actually produce for a vector: floor hits are guaranteed whatever lands,
   /// and rolled hits run from nothing up to the vector's ceiling (a Power die scores double on a six,
   /// every other vector scores at most one hit per die). `fst` is the worst roll, `snd` the best.
   let hitBounds (vector: Vector) (statValue: int) (opposingStat: int) : int * int =
-    let floorHits = computeFloorHits statValue
-    let rolledCeiling =
-      match vector with
-      | Power -> computePoolSize statValue opposingStat * 2
-      | _ -> computePoolSize statValue opposingStat
-
-    floorHits, floorHits + rolledCeiling
+    ProgressionScale.hitBounds vector statValue opposingStat
 
   /// True when the lesser combatant's best possible roll still cannot reach the greater's worst: the
   /// contest is decided before the dice. The cutoff is arithmetic and nothing else -- while any overlap

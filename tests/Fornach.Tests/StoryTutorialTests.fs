@@ -163,11 +163,12 @@ module StoryTutorialTests =
   let ``Each story stage gate levels the protagonist for the next biome's monsters`` () =
     // Per-kill experience (~0.3 levels per floor after the tutorial) cannot keep pace with the story
     // curve, so each stage's keystone guardian grants the level the next biome's monsters assume.
-    // The ramp is six levels per stage and lands on 40 — the Veteran threshold — for the tower.
+    // The ramp lands on the Veteran threshold for the tower, whatever the stat curve puts that at.
     let player = StoryBosses.createProloguePlayer "berserker"
     let mutable state = TowerSession.initSessionWithMode player 4242 1 true
 
-    let gateLevels = [ 1, 6; 2, 11; 3, 17; 4, 23; 5, 29; 6, 35; 7, 40 ]
+    let gateLevels =
+      [ for floorNumber in 1..7 -> floorNumber, ProgressionScale.storyGuardianLevel floorNumber ]
 
     for floorNumber, expectedLevel in gateLevels do
       Assert.Equal(floorNumber, state.CurrentFloor.FloorNumber)

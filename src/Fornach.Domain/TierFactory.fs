@@ -3,49 +3,27 @@ namespace Fornach.Domain
 open System
 
 /// Standard progression and combat mastery tiers
+///
+/// A tier's entry level is not authored: it is the level at which the tier below can no longer beat it on
+/// any vector. `ProgressionScale.tierToLevel` derives the boundaries from the stat and pool curves, so
+/// reshaping either moves the tiers with them.
 type CombatTier =
-  /// Level 1: Base starting stats and entry-level abilities
+  /// Below the Veteran floor: contestable by a starting character
   | Novice
-  /// Level 40: Seasoned veteran representing roughly 40 levels of progression
+  /// The first level a level-1 character cannot beat in any vector
   | Veteran
-  /// Level 100: Paragon master representing roughly 100 levels of progression
+  /// The first level a Veteran cannot beat in any vector
   | Master
-  /// Level 200: Ascendant grandmaster representing roughly 200 levels of progression
+  /// The first level a Master cannot beat in any vector
   | GrandMaster
 
 module ProgressionScale =
 
-  /// Resolves the canonical character level for a combat tier
-  let tierToLevel (tier: CombatTier) : int =
-    match tier with
-    | Novice -> 1
-    | Veteran -> 40
-    | Master -> 100
-    | GrandMaster -> 200
+  // The tier boundaries live at the bottom of this module: they are read off `physicalStatsForLevel`, so
+  // they have to be defined after it.
 
-  /// Resolves the mastery tier for an arbitrary (uncapped) character level.
-  let levelToTier (level: int) : CombatTier =
-    if level >= 200 then GrandMaster
-    elif level >= 100 then Master
-    elif level >= 40 then Veteran
-    else Novice
-
-  /// Level a story stage's guardian hands the protagonist: a six-level ramp per stage that lands the
-  /// protagonist on the Veteran threshold (level 40) at the end of the sixth grief stage, so the
-  /// Infinite Tower (story floor 8) is entered as a Veteran rather than a GrandMaster. Floor 1 is the
-  /// tutorial's landing (level 6) and the last stage hands over nothing further (40, not 45) — the
-  /// gate tops up to this level and only carries a capped lead beyond it.
-  /// The story's own enemies are re-levelled to the protagonist by `TowerSession.rescaleFloorEnemies`,
-  /// so this ladder is the protagonist's level, not the bestiary's authored magnitude.
-  let storyGuardianLevel (floorNumber: int) : int =
-    match floorNumber with
-    | 1 -> 6
-    | 2 -> 11
-    | 3 -> 17
-    | 4 -> 23
-    | 5 -> 29
-    | 6 -> 35
-    | _ -> 40
+  /// Levels a story stage's guardian hands the protagonist. Defined below the tier block: it derives its
+  /// landing point from `tierToLevel Veteran`.
 
   /// Authored bestiary levels the *story* stages may field, as opposed to `storyGuardianLevel`,
   /// which is the protagonist's own level. Templates are authored against the old tier magnitudes
@@ -78,6 +56,100 @@ module ProgressionScale =
     // Offensive off-plane stat gets modest growth (halfway between min and tert)
     let offOff = min + int (Math.Round(float (tert - min) * 0.50))
     (prim, sec, tert, min, offDef, offOff)
+
+  // ---- Initiative cutoffs and the tier boundaries they define ----------------------------------
+
+  /// Dice a stat buys against an opposing stat. This is the one definition of the pool curve: every
+  /// strike in the engine and the tier boundaries below read it from here.
+  let poolFor (statValue: int) (opposingStat: int) : int =
+    let ratio = float statValue / float (max 1 opposingStat)
+    Math.Clamp(int (Math.Round(6.0 + 4.0 * ratio)), 4, 20)
+
+  /// Hits a stat guarantees before a single die is rolled.
+  let floorFor (statValue: int) : int = statValue / 15
+
+  /// Worst and best hit counts a stat can produce against an opposing stat. Power is the vector that
+  /// scores double per die, so its ceiling is twice the pool; the floor hits land whatever is rolled.
+  let hitBounds (vector: Vector) (statValue: int) (opposingStat: int) : int * int =
+    let floorHits = floorFor statValue
+    let pool = poolFor statValue opposingStat
+
+    let ceiling =
+      match vector with
+      | Power -> pool * 2
+      | _ -> pool
+
+    floorHits, floorHits + ceiling
+
+  /// The (offence, defence) stat pair a duel on each vector resolves through, read off a balanced duelist:
+  /// the Fighter archetype carries a primary stat in all six, so no vector is favoured by its class and
+  /// the boundary below is a property of the curve rather than of one matchup.
+  let private duelStats (level: int) (vector: Vector) : int * int =
+    let prim, _sec, _tert, _min, offDefence, _offOffence = physicalStatsForLevel level
+
+    match vector with
+    | Power | Agility -> prim, prim
+    | _ -> prim / 2, offDefence
+
+  /// True when a combatant at `lesserLevel` cannot beat one at `greaterLevel` on any vector: its best
+  /// possible roll still misses the greater's worst, so the contest is settled before the dice and the
+  /// lesser combatant has nothing to win. Any overlap at all means the win is real and is awarded.
+  let cannotTouch (lesserLevel: int) (greaterLevel: int) : bool =
+    [ Power; Agility; Discipline ]
+    |> List.forall (fun vector ->
+      let _, greaterDefence = duelStats greaterLevel vector
+      let lesserOffence, _ = duelStats lesserLevel vector
+      let _, lesserBest = hitBounds vector lesserOffence greaterDefence
+      let greaterWorst, _ = hitBounds vector greaterDefence lesserOffence
+      lesserBest < greaterWorst)
+
+  /// Lowest level above `floor` that a combatant at `floor` can no longer touch.
+  let private nextFloor (floor: int) : int =
+    let rec scan level =
+      if level >= 10000 || cannotTouch floor level then level else scan (level + 1)
+
+    scan (floor + 1)
+
+  /// The level each tier begins at, derived from the curves above.
+  let private tierFloors =
+    lazy
+      (let veteran = nextFloor 1
+       let master = nextFloor veteran
+       let grandMaster = nextFloor master
+       veteran, master, grandMaster)
+
+  /// Resolves the mastery tier for an arbitrary (uncapped) character level.
+  let levelToTier (level: int) : CombatTier =
+    let veteran, master, grandMaster = tierFloors.Value
+
+    if level >= grandMaster then GrandMaster
+    elif level >= master then Master
+    elif level >= veteran then Veteran
+    else Novice
+
+  /// The level a tier begins at: the first level the tier below cannot touch.
+  let tierToLevel (tier: CombatTier) : int =
+    let veteran, master, grandMaster = tierFloors.Value
+
+    match tier with
+    | Novice -> 1
+    | Veteran -> veteran
+    | Master -> master
+    | GrandMaster -> grandMaster
+
+  /// Level a story stage's guardian hands the protagonist: a ramp from the tutorial's landing (level 6) that
+  /// reaches the Veteran threshold at the end of the sixth grief stage, so the Infinite Tower (story floor 8)
+  /// is entered as a Veteran rather than a GrandMaster. The last stage hands over nothing further. The
+  /// landing point is derived from `tierToLevel Veteran` rather than authored, so reshaping the stat curve
+  /// moves the ladder with the tiers instead of silently dropping the protagonist back into Novice.
+  /// The story's own enemies are re-levelled to the protagonist by `TowerSession.rescaleFloorEnemies`,
+  /// so this ladder is the protagonist's level, not the bestiary's authored magnitude.
+  let storyGuardianLevel (floorNumber: int) : int =
+    let landing = 6
+    let stages = 6
+    let veteran = tierToLevel Veteran
+    let floor = Math.Clamp(floorNumber, 1, stages + 1)
+    landing + int (Math.Round(float (veteran - landing) * float (floor - 1) / float stages))
 
   /// Resolves the spell armor percentage for magic users based on level.
   /// Floors at 5% from level 1, then 5% every 10 levels above 50, capping at 80% at level 200.

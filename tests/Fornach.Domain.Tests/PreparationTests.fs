@@ -447,12 +447,7 @@ module PreparationTests =
         let fighter = TierFactory.createClassTier cls tier
         Assert.Equal(cls, fighter.Class)
 
-        let expectedLevel =
-          match tier with
-          | Novice -> 1
-          | Veteran -> 40
-          | Master -> 100
-          | GrandMaster -> 200
+        let expectedLevel = ProgressionScale.tierToLevel tier
 
         Assert.Equal(expectedLevel, fighter.Progression.Level)
 

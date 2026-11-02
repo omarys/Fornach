@@ -42,13 +42,17 @@ module ProgressionTests =
     Assert.Equal(20, after.CurrentXP)
 
   [<Fact>]
-  let ``levelToTier honours canonical tier thresholds`` () =
+  let ``levelToTier honours the derived tier thresholds`` () =
+    let veteran = ProgressionScale.tierToLevel CombatTier.Veteran
+    let master = ProgressionScale.tierToLevel CombatTier.Master
+    let grandMaster = ProgressionScale.tierToLevel CombatTier.GrandMaster
+
     Assert.Equal(CombatTier.Novice, ProgressionScale.levelToTier 1)
-    Assert.Equal(CombatTier.Novice, ProgressionScale.levelToTier 39)
-    Assert.Equal(CombatTier.Veteran, ProgressionScale.levelToTier 40)
-    Assert.Equal(CombatTier.Master, ProgressionScale.levelToTier 100)
-    Assert.Equal(CombatTier.GrandMaster, ProgressionScale.levelToTier 200)
-    Assert.Equal(CombatTier.GrandMaster, ProgressionScale.levelToTier 350)
+    Assert.Equal(CombatTier.Novice, ProgressionScale.levelToTier (veteran - 1))
+    Assert.Equal(CombatTier.Veteran, ProgressionScale.levelToTier veteran)
+    Assert.Equal(CombatTier.Master, ProgressionScale.levelToTier master)
+    Assert.Equal(CombatTier.GrandMaster, ProgressionScale.levelToTier grandMaster)
+    Assert.Equal(CombatTier.GrandMaster, ProgressionScale.levelToTier (grandMaster + 150))
 
   [<Fact>]
   let ``rescaleToLevel raises stats and pools while preserving the health ratio`` () =
@@ -164,15 +168,17 @@ module ProgressionTests =
     let state = TowerSession.initSessionWithMode player 77 7 true
     let after = TowerSession.resolveEnemyDefeat "boss_stage_7" state
 
-    Assert.Equal(40, after.Player.Level)
+    Assert.Equal(ProgressionScale.tierToLevel CombatTier.Veteran, after.Player.Level)
     Assert.Equal(CombatTier.Veteran, ProgressionScale.levelToTier after.Player.Level)
 
   [<Fact>]
   let ``the story level ladder climbs every stage and stops at the Veteran threshold`` () =
     let ladder = [ for floor in 1 .. 7 -> ProgressionScale.storyGuardianLevel floor ]
+    let veteran = ProgressionScale.tierToLevel CombatTier.Veteran
+
     Assert.Equal<int list>(List.sort ladder, ladder)
-    Assert.Equal(40, List.last ladder)
-    Assert.True(ladder |> List.forall (fun level -> level <= 40))
+    Assert.Equal(veteran, List.last ladder)
+    Assert.True(ladder |> List.forall (fun level -> level <= veteran))
 
     // Template eligibility stays on the authored bestiary magnitudes, so the deep stages keep their
     // roster instead of collapsing onto the single lowest-level template.

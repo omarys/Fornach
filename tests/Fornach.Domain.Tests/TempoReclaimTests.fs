@@ -189,3 +189,37 @@ module TempoReclaimTests =
     Assert.True(moved)
     Assert.True(noviceAfter.IsInVor, "a Novice that wins the bind takes the Vor")
     Assert.True(masterAfter.IsInNach)
+  [<Fact>]
+  let ``Tier floors are derived from the dice, not authored`` () =
+    let veteran = ProgressionScale.tierToLevel Veteran
+    let master = ProgressionScale.tierToLevel Master
+    let grandMaster = ProgressionScale.tierToLevel GrandMaster
+
+    Assert.True(veteran < master && master < grandMaster, "tiers must stay ordered")
+
+    // The floor is the *first* level the tier below cannot touch -- one below it is still contestable.
+    Assert.False(ProgressionScale.cannotTouch 1 (veteran - 1), "a starting character can still touch a level just under Veteran")
+    Assert.True(ProgressionScale.cannotTouch 1 veteran, "a starting character cannot touch a Veteran")
+    Assert.False(ProgressionScale.cannotTouch veteran (master - 1))
+    Assert.True(ProgressionScale.cannotTouch veteran master)
+    Assert.False(ProgressionScale.cannotTouch master (grandMaster - 1))
+    Assert.True(ProgressionScale.cannotTouch master grandMaster)
+
+    Assert.Equal(Novice, ProgressionScale.levelToTier (veteran - 1))
+    Assert.Equal(Veteran, ProgressionScale.levelToTier veteran)
+    Assert.Equal(Master, ProgressionScale.levelToTier master)
+    Assert.Equal(GrandMaster, ProgressionScale.levelToTier grandMaster)
+
+  [<Fact>]
+  let ``The level rule and the combatant rule agree on who can be ambushed at all`` () =
+    // `cannotTouch` defines the tiers off the bare curve; `cedesInitiative` is what an ambush asks, and it
+    // reads the combatant's *equipped* stats. Kit therefore moves the practical boundary to at or below the
+    // canonical floor, never above it -- a Veteran is never touchable by a starting character.
+    let veteran = ProgressionScale.tierToLevel Veteran
+
+    let duelist level = TierFactory.createClassLevel CharacterClass.Fighter level
+
+    Assert.True(ActionResolver.cedesInitiative (duelist veteran) (duelist 1))
+    Assert.True(ActionResolver.cedesInitiative (duelist (veteran + 40)) (duelist 1))
+    Assert.False(ActionResolver.cedesInitiative (duelist 1) (duelist 1), "equals always contest the Vor")
+    Assert.False(ActionResolver.cedesInitiative (duelist 5) (duelist 1), "neighbours are still a live threat")

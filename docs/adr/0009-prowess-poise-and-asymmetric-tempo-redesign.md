@@ -95,8 +95,12 @@ against several foes is therefore **N separate duels sharing a turn**, not one f
 - **An ambusher only takes the Vor if it could have taken it anyway.** Surprise grants the tempo to a foe
   whose best possible roll can still reach the player's worst; once it cannot, the ambusher *cedes* the
   initiative and the player opens holding it (`ActionResolver.cedesInitiative`, `DicePool.cannotBeat`).
-  The cutoff is arithmetic, not rank — a level-60 character labelled Novice can still reach a Master's
-  floor while a Veteran cannot, so the tier name is not a proxy for the boundary.
+  The cutoff is arithmetic, never rank.
+- **The tiers are the cutoff.** `CombatTier` entry levels are derived, not authored: Veteran is the first
+  level a level-1 character cannot touch, Master the first a Veteran cannot touch, GrandMaster the first a
+  Master cannot touch (`ProgressionScale.cannotTouch` / `tierToLevel`). Reshaping the stat curve or the pool
+  formula moves the tiers with it, and the story ladder follows the Veteran floor. On the current curve
+  that is 58 / 121 / 193.
 - **A win is a win.** Whenever the dice allow the lesser combatant to take the Vor, it keeps it: the cede
   only applies where the contest is decided before the roll, never as a clawback of a won bind.
 - **Future:** holding more than one Vor at once is gated on `Prowess` against the foes' `Prowess`/`Instinct`,
