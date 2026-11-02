@@ -1120,7 +1120,18 @@ module Program =
     let logLines () = combatLog |> List.ofSeq
 
     let isLiving (e: TowerEnemy) =
-      not e.IsDefeated && not e.Combatant.Health.IsDepleted && not e.Combatant.Morale.IsDepleted
+      // A collapsed foe takes no further action and is execute-eligible, so it stops counting as living:
+      // once the whole pack collapses the fight ends in victory instead of running forever.
+      not e.IsDefeated
+      && not e.Combatant.Health.IsDepleted
+      && not e.Combatant.Morale.IsDepleted
+      && not (CollapseState.isCollapsed e.Combatant.Collapse)
+
+    /// The player is out of the fight when a pool empties or any status meter breaks it.
+    let playerDown () =
+      currentPlayer.Health.IsDepleted
+      || currentPlayer.Morale.IsDepleted
+      || CollapseState.isCollapsed currentPlayer.Collapse
 
     let living () = currentEnemies |> List.filter isLiving
 
@@ -1171,7 +1182,7 @@ module Program =
           currentEnemies <- currentEnemies |> List.map (fun en -> if en.Id = e.Id then { en with Combatant = r.Actor } else en)
           priorDefenses <- priorDefenses + 1
           let executed = r.Events |> List.exists (function CombatEvent.Executed _ -> true | _ -> false)
-          if executed || currentPlayer.Health.IsDepleted || currentPlayer.Morale.IsDepleted then
+          if executed || playerDown () then
             outcome <- TowerDisplay.GroupDuelOutcome.Defeated
             combatOver <- true
             AnsiConsole.WriteLine()
@@ -1235,7 +1246,7 @@ module Program =
           currentPlayer <- r.Target
           currentEnemies <- currentEnemies |> List.map (fun en -> if en.Id = e.Id then { en with Combatant = r.Actor } else en)
           priorDefenses <- priorDefenses + 1
-          if currentPlayer.Health.IsDepleted || currentPlayer.Morale.IsDepleted then survived <- false
+          if playerDown () then survived <- false
         if survived then
           outcome <- TowerDisplay.GroupDuelOutcome.Fled
           AnsiConsole.MarkupLine(sprintf "\n[bold %s]You slip away from the pack![/]" Theme.Green)

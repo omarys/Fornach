@@ -146,6 +146,22 @@ module TowerSession =
   let restRecoverMoraleWhenWoundClosed (bleedStacks: int) (pool: Pool) (amount: int) =
     if bleedStacks > 0 then pool else restRecoverMorale pool amount
 
+  /// Status meters are pressure, not damage: they bleed off whenever nothing is engaged, so the 1% a
+  /// defended round costs cannot compound into a permanent debuff across a whole floor. Bleeding being
+  /// open does not stop it for the same reason armor still gets tended.
+  let restDecayStatus = 10
+
+  let decayStatusMeters (m: StatusMeters) =
+    let d (meter: Meter) = Meter.Create(meter.Value - restDecayStatus)
+
+    { m with
+        Exhaustion = d m.Exhaustion
+        Frustration = d m.Frustration
+        Recklessness = d m.Recklessness
+        CognitiveFatigue = d m.CognitiveFatigue
+        Confusion = d m.Confusion
+        Provoke = d m.Provoke }
+
   /// One turn of out-of-combat recovery. Bleeding closes first, and Health and Morale only
   /// regenerate once that has stopped the wound. Armor is tended either way — gear is maintained
   /// regardless of what is bleeding. The combat ramp decays one stack per turn here: this function
@@ -157,7 +173,8 @@ module TowerSession =
         BleedStacks = bleed
         Health = restRecoverHealthWhenWoundClosed bleed player.Health heal
         Morale = restRecoverMoraleWhenWoundClosed bleed player.Morale morale
-        Armor = restRepairArmor player.Armor armorRepair }
+        Armor = restRepairArmor player.Armor armorRepair
+        Meters = decayStatusMeters player.Meters }
 
   /// One step short of Pristine: resting hones a ruined weapon but cannot restore it.
   let restHoneWeapon (weapon: WeaponCondition) =

@@ -596,8 +596,12 @@ type Combatant =
 
       match reasonOpt with
       | Some reason ->
+        // A combatant that collapses drops whatever tempo it was holding: it takes no further action, so
+        // it cannot insist on the Vor either. Without this a collapsed foe stayed in the Vor and kept
+        // swinging, which made reaching 100% on any status meter do nothing at all.
         { c with
-            Collapse = CollapseState.Collapsed reason }
+            Collapse = CollapseState.Collapsed reason
+            Tempo = TacticalTiming.Nach }
       | None -> c
 
   /// Restores a collapsed combatant to Stable if all status meters have dropped below 100%

@@ -2480,6 +2480,24 @@ module ActionResolver =
       currentTarget <- updatedTarget
       events <- wardEvts @ (CombatEvent.DamageApplied dmgEvt :: events)
 
+      // A strike that is fully absorbed is an answered strike, the same as one that never landed. The
+      // attacker pays for swinging into a wall; the defender pays nothing beyond the 1% upkeep its own
+      // round already cost it, so holding a guard is a way to outlast a foe rather than a way to be pinned
+      // forever. Without this a braced defender was untouchable but also unable to claim the Vor: the
+      // strike "landed" for zero and neither the whiff nor the posture path fired. The tempo half is
+      // settled at Step H, after the landed-tempo rule has had its say -- deciding it here let the
+      // attacker's "insist on the Vor" hand the defender's seizure straight back.
+      let fullyAbsorbed = dmgEvt.Amount <= 0 && not currentTarget.Health.IsDepleted
+
+      if fullyAbsorbed then
+        currentActor <-
+          currentActor
+          |> Combatant.updateMeters (fun m ->
+            { m with
+                Exhaustion = m.Exhaustion + 20
+                Frustration = m.Frustration + 15 })
+        events <- CombatEvent.ComboReset(currentActor.Id, "Strike fully absorbed: the guard answered it.") :: events
+
       // Transient Pain Shock Check (ADR 0009):
       // Single-turn physical HP damage >= 15% Max HP triggers a check against Poise (Fortitude fallback for non-humanoids)
       if plane = Physical && dmgEvt.Amount > 0 then
@@ -2726,7 +2744,12 @@ module ActionResolver =
 
       // Step H: the initiative does not follow the dice — only a decisive answer turns the tempo.
       let landedActor, landedTarget, tempoMoved =
-        if isAffinityCounter && contest.NetHits <= 1 && finalTarget.IsInNach then
+        if fullyAbsorbed then
+          // Nothing got through, so nothing was imposed: the guard answered the strike and takes the
+          // tempo. This has to win over the insist rule below, or an attacker holding the Vor keeps it
+          // merely by having swung into a wall.
+          resolveWhiffTempo finalActorWithFluid finalTarget
+        elif isAffinityCounter && contest.NetHits <= 1 && finalTarget.IsInNach then
           Combatant.yieldVor finalActorWithFluid, Combatant.seizeVor finalTarget, true
         else
           resolveLandedTempo finalActorWithFluid finalTarget contest.NetHits
@@ -2816,11 +2839,17 @@ module ActionResolver =
     currentActor <- updatedActor
     events <- events @ [ CombatEvent.UnattackedStanceBenefit(currentActor.Id, sprintf "%A" defense, benefitMsg) ]
 
+    // A defended round is a won exchange, so it seizes the Vor from the foe it answered. This used to
+    // require `not target.IsInVor`, which meant a player pinned in the Nach by an ambusher could never
+    // take the tempo back: the guard hardened its meters while the foe kept the Vor by definition, and
+    // the whiff highway out was blocked too because a braced strike lands-but-is-soaked rather than
+    // missing. Seizure is still per-target -- whoever was defended against goes to the Nach; the rest
+    // of a pack keeps its own tempo.
     let finalActor, finalTarget =
-      if currentActor.IsInNach && not target.IsInVor then
+      if currentActor.IsInNach then
         let a = Combatant.seizeVor currentActor
         let t = Combatant.yieldVor target
-        events <- events @ [ CombatEvent.TempoShifted(a.Id, t.Id, sprintf "%s capitalized on unattacked defense and seized the Vor." a.Name) ]
+        events <- events @ [ CombatEvent.TempoShifted(a.Id, t.Id, sprintf "%s held the defense and seized the Vor from %s." a.Name target.Name) ]
         a, t
       else
         currentActor, target
