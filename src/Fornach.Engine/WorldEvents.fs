@@ -228,7 +228,7 @@ module WorldEvents =
       HasTraded = false }
 
   /// Creates a sealed treasure vault guarding relics behind puzzles or stat checks
-  let createVault (theme: FloorTheme) (floorNum: int) : VaultData =
+  let createVault (theme: FloorTheme) (floorNum: int) (playerPlane: Plane) : VaultData =
     // The vault asks for a stat at a share of the tier its floor's level carries, not at a flat
     // `30 + floorNum * 2`. That flat number was mis-scaled at both ends: on floor 1 it demanded 32
     // Intellect while a Fighter carries 22 and a Warrior 15, so every physical archetype walked past the
@@ -238,14 +238,22 @@ module WorldEvents =
     let _, _, offTier, _, _, _ = ProgressionScale.physicalStatsForLevel (max 1 floorNum)
     let requirement = offTier
 
+    // The vault asks the stat the archetype is *not* built around. `requirement` was already set to the
+    // off-plane tier, but the stat itself still alternated by floor, so a Fighter was handed its own
+    // primary on one floor and gated on its off-plane on another. Reading the plane keeps the gate honest
+    // for every class: physical archetypes are asked to deduce, casters to work with their hands.
+    let puzzleStat, statTest =
+      match playerPlane with
+      | Physical ->
+        StatId.Intellect, "An intricate geometric arcane matrix requiring rigorous analytical deduction to balance."
+      | Mental ->
+        StatId.Finesse, "A complex multi-dial clockwork tumbler requiring deft mechanical dexterity to bypass."
+
     let puzzle =
       match floorNum % 3 with
-      | 0 ->
-        VaultPuzzle.StatCheck(StatId.Finesse, requirement, "A complex multi-dial clockwork tumbler requiring deft mechanical dexterity to bypass.")
-      | 1 ->
-        VaultPuzzle.StatCheck(StatId.Intellect, requirement, "An intricate geometric arcane matrix requiring rigorous analytical deduction to balance.")
-      | _ ->
+      | 2 ->
         VaultPuzzle.KeyholeLock(sprintf "key_floor_%d" floorNum, sprintf "Floor %d Keystone" floorNum, "Carried by the hostile floor guardian.")
+      | _ -> VaultPuzzle.StatCheck(puzzleStat, requirement, statTest)
 
     let relic : EquipmentItem =
       { Name = sprintf "Crown of %s" theme.Name
@@ -411,7 +419,7 @@ module WorldEvents =
         IsCommuned = false }
 
   /// Procedurally generates 2 to 4 diverse dynamic encounters for a floor based on biome and layout
-  let generateFloorEncounters (theme: FloorTheme) (floorNum: int) (plazaCenters: Point list) : (Point * FloorEncounter) list =
+  let generateFloorEncounters (theme: FloorTheme) (floorNum: int) (plazaCenters: Point list) (playerPlane: Plane) : (Point * FloorEncounter) list =
     match plazaCenters with
     | p0 :: p1 :: p2 :: p3 :: p4 :: p5 :: _ ->
       [ // 1. Memory Echo on every floor (narrative core of the grief ascent)
@@ -448,7 +456,7 @@ module WorldEvents =
           let ambushPos = { X = p3.X + 3; Y = p3.Y - 2 }
           let vaultPos = { X = p3.X - 3; Y = p3.Y + 2 }
           ambushPos, FloorEncounter.AmbushLair (createAmbush theme floorNum)
-          vaultPos, FloorEncounter.TreasureVault (createVault theme floorNum)
+          vaultPos, FloorEncounter.TreasureVault (createVault theme floorNum playerPlane)
         | _ ->
           let ambushPos = { X = p3.X + 3; Y = p3.Y - 2 }
           let traderPos = { X = p1.X - 3; Y = p1.Y - 2 }

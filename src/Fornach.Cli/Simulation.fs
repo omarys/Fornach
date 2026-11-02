@@ -1281,7 +1281,7 @@ module Simulation =
   /// The floor's live mobs, scaled exactly the way the interactive tower scales them. Guardians are
   /// dropped: a progression sweep measures the mob curve, and one boss per floor would dominate it.
   let private floorMobs (seed: int) (player: Combatant) (floorNumber: int) : Combatant list =
-    TowerGenerator.generateFloorWithMode seed floorNumber false
+    TowerGenerator.generateFloorForPlane seed floorNumber false player.Plane
     |> TowerSession.rescaleFloorEnemies player
     |> fun floor -> floor.Entities |> Map.toList |> List.map snd
     |> List.choose (function

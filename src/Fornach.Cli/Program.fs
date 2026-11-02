@@ -1249,6 +1249,10 @@ module Program =
         | StandardAttack atk when choice.Contains("Seize Indes") -> playerActiveDefenseOpt <- Some(SeizeIndes atk)
         | _ -> playerActiveDefenseOpt <- None
 
+        // Every guard stack this round pays per foe still standing, so the pack size is stamped once here,
+        // before either side acts, and re-stamped each round as the pack thins out.
+        currentPlayer <- { currentPlayer with EnemiesFaced = (living ()).Length }
+
         // 3a. The pack opens when it holds the Vor and the player does not: it strikes before the
         // player's action, and its end-of-round answer is skipped so neither side strikes twice.
         let openedByPack = packHasVor ()

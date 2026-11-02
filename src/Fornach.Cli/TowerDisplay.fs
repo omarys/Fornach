@@ -702,7 +702,7 @@ module TowerDisplay =
     let depthCap, bossOffset = TowerSession.floorScalingFor state.IsStoryMode state.CurrentFloor.FloorNumber
 
     let pristine =
-      TowerGenerator.generateFloorWithMode state.Seed state.CurrentFloor.FloorNumber state.IsStoryMode
+      TowerGenerator.generateFloorForPlane state.Seed state.CurrentFloor.FloorNumber state.IsStoryMode state.Player.Plane
       |> TowerSession.rescaleFloorEnemiesWith depthCap bossOffset state.Player
     let pristineMobs =
       pristine.Entities
@@ -1253,7 +1253,7 @@ module TowerDisplay =
 
     let debugTeleport () =
       let floor = AnsiConsole.Prompt(TextPrompt<int>("[bold yellow]Teleport to floor:[/]"))
-      let regenerated = TowerGenerator.generateFloorWithMode seed floor isStory
+      let regenerated = TowerGenerator.generateFloorForPlane seed floor isStory state.Player.Plane
       state <- { state with CurrentFloor = regenerated; PlayerPosition = regenerated.SpawnLocation }
       state <- TowerSession.updateFov state
       RuntimeLog.write (sprintf "debug: teleport -> floor %d spawn %A" floor regenerated.SpawnLocation)

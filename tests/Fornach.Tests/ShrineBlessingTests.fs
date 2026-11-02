@@ -23,11 +23,11 @@ let private themes =
 
 let private bonusesOf (item: EquipmentItem) = item.StatPercentBonuses |> List.map fst |> set
 
-/// Every equipment item the world events can hand out for one theme and floor.
-let private grantedItems (theme: FloorTheme) (floorNum: int) : (string * EquipmentItem) list =
+/// Every equipment item the world events can hand out for one theme, floor and archetype plane.
+let private grantedItems (theme: FloorTheme) (floorNum: int) (plane: Plane) : (string * EquipmentItem) list =
   let altar = WorldEvents.createAltar theme floorNum PrimaryPair
   let trader = WorldEvents.createTrader theme floorNum
-  let vault = WorldEvents.createVault theme floorNum
+  let vault = WorldEvents.createVault theme floorNum plane
 
   let altarRelic =
     match altar.Reward with
@@ -44,12 +44,19 @@ let private grantedItems (theme: FloorTheme) (floorNum: int) : (string * Equipme
 let ``no blessing, ware or relic grants Prowess, Poise or Acumen`` () =
   for theme in themes do
     for floorNum in [ 1; 5; 12; 40 ] do
-      for name, item in grantedItems theme floorNum do
-        let reserved = Set.intersect (bonusesOf item) reservedForGrowth
+      for plane in [ Plane.Physical; Plane.Mental ] do
+        for name, item in grantedItems theme floorNum plane do
+          let reserved = Set.intersect (bonusesOf item) reservedForGrowth
 
-        Assert.True(
-          reserved.IsEmpty,
-          sprintf "%s (floor %d, %A) grants %A — those are earned through combat, not bought or found" name floorNum theme reserved)
+          Assert.True(
+            reserved.IsEmpty,
+            sprintf
+              "%s (floor %d, %A, %A) grants %A — those are earned through combat, not bought or found"
+              name
+              floorNum
+              theme
+              plane
+              reserved)
 
 [<Fact>]
 let ``every blessing pair is one a class can actually use`` () =
@@ -59,7 +66,7 @@ let ``every blessing pair is one a class can actually use`` () =
           StatId.Intellect; StatId.Resolve; StatId.Acuity; StatId.Intuition ]
 
   for theme in themes do
-    for name, item in grantedItems theme 3 do
+    for name, item in grantedItems theme 3 Plane.Physical do
       let illegal = Set.difference (bonusesOf item) legal
 
       Assert.True(

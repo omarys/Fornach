@@ -2756,11 +2756,16 @@ module ActionResolver =
     let mutable currentActor = actor
     let mutable events = [ CombatEvent.ActiveDefenseDeclared(actor.Id, sprintf "%A" defense) ]
 
+    // A defended round pays one guard stack per foe faced: holding off a four-strong pack is worth four
+    // times a duel, and the pack thinning out lowers every later gain. `EnemiesFaced` is stamped by the
+    // pack owner; zero means nobody stated it, which pays the single stack a duel would.
+    let guardGain = max 1 actor.EnemiesFaced
+
     // An active defense posture is by definition an action taken in the Nach (ADR 0009), so the posture
-    // pays its own guard stack here: Inertia/Focus are the meters that a defended round earns. This used
+    // pays its own guard stacks here: Inertia/Focus are the meters that a defended round earns. This used
     // to call `addStacks`, which fed Flow/Momentum instead -- slipping showed the offense ramp and never
     // hardened the guard, so the whole Nach game read as broken. `resolveExWithDefense` skips its own
-    // Nach grant for `ActiveDefense` so the stack is not paid twice.
+    // Nach grant for `ActiveDefense` so the stacks are not paid twice.
     let benefitMsg, updatedActor =
       match defense with
       | FortitudeGuard isBraced ->
@@ -2770,43 +2775,43 @@ module ActionResolver =
           { currentActor with
               Armor = currentActor.Armor.Repair armorRepaired
               Stance = CombatStance.PowerStance }
-          |> Combatant.addGuardStacks 1
+          |> Combatant.addGuardStacks guardGain
           |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness - reckDrained })
-        sprintf "Fortitude Guard repaired +%d Armor durability, bled -%d Recklessness, and braced for Power strike (+1 Inertia/Focus)." armorRepaired reckDrained, a
+        sprintf "Fortitude Guard repaired +%d Armor durability, bled -%d Recklessness, and braced for Power strike (+%d Inertia/Focus)." armorRepaired reckDrained guardGain, a
 
       | ReflexSlip isEvasive ->
         let overwheimVent = if isEvasive then 25 else 15
         let exhaustVent = if isEvasive then 15 else 10
         let a =
           { currentActor with Stance = CombatStance.AgilityStance }
-          |> Combatant.addGuardStacks 1
+          |> Combatant.addGuardStacks guardGain
           |> Combatant.updateMeters (fun m ->
             { m with
                 Frustration = m.Frustration - overwheimVent
                 Exhaustion = m.Exhaustion - exhaustVent })
-        sprintf "Reflex Slip vented -%d Frustration and -%d Exhaustion, resetting footwork for an Agility strike (+1 Inertia/Focus)." overwheimVent exhaustVent, a
+        sprintf "Reflex Slip vented -%d Frustration and -%d Exhaustion, resetting footwork for an Agility strike (+%d Inertia/Focus)." overwheimVent exhaustVent guardGain, a
 
       | ResolveAnchor isIronWill ->
         let wardErected = if isIronWill then 30 else 20
         let fatigueVent = if isIronWill then 20 else 15
         let a =
           { currentActor with ComplexForm = Some ComplexForm.AegisLattice; Stance = CombatStance.DisciplineStance }
-          |> Combatant.addGuardStacks 1
+          |> Combatant.addGuardStacks guardGain
           |> Combatant.addWard wardErected
           |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue - fatigueVent })
-        sprintf "Resolve Anchor reinforced +%d Arcane Ward, cleared -%d Cognitive Fatigue (+1 Inertia/Focus)." wardErected fatigueVent, a
+        sprintf "Resolve Anchor reinforced +%d Arcane Ward, cleared -%d Cognitive Fatigue (+%d Inertia/Focus)." wardErected fatigueVent guardGain, a
 
       | IntuitionPerception isInsightful ->
         let confVent = if isInsightful then 25 else 20
         let provVent = if isInsightful then 20 else 15
         let a =
           { currentActor with ComplexForm = Some ComplexForm.PhantasmalDiffusion; Stance = CombatStance.AgilityStance }
-          |> Combatant.addGuardStacks 1
+          |> Combatant.addGuardStacks guardGain
           |> Combatant.updateMeters (fun m ->
             { m with
                 Confusion = m.Confusion - confVent
                 Provoke = m.Provoke - provVent })
-        sprintf "Intuition Perception dispelled -%d Confusion and calmed -%d Provoke, sharpening insight (+1 Inertia/Focus)." confVent provVent, a
+        sprintf "Intuition Perception dispelled -%d Confusion and calmed -%d Provoke, sharpening insight (+%d Inertia/Focus)." confVent provVent guardGain, a
 
     currentActor <- updatedActor
     events <- events @ [ CombatEvent.UnattackedStanceBenefit(currentActor.Id, sprintf "%A" defense, benefitMsg) ]
@@ -2866,18 +2871,19 @@ module ActionResolver =
         | DeployPreparation (prep, targetIdOpt) -> resolveDeployPreparation prep targetIdOpt upkeepActor target
 
       // The guard meters answer every action taken from the Nach, not just strikes: a fighter pinned
-      // there hardens whether they swing, brace, shift or recover. One stack per round of lost tempo,
-      // which is why the tempo gate sits here and not in `resolveAttack` — the stalemate was made of
-      // braces and recoveries, and those bought nothing. Tempo-gated on purpose: a flat every-action
-      // ramp hands a pack of N attackers N times the defensive gain (measured: GrandMaster Fighter vs a
-      // Veteran swarm collapsed from 41 mobs stood against to 9, at both 1% and 2.5% per stack).
+      // there hardens whether they swing, brace, shift or recover. The gain is one stack per foe faced,
+      // so a duel pays one and a four-strong pack pays four. Tempo-gated on purpose: the gate sits here
+      // and not in `resolveAttack` because the stalemate was made of braces and recoveries and those
+      // bought nothing, and because a flat every-action ramp multiplies the pack's free defensive gain
+      // (measured: GrandMaster Fighter vs a Veteran swarm collapsed from 41 mobs stood against to 9, at
+      // both 1% and 2.5% per stack). Re-measure that matchup if the pack gain is ever raised again.
       let guarded =
         match intent with
-        // The posture already paid its guard stack inside `resolveActiveDefense`; paying again here would
-        // hand a braced player two stacks for one round of lost tempo.
+        // The posture already paid its guard stacks inside `resolveActiveDefense`; paying again here would
+        // hand a braced player twice the stacks for one round of lost tempo.
         | ActiveDefense _ -> res
         | _ when upkeepActor.IsInNach ->
-          { res with Actor = Combatant.addGuardStacks 1 res.Actor }
+          { res with Actor = Combatant.addGuardStacks (max 1 upkeepActor.EnemiesFaced) res.Actor }
         | _ -> res
 
       { guarded with Events = upkeepEvents @ guarded.Events }

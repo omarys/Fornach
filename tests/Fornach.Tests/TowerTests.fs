@@ -690,3 +690,26 @@ let ``a tower run marks its player, so the ramp and guard meters actually compou
   Assert.Equal(1, ramped.Focus)
   Assert.Equal(1, ramped.Flow)
   Assert.Equal(1, ramped.Momentum)
+
+[<Fact>]
+let ``a defended round pays one guard stack per foe still standing`` () =
+  // Holding off a four-strong Blight Sprite pack has to be worth four times a duel, and the gain has to
+  // fall as the pack thins -- otherwise a Nach posture is worth the same against one sprite as against
+  // the pack that opened on you.
+  let duel = (Archetypes.findByName "Fighter" |> Option.get).Factory ()
+
+  let guardedBy foes =
+    let player = { duel with PlayerStyle = true; EnemiesFaced = foes }
+    let r = ActionResolver.resolveActiveDefense (ReflexSlip false) player player
+    r.Actor
+
+  Assert.Equal(1, (guardedBy 1).Inertia)
+  Assert.Equal(4, (guardedBy 4).Inertia)
+  Assert.Equal(4, (guardedBy 4).Focus)
+
+  // An unstated pack size (0) still pays the single stack a duel would, never nothing.
+  Assert.Equal(1, (guardedBy 0).Inertia)
+
+  // The guard ceiling is 25, so a full pack cannot be banked in one round only because it overshot.
+  Assert.Equal(25, (guardedBy 40).Inertia)
+  Assert.True(Combatant.GuardStackCap > Combatant.StackCap, "the guard must bank past the offense ramp")

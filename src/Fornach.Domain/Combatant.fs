@@ -92,6 +92,10 @@ type Combatant =
     /// True for combatants with player-style discipline: fluid stance / Complex Form transitions,
     /// tactical preparations, and a varied attack kit. Plain opposition leaves this false.
     PlayerStyle: bool
+    /// How many foes the player faces, stamped at the boundary that owns the pack. A defence taken from
+    /// the Nach pays one guard stack per foe, so a duel pays 1 and a four-strong pack pays 4. Zero means
+    /// "not stated" and pays 1, which is what every non-CLI path and every test gets.
+    EnemiesFaced: int
     /// Tactical tempo in the Vor / Nach paradigm
     Tempo: TacticalTiming
     /// True when staggered by Pain Shock, losing the next action/turn (ADR 0009)
@@ -234,8 +238,9 @@ type Combatant =
     // 10% it was ~1.9x the Momentum meter once Finesse's 2.5x crit was counted in.
     let momentumRamp = 1.0 + 0.01 * float (Math.Clamp(this.Momentum, 0, Combatant.StackCap))
     // The guard meters pay 2.5%/stack against the offensive ramp's 1%: acting from the Nach is a losing
-    // exchange on the attack, so it buys defence instead.
-    let guardRamp (stacks: int) = 1.0 + 0.025 * float (Math.Clamp(stacks, 0, Combatant.StackCap))
+    // exchange on the attack, so it buys defence instead. The rate is unchanged; the guard is simply
+    // allowed to bank 25 stacks instead of 5, so its ceiling is 1.625x rather than 1.125x.
+    let guardRamp (stacks: int) = 1.0 + 0.025 * float (Math.Clamp(stacks, 0, Combatant.GuardStackCap))
 
     let ramp =
       match stat with
@@ -316,6 +321,7 @@ type Combatant =
       MonsterFamily = None
       MonsterTraits = []
       PlayerStyle = false
+      EnemiesFaced = 0
       Tempo = TacticalTiming.Vor
       IsStaggered = false }
 
@@ -363,6 +369,7 @@ type Combatant =
       MonsterFamily = None
       MonsterTraits = []
       PlayerStyle = false
+      EnemiesFaced = 0
       Tempo = TacticalTiming.Vor
       IsStaggered = false }
 
@@ -385,8 +392,13 @@ type Combatant =
   static member updateMeters (updater: StatusMeters -> StatusMeters) (c: Combatant) =
     { c with Meters = updater c.Meters }
 
-  /// Every combat ramp meter shares one ceiling: five stacks, so a full pile cashes at 2.75x.
+  /// The offense ramp's ceiling: five stacks. Flow tops out at 1.30x (6%/stack), Momentum at 1.05x.
   static member StackCap = 5
+
+  /// The guard meters' own ceiling, deliberately above the offense ramp's: a defence taken from the Nach
+  /// is a losing exchange on the attack, so the defence it buys is allowed to bank deeper. At the same
+  /// 2.5%/stack the rate never changed, 25 stacks cash at 1.625x instead of 1.125x.
+  static member GuardStackCap = 25
 
   /// Raises both ramp meters together. Only the player compounds: `PlayerStyle` marks the player's kit,
   /// and the ramp is part of it, so opposition never leaves the baseline it spawned with.
@@ -405,8 +417,8 @@ type Combatant =
       c
     else
     { c with
-        Inertia = Math.Clamp(c.Inertia + delta, 0, Combatant.StackCap)
-        Focus = Math.Clamp(c.Focus + delta, 0, Combatant.StackCap) }
+        Inertia = Math.Clamp(c.Inertia + delta, 0, Combatant.GuardStackCap)
+        Focus = Math.Clamp(c.Focus + delta, 0, Combatant.GuardStackCap) }
 
   /// One stack off every meter: the end-of-turn decay when nothing is engaged.
   static member decayStacks (c: Combatant) =

@@ -45,7 +45,7 @@ module TowerGenerator =
       p.Y >= this.Y && p.Y < this.Y + this.Height
 
   /// Generates a complete Tower floor layout with open architectural plazas and no blocky caves
-  let generateFloorWithMode (seed: int) (floorNumber: int) (isStory: bool) : TowerFloor =
+  let generateFloorForPlane (seed: int) (floorNumber: int) (isStory: bool) (playerPlane: Plane) : TowerFloor =
     let rng = Random(seed + floorNumber * 1009)
 
     // 1. Determine Floor Theme
@@ -789,7 +789,7 @@ module TowerGenerator =
 
     // G. Dynamic World & Tower Floor Encounters (ADR 0004 Phase 3)
     let plazaCenters = plazas |> List.map (fun p -> p.Center)
-    let floorEncounters = WorldEvents.generateFloorEncounters theme floorNumber plazaCenters
+    let floorEncounters = WorldEvents.generateFloorEncounters theme floorNumber plazaCenters playerPlane
 
     for (encPos, enc) in floorEncounters do
       tiles <- Map.add encPos (Floor surface) tiles
@@ -821,6 +821,11 @@ module TowerGenerator =
       Visible = Set.empty.Add spawn
       SeenEnemies = Set.empty
       ActiveQuests = npc.Quest |> Option.toList }
+
+  /// Generates a complete Tower floor layout with open architectural plazas.
+  /// Assumes a Physical player for the vault's stat check; live runs use `generateFloorForPlane`.
+  let generateFloorWithMode (seed: int) (floorNumber: int) (isStory: bool) : TowerFloor =
+    generateFloorForPlane seed floorNumber isStory Plane.Physical
 
   /// Generates a complete Tower floor layout with open architectural plazas
   let generateFloor (seed: int) (floorNumber: int) : TowerFloor =

@@ -531,3 +531,44 @@ let ``Shrine communion resets player combat strain meters to zero`` () =
   let updatedState, events = TowerSession.stepPlayer Direction.East stateWithShrine
   Assert.Equal(StatusMeters.Zero, updatedState.Player.Meters)
   Assert.Contains(events, fun e -> match e with TowerEvent.ShrineActivated s -> s.Id = shrine.Id | _ -> false)
+
+/// A vault gates on the stat the archetype is *not* built around. The stat used to alternate by floor,
+/// so on every third floor a Fighter was handed Intellect and on the next two its own primary Finesse —
+/// the gate the `offTier` requirement was priced for only landed on the floors the rotation agreed with.
+[<Fact>]
+let ``vault stat checks ask the off-plane stat of the archetype`` () =
+  let physicalVaults =
+    [ for floorNum in 1..12 do
+        match (WorldEvents.createVault FloorTheme.QuarryPlazas floorNum Plane.Physical).Puzzle with
+        | VaultPuzzle.StatCheck (stat, _, _) -> floorNum, stat
+        | VaultPuzzle.KeyholeLock _ -> ()
+        | VaultPuzzle.MemoryCipher _ -> () ]
+
+  let mentalVaults =
+    [ for floorNum in 1..12 do
+        match (WorldEvents.createVault FloorTheme.QuarryPlazas floorNum Plane.Mental).Puzzle with
+        | VaultPuzzle.StatCheck (stat, _, _) -> floorNum, stat
+        | VaultPuzzle.KeyholeLock _ -> ()
+        | VaultPuzzle.MemoryCipher _ -> () ]
+
+  Assert.NotEmpty(physicalVaults)
+  Assert.NotEmpty(mentalVaults)
+
+  for floorNum, stat in physicalVaults do
+    Assert.True(
+      (Attributes.descriptorOf stat).Plane = Plane.Mental,
+      sprintf "floor %d asked a Physical archetype for %A, which is its own plane" floorNum stat)
+
+  for floorNum, stat in mentalVaults do
+    Assert.True(
+      (Attributes.descriptorOf stat).Plane = Plane.Physical,
+      sprintf "floor %d asked a Mental archetype for %A, which is its own plane" floorNum stat)
+
+  // The keystone lock still lands on every third vault, so the stat gate does not swallow it.
+  let keyholeFloors =
+    [ for floorNum in 1..12 do
+        match (WorldEvents.createVault FloorTheme.QuarryPlazas floorNum Plane.Physical).Puzzle with
+        | VaultPuzzle.KeyholeLock _ -> floorNum
+        | _ -> () ]
+
+  Assert.Equal<int list>([ 2; 5; 8; 11 ], keyholeFloors)

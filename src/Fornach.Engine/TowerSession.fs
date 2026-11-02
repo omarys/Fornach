@@ -587,7 +587,7 @@ module TowerSession =
     let player = { player with PlayerStyle = true }
 
     let floor =
-      TowerGenerator.generateFloorWithMode seed startFloor isStory
+      TowerGenerator.generateFloorForPlane seed startFloor isStory player.Plane
       |> rescaleFloorEnemiesWith depthCap bossOffset player
     let initial =
       { Player = player
@@ -620,7 +620,7 @@ module TowerSession =
     let depthCap, bossOffset = floorScalingFor state.IsStoryMode nextFloorNum
 
     let nextFloor =
-      TowerGenerator.generateFloorWithMode state.Seed nextFloorNum state.IsStoryMode
+      TowerGenerator.generateFloorForPlane state.Seed nextFloorNum state.IsStoryMode state.Player.Plane
       |> rescaleFloorEnemiesWith depthCap bossOffset state.Player
     let nextState =
       { state with
