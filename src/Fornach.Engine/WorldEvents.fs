@@ -229,12 +229,21 @@ module WorldEvents =
 
   /// Creates a sealed treasure vault guarding relics behind puzzles or stat checks
   let createVault (theme: FloorTheme) (floorNum: int) : VaultData =
+    // The vault asks for a stat at a share of the tier its floor's level carries, not at a flat
+    // `30 + floorNum * 2`. That flat number was mis-scaled at both ends: on floor 1 it demanded 32
+    // Intellect while a Fighter carries 22 and a Warrior 15, so every physical archetype walked past the
+    // first vault in the game; by floor 20 it asked for 70 while the tier it was gating had reached 201,
+    // so it had stopped gating anything. Half the primary is the tier an archetype can reach with its
+    // off-plane stat and the one it misses without it, which is the gate the vault means to be.
+    let _, _, offTier, _, _, _ = ProgressionScale.physicalStatsForLevel (max 1 floorNum)
+    let requirement = offTier
+
     let puzzle =
       match floorNum % 3 with
       | 0 ->
-        VaultPuzzle.StatCheck(StatId.Finesse, 30 + floorNum * 2, "A complex multi-dial clockwork tumbler requiring deft mechanical dexterity to bypass.")
+        VaultPuzzle.StatCheck(StatId.Finesse, requirement, "A complex multi-dial clockwork tumbler requiring deft mechanical dexterity to bypass.")
       | 1 ->
-        VaultPuzzle.StatCheck(StatId.Intellect, 30 + floorNum * 2, "An intricate geometric arcane matrix requiring rigorous analytical deduction to balance.")
+        VaultPuzzle.StatCheck(StatId.Intellect, requirement, "An intricate geometric arcane matrix requiring rigorous analytical deduction to balance.")
       | _ ->
         VaultPuzzle.KeyholeLock(sprintf "key_floor_%d" floorNum, sprintf "Floor %d Keystone" floorNum, "Carried by the hostile floor guardian.")
 
