@@ -141,7 +141,15 @@ module ActionResolver =
   /// of margin): a scratch is contact without control, and the striker keeps what it already holds.
   /// Returns updated attacker, updated defender, and whether the Vor changed hands.
   let resolveLandedTempo (attacker: Combatant) (defender: Combatant) (netHits: int) : Combatant * Combatant * bool =
-    if attacker.IsInNach && netHits >= 2 then
+    // Guard stacks are the reward for a defended round, so they should also be what makes the Vor
+    // expensive to steal: a braced defender is not stripped of the initiative by a narrow win. Every five
+    // stacks raises the margin the foe must win by, so a full guard of 25 demands seven net hits, which a
+    // single strike does not land. `addGuardStacks` no-ops off `PlayerStyle`, so enemies never bank them
+    // and this only ever protects the side that actually spent its turn defending.
+    let guardShelter = max defender.Inertia defender.Focus / 5
+    let stealMargin = 2 + guardShelter
+
+    if attacker.IsInNach && netHits >= stealMargin then
       Combatant.seizeVor attacker, Combatant.yieldVor defender, true
     elif attacker.IsInVor then
       // A striker that holds the Vor insists on it, so a stray second holder is put back in the Nach.

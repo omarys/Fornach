@@ -128,3 +128,29 @@ module TempoReclaimTests =
 
     Assert.Equal(0, rested.Meters.Exhaustion.Value)
     Assert.Equal(0, rested.Meters.Frustration.Value)
+
+  [<Fact>]
+  let ``Guard stacks raise the margin a foe needs to steal the Vor`` () =
+    // Reported case: 25 guard stacks, no damage taken, still pinned in the Nach. A braced defender was
+    // stripped of the tempo by any landed strike at all -- and `applyDamage` floors a soaked hit at 1
+    // damage, so "took no damage" and "lost the Vor anyway" were the same event. Guard stacks are earned
+    // by defending, so they are what the tempo is defended with.
+    let braced =
+      (TierFactory.createClassLevel CharacterClass.Fighter 25 |> player)
+      |> fun c -> { c with Tempo = TacticalTiming.Vor }
+      |> Combatant.addGuardStacks 25
+
+    let unguarded = { braced with Inertia = 0; Focus = 0 }
+    let foe = bandit () |> Combatant.yieldVor
+
+    let foeAfter, bracedAfter, stole = ActionResolver.resolveLandedTempo foe braced 3
+    Assert.False(stole, "a full guard must not be robbed by a narrow win")
+    Assert.True(bracedAfter.IsInVor, "the braced defender keeps the Vor")
+    Assert.True(foeAfter.IsInNach, "the narrow win leaves the foeman still in the Nach")
+
+    let _, unguardedAfter, stoleUnguarded = ActionResolver.resolveLandedTempo foe unguarded 3
+    Assert.True(stoleUnguarded, "an unguarded defender still loses the Vor to the same strike")
+    Assert.True(unguardedAfter.IsInNach, "the unguarded defender drops to the Nach")
+
+    let _, _, stoleFromBraced = ActionResolver.resolveLandedTempo foe braced 7
+    Assert.True(stoleFromBraced, "a decisive seven-hit win still takes the Vor from a full guard")

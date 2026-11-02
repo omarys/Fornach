@@ -359,12 +359,24 @@ module Program =
       choices
     else
       let counterStrike =
+        // The counter is whatever the player is actually fighting in. This used to read the class vector,
+        // so a Power-vector build that slipped into Agility Stance was offered a Force Strike gambit it
+        // had not trained for and would not have picked. Stance is written by the very defence that put
+        // the player in the Nach, which is exactly the vector the wager is being made in, and
+        // `AttackClassification.IsAllowedFor` gates on plane alone -- so any stance-driven strike is one
+        // the build can legally make.
+        let stanceVector =
+          match player.Stance with
+          | CombatStance.AgilityStance -> Vector.Agility
+          | CombatStance.DisciplineStance -> Vector.Discipline
+          | CombatStance.PowerStance -> Vector.Power
+
         if player.Plane = Physical then
-          match player.Class.Vector with
+          match stanceVector with
           | Vector.Agility -> "Finesse Cadence: Rapid Probing"
           | _ -> "Force Strike: Standard Cleave"
         else
-          match player.Class.Vector with
+          match stanceVector with
           | Vector.Agility -> "Guile Deception: Rhetorical Misdirection"
           | Vector.Discipline -> "Acumen Interrogation: Procedural Pressure"
           | _ -> "Authority Decree: Imperious Command"

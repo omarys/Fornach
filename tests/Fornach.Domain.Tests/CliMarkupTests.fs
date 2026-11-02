@@ -144,3 +144,28 @@ module CliMarkupTests =
         for choice in choices do
           let m = Markup(choice)
           Assert.NotNull(m)
+
+  [<Fact>]
+  let ``Seize Indes counter follows the stance the player is fighting in, not the class vector`` () =
+    // Reported case: an Agility-stance build was offered a Power Force Strike as its Indes counter. The
+    // offer read Class.Vector, so the gambit was made in a vector the player had not slipped into.
+    let enemy = Bestiary.slagHound.ToCombatant (CombatantId.New())
+
+    let slipped =
+      { StoryBosses.createProloguePlayer "berserker" with
+          Tempo = TacticalTiming.Nach
+          Stance = CombatStance.AgilityStance }
+
+    let counterOf (p: Combatant) =
+      Program.buildActionChoicesWithTelegraph p enemy None true
+      |> List.filter (fun c -> c.Contains("Seize Indes"))
+
+    let slippedCounter = counterOf slipped
+    Assert.Single(slippedCounter) |> ignore
+    Assert.Contains("Finesse Cadence", slippedCounter.Head)
+
+    // The same build braced in Power Stance is offered the Power counter.
+    let braced = { slipped with Stance = CombatStance.PowerStance }
+    let bracedCounter = counterOf braced
+    Assert.Single(bracedCounter) |> ignore
+    Assert.Contains("Force Strike", bracedCounter.Head)
