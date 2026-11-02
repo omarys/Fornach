@@ -47,6 +47,9 @@ module GuardRampTests =
     Assert.True(braced.Actor.IsInNach || braced.Actor.IsInVor)
     Assert.Equal(1, braced.Actor.Inertia)
     Assert.Equal(1, braced.Actor.Focus)
+    // A brace must not load the offense ramp -- that was the ambush bug where slipping showed Flow/Momentum.
+    Assert.Equal(0, braced.Actor.Momentum)
+    Assert.Equal(0, braced.Actor.Flow)
 
   [<Fact>]
   let ``the ramp and the guard meters rise independently`` () =

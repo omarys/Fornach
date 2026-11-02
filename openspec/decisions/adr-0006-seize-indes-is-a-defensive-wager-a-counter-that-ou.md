@@ -20,5 +20,3 @@ Losing costs more than bracing: 1.5x damage plus the whole ramp. Enemy AI does n
 
 > Recorded by openlore decisions on 2026-10-30
 > Decision ID: 407c5c5b
-
-

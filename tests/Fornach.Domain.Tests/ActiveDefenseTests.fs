@@ -112,8 +112,11 @@ module ActiveDefenseTests =
     Assert.True(outcome.Actor.Armor.Current > 20, "Braced FortitudeGuard must repair armor")
     // Recklessness bled
     Assert.True(outcome.Actor.Meters.Recklessness.Value < 40, "FortitudeGuard must bleed Recklessness")
-    // Momentum gained
-    Assert.Equal(1, outcome.Actor.Momentum)
+    // Guard meters gained -- a brace hardens, it does not load the offense ramp
+    Assert.Equal(1, outcome.Actor.Inertia)
+    Assert.Equal(1, outcome.Actor.Focus)
+    Assert.Equal(0, outcome.Actor.Momentum)
+    Assert.Equal(0, outcome.Actor.Flow)
     // Stance set to PowerStance
     Assert.Equal(CombatStance.PowerStance, outcome.Actor.Stance)
     // Seizes Vor
@@ -125,7 +128,7 @@ module ActiveDefenseTests =
     Assert.True(hasBenefitEvent, "UnattackedStanceBenefit event must be emitted")
 
   [<Fact>]
-  let ``Unattacked ReflexSlip vents overwhelm and exhaustion and sets flow`` () =
+  let ``Unattacked ReflexSlip vents overwhelm and exhaustion and hardens the guard`` () =
     let rogue =
       (TierFactory.createClassLevel CharacterClass.Rogue 1 |> player)
       |> fun c -> { c with Tempo = TacticalTiming.Nach }
@@ -142,7 +145,10 @@ module ActiveDefenseTests =
 
     Assert.True(outcome.Actor.Meters.Frustration.Value < 50, "ReflexSlip must vent Frustration")
     Assert.True(outcome.Actor.Meters.Exhaustion.Value < 50, "ReflexSlip must vent Exhaustion")
-    Assert.Equal(1, outcome.Actor.Flow)
+    Assert.Equal(1, outcome.Actor.Inertia)
+    Assert.Equal(1, outcome.Actor.Focus)
+    Assert.Equal(0, outcome.Actor.Flow)
+    Assert.Equal(0, outcome.Actor.Momentum)
     Assert.Equal(CombatStance.AgilityStance, outcome.Actor.Stance)
     Assert.True(outcome.Actor.IsInVor, "Unattacked active defense must seize the Vor")
 
