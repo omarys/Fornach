@@ -1019,9 +1019,13 @@ module Simulation =
             for j in i + 1 .. classes.Length - 1 do
               let clsA = classes.[i]
               let clsB = classes.[j]
-              // The peer matrix compares player builds, so both champions carry player-style discipline.
+              // Only the main character compounds the offense/guard ramps, so the matrix puts the player
+              // on side A and plain opposition on side B. Both sides used to be player-style, which let a
+              // class comparison measure stack mechanics only the protagonist is meant to have -- and made
+              // the matrix hypersensitive to guard tuning, since a long duel banked guard on both sides
+              // and stalled. `runHeadlessBatch` alternates turn order, so A is not simply the first mover.
               let factoryA () = { TierFactory.createClassTier clsA tier with PlayerStyle = true }
-              let factoryB () = { TierFactory.createClassTier clsB tier with PlayerStyle = true }
+              let factoryB () = TierFactory.createClassTier clsB tier
               let summary = runHeadlessBatch factoryA factoryB iterations roller
               matchupResults.[(tier, clsA, clsB)] <- summary
               task.Increment(1.0)

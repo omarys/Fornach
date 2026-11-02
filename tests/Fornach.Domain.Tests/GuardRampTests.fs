@@ -75,3 +75,29 @@ module GuardRampTests =
     let guarded = fighter () |> Combatant.addGuardStacks Combatant.StackCap
     Assert.Equal(Combatant.StackCap - 1, (guarded |> Combatant.decayStacks).Inertia)
     Assert.Equal(0, (guarded |> Combatant.clearStacks).Focus)
+
+  [<Fact>]
+  let ``opposition never compounds either ramp, however long the fight runs`` () =
+    // The ramps and the guard are the main character's kit. A plain template enemy must stay at zero no
+    // matter how many stacks are pushed at it -- otherwise a long fight hands the opposition the same
+    // compounding the player earns, and class-matrix comparisons start measuring a mechanic no enemy has.
+    let mob = TierFactory.createClassLevel CharacterClass.Fighter 5
+
+    Assert.False(mob.PlayerStyle, "plain opposition is not player-style")
+
+    let pushed =
+      mob
+      |> Combatant.addStacks 40
+      |> Combatant.addGuardStacks 40
+
+    Assert.Equal(0, pushed.Flow)
+    Assert.Equal(0, pushed.Momentum)
+    Assert.Equal(0, pushed.Inertia)
+    Assert.Equal(0, pushed.Focus)
+
+    // The player, given the same, banks both -- and each keeps its own ceiling.
+    let player = fighter () |> Combatant.addStacks 40 |> Combatant.addGuardStacks 40
+    Assert.Equal(Combatant.StackCap, player.Flow)
+    Assert.Equal(Combatant.StackCap, player.Momentum)
+    Assert.Equal(Combatant.GuardStackCap, player.Inertia)
+    Assert.Equal(Combatant.GuardStackCap, player.Focus)

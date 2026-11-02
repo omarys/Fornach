@@ -50,8 +50,11 @@ module PeerClassBalanceTests =
               yield (canonicalClasses.[i], canonicalClasses.[j]) ]
 
       for (clsA, clsB) in classPairs do
+        // Side A is the main character, side B is plain opposition: only the protagonist compounds the
+        // offense/guard ramps, so giving both sides player-style stacking measured a mechanic no enemy
+        // has and let guard tuning move the whole matrix. Turn order alternates, so A is not the first mover.
         let factoryA () = { TierFactory.createClassTier clsA tier with PlayerStyle = true }
-        let factoryB () = { TierFactory.createClassTier clsB tier with PlayerStyle = true }
+        let factoryB () = TierFactory.createClassTier clsB tier
 
         let summary = Simulation.runHeadlessBatch factoryA factoryB runsPerMatchup roller
         let winRateA = (float summary.WinsA / float summary.TotalIterations) * 100.0
@@ -125,7 +128,7 @@ module PeerClassBalanceTests =
       let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
       let runs = 50
       let factoryA () = { TierFactory.createClassTier CharacterClass.Fighter CombatTier.Master with PlayerStyle = true }
-      let factoryB () = { TierFactory.createClassTier CharacterClass.Mage CombatTier.Master with PlayerStyle = true }
+      let factoryB () = TierFactory.createClassTier CharacterClass.Mage CombatTier.Master
 
       let summary = Simulation.runHeadlessBatch factoryA factoryB runs roller
       let winRateA = (float summary.WinsA / float summary.TotalIterations) * 100.0
@@ -147,7 +150,7 @@ module PeerClassBalanceTests =
       for tier in [ CombatTier.Veteran; CombatTier.Master ] do
         let summary = Simulation.runHeadlessBatch
                         (fun () -> { TierFactory.createClassTier CharacterClass.Fighter tier with PlayerStyle = true })
-                        (fun () -> { TierFactory.createClassTier CharacterClass.Mage tier with PlayerStyle = true })
+                        (fun () -> TierFactory.createClassTier CharacterClass.Mage tier)
                         runs roller
         let fighterWinRate = (float summary.WinsA / float summary.TotalIterations) * 100.0
         output.WriteLine(sprintf "Fighter vs Mage (%A): Fighter Win Rate = %.1f%%, Avg TTK = %.2f" tier fighterWinRate summary.AvgRounds)
