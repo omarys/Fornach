@@ -140,18 +140,30 @@ module ActionResolver =
   /// alternation and no choice could change it. Now only a *decisive* answer turns the tempo (two hits
   /// of margin): a scratch is contact without control, and the striker keeps what it already holds.
   /// Returns updated attacker, updated defender, and whether the Vor changed hands.
+  /// The offence/defence stat each vector pairs with when a strike is resolved. Kept beside the tempo
+  /// rules so the two cannot drift apart.
+  let private tempoVectorStats: (Vector * StatId * StatId) list =
+    [ Vector.Power, Force, Fortitude
+      Vector.Agility, Finesse, Reflex
+      Vector.Discipline, Acumen, Resolve ]
+
+  /// True when one combatant's best possible roll in every vector still cannot reach the other's worst.
+  /// The cutoff is arithmetic and nothing else: while any overlap remains the lesser combatant can still
+  /// win the bind, and a win is a win however unlikely. Only once the contest is decided before the dice
+  /// does it cede the initiative instead of claiming it -- which is the one thing that stops a pack the
+  /// player massively outclasses from opening with a tempo they could never have taken.
+  let cedesInitiative (superior: Combatant) (lesser: Combatant) : bool =
+    tempoVectorStats
+    |> List.forall (fun (vector, offence, defence) ->
+      DicePool.cannotBeat vector (superior.GetCombatStat defence) (lesser.GetCombatStat offence))
+
   let resolveLandedTempo (attacker: Combatant) (defender: Combatant) (netHits: int) : Combatant * Combatant * bool =
     // Tempo is per engagement. A striker that already holds the Vor keeps it and does not touch the
     // defender at all: with several foes in the fight, that defender's tempo belongs to a different
     // pairing, so landing on it says nothing about its engagement with anyone else. Only a decisive win
     // from the Nach moves the tempo, and it moves it in this pairing alone.
     if attacker.IsInNach && netHits >= 2 then
-      if ProgressionScale.cedesVor defender.Level attacker.Level then
-        // Winning the bind is not enough against a superior: the outclassed striker cedes the claim
-        // instead of taking the tempo, so a Master's Vor is never moved by a Novice's good roll.
-        Combatant.yieldVor attacker, Combatant.seizeVor defender, true
-      else
-        Combatant.seizeVor attacker, Combatant.yieldVor defender, true
+      Combatant.seizeVor attacker, Combatant.yieldVor defender, true
     else
       attacker, defender, false
 

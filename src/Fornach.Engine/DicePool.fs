@@ -37,6 +37,26 @@ module DicePool =
   let computeFloorHits (statValue: int) : int =
     statValue / 15
 
+  /// The extremes a pool can actually produce for a vector: floor hits are guaranteed whatever lands,
+  /// and rolled hits run from nothing up to the vector's ceiling (a Power die scores double on a six,
+  /// every other vector scores at most one hit per die). `fst` is the worst roll, `snd` the best.
+  let hitBounds (vector: Vector) (statValue: int) (opposingStat: int) : int * int =
+    let floorHits = computeFloorHits statValue
+    let rolledCeiling =
+      match vector with
+      | Power -> computePoolSize statValue opposingStat * 2
+      | _ -> computePoolSize statValue opposingStat
+
+    floorHits, floorHits + rolledCeiling
+
+  /// True when the lesser combatant's best possible roll still cannot reach the greater's worst: the
+  /// contest is decided before the dice. The cutoff is arithmetic and nothing else -- while any overlap
+  /// remains the win is real, and a lucky novice that beats a master is awarded the win.
+  let cannotBeat (vector: Vector) (greaterStat: int) (lesserStat: int) : bool =
+    let _, lesserBest = hitBounds vector lesserStat greaterStat
+    let greaterWorst, _ = hitBounds vector greaterStat lesserStat
+    lesserBest < greaterWorst
+
   /// Power Vector: TN 5+ (5 counts as 1 hit; 6 counts as 2 hits)
   let private evaluatePower (dice: int list) : int list * int =
     let hits =

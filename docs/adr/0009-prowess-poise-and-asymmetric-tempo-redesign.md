@@ -92,6 +92,13 @@ against several foes is therefore **N separate duels sharing a turn**, not one f
 - **A surrounded player opens in the Nach** and can hold no Vor until a defence or counter wins one. This is
   the intended shape of an ambush, not a deadlock: the Nach menu still offers defences, recoveries and
   *Seize Indes*.
+- **An ambusher only takes the Vor if it could have taken it anyway.** Surprise grants the tempo to a foe
+  whose best possible roll can still reach the player's worst; once it cannot, the ambusher *cedes* the
+  initiative and the player opens holding it (`ActionResolver.cedesInitiative`, `DicePool.cannotBeat`).
+  The cutoff is arithmetic, not rank — a level-60 character labelled Novice can still reach a Master's
+  floor while a Veteran cannot, so the tier name is not a proxy for the boundary.
+- **A win is a win.** Whenever the dice allow the lesser combatant to take the Vor, it keeps it: the cede
+  only applies where the contest is decided before the roll, never as a clawback of a won bind.
 - **Future:** holding more than one Vor at once is gated on `Prowess` against the foes' `Prowess`/`Instinct`,
   and is deliberately not implemented yet.
 

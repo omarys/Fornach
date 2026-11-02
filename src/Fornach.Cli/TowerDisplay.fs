@@ -1775,11 +1775,8 @@ module TowerDisplay =
               // here was in view a moment ago, so each one holds the Vor against the player and the player
               // opens in the Nach holding none -- unless the player outclasses it, in which case the
               // ambusher cedes the initiative instead.
-              let playerLevel = state.Player.Level
-
-              let cedesLevel (level: int) = ProgressionScale.cedesVor playerLevel level
-
-              let packCedes = spawned |> List.forall (fun e -> cedesLevel e.Combatant.Level)
+              let packCedes =
+                spawned |> List.forall (fun e -> ActionResolver.cedesInitiative state.Player e.Combatant)
 
               state <-
                 { state with
@@ -1793,7 +1790,7 @@ module TowerDisplay =
                 state.CurrentFloor.FloorNumber
                 (spawned
                  |> List.map (fun e ->
-                   if cedesLevel e.Combatant.Level then
+                   if ActionResolver.cedesInitiative state.Player e.Combatant then
                      { e with Combatant = Combatant.yieldVor e.Combatant }
                    else
                      { e with Combatant = Combatant.seizeVor e.Combatant }))

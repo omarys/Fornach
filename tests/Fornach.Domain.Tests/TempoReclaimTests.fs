@@ -158,31 +158,34 @@ module TempoReclaimTests =
     Assert.True(strikerAfter.IsInVor)
     Assert.True(holderAfter.IsInNach)
   [<Fact>]
-  let ``Only the tier immediately below still threatens a superior's Vor`` () =
-    // Rank has to mean more than bigger numbers: two tiers beneath and a combatant cedes the initiative
-    // outright, while the adjacent tier below is still a live threat. That is the boundary the design
-    // draws -- a Veteran can be ambushed, a Master cannot be ambushed by anything below a Veteran.
-    Assert.True(ProgressionScale.cedesVor 100 1, "a Novice cedes to a Master")
-    Assert.True(ProgressionScale.cedesVor 200 1, "a Novice cedes to a GrandMaster")
-    Assert.False(ProgressionScale.cedesVor 100 40, "a Veteran is still a threat to a Master")
-    Assert.False(ProgressionScale.cedesVor 40 1, "a Novice can still ambush a Veteran")
-    Assert.False(ProgressionScale.cedesVor 100 100, "equals contest the Vor normally")
+  let ``The cutoff is arithmetic: ceding needs the lesser best to miss the greater worst`` () =
+    // Floor hits are guaranteed, so the greater's worst roll is its floor; a Power pool scores double per
+    // die on a six, so the lesser's best is its floor plus twice its pool. Overlap of a single point is
+    // enough for the lesser combatant to win, and a possible win is a real win.
+    let greaterWorst, _ = DicePool.hitBounds Vector.Power 300 0
+    let _, lesserBest = DicePool.hitBounds Vector.Power 0 300
+
+    Assert.True(lesserBest < greaterWorst, "a pool of nothing cannot reach a 300-stat floor")
+    Assert.True(DicePool.cannotBeat Vector.Power 300 0)
+
+    // 15 stat points is one guaranteed hit; the lesser side there still overflows it with rolled dice.
+    let greaterWorstNear, _ = DicePool.hitBounds Vector.Power 15 0
+    let _, lesserBestNear = DicePool.hitBounds Vector.Power 0 15
+
+    Assert.True(lesserBestNear >= greaterWorstNear, "one guaranteed hit is still reachable")
+    Assert.False(DicePool.cannotBeat Vector.Power 15 0)
 
   [<Fact>]
-  let ``An outclassed striker that wins the bind cedes the Vor instead`` () =
+  let ``A novice that wins the bind keeps the win`` () =
+    // The rule is about who can win at all, not about rank: once the dice allow the win, taking the Vor
+    // is not clawed back from the underdog.
     let master =
       (TierFactory.createClassLevel CharacterClass.Warrior 100 |> player)
       |> fun c -> { c with Tempo = TacticalTiming.Nach }
 
     let novice = TierFactory.createClassLevel CharacterClass.Fighter 1 |> Combatant.yieldVor
-    let noviceAfter, masterAfter, moved = ActionResolver.resolveLandedTempo novice master 5
+    let noviceAfter, masterAfter, moved = ActionResolver.resolveLandedTempo novice master 2
 
-    Assert.True(moved, "the tempo does move -- it moves the other way")
-    Assert.True(masterAfter.IsInVor, "the Master keeps the Vor against a decisive Novice strike")
-    Assert.False(noviceAfter.IsInVor, "the outclassed striker cedes the claim")
-
-    let veteran = TierFactory.createClassLevel CharacterClass.Fighter 40 |> Combatant.yieldVor
-    let _, masterAfterVeteran, movedVeteran = ActionResolver.resolveLandedTempo veteran master 5
-
-    Assert.True(movedVeteran)
-    Assert.True(masterAfterVeteran.IsInNach, "a Veteran is close enough to take the Vor from a Master")
+    Assert.True(moved)
+    Assert.True(noviceAfter.IsInVor, "a Novice that wins the bind takes the Vor")
+    Assert.True(masterAfter.IsInNach)
