@@ -154,3 +154,24 @@ module TempoReclaimTests =
 
     let _, _, stoleFromBraced = ActionResolver.resolveLandedTempo foe braced 7
     Assert.True(stoleFromBraced, "a decisive seven-hit win still takes the Vor from a full guard")
+
+  [<Fact>]
+  let ``An insisting Vor holder cannot dump a braced defender`` () =
+    // Reported case: an ambush pack where every sprite held the Vor. The insist branch had no margin at
+    // all, so the first chip hit from any of them put a braced player back in the Nach even when the
+    // strike did zero damage. It now needs the same margin a seizure does.
+    let braced =
+      (TierFactory.createClassLevel CharacterClass.Fighter 25 |> player)
+      |> fun c -> { c with Tempo = TacticalTiming.Vor }
+      |> Combatant.addGuardStacks 25
+
+    let insisting = bandit () |> Combatant.seizeVor
+
+    let _, bracedAfter, moved = ActionResolver.resolveLandedTempo insisting braced 1
+    Assert.False(moved, "an insisting holder moves nobody at this margin")
+    Assert.True(bracedAfter.IsInVor, "the braced defender keeps the Vor against an insist")
+
+    let _, unguardedAfter, _ =
+      ActionResolver.resolveLandedTempo insisting { braced with Inertia = 0; Focus = 0 } 3
+
+    Assert.True(unguardedAfter.IsInNach, "an unguarded defender is still put back in the Nach")

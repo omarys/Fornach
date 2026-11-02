@@ -151,8 +151,11 @@ module ActionResolver =
 
     if attacker.IsInNach && netHits >= stealMargin then
       Combatant.seizeVor attacker, Combatant.yieldVor defender, true
-    elif attacker.IsInVor then
-      // A striker that holds the Vor insists on it, so a stray second holder is put back in the Nach.
+    elif attacker.IsInVor && netHits >= stealMargin then
+      // A striker that holds the Vor insists on it, so a stray second holder is put back in the Nach --
+      // but only on the same margin a seizure needs. Ungated, this branch was a free dump on any landing
+      // hit, which is what let a pack of Vor-holding sprites shove a braced player out of the tempo every
+      // single round even for zero damage.
       attacker, Combatant.yieldVor defender, false
     else
       attacker, defender, false

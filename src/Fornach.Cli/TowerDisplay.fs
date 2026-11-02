@@ -1775,10 +1775,21 @@ module TowerDisplay =
               // here was in view a moment ago, so the pack holds the Vor and the player opens in the Nach.
               state <- { state with Player = Combatant.yieldVor state.Player }
 
+              // One foe carries the initiative. Every spawn arrives holding the Vor by constructor
+              // default, and `resolveLandedTempo` lets a holder "insist" on it, so with several holders
+              // any one of them dumped a player who had already seized the tempo back. `TowerSession`'
+              // own approach path picks a single ambusher for the same reason; this path did not, which
+              // is how a braced player stayed pinned in the Nach for the whole fight.
+              let opener = spawned |> List.tryHead |> Option.map (fun e -> e.Id)
+
               handleGroup
                 state.CurrentFloor.FloorNumber
                 (spawned
-                 |> List.map (fun e -> { e with Combatant = Combatant.seizeVor e.Combatant }))
+                 |> List.map (fun e ->
+                   if Some e.Id = opener then
+                     { e with Combatant = Combatant.seizeVor e.Combatant }
+                   else
+                     { e with Combatant = Combatant.yieldVor e.Combatant }))
 
             | TowerEvent.TrapTriggered(_, msg) ->
               AnsiConsole.MarkupLine(sprintf "\n[bold red]⚠ %s[/]" msg)
