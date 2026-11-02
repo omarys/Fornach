@@ -490,12 +490,13 @@ module Simulation =
         condition <- MoraleDepleted
       else
         // Phase 2: Swarm Turn (All surviving mob members attack Solo concurrently)
-        // When BastionZoneControl is active, only the 3 frontline tiles in front of the Warden can swing this round.
+        // Poise sets the frontage: how many bodies can reach the solo at once, from eight down to one.
+        // When BastionZoneControl is active, only the 3 frontline tiles in front of the Warden can swing.
         // Each clone that vanishes/shatters blocks that tile space until the end of the round!
-        // Hard positional limit: at most 8 enemies can swing at the solo (the eight surrounding tiles).
         let initialMaxSwings =
-          if solo.HasActivePreparation PreparationType.BastionZoneControl then 3
-          else Math.Min(8, mob.Length)
+          let frontage = Math.Min(solo.Frontage, mob.Length)
+          if solo.HasActivePreparation PreparationType.BastionZoneControl then Math.Min(3, frontage)
+          else frontage
 
         let mutable availableSwings = initialMaxSwings
         let mutable priorDefenses = 0
@@ -548,6 +549,7 @@ module Simulation =
           else
             mob <- mob |> List.mapi (fun i m -> if i = mobIdx then newAttacker else m)
             priorDefenses <- priorDefenses + 1
+            peakPenalty <- Math.Max(peakPenalty, priorDefenses)
             mobIdx <- mobIdx + 1
 
         // Phase 3: Solo Upkeep at end of round
@@ -1313,9 +1315,13 @@ module Simulation =
 
       // The climber is the protagonist, not a mob. `resolveMentalDefenseFor` picks its player branch off
       // this name, and a generic class like Rogue would otherwise be defended as an enemy — which is how
-      // the early-level enemy relief below ended up shaving a third off the Rogue's own guard.
+      // the early-level enemy relief below ended up shaving a third off the Rogue's own guard. `PlayerStyle`
+      // is the same distinction for the ramp: the climb harness must build a player, or the protagonist
+      // climbs with the opposition's flat, non-compounding stats.
       let mutable player =
-        { TierFactory.createClassLevel playerClass 1 with Name = "Protagonist" }
+        { TierFactory.createClassLevel playerClass 1 with
+            Name = "Protagonist"
+            PlayerStyle = true }
         |> Combatant.seizeVor
       let mutable floor = 1
       let mutable alive = true

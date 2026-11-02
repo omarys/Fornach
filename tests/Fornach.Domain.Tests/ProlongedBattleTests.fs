@@ -22,12 +22,14 @@ module ProlongedBattleTests =
 
   let createFighter force fort finesse reflex prowess poise =
     Combatant.create (CombatantId.New()) "TestFighter" 2000 2000 (fighterStats force fort finesse reflex prowess poise)
+    |> fun c -> { c with PlayerStyle = true }
 
   /// Same stat spread at an explicit progression level — the Attack of Opportunity budget scales
   /// with level, so AoO tests need a leveled defender.
   let createFighterAtLevel level force fort finesse reflex prowess poise =
     Combatant.createWithClass (CombatantId.New()) "TestFighter" 2000 2000
       (fighterStats force fort finesse reflex prowess poise) CharacterClass.Warrior level
+    |> fun c -> { c with PlayerStyle = true }
 
   [<Fact>]
   let ``a disarm holding exactly the required stacks is not reported as failed`` () =
@@ -434,16 +436,28 @@ module ProlongedBattleTests =
     Assert.Equal(Some "Agility", aooVector resAgility)
 
   [<Fact>]
-  let ``Attack of opportunity capacity is one per ten levels after 20 and caps at eight`` () =
-    let capacity level = (createFighterAtLevel level 50 50 50 50 50 50).AttackOfOpportunityCapacity
+  let ``Frontage is bought with Poise, from eight approaches down to one`` () =
+    let frontage poise = (createFighterAtLevel 100 50 50 50 50 50 poise).Frontage
 
-    Assert.Equal(0, capacity 1)
-    Assert.Equal(0, capacity 20)
-    Assert.Equal(1, capacity 30)
-    Assert.Equal(4, capacity 60)
-    Assert.Equal(7, capacity 90)
-    Assert.Equal(8, capacity 100)
+    Assert.Equal(8, frontage 45) // a raw Novice: every surrounding tile can reach it
+    Assert.Equal(7, frontage 100)
+    Assert.Equal(6, frontage 201) // Veteran
+    Assert.Equal(4, frontage 441) // Master Fighter
+    Assert.Equal(1, frontage 841) // GrandMaster: a single approach lane left
+    Assert.Equal(1, frontage 4041) // Legend: the floor, because frontage is never immunity
+
+  [<Fact>]
+  let ``Attack of opportunity capacity is bought with Prowess and caps at eight`` () =
+    let capacity prowess = (createFighterAtLevel 100 50 50 50 50 prowess 50).AttackOfOpportunityCapacity
+
+    // A raw Novice's 40-45 Prowess answers nothing; a Veteran's 200 fills the eight surrounding tiles.
+    Assert.Equal(0, capacity 30)
+    Assert.Equal(0, capacity 40)
+    Assert.Equal(1, capacity 60)
+    Assert.Equal(2, capacity 90)
+    Assert.Equal(5, capacity 140)
     Assert.Equal(8, capacity 200)
+    Assert.Equal(8, capacity 841)
 
   [<Fact>]
   let ``Attack of opportunity budget is spent one flanker at a time and stops at capacity`` () =
@@ -467,7 +481,7 @@ module ProlongedBattleTests =
   let ``Fully surrounded level 100 defender answers eight flankers and no more`` () =
     let roller = fixedRoller 1
     let flanker = createFighter 40 40 30 30 30 30
-    let grandmaster = createFighterAtLevel 100 50 320 140 130 90 85
+    let grandmaster = createFighterAtLevel 100 50 320 140 130 200 85
 
     let aoo (priorDefenses: int) =
       ActionResolver.resolveEx roller (StandardAttack (ForceStrike false)) flanker grandmaster priorDefenses
@@ -649,6 +663,7 @@ module ProlongedBattleTests =
         Acumen, acumen; Composure, composure
       ]
     Combatant.create id "TestMage" 2000 2000 stats
+    |> fun c -> { c with PlayerStyle = true }
 
   [<Fact>]
   let ``Power / Intellect magic user deals high Cataclysm damage and splashes to swarm in group turn`` () =

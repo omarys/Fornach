@@ -13,7 +13,10 @@ module StudyStackSpendTests =
 
   let private topRoll (_: int) (_: int) = 6
 
-  let private master () = TierFactory.createClassTier CharacterClass.Fighter CombatTier.Master
+  /// A ramp fixture is a stand-in for the player: only `PlayerStyle` combatants compound.
+  let private master () =
+    TierFactory.createClassTier CharacterClass.Fighter CombatTier.Master
+    |> fun c -> { c with PlayerStyle = true }
 
   let private spentBy (res: ActionResult) =
     res.Events

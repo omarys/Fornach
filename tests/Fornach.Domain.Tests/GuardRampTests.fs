@@ -6,7 +6,11 @@ open Fornach.Engine
 
 module GuardRampTests =
 
-  let private fighter () = TierFactory.createClassLevel CharacterClass.Fighter 5
+  // These fixtures stand in for the player: the ramp and the guard meters are the player's kit, so a
+  // template enemy would (correctly) refuse to compound.
+  let private fighter () =
+    TierFactory.createClassLevel CharacterClass.Fighter 5
+    |> fun c -> { c with PlayerStyle = true }
 
   [<Fact>]
   let ``a whiff in the Vor and a swing from the Nach both buy a guard stack`` () =
@@ -22,6 +26,7 @@ module GuardRampTests =
           Acumen, 50; Composure, poise
         ]
       Combatant.create (CombatantId.New()) "Mirrored" 9000 9000 stats
+      |> fun c -> { c with PlayerStyle = true }
     // A wall of Poise the strike cannot penetrate: the whiff branch, from the Vor.
     let whiffed = ActionResolver.resolve roller (ActionIntent.StandardAttack(ForceStrike false)) (make 50 50) (make 900 50)
     Assert.Equal(1, whiffed.Actor.Inertia)

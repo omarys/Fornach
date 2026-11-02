@@ -93,7 +93,7 @@ module CombatTacticsTests =
   let ``Raise Shield fortifies armor soak and feeds the ramp`` () =
     let damagedPlayer =
       let p = TierFactory.createClassLevel CharacterClass.Fighter 30
-      { p with Armor = { p.Armor with Current = 10 } }
+      { p with Armor = { p.Armor with Current = 10 }; PlayerStyle = true }
       |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness + 40 })
 
     let dummyTarget = TierFactory.createClassLevel CharacterClass.Warrior 30

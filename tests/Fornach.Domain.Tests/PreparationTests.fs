@@ -22,6 +22,7 @@ module PreparationTests =
         Acumen, acumen; Composure, composure
       ]
     Combatant.createWithClass id "TestFighter" 2000 2000 stats charClass level
+    |> fun c -> { c with PlayerStyle = true }
 
   let createStandardFighter (charClass: CharacterClass) (level: int) =
     createFighterWithClass charClass level 50 50 50 50 50 50 50 50 50 50 50 50
@@ -860,7 +861,11 @@ module PreparationTests =
 
   [<Fact>]
   let ``1vsN: GrandMaster Strategist with Heraldic Treatise tops out the ramp across a swarm of 5 Novice Warriors`` () =
-    let strategist = TierFactory.createClassTier CharacterClass.Mage GrandMaster
+    // The strategist is the player in this matchup: the ramp is the player's kit, so the fixture has to
+    // carry it or the treatise has nothing to fill.
+    let strategist =
+      TierFactory.createClassTier CharacterClass.Mage GrandMaster
+      |> fun c -> { c with PlayerStyle = true }
     let primaryNovice = TierFactory.createClassTier CharacterClass.Warrior Novice
     let flankers = List.init 4 (fun _ -> TierFactory.createClassTier CharacterClass.Warrior Novice)
     let roller = fixedRoller 3

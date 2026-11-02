@@ -1747,11 +1747,10 @@ module ActionResolver =
 
         if roller 1 100 <= effectiveTriggerChance then
 
-          // Damage rides the margin as well as the interceptor's own stat: a flanker whose guard is far
-          // below the defender's vector eats a harder reaction than one who nearly matches it.
-          let baseDmg =
-            if vectorName = "Agility" then float defFinesse * 0.65
-            else float defProwess * 0.75
+          // Damage rides the margin as well as the interceptor's own reach. The vector only decides whether
+          // the defender can react at all; Prowess is what a reactive strike is thrown with, so it sets the
+          // weight in either case.
+          let baseDmg = float (currentTarget.GetStat Prowess) * 0.70
           let aooDmg = Math.Max(10, int (Math.Round(baseDmg + float delta * 0.5)))
 
           currentActor <- { currentActor with Health = currentActor.Health.ApplyDelta -aooDmg }

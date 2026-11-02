@@ -6,6 +6,10 @@ open Fornach.Engine
 
 module ActiveDefenseTests =
 
+  /// Both sides of these fixtures stand in for the player: only `PlayerStyle` combatants compound the
+  /// ramp and the guard meters, and these tests pin what those meters do.
+  let private player (c: Combatant) = { c with PlayerStyle = true }
+
   let private fixedRoller (result: int) : DiceRoller =
     fun _min _max -> result
 
@@ -13,10 +17,10 @@ module ActiveDefenseTests =
   let ``FortitudeGuard counters ForceStrike with 25 percent mitigation and seizes Vor`` () =
     let roller = fixedRoller 5
     let attacker =
-      TierFactory.createClassLevel CharacterClass.Warrior 1
+      (TierFactory.createClassLevel CharacterClass.Warrior 1 |> player)
       |> fun c -> { c with Tempo = TacticalTiming.Vor }
     let defender =
-      TierFactory.createClassLevel CharacterClass.Fighter 1
+      (TierFactory.createClassLevel CharacterClass.Fighter 1 |> player)
       |> fun c -> { c with Tempo = TacticalTiming.Nach }
 
     let atkIntent = StandardAttack (ForceStrike false)
@@ -41,10 +45,10 @@ module ActiveDefenseTests =
   let ``ReflexSlip counters FinesseCadence with 25 percent mitigation and seizes Vor`` () =
     let roller = fixedRoller 5
     let attacker =
-      TierFactory.createClassLevel CharacterClass.Rogue 1
+      (TierFactory.createClassLevel CharacterClass.Rogue 1 |> player)
       |> fun c -> { c with Tempo = TacticalTiming.Vor }
     let defender =
-      TierFactory.createClassLevel CharacterClass.Fighter 10
+      (TierFactory.createClassLevel CharacterClass.Fighter 10 |> player)
       |> fun c -> { c with Tempo = TacticalTiming.Nach }
 
     let atkIntent = StandardAttack (FinesseCadence false)
@@ -66,8 +70,8 @@ module ActiveDefenseTests =
   [<Fact>]
   let ``Active defenses are vulnerable to mismatched attack vectors`` () =
     let roller = fixedRoller 5
-    let attacker = TierFactory.createClassLevel CharacterClass.Rogue 1
-    let defender = TierFactory.createClassLevel CharacterClass.Fighter 1
+    let attacker = (TierFactory.createClassLevel CharacterClass.Rogue 1 |> player)
+    let defender = (TierFactory.createClassLevel CharacterClass.Fighter 1 |> player)
 
     // Finesse cadence vs Fortitude guard (wrong affinity)
     let outcome =
@@ -91,7 +95,7 @@ module ActiveDefenseTests =
   [<Fact>]
   let ``Unattacked FortitudeGuard repairs armor and bleeds recklessness`` () =
     let fighter =
-      TierFactory.createClassLevel CharacterClass.Fighter 1
+      (TierFactory.createClassLevel CharacterClass.Fighter 1 |> player)
       |> fun c ->
         { c with
             Armor = ArmorIntegrity.Create 50 |> fun a -> a.Shred 30
@@ -99,7 +103,7 @@ module ActiveDefenseTests =
       |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness + 40 })
 
     let opponent =
-      TierFactory.createClassLevel CharacterClass.Warrior 1
+      (TierFactory.createClassLevel CharacterClass.Warrior 1 |> player)
       |> fun c -> { c with Tempo = TacticalTiming.Nach }
 
     let outcome = ActionResolver.resolveActiveDefense (FortitudeGuard true) fighter opponent
@@ -123,7 +127,7 @@ module ActiveDefenseTests =
   [<Fact>]
   let ``Unattacked ReflexSlip vents overwhelm and exhaustion and sets flow`` () =
     let rogue =
-      TierFactory.createClassLevel CharacterClass.Rogue 1
+      (TierFactory.createClassLevel CharacterClass.Rogue 1 |> player)
       |> fun c -> { c with Tempo = TacticalTiming.Nach }
       |> Combatant.updateMeters (fun m ->
         { m with
@@ -131,7 +135,7 @@ module ActiveDefenseTests =
             Exhaustion = m.Exhaustion + 50 })
 
     let opponent =
-      TierFactory.createClassLevel CharacterClass.Warrior 1
+      (TierFactory.createClassLevel CharacterClass.Warrior 1 |> player)
       |> fun c -> { c with Tempo = TacticalTiming.Nach }
 
     let outcome = ActionResolver.resolveActiveDefense (ReflexSlip true) rogue opponent
@@ -146,10 +150,10 @@ module ActiveDefenseTests =
   let ``Mental plane active defenses ResolveAnchor and IntuitionPerception counter mental attacks`` () =
     let roller min max = if max = 100 then 100 else 5
     let attacker =
-      TierFactory.createClassLevel CharacterClass.Mage 1
+      (TierFactory.createClassLevel CharacterClass.Mage 1 |> player)
       |> fun c -> { c with Tempo = TacticalTiming.Vor }
     let defender =
-      TierFactory.createClassLevel CharacterClass.Mage 1
+      (TierFactory.createClassLevel CharacterClass.Mage 1 |> player)
       |> fun c -> { c with Tempo = TacticalTiming.Nach }
 
     // ResolveAnchor counters ArcaneCataclysm (Power)
@@ -186,10 +190,10 @@ module ActiveDefenseTests =
   let ``Decoy interception absorbs blow and yields Vor to defender`` () =
     let roller min max = if max = 100 then 1 else 3
     let attacker =
-      TierFactory.createClassLevel CharacterClass.Warrior 1
+      (TierFactory.createClassLevel CharacterClass.Warrior 1 |> player)
       |> fun c -> { c with Tempo = TacticalTiming.Vor }
     let defender =
-      TierFactory.createClassLevel CharacterClass.Mage 1
+      (TierFactory.createClassLevel CharacterClass.Mage 1 |> player)
       |> fun c -> { c with Tempo = TacticalTiming.Nach; MirrorClones = 1 }
 
     let outcome =
@@ -216,10 +220,10 @@ module ActiveDefenseTests =
     // Roller returns 1 so 1d100 <= counterChance succeeds
     let roller _min _max = 1
     let attacker =
-      TierFactory.createClassLevel CharacterClass.Warrior 1
+      (TierFactory.createClassLevel CharacterClass.Warrior 1 |> player)
       |> fun c -> { c with Tempo = TacticalTiming.Vor }
     let defender =
-      TierFactory.createClassLevel CharacterClass.Fighter 10
+      (TierFactory.createClassLevel CharacterClass.Fighter 10 |> player)
       |> fun c ->
         { c with
             Tempo = TacticalTiming.Nach
@@ -246,15 +250,15 @@ module ActiveDefenseTests =
   let ``BestiaryKnowledge adds targeted discipline bonus against matching enemy species`` () =
     let roller _min _max = 50
     let wolfTarget =
-      TierFactory.createClassLevel CharacterClass.Warrior 1
+      (TierFactory.createClassLevel CharacterClass.Warrior 1 |> player)
       |> fun c -> { c with Name = "Lv.1 Forest Wolf" }
     let banditTarget =
-      TierFactory.createClassLevel CharacterClass.Warrior 1
+      (TierFactory.createClassLevel CharacterClass.Warrior 1 |> player)
       |> fun c -> { c with Name = "Lv.1 Bandit" }
 
     // Attacker with 0 Prowess but +20 BestiaryKnowledge against "Forest Wolf"
     let attacker =
-      TierFactory.createClassLevel CharacterClass.Fighter 1
+      (TierFactory.createClassLevel CharacterClass.Fighter 1 |> player)
       |> fun c ->
         let prog = { c.Progression with BestiaryKnowledge = Map [ "Forest Wolf", 20 ] }
         { c with Progression = prog }
@@ -274,10 +278,10 @@ module ActiveDefenseTests =
     let roller = fixedRoller 5
     // The defender outclasses the attacker, so its counter out-rolls the incoming strike outright.
     let attacker =
-      TierFactory.createClassLevel CharacterClass.Warrior 1
+      (TierFactory.createClassLevel CharacterClass.Warrior 1 |> player)
       |> fun c -> { c with Tempo = TacticalTiming.Vor }
     let defender =
-      TierFactory.createClassLevel CharacterClass.Fighter 40
+      (TierFactory.createClassLevel CharacterClass.Fighter 40 |> player)
       |> fun c -> { c with Tempo = TacticalTiming.Nach }
 
     let atkIntent = StandardAttack (ForceStrike false)
@@ -305,10 +309,10 @@ module ActiveDefenseTests =
   let ``Seize Indes that loses the exchange lands half again as hard and spends every stack`` () =
     let roller = fixedRoller 5
     let attacker =
-      TierFactory.createClassLevel CharacterClass.Warrior 40
+      (TierFactory.createClassLevel CharacterClass.Warrior 40 |> player)
       |> fun c -> { c with Tempo = TacticalTiming.Vor }
     let defender =
-      TierFactory.createClassLevel CharacterClass.Fighter 1
+      (TierFactory.createClassLevel CharacterClass.Fighter 1 |> player)
       |> fun c -> { c with Tempo = TacticalTiming.Nach; Health = Pool.Create 1_000_000 }
       |> Combatant.addStacks 3
 

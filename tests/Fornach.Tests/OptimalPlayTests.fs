@@ -118,7 +118,22 @@ module OptimalPlayer =
     let kills = resolved |> List.filter isBeaten |> List.length
     let ramp = (res.Actor.Momentum + res.Actor.Flow) - (solo.Momentum + solo.Flow)
     let retookVor = if res.Actor.IsInVor && solo.IsInNach then 20.0 else 0.0
-    let died = if isBeaten res.Actor then -1e6 else 0.0
+
+    // A meter at 100 collapses the fighter, and a collapsed fighter is executed. The scorer priced only
+    // damage and the pack's answer, so it kept picking gambits whose self-tax killed the fighter it was
+    // supposed to be optimising for — Basalt Eruption alone costs +25 Recklessness, +20 Exhaustion and
+    // +30 Frustration. Every caster run ended the same way: Recklessness reached 100 on round three or
+    // four and the pack executed a collapsed mage.
+    let collapses =
+      [ res.Actor.Meters.Recklessness
+        res.Actor.Meters.Exhaustion
+        res.Actor.Meters.Frustration
+        res.Actor.Meters.CognitiveFatigue
+        res.Actor.Meters.Confusion
+        res.Actor.Meters.Provoke ]
+      |> List.exists (fun m -> m.Value >= 100)
+
+    let died = if isBeaten res.Actor || collapses then -1e6 else 0.0
 
     // A foe this action killed does not get to answer it.
     let stillStanding =

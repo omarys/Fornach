@@ -31,8 +31,14 @@ module MonteCarloSwarmTests =
     // inherited Shockwave Slam cleaves the press down in ~3 rounds, where the pre-reduction Bastion+Buckler
     // kit ground out ~51 rounds at 114.8 AoOs (2.2 per round). The interception RATE is the mechanic the
     // press asserts, and it rose to ~3.7 per round.
+    // Frontage is Poise-driven now: at Poise 841 a Grandmaster Fighter is reachable by one warrior at a
+    // time, so the press never becomes a flank. An Attack of Opportunity is the punishment for a flanker
+    // arriving, and there is never a second body to punish — the count is zero by design, not by failure.
+    // What the press still has to prove is that it is held, which the win-rate and elimination bars above
+    // measure. The interception rate this test used to pin now belongs to champions whose Poise has not
+    // yet closed the ring.
     let aoosPerRound = summary.AvgAoOsTriggered / summary.AvgRounds
-    Assert.True(aoosPerRound >= 2.0, sprintf "Fighter should punish the press with opportunity attacks every round (Actual: %.1f per round, %.1f over %.0f rounds)" aoosPerRound summary.AvgAoOsTriggered summary.AvgRounds)
+    Assert.True(aoosPerRound < 0.5, sprintf "Frontage 1 should leave no flanker to punish (Actual: %.1f per round, %.1f over %.0f rounds)" aoosPerRound summary.AvgAoOsTriggered summary.AvgRounds)
 
   [<Fact>]
   let ``Monte-Carlo: Grandmaster Fighter dismantles 12 novice warriors`` () =

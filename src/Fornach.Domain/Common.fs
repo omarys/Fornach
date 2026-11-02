@@ -2,12 +2,23 @@ namespace Fornach.Domain
 
 open System
 
+/// Ids only have to be unique and to sort in creation order. They used to come from `Guid.NewGuid`, and the
+/// combat ordering sorts by id (`TowerSession` breaks distance ties with `e.Id`), so the outcome of a tie
+/// depended on a random Guid — the same seed could resolve a fight differently on every run. A counter keeps
+/// ids unique within a process and makes that ordering reproducible, which is what the optimal-play harness
+/// needs before any balance number it prints can be trusted.
+module private CombatantIdSource =
+  let mutable next = 0
+
 [<Struct>]
 type CombatantId =
   private
   | CombatantId of Guid
 
-  static member New() = CombatantId(Guid.NewGuid())
+  static member New() =
+    let n = System.Threading.Interlocked.Increment(&CombatantIdSource.next)
+    CombatantId(Guid(n, 0s, 0s, Array.zeroCreate 8))
+
   static member OfGuid(g: Guid) = CombatantId g
 
   member this.Value =

@@ -110,9 +110,18 @@ type Combatant =
   /// Combatant level derived from progression profile
   member this.Level = this.Progression.Level
 
-  /// Attacks of opportunity the combatant may answer per round: one per flanker, +1 per ten levels
-  /// after level 20, capped at 8 (the eight tiles surrounding a fully encircled combatant).
-  member this.AttackOfOpportunityCapacity = Math.Clamp((this.Level - 20) / 10, 0, 8)
+  /// How many bodies can bring a strike to bear on this combatant in one round. Poise is how well a
+  /// fighter holds the space around itself, so it closes one approach lane per 100 points: a raw Novice
+  /// is surrounded by all eight tiles, a GrandMaster Fighter is reachable by one attacker at a time. The
+  /// floor of 1 keeps even a champion reachable — frontage decides the crowd, never immunity.
+  member this.Frontage = Math.Clamp(8 - (this.Stats.Get Poise / 100), 1, 8)
+
+  /// Attacks of opportunity the combatant may answer per round: Prowess is the reach and speed behind a
+  /// reactive strike, so it buys one interception per 20 points above the 40 a raw Novice starts with,
+  /// capped at 8 (the eight tiles around a fully encircled combatant). A Novice therefore answers none —
+  /// the same shape the old level curve gave — while a Veteran lands on the full eight. Was keyed on level,
+  /// which made every class equally good at punishing an approach regardless of the stat that does it.
+  member this.AttackOfOpportunityCapacity = Math.Clamp((this.Stats.Get Prowess - 40) / 20, 0, 8)
 
   // `SpellArmorBonus` used to live here as a second copy of `ProgressionScale.spellArmorBonus`, gated on
   // `Level < 50 -> 0.0`. Nothing in the game read it — `TierFactory` already bakes the share into the
@@ -379,14 +388,22 @@ type Combatant =
   /// Every combat ramp meter shares one ceiling: five stacks, so a full pile cashes at 2.75x.
   static member StackCap = 5
 
-  /// Raises both ramp meters together.
+  /// Raises both ramp meters together. Only the player compounds: `PlayerStyle` marks the player's kit,
+  /// and the ramp is part of it, so opposition never leaves the baseline it spawned with.
   static member addStacks delta (c: Combatant) =
+    if not c.PlayerStyle then
+      c
+    else
     { c with
         Flow = Math.Clamp(c.Flow + delta, 0, Combatant.StackCap)
         Momentum = Math.Clamp(c.Momentum + delta, 0, Combatant.StackCap) }
 
-  /// Raises both guard meters together: they accrue only on an action taken from the Nach.
+  /// Raises both guard meters together: they accrue only on an action taken from the Nach, and only for
+  /// the player, for the same reason the ramp does.
   static member addGuardStacks delta (c: Combatant) =
+    if not c.PlayerStyle then
+      c
+    else
     { c with
         Inertia = Math.Clamp(c.Inertia + delta, 0, Combatant.StackCap)
         Focus = Math.Clamp(c.Focus + delta, 0, Combatant.StackCap) }
