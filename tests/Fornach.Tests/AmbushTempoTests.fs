@@ -127,7 +127,7 @@ let ``a pack of unseen foes closing on the player also opens in the Nach`` () =
   Assert.Equal(TacticalTiming.Nach, after.Player.Tempo)
 
 [<Fact>]
-let ``only one foe of an unseen pack carries the Vor`` () =
+let ``every foe of an unseen pack carries its own Vor against the player`` () =
   let playerPos = { X = 10; Y = 4 }
 
   let entities =
@@ -144,10 +144,9 @@ let ``only one foe of an unseen pack carries the Vor`` () =
       | TowerEvent.GroupCombatTriggered enemies -> Some enemies
       | _ -> None)
 
-  // Handing the Vor to every unseen foe let each one "insist" on it (resolveLandedTempo), so a player who
-  // seized it back lost it again to the next foe in the same phase.
-  Assert.Equal(1, pack |> List.filter (fun e -> e.Combatant.Tempo = TacticalTiming.Vor) |> List.length)
-  Assert.Equal(pack.Length - 1, pack |> List.filter (fun e -> e.Combatant.Tempo = TacticalTiming.Nach) |> List.length)
+  // Tempo is per engagement: each unseen foe holds the Vor in its own pairing with the player, and the
+  // player holds none. Several holders is the expected shape of a pack, not a bug to be deduped.
+  Assert.Equal(pack.Length, pack |> List.filter (fun e -> e.Combatant.Tempo = TacticalTiming.Vor) |> List.length)
   Assert.Equal(TacticalTiming.Nach, after.Player.Tempo)
 
 [<Fact>]

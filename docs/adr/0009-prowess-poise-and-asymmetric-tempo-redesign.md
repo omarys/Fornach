@@ -74,6 +74,27 @@ Fornach's combat model was historically rooted in a symmetrical 12-stat matrix a
    - Poise gains: **+1** per encounter where player passed a Pain Shock check or executed a successful active defense counter; **+3** on Floor Boss clears.
    - Prowess and Poise are removed from manual level-up stat point allocation.
 
+## Multi-Combatant Engagements
+
+Everything above is written for a duel, and for good reason: the tempo rules are duel rules. A fight
+against several foes is therefore **N separate duels sharing a turn**, not one fight with one initiative.
+
+- **Tempo is per engagement.** `Combatant.Tempo` describes that combatant's position in *its own* pairing
+  with the player. The player's `Tempo` means "initiative against the current focus"; each foe's `Tempo`
+  means "initiative against the player". Landing a strike never writes the defender's tempo when the
+  striker already holds the Vor, because that defender's tempo belongs to a different pairing.
+- **The player holds one Vor at a time** — the one against the current focus. Every other foe stands in its
+  own engagement and holds (or regains) the initiative against the player. A foe the player yielded stays
+  out only while it *is* the focus; switching focus hands the abandoned foe its Vor back.
+- **The cost of numbers is the encirclement defence penalty** (`DicePool.computeEncirclementPenalty`,
+  driven by `effectivePriorDefenses`), which taxes the player's defence once the first foe of the round has
+  already swung. Numbers buy extra attempts, not a longer initiative chain.
+- **A surrounded player opens in the Nach** and can hold no Vor until a defence or counter wins one. This is
+  the intended shape of an ambush, not a deadlock: the Nach menu still offers defences, recoveries and
+  *Seize Indes*.
+- **Future:** holding more than one Vor at once is gated on `Prowess` against the foes' `Prowess`/`Instinct`,
+  and is deliberately not implemented yet.
+
 ## Consequences
 
 - Active combat menus are uncluttered and directly reflect the Liechtenauer fencing roles: Attacker drives in *Vor*, Defender intercepts in *Nach*, and binds clash in *Indes*.

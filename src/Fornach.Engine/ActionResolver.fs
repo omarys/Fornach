@@ -141,22 +141,12 @@ module ActionResolver =
   /// of margin): a scratch is contact without control, and the striker keeps what it already holds.
   /// Returns updated attacker, updated defender, and whether the Vor changed hands.
   let resolveLandedTempo (attacker: Combatant) (defender: Combatant) (netHits: int) : Combatant * Combatant * bool =
-    // Guard stacks are the reward for a defended round, so they should also be what makes the Vor
-    // expensive to steal: a braced defender is not stripped of the initiative by a narrow win. Every five
-    // stacks raises the margin the foe must win by, so a full guard of 25 demands seven net hits, which a
-    // single strike does not land. `addGuardStacks` no-ops off `PlayerStyle`, so enemies never bank them
-    // and this only ever protects the side that actually spent its turn defending.
-    let guardShelter = max defender.Inertia defender.Focus / 5
-    let stealMargin = 2 + guardShelter
-
-    if attacker.IsInNach && netHits >= stealMargin then
+    // Tempo is per engagement. A striker that already holds the Vor keeps it and does not touch the
+    // defender at all: with several foes in the fight, that defender's tempo belongs to a different
+    // pairing, so landing on it says nothing about its engagement with anyone else. Only a decisive win
+    // from the Nach moves the tempo, and it moves it in this pairing alone.
+    if attacker.IsInNach && netHits >= 2 then
       Combatant.seizeVor attacker, Combatant.yieldVor defender, true
-    elif attacker.IsInVor && netHits >= stealMargin then
-      // A striker that holds the Vor insists on it, so a stray second holder is put back in the Nach --
-      // but only on the same margin a seizure needs. Ungated, this branch was a free dump on any landing
-      // hit, which is what let a pack of Vor-holding sprites shove a braced player out of the tempo every
-      // single round even for zero damage.
-      attacker, Combatant.yieldVor defender, false
     else
       attacker, defender, false
 

@@ -1772,24 +1772,15 @@ module TowerDisplay =
               AnsiConsole.MarkupLine(sprintf "[bold %s]%d monsters emerge from the surrounding colonnades![/]" Theme.Yellow spawned.Length)
               Thread.Sleep(1000)
               // The ambush pack is already adjacent: hand the encounter to the group combat path. No foe
-              // here was in view a moment ago, so the pack holds the Vor and the player opens in the Nach.
+              // here was in view a moment ago, so every one of them holds the Vor against the player and
+              // the player opens in the Nach holding none. Tempo is per engagement, so several holders is
+              // the correct shape for a pack -- it is a ring of separate duels, not one shared tempo.
               state <- { state with Player = Combatant.yieldVor state.Player }
-
-              // One foe carries the initiative. Every spawn arrives holding the Vor by constructor
-              // default, and `resolveLandedTempo` lets a holder "insist" on it, so with several holders
-              // any one of them dumped a player who had already seized the tempo back. `TowerSession`'
-              // own approach path picks a single ambusher for the same reason; this path did not, which
-              // is how a braced player stayed pinned in the Nach for the whole fight.
-              let opener = spawned |> List.tryHead |> Option.map (fun e -> e.Id)
 
               handleGroup
                 state.CurrentFloor.FloorNumber
                 (spawned
-                 |> List.map (fun e ->
-                   if Some e.Id = opener then
-                     { e with Combatant = Combatant.seizeVor e.Combatant }
-                   else
-                     { e with Combatant = Combatant.yieldVor e.Combatant }))
+                 |> List.map (fun e -> { e with Combatant = Combatant.seizeVor e.Combatant }))
 
             | TowerEvent.TrapTriggered(_, msg) ->
               AnsiConsole.MarkupLine(sprintf "\n[bold red]⚠ %s[/]" msg)

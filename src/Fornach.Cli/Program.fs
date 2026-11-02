@@ -1340,6 +1340,19 @@ module Program =
               AnsiConsole.MarkupLine(sprintf "\n[bold %s]%d more foe(s) close in and join the fight![/]" Theme.Pink joined)
           | None -> ()
 
+        // The Vor the player holds is held against one foe at a time: the one engaged this round. Every
+        // other foe stands in its own engagement and keeps -- or regains -- the initiative against the
+        // player, so a foe the player yielded stays out only while it is the focus. Without this, taking
+        // the Vor once held the whole pack in the Nach for the rest of the fight.
+        if not combatOver && currentPlayer.IsInVor then
+          currentEnemies <-
+            currentEnemies
+            |> List.map (fun e ->
+              if e.Id <> target.Id && e.Combatant.IsInNach then
+                { e with Combatant = Combatant.seizeVor e.Combatant }
+              else
+                e)
+
         AnsiConsole.WriteLine()
         AnsiConsole.Markup(sprintf "[%s]Press any key to proceed to next round...[/]" Theme.Comment)
         Console.ReadKey(true) |> ignore

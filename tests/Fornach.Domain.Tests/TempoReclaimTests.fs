@@ -130,48 +130,30 @@ module TempoReclaimTests =
     Assert.Equal(0, rested.Meters.Frustration.Value)
 
   [<Fact>]
-  let ``Guard stacks raise the margin a foe needs to steal the Vor`` () =
-    // Reported case: 25 guard stacks, no damage taken, still pinned in the Nach. A braced defender was
-    // stripped of the tempo by any landed strike at all -- and `applyDamage` floors a soaked hit at 1
-    // damage, so "took no damage" and "lost the Vor anyway" were the same event. Guard stacks are earned
-    // by defending, so they are what the tempo is defended with.
-    let braced =
-      (TierFactory.createClassLevel CharacterClass.Fighter 25 |> player)
-      |> fun c -> { c with Tempo = TacticalTiming.Vor }
-      |> Combatant.addGuardStacks 25
-
-    let unguarded = { braced with Inertia = 0; Focus = 0 }
-    let foe = bandit () |> Combatant.yieldVor
-
-    let foeAfter, bracedAfter, stole = ActionResolver.resolveLandedTempo foe braced 3
-    Assert.False(stole, "a full guard must not be robbed by a narrow win")
-    Assert.True(bracedAfter.IsInVor, "the braced defender keeps the Vor")
-    Assert.True(foeAfter.IsInNach, "the narrow win leaves the foeman still in the Nach")
-
-    let _, unguardedAfter, stoleUnguarded = ActionResolver.resolveLandedTempo foe unguarded 3
-    Assert.True(stoleUnguarded, "an unguarded defender still loses the Vor to the same strike")
-    Assert.True(unguardedAfter.IsInNach, "the unguarded defender drops to the Nach")
-
-    let _, _, stoleFromBraced = ActionResolver.resolveLandedTempo foe braced 7
-    Assert.True(stoleFromBraced, "a decisive seven-hit win still takes the Vor from a full guard")
-
-  [<Fact>]
-  let ``An insisting Vor holder cannot dump a braced defender`` () =
-    // Reported case: an ambush pack where every sprite held the Vor. The insist branch had no margin at
-    // all, so the first chip hit from any of them put a braced player back in the Nach even when the
-    // strike did zero damage. It now needs the same margin a seizure does.
-    let braced =
+  let ``Tempo is per engagement: landing while holding the Vor leaves the defender alone`` () =
+    // Reported case: a pack ambush where every sprite held the Vor and the player held one too. The rules
+    // treated the Vor as a single pool, so a chip hit from a non-focus foe stripped the tempo the player
+    // had won against a different one. That defeder's Vor is only stake in *their* engagement.
+    let defender =
       (TierFactory.createClassLevel CharacterClass.Fighter 25 |> player)
       |> fun c -> { c with Tempo = TacticalTiming.Vor }
       |> Combatant.addGuardStacks 25
 
     let insisting = bandit () |> Combatant.seizeVor
 
-    let _, bracedAfter, moved = ActionResolver.resolveLandedTempo insisting braced 1
-    Assert.False(moved, "an insisting holder moves nobody at this margin")
-    Assert.True(bracedAfter.IsInVor, "the braced defender keeps the Vor against an insist")
+    let _, defenderAfter, moved = ActionResolver.resolveLandedTempo insisting defender 3
+    Assert.False(moved, "landing while already holding the Vor moves no tempo")
+    Assert.True(defenderAfter.IsInVor, "the defender's own engagement is untouched")
 
-    let _, unguardedAfter, _ =
-      ActionResolver.resolveLandedTempo insisting { braced with Inertia = 0; Focus = 0 } 3
+  [<Fact>]
+  let ``A decisive Nach strike moves the tempo in its own pairing`` () =
+    let holder =
+      (TierFactory.createClassLevel CharacterClass.Warrior 30 |> player)
+      |> fun c -> { c with Tempo = TacticalTiming.Vor }
 
-    Assert.True(unguardedAfter.IsInNach, "an unguarded defender is still put back in the Nach")
+    let striker = bandit () |> Combatant.yieldVor
+
+    let strikerAfter, holderAfter, moved = ActionResolver.resolveLandedTempo striker holder 2
+    Assert.True(moved, "two net hits from the Nach still takes the Vor")
+    Assert.True(strikerAfter.IsInVor)
+    Assert.True(holderAfter.IsInNach)
