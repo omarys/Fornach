@@ -666,3 +666,27 @@ let ``waiting on the map actually reveals more than the walking cone`` () =
   Assert.Equal(360.0, arc.ArcDegrees)
   Assert.True(widened.CurrentFloor.Visible.Count > walking.CurrentFloor.Visible.Count)
   Assert.True(Set.isSubset walking.CurrentFloor.Visible widened.CurrentFloor.Visible)
+
+[<Fact>]
+let ``a tower run marks its player, so the ramp and guard meters actually compound`` () =
+  // The interactive tower builds its player from the plain-data archetype registry, and
+  // `Archetypes.asPlayer` is the identity: nothing in that hand-off sets `PlayerStyle`. Unmarked,
+  // `Combatant.addStacks`/`addGuardStacks` no-op on the player, so Inertia/Focus stay pinned at 0 for
+  // the whole run -- no guard ramp, no Focus to spend on Discipline gambits, and none of the
+  // Frustration/Exhaustion pressure those gambits carry. It reads as a stalemate, not as a bug.
+  let fromRegistry = (Archetypes.findByName "Fighter" |> Option.get).Factory ()
+
+  Assert.False(fromRegistry.PlayerStyle, "the registry stays plain data; the session does the marking")
+
+  let state = TowerSession.initSession fromRegistry 42 1
+  Assert.True(state.Player.PlayerStyle)
+
+  let ramped =
+    state.Player
+    |> Combatant.addGuardStacks 1
+    |> Combatant.addStacks 1
+
+  Assert.Equal(1, ramped.Inertia)
+  Assert.Equal(1, ramped.Focus)
+  Assert.Equal(1, ramped.Flow)
+  Assert.Equal(1, ramped.Momentum)

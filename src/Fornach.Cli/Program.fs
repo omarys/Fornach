@@ -382,8 +382,10 @@ module Program =
     let rng = Random()
     let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
 
-    let mutable player = playerArch.Factory () |> Combatant.seizeVor
-    let mutable enemy = enemyArch.Factory () |> Combatant.yieldVor
+    // The arena picks both fighters out of the same plain-data registry, so the side that is the player
+    // has to be declared here: without the mark the ramp meters no-op and the player never compounds.
+    let mutable player = playerArch.Factory () |> Combatant.seizeVor |> fun p -> { p with PlayerStyle = true }
+    let mutable enemy = enemyArch.Factory () |> Combatant.yieldVor |> fun c -> { c with PlayerStyle = false }
     let mutable round = 1
     let mutable combatOver = false
     let mutable outcome = "PlayerDefeated"

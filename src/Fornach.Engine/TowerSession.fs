@@ -578,6 +578,14 @@ module TowerSession =
   let initSessionWithMode (player: Combatant) (seed: int) (startFloor: int) (isStory: bool) : TowerRunState =
     let depthCap, bossOffset = floorScalingFor isStory startFloor
 
+    // `TowerRunState.Player` is the player by construction, so mark it here instead of trusting every
+    // caller to. The interactive tower hands in an `Archetypes` factory result and those stay plain data
+    // (`Archetypes.asPlayer` is the identity), so an unmarked hand-off left a real player with
+    // `PlayerStyle = false` -- and `Combatant.addStacks`/`addGuardStacks` then no-op, pinning
+    // Flow/Momentum/Inertia/Focus at 0 for the whole run: no guard ramp, no Focus for Discipline gambits,
+    // no Frustration/Exhaustion pressure on the enemy. A stalemate that looks like missing damage.
+    let player = { player with PlayerStyle = true }
+
     let floor =
       TowerGenerator.generateFloorWithMode seed startFloor isStory
       |> rescaleFloorEnemiesWith depthCap bossOffset player
