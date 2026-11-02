@@ -146,7 +146,12 @@ module ActionResolver =
     // pairing, so landing on it says nothing about its engagement with anyone else. Only a decisive win
     // from the Nach moves the tempo, and it moves it in this pairing alone.
     if attacker.IsInNach && netHits >= 2 then
-      Combatant.seizeVor attacker, Combatant.yieldVor defender, true
+      if ProgressionScale.cedesVor defender.Level attacker.Level then
+        // Winning the bind is not enough against a superior: the outclassed striker cedes the claim
+        // instead of taking the tempo, so a Master's Vor is never moved by a Novice's good roll.
+        Combatant.yieldVor attacker, Combatant.seizeVor defender, true
+      else
+        Combatant.seizeVor attacker, Combatant.yieldVor defender, true
     else
       attacker, defender, false
 

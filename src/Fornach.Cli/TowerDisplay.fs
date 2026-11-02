@@ -1772,15 +1772,31 @@ module TowerDisplay =
               AnsiConsole.MarkupLine(sprintf "[bold %s]%d monsters emerge from the surrounding colonnades![/]" Theme.Yellow spawned.Length)
               Thread.Sleep(1000)
               // The ambush pack is already adjacent: hand the encounter to the group combat path. No foe
-              // here was in view a moment ago, so every one of them holds the Vor against the player and
-              // the player opens in the Nach holding none. Tempo is per engagement, so several holders is
-              // the correct shape for a pack -- it is a ring of separate duels, not one shared tempo.
-              state <- { state with Player = Combatant.yieldVor state.Player }
+              // here was in view a moment ago, so each one holds the Vor against the player and the player
+              // opens in the Nach holding none -- unless the player outclasses it, in which case the
+              // ambusher cedes the initiative instead.
+              let playerLevel = state.Player.Level
+
+              let cedesLevel (level: int) = ProgressionScale.cedesVor playerLevel level
+
+              let packCedes = spawned |> List.forall (fun e -> cedesLevel e.Combatant.Level)
+
+              state <-
+                { state with
+                    Player =
+                      if packCedes then
+                        Combatant.seizeVor state.Player
+                      else
+                        Combatant.yieldVor state.Player }
 
               handleGroup
                 state.CurrentFloor.FloorNumber
                 (spawned
-                 |> List.map (fun e -> { e with Combatant = Combatant.seizeVor e.Combatant }))
+                 |> List.map (fun e ->
+                   if cedesLevel e.Combatant.Level then
+                     { e with Combatant = Combatant.yieldVor e.Combatant }
+                   else
+                     { e with Combatant = Combatant.seizeVor e.Combatant }))
 
             | TowerEvent.TrapTriggered(_, msg) ->
               AnsiConsole.MarkupLine(sprintf "\n[bold red]⚠ %s[/]" msg)

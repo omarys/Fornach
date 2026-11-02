@@ -30,6 +30,21 @@ module ProgressionScale =
     elif level >= 40 then Veteran
     else Novice
 
+  /// Rank of a combat tier, so a gap between two combatants can be counted rather than enumerated pairwise.
+  let tierRank (level: int) : int =
+    match levelToTier level with
+    | Novice -> 0
+    | Veteran -> 1
+    | Master -> 2
+    | GrandMaster -> 3
+
+  /// A combatant two or more tiers beneath another does not contest the initiative at all: it cedes the
+  /// Vor rather than claiming it. One tier beneath stays a live threat -- a Veteran can still be ambushed
+  /// by a novice -- but nothing below a Veteran moves a Master's Vor, so rank means something beyond
+  /// larger numbers.
+  let cedesVor (greaterLevel: int) (lesserLevel: int) : bool =
+    tierRank greaterLevel - tierRank lesserLevel >= 2
+
   /// Level a story stage's guardian hands the protagonist: a six-level ramp per stage that lands the
   /// protagonist on the Veteran threshold (level 40) at the end of the sixth grief stage, so the
   /// Infinite Tower (story floor 8) is entered as a Veteran rather than a GrandMaster. Floor 1 is the

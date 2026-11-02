@@ -157,3 +157,32 @@ module TempoReclaimTests =
     Assert.True(moved, "two net hits from the Nach still takes the Vor")
     Assert.True(strikerAfter.IsInVor)
     Assert.True(holderAfter.IsInNach)
+  [<Fact>]
+  let ``Only the tier immediately below still threatens a superior's Vor`` () =
+    // Rank has to mean more than bigger numbers: two tiers beneath and a combatant cedes the initiative
+    // outright, while the adjacent tier below is still a live threat. That is the boundary the design
+    // draws -- a Veteran can be ambushed, a Master cannot be ambushed by anything below a Veteran.
+    Assert.True(ProgressionScale.cedesVor 100 1, "a Novice cedes to a Master")
+    Assert.True(ProgressionScale.cedesVor 200 1, "a Novice cedes to a GrandMaster")
+    Assert.False(ProgressionScale.cedesVor 100 40, "a Veteran is still a threat to a Master")
+    Assert.False(ProgressionScale.cedesVor 40 1, "a Novice can still ambush a Veteran")
+    Assert.False(ProgressionScale.cedesVor 100 100, "equals contest the Vor normally")
+
+  [<Fact>]
+  let ``An outclassed striker that wins the bind cedes the Vor instead`` () =
+    let master =
+      (TierFactory.createClassLevel CharacterClass.Warrior 100 |> player)
+      |> fun c -> { c with Tempo = TacticalTiming.Nach }
+
+    let novice = TierFactory.createClassLevel CharacterClass.Fighter 1 |> Combatant.yieldVor
+    let noviceAfter, masterAfter, moved = ActionResolver.resolveLandedTempo novice master 5
+
+    Assert.True(moved, "the tempo does move -- it moves the other way")
+    Assert.True(masterAfter.IsInVor, "the Master keeps the Vor against a decisive Novice strike")
+    Assert.False(noviceAfter.IsInVor, "the outclassed striker cedes the claim")
+
+    let veteran = TierFactory.createClassLevel CharacterClass.Fighter 40 |> Combatant.yieldVor
+    let _, masterAfterVeteran, movedVeteran = ActionResolver.resolveLandedTempo veteran master 5
+
+    Assert.True(movedVeteran)
+    Assert.True(masterAfterVeteran.IsInNach, "a Veteran is close enough to take the Vor from a Master")

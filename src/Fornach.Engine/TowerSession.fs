@@ -457,16 +457,32 @@ module TowerSession =
     // player, who opens in the Nach holding none. Tempo is per engagement, so several holders is the
     // correct shape for a pack -- it is a ring of separate duels, and one foe landing does not move any
     // other pairing's tempo.
-    if not unseen.IsEmpty then
-      workingState <- { workingState with Player = Combatant.yieldVor workingState.Player }
-
+    // Surprise is worth the Vor only to a foe the player cannot simply overawe: two tiers beneath and the
+    // ambusher cedes the initiative instead of seizing it.
     let engaged =
       adjacent
       |> List.map (fun e ->
         if unseen |> List.exists (fun u -> u.Id = e.Id) then
-          { e with Combatant = Combatant.seizeVor e.Combatant }
+          if ProgressionScale.cedesVor workingState.Player.Level e.Combatant.Level then
+            { e with Combatant = Combatant.yieldVor e.Combatant }
+          else
+            { e with Combatant = Combatant.seizeVor e.Combatant }
         else
           e)
+
+    // A player the whole pack cedes to was never really ambushed, so it opens holding the Vor.
+    if not unseen.IsEmpty then
+      let allCede =
+        unseen
+        |> List.forall (fun u -> ProgressionScale.cedesVor workingState.Player.Level u.Combatant.Level)
+
+      workingState <-
+        { workingState with
+            Player =
+              if allCede then
+                Combatant.seizeVor workingState.Player
+              else
+                Combatant.yieldVor workingState.Player }
 
     let events =
       if List.isEmpty engaged then []
