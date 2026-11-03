@@ -8,6 +8,8 @@ open Fornach.Engine
 /// ways back out of that pin, and what happens when a combatant finally breaks.
 module TempoReclaimTests =
 
+  let private fixedRoller (result: int) : DiceRoller = fun _ _ -> result
+
   let private player (c: Combatant) = { c with PlayerStyle = true }
 
   let private bandit () =
@@ -223,3 +225,151 @@ module TempoReclaimTests =
     Assert.True(ActionResolver.cedesInitiative (duelist (veteran + 40)) (duelist 1))
     Assert.False(ActionResolver.cedesInitiative (duelist 1) (duelist 1), "equals always contest the Vor")
     Assert.False(ActionResolver.cedesInitiative (duelist 5) (duelist 1), "neighbours are still a live threat")
+
+  [<Fact>]
+  let ``Recovery action in Nach yields the Vor to a defender in the Nach`` () =
+    // If an enemy collapsed or was knocked into the Nach and then takes a RecoveryAction,
+    // a player waiting in the Nach must seize the Vor rather than being trapped in the Nach forever.
+    let player =
+      (TierFactory.createClassLevel CharacterClass.Fighter 1 |> player)
+      |> fun c -> { c with Tempo = TacticalTiming.Nach }
+
+    let foeInNach =
+      (TierFactory.createClassLevel CharacterClass.Warrior 1)
+      |> fun c -> { c with Tempo = TacticalTiming.Nach }
+
+    let roller : DiceRoller = fun min _ -> min
+    let res = ActionResolver.resolveExWithDefense roller (RecoveryAction SteadyForm) None foeInNach player 0
+
+    Assert.True(res.Target.IsInVor, "the defender in the Nach must seize the Vor when the actor recovers")
+    Assert.True(res.Actor.IsInNach, "the recovering actor must stay in the Nach")
+
+  [<Fact>]
+  let ``Floor 1 tutorial non-lethal resolution preserves player active defense and counters`` () =
+    // On floor 1, resolveWithoutLethalWithDefense must respect player's active defense choice
+    // and correctly evaluate counter affinities and tempo rather than dropping defOpt to None.
+    let player =
+      (TierFactory.createClassLevel CharacterClass.Fighter 1 |> player)
+      |> fun c -> { c with Tempo = TacticalTiming.Nach }
+
+    let foe =
+      (TierFactory.createClassLevel CharacterClass.Warrior 1)
+      |> fun c -> { c with Tempo = TacticalTiming.Vor }
+
+    // Foe attacks with Power strike (ForceStrike), player defends with FortitudeGuard (Affinity counter against Power)
+    let roller : DiceRoller = fun min _ -> min // Minimum rolls so defense easily holds
+    let defChoice = Some(Guard(FortitudeGuard true))
+    let attackIntent = StandardAttack(ForceStrike false)
+
+    let res = ActionResolver.resolveWithoutLethalWithDefense roller attackIntent defChoice foe player 0
+
+    Assert.True(res.Target.IsInVor, "player affinity counter on Floor 1 must seize the Vor")
+    Assert.True(res.Actor.IsInNach, "countered foe on Floor 1 must yield the Vor")
+    let hasCounterEvent =
+      res.Events
+      |> List.exists (function
+        | CombatEvent.DefenseAffinityResolved(_, _, isCounter, _) -> isCounter
+        | _ -> false)
+    Assert.True(hasCounterEvent, "defense affinity counter event must be emitted on Floor 1")
+
+  [<Fact>]
+  let ``Whiffing inflicts status damage and surrenders the Vor to the defender`` () =
+    let player =
+      (TierFactory.createClassLevel CharacterClass.Fighter 1 |> player)
+      |> fun c -> { c with Tempo = TacticalTiming.Nach }
+
+    let foeInVor =
+      (TierFactory.createClassLevel CharacterClass.Warrior 1)
+      |> fun c -> { c with Tempo = TacticalTiming.Vor }
+
+    // Attacker rolls lowest, defender rolls highest -> Whiff
+    let roller : DiceRoller = fun min max -> if max = 6 then min else max
+    let res = ActionResolver.resolveEx roller (StandardAttack(ForceStrike false)) foeInVor player 0
+
+    // Attacker suffered status damage on physical whiff (Exhaustion and Frustration)
+    Assert.True(res.Actor.Meters.Exhaustion.Value > 0, "whiffing physical strike must inflict Exhaustion")
+    Assert.True(res.Actor.Meters.Frustration.Value > 0, "whiffing physical strike must inflict Frustration")
+
+    // Vor is surrendered to defender
+    Assert.True(res.Target.IsInVor, "defender in Nach must seize the Vor on attacker whiff")
+    Assert.True(res.Actor.IsInNach, "attacker must yield the Vor on whiff")
+
+    let tempoEvent =
+      res.Events
+      |> List.tryPick (function
+        | CombatEvent.TempoShifted(newVor, oldVor, reason) -> Some(newVor, oldVor, reason)
+        | _ -> None)
+    Assert.True(tempoEvent.IsSome, "TempoShifted event must be emitted on whiff")
+    let newVor, oldVor, _ = tempoEvent.Value
+    Assert.Equal(player.Id, newVor)
+    Assert.Equal(foeInVor.Id, oldVor)
+
+  [<Fact>]
+  let ``Strike dealing no damage due to full mitigation inflicts status damage and surrenders Vor`` () =
+    let player =
+      (TierFactory.createClassLevel CharacterClass.Fighter 1 |> player)
+      |> fun c -> { c with Tempo = TacticalTiming.Nach; ArcaneWard = 5000 }
+
+    let foeInVor =
+      (TierFactory.createClassLevel CharacterClass.Warrior 5)
+      |> fun c -> { c with Tempo = TacticalTiming.Vor }
+
+    // Attacker lands strike cleanly, but ArcaneWard completely absorbs the damage
+    let roller = fixedRoller 6
+    let res = ActionResolver.resolveEx roller (StandardAttack(ForceStrike false)) foeInVor player 0
+
+    // Check damage dealt to Health was 0
+    let dmgEvent =
+      res.Events
+      |> List.tryPick (function CombatEvent.DamageApplied d -> Some d | _ -> None)
+    Assert.True(dmgEvent.IsSome, sprintf "Events: %A" (res.Events |> List.map (fun e -> sprintf "%A" e)))
+    Assert.Equal(0, dmgEvent.Value.Amount)
+
+    // Attacker suffered status damage on 0-damage strike
+    Assert.True(res.Actor.Meters.Exhaustion.Value >= 20, "absorbing all damage must inflict Exhaustion on attacker")
+    Assert.True(res.Actor.Meters.Frustration.Value >= 15, "absorbing all damage must inflict Frustration on attacker")
+
+    // Vor surrendered to defender
+    Assert.True(res.Target.IsInVor, "defender must seize the Vor when incoming strike does no damage")
+    Assert.True(res.Actor.IsInNach, "attacker must yield the Vor when strike does no damage")
+
+    let tempoEvent =
+      res.Events
+      |> List.tryPick (function
+        | CombatEvent.TempoShifted(newVor, oldVor, reason) -> Some(newVor, oldVor, reason)
+        | _ -> None)
+    Assert.True(tempoEvent.IsSome, "TempoShifted event must be emitted when damage is fully absorbed")
+    let newVor, oldVor, _ = tempoEvent.Value
+    Assert.Equal(player.Id, newVor)
+    Assert.Equal(foeInVor.Id, oldVor)
+
+  [<Fact>]
+  let ``Mental strike dealing no damage inflicts mental status damage and surrenders Vor`` () =
+    let player =
+      (TierFactory.createClassLevel CharacterClass.Fighter 1 |> player)
+      |> fun c -> { c with Tempo = TacticalTiming.Nach; ArcaneWard = 5000 }
+
+    let foeInVor =
+      (TierFactory.createClassLevel CharacterClass.Mage 5)
+      |> fun c -> { c with Tempo = TacticalTiming.Vor }
+
+    // Attacker rolls 6 (hits), defender rolls 1 (misses) so strike lands cleanly, but ward absorbs all damage
+    let mutable rollCount = 0
+    let roller : DiceRoller = fun _ _ ->
+      rollCount <- rollCount + 1
+      if rollCount <= 20 then 6 else 1
+    let res = ActionResolver.resolveEx roller (StandardAttack(ArcaneCataclysm false)) foeInVor player 0
+
+    let dmgEvent =
+      res.Events
+      |> List.tryPick (function CombatEvent.DamageApplied d -> Some d | _ -> None)
+    Assert.True(dmgEvent.IsSome, "DamageApplied event must be emitted")
+    Assert.Equal(0, dmgEvent.Value.Amount)
+
+    // Attacker suffered mental status damage (CognitiveFatigue, Confusion, Frustration)
+    Assert.True(res.Actor.Meters.CognitiveFatigue.Value >= 20, "fully absorbed mental strike must inflict CognitiveFatigue")
+    Assert.True(res.Actor.Meters.Confusion.Value >= 15, "fully absorbed mental strike must inflict Confusion")
+
+    // Vor surrendered to defender
+    Assert.True(res.Target.IsInVor, "defender must seize Vor on fully absorbed mental strike")
+    Assert.True(res.Actor.IsInNach, "attacker must yield Vor on fully absorbed mental strike")

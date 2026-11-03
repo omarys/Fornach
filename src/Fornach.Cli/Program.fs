@@ -968,7 +968,10 @@ module Program =
     )
 
     let isStanding (e: TowerEnemy) =
-      not e.IsDefeated && not e.Combatant.Health.IsDepleted && not e.Combatant.Morale.IsDepleted
+      not e.IsDefeated
+      && not e.Combatant.Health.IsDepleted
+      && not e.Combatant.Morale.IsDepleted
+      && not (CollapseState.isCollapsed e.Combatant.Collapse)
 
     // Who opens the exchange, read from live tempo rather than assumed: a pack that has seized the
     // Vor strikes before the player does, and that has to be visible before the player commits.
@@ -1026,7 +1029,12 @@ module Program =
         | None, Some _ -> sprintf "[%s]🎯[/]" Theme.Green
         | None, None -> ""
       let status =
-        [ if not standing then sprintf "[bold %s]DOWN[/]" Theme.Red
+        [ if e.Combatant.Health.IsDepleted || e.Combatant.Morale.IsDepleted || e.IsDefeated then
+            sprintf "[bold %s]DOWN[/]" Theme.Red
+          elif CollapseState.isCollapsed c.Collapse then
+            match c.Collapse with
+            | CollapseState.Collapsed reason -> sprintf "[bold %s]COLLAPSED (%A)[/]" Theme.Red reason
+            | CollapseState.Stable -> ""
           threat
           weaponTag
           if c.BleedStacks > 0 then sprintf "[%s]BLEED %d[/]" Theme.Red c.BleedStacks ]
@@ -1184,7 +1192,7 @@ module Program =
               AnsiConsole.MarkupLine(sprintf "\n[bold %s]⚡ %s is staggered from the technique interrupt! Attack defused![/]" Theme.Yellow e.Name)
               ActionResolver.resolve roller intent e.Combatant currentPlayer
             elif floorNumber = 1 then
-              ActionResolver.resolveWithoutLethal roller intent e.Combatant currentPlayer
+              ActionResolver.resolveWithoutLethalWithDefense roller intent defOpt e.Combatant currentPlayer priorDefenses
             else
               ActionResolver.resolveExWithDefense roller intent defOpt e.Combatant currentPlayer priorDefenses
           CombatLogger.recordTurn session round turnNum (sprintf "%A" intent) e.Combatant playerBeforeTurn r
@@ -1249,7 +1257,7 @@ module Program =
           let playerBeforeTurn = currentPlayer
           let r =
             if floorNumber = 1 then
-              ActionResolver.resolveWithoutLethal roller intent e.Combatant currentPlayer
+              ActionResolver.resolveWithoutLethalWithDefense roller intent None e.Combatant currentPlayer priorDefenses
             else
               ActionResolver.resolveEx roller intent e.Combatant currentPlayer priorDefenses
           CombatLogger.recordTurn session round turnNum (sprintf "%A" intent) e.Combatant playerBeforeTurn r
@@ -1283,13 +1291,36 @@ module Program =
           AnsiConsole.MarkupLine(sprintf "\n[bold %s]⚡ The pack holds the Vor and strikes before you can answer![/]" Theme.Yellow)
           packPhase ()
 
+          if (living ()).IsEmpty then
+            outcome <- TowerDisplay.GroupDuelOutcome.Victorious
+            currentPlayer <- Combatant.growFromEncounter (currentEnemies |> List.map (fun e -> e.Combatant)) currentPlayer
+            combatOver <- true
+            AnsiConsole.WriteLine()
+            AnsiConsole.Write(
+              Rule(sprintf "[bold %s]★★★ PACK VANQUISHED: %s PREVAILED! ★★★[/]" Theme.Green currentPlayer.Name)
+                .Centered()
+                .RuleStyle(Theme.StyleGreen)
+            )
+
         if not combatOver then
-          // 3. Player action via the group-turn resolver (cleave/splash onto nearby foes)
-          let otherLiving = livingNow |> List.filter (fun e -> e.Id <> target.Id) |> List.map (fun e -> e.Combatant)
+          // 3. Player action via the group-turn resolver (cleave/splash onto nearby foes).
+          // Read target and secondaries afresh from currentEnemies so packPhase state
+          // (damage, meters, collapse, tempo) is preserved rather than overwritten by stale snapshots.
+          let freshTarget =
+            currentEnemies
+            |> List.tryFind (fun e -> e.Id = target.Id)
+            |> Option.map (fun e -> e.Combatant)
+            |> Option.defaultValue targetCombatant
+          let freshOtherLiving =
+            currentEnemies
+            |> List.filter isLiving
+            |> List.filter (fun e -> e.Id <> target.Id)
+            |> List.map (fun e -> e.Combatant)
+
           AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes %s...[/]" Theme.Green currentPlayer.Name choice)
           let playerBefore = currentPlayer
-          let targetBefore = targetCombatant
-          let res = ActionResolver.resolveGroupTurn roller intent currentPlayer targetCombatant otherLiving
+          let targetBefore = freshTarget
+          let res = ActionResolver.resolveGroupTurn roller intent currentPlayer freshTarget freshOtherLiving
           let isTargetInterrupted =
             res.Events
             |> List.exists (function CombatEvent.ActionInterrupted(_, tId, _, _) when tId = target.Combatant.Id -> true | _ -> false)
@@ -1344,11 +1375,15 @@ module Program =
         // other foe stands in its own engagement and keeps -- or regains -- the initiative against the
         // player, so a foe the player yielded stays out only while it is the focus. Without this, taking
         // the Vor once held the whole pack in the Nach for the rest of the fight.
+        // A collapsed, defeated, or outmatched foe that ceded initiative never reclaims the Vor.
         if not combatOver && currentPlayer.IsInVor then
           currentEnemies <-
             currentEnemies
             |> List.map (fun e ->
-              if e.Id <> target.Id && e.Combatant.IsInNach then
+              if e.Id <> target.Id
+                 && e.Combatant.IsInNach
+                 && isLiving e
+                 && not (ActionResolver.cedesInitiative currentPlayer e.Combatant) then
                 { e with Combatant = Combatant.seizeVor e.Combatant }
               else
                 e)

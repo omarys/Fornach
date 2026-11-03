@@ -582,6 +582,7 @@ module TowerSession =
                   Name = sprintf "Lv.%d %s" level e.Name } }
 
     { floor with
+        InitialPlayerLevel = max 1 player.Level
         Entities =
           floor.Entities
           |> Map.map (fun _ ent ->
@@ -826,10 +827,16 @@ module TowerSession =
               | _ -> false)
 
           let mutable spawnedEnemies = []
+          let floorPlayer =
+            let lvl =
+              if state.CurrentFloor.InitialPlayerLevel > 0 then state.CurrentFloor.InitialPlayerLevel
+              else state.Player.Level
+            { state.Player with Progression = { state.Player.Progression with Level = lvl } }
+
           // 1. Leader
           let leaderCombatant =
             Bestiary.createMonster ambush.Pack.Leader
-            |> fun c -> TierFactory.clampEngagedToPlayerLevel c state.Player
+            |> fun c -> TierFactory.clampEngagedToPlayerLevel c floorPlayer
           let leaderEnemy =
             { Id = sprintf "%s_leader" ambush.Id
               Name = ambush.Pack.Leader.Name
@@ -850,7 +857,7 @@ module TowerSession =
             | spawnPos :: rest ->
               let minionCombatant =
                 Bestiary.createMonster minionTemplate
-                |> fun c -> TierFactory.clampEngagedToPlayerLevel c state.Player
+                |> fun c -> TierFactory.clampEngagedToPlayerLevel c floorPlayer
               let minionEnemy =
                 { Id = sprintf "%s_minion_%d" ambush.Id i
                   Name = minionTemplate.Name

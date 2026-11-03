@@ -820,7 +820,8 @@ module TowerGenerator =
       Explored = Set.empty.Add spawn
       Visible = Set.empty.Add spawn
       SeenEnemies = Set.empty
-      ActiveQuests = npc.Quest |> Option.toList }
+      ActiveQuests = npc.Quest |> Option.toList
+      InitialPlayerLevel = 1 }
 
   /// Generates a complete Tower floor layout with open architectural plazas.
   /// Assumes a Physical player for the vault's stat check; live runs use `generateFloorForPlane`.

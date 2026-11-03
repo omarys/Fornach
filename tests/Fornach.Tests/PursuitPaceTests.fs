@@ -45,7 +45,8 @@ let private makeState (playerFinesse: int) (playerPos: Point) (entities: Map<Poi
       Explored = Set.empty
       Visible = Set.empty
       SeenEnemies = Set.empty
-      ActiveQuests = [] }
+      ActiveQuests = []
+      InitialPlayerLevel = 1 }
 
   { Player = combatant "Runner" playerFinesse
     CurrentFloor = floor

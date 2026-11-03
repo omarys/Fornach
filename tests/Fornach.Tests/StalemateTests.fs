@@ -48,7 +48,8 @@ let private openFloor (entities: Map<Point, TowerEntity>) : TowerFloor =
     Explored = Set.empty
     Visible = Set.empty
     SeenEnemies = Set.empty
-    ActiveQuests = [] }
+    ActiveQuests = []
+    InitialPlayerLevel = 1 }
 
 let private stateWith (player: Combatant) (entities: Map<Point, TowerEntity>) : TowerRunState =
   { Player = player

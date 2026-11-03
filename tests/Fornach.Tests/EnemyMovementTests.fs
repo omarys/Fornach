@@ -52,7 +52,8 @@ let private makeState
       Explored = Set.empty
       Visible = Set.empty
       SeenEnemies = Set.empty
-      ActiveQuests = [] }
+      ActiveQuests = []
+      InitialPlayerLevel = 1 }
 
   { Player = createPlayer ()
     CurrentFloor = floor
