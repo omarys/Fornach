@@ -68,6 +68,36 @@ module TempoReclaimTests =
     Assert.True(collapsed.IsExecuteEligible, "a collapsed combatant stays execute-eligible")
 
   [<Fact>]
+  let ``Absorbed blows break the striker and hand the Vor back`` () =
+    // Reported: a pack whose every strike was soaked to zero damage kept the Vor anyway, because a
+    // no-damage blow only ticked a meter. Each absorbed blow adds 20 Exhaustion, so five of them clear
+    // the 100 cap, the striker breaks, and the tempo it took comes back to the combatant it took it from.
+    let mutable foe =
+      (TierFactory.createClassLevel CharacterClass.Warrior 1)
+      |> fun c -> { c with Tempo = TacticalTiming.Vor }
+
+    // A ward the strike cannot get through, so every blow is answered and nothing lands.
+    let mutable defender =
+      (TierFactory.createClassLevel CharacterClass.Fighter 1 |> player)
+      |> fun c -> { c with Tempo = TacticalTiming.Nach; ArcaneWard = 5000 }
+
+    for round in 1..4 do
+      let res = ActionResolver.resolveEx (fixedRoller 4) (StandardAttack(ForceStrike false)) foe defender round
+      foe <- res.Actor
+      defender <- res.Target
+
+    Assert.False(CollapseState.isCollapsed foe.Collapse, "four unanswered blows must not yet break the striker")
+    Assert.True(defender.IsInVor, "the defender took the Vor on the first absorbed strike")
+
+    let res = ActionResolver.resolveEx (fixedRoller 4) (StandardAttack(ForceStrike false)) foe defender 5
+    foe <- res.Actor
+    defender <- res.Target
+
+    Assert.True(CollapseState.isCollapsed foe.Collapse, "a fifth unanswered blow must break the striker")
+    Assert.False(foe.IsInVor, "a collapsed striker does not hold the Vor")
+    Assert.True(defender.IsInVor, "a collapsed striker surrenders the Vor")
+
+  [<Fact>]
   let ``A fully absorbed strike taxes the attacker and hands over the Vor`` () =
     // Braced Fortitude Guard soaks a strike to zero rather than making it miss, so before this the
     // attacker paid nothing: it "landed" for 0 and neither the whiff nor the posture path fired.
@@ -227,9 +257,12 @@ module TempoReclaimTests =
     Assert.False(ActionResolver.cedesInitiative (duelist 5) (duelist 1), "neighbours are still a live threat")
 
   [<Fact>]
-  let ``Recovery action in Nach yields the Vor to a defender in the Nach`` () =
-    // If an enemy collapsed or was knocked into the Nach and then takes a RecoveryAction,
-    // a player waiting in the Nach must seize the Vor rather than being trapped in the Nach forever.
+  let ``Recovery action in the Nach does not hand the Vor to the foe being recovered against`` () =
+    // Reported: a player pinned in the Nach picked the recovery (the menu gives it a shield icon, so it
+    // reads as the defensive option) and it handed the pack the Vor back every round, so the exchange
+    // alternated the Vor forever with no damage either way. A recovery transfers the initiative the
+    // actor actually holds; it does not invent one for the other side. The way out of the Nach is a
+    // guard, which seizes the Vor outright (`resolveActiveDefense`).
     let player =
       (TierFactory.createClassLevel CharacterClass.Fighter 1 |> player)
       |> fun c -> { c with Tempo = TacticalTiming.Nach }
@@ -241,8 +274,8 @@ module TempoReclaimTests =
     let roller : DiceRoller = fun min _ -> min
     let res = ActionResolver.resolveExWithDefense roller (RecoveryAction SteadyForm) None foeInNach player 0
 
-    Assert.True(res.Target.IsInVor, "the defender in the Nach must seize the Vor when the actor recovers")
-    Assert.True(res.Actor.IsInNach, "the recovering actor must stay in the Nach")
+    Assert.True(res.Actor.IsInNach, "the recovering actor stays in the Nach")
+    Assert.True(res.Target.IsInNach, "the recovery must not hand the Vor to the foe it was recovering against")
 
   [<Fact>]
   let ``Floor 1 tutorial non-lethal resolution preserves player active defense and counters`` () =

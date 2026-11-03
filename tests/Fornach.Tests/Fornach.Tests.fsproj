@@ -28,6 +28,7 @@
     <Compile Include="AiStanceTests.fs" />
     <Compile Include="CombatLoggerTests.fs" />
     <Compile Include="GroupEngagementTests.fs" />
+    <Compile Include="TempoDeadlockTests.fs" />
     <Compile Include="DebugToolingTests.fs" />
     <Compile Include="CombatTacticsTests.fs" />
     <Compile Include="RepairTests.fs" />

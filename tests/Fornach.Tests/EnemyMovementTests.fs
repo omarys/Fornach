@@ -293,6 +293,75 @@ let ``reinforceFromPursuit returns an adjacent pursuer on the first phase`` () =
   Assert.Equal(enemy.Id, joined.Head.Id)
 
 [<Fact>]
+let ``a joiner that closes from out of sight takes the Vor and pushes the player into the Nach`` () =
+  // Reported: engaged with a wolf, a bandit walked in and joined. A foe arriving from outside the
+  // player's view is the same event as an ambush -- it closes with the Vor and the player drops into
+  // the Nach. The opening engagement already rules this (TowerSession.ambushTempo); a mid-fight
+  // joiner has to obey the same rule or it arrives holding an initiative nobody can ever exercise.
+  let playerPos = { X = 3; Y = 8 }
+  let enemy = makeEnemy "mob_0" "Bandit"
+  let state = makeState playerPos (openTiles 16 16) (Map.ofList [ { X = 5; Y = 8 }, EntityEnemy enemy ])
+
+  let after, joined = TowerSession.reinforceFromPursuit state []
+
+  Assert.Equal(1, joined.Length)
+  Assert.True(joined.Head.Combatant.IsInVor, "a joiner closing from out of sight takes the Vor")
+  Assert.True(after.Player.IsInNach, "an unseen joiner knocks the player back into the Nach")
+
+[<Fact>]
+let ``a joiner the player has already seen still takes the Vor`` () =
+  // Reported: engaged with a wolf, a bandit already in view walked in and joined. A reinforcement opens
+  // its own engagement on arrival, so being seen earlier is not the same as being engaged now -- it
+  // closes with the Vor and the player drops into the Nach. Only a joiner the player badly outmatches
+  // cedes instead.
+  let playerPos = { X = 3; Y = 8 }
+  let enemy = makeEnemy "mob_0" "Bandit"
+  let state = makeState playerPos (openTiles 16 16) (Map.ofList [ { X = 5; Y = 8 }, EntityEnemy enemy ])
+
+  let seenState =
+    { state with
+        CurrentFloor =
+          { state.CurrentFloor with
+              SeenEnemies = Set.singleton enemy.Id } }
+
+  Assert.True(seenState.Player.IsInVor, "precondition: the player holds the Vor against the wolf")
+
+  let after, joined = TowerSession.reinforceFromPursuit seenState []
+
+  Assert.Equal(1, joined.Length)
+  Assert.True(joined.Head.Combatant.IsInVor, "a seen joiner still closes with the Vor")
+  Assert.True(after.Player.IsInNach, "the player drops into the Nach against the new engagement")
+
+[<Fact>]
+let ``a joiner the player outmatches cedes the Vor instead of taking it`` () =
+  // The other half of the rule: a reinforcement that could never reach the player does not get to
+  // claim the initiative for free.
+  let playerPos = { X = 3; Y = 8 }
+  let enemy = makeEnemy "mob_0" "Scavenger"
+  let state = makeState playerPos (openTiles 16 16) (Map.ofList [ { X = 5; Y = 8 }, EntityEnemy enemy ])
+
+  // A wall of defence the joiner's best roll cannot reach, on every vector. Finesse stays level so the
+  // pursuer still closes to adjacency on this phase.
+  let wall =
+    StatBlock.Create
+      [ StatId.Force, 60
+        StatId.Fortitude, 5000
+        StatId.Finesse, 60
+        StatId.Reflex, 5000
+        StatId.Prowess, 60
+        StatId.Poise, 60
+        StatId.Acumen, 60
+        StatId.Resolve, 5000 ]
+
+  let strongState = { state with Player = { state.Player with Stats = wall } }
+
+  let after, joined = TowerSession.reinforceFromPursuit strongState []
+
+  Assert.Equal(1, joined.Length)
+  Assert.False(joined.Head.Combatant.IsInVor, "an outmatched joiner cedes the Vor")
+  Assert.True(after.Player.IsInVor, "a joiner that cedes leaves the player's Vor alone")
+
+[<Fact>]
 let ``reinforceFromPursuit never returns an enemy beyond the aggro radius`` () =
   let playerPos = { X = 1; Y = 1 }
   let enemy = makeEnemy "mob_0" "Scavenger"

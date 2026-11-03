@@ -334,23 +334,23 @@ module PreparationTests =
     Assert.Equal(attacker.Id, oldVor)
 
   [<Fact>]
-  let ``RecoveryAction in the Vor yields the Vor to the target`` () =
+  let ``RecoveryAction in the Vor against a foe already in the Nach keeps the Vor`` () =
+    // The foe yielded already, so there is nobody left to hand the initiative to. Recovering still costs
+    // the tempo when the foe is holding it, but it must not give away one the foe has already given up:
+    // that made a defended round self-defeating and left both sides alternating the Vor forever.
     let actor = createStandardFighter CharacterClass.Fighter 1 |> Combatant.seizeVor
     let target = createStandardFighter CharacterClass.Warrior 1 |> Combatant.yieldVor
 
     let roller = fixedRoller 3
     let res = ActionResolver.resolve roller (RecoveryAction SteadyForm) actor target
 
-    Assert.True(res.Actor.IsInNach, "Actor should have yielded the Vor")
-    Assert.True(res.Target.IsInVor, "Target should have gained the Vor")
+    Assert.True(res.Actor.IsInVor, "Actor keeps the Vor the target already yielded")
+    Assert.True(res.Target.IsInNach, "Target stays in the Nach")
 
     let tempoShifted =
       res.Events
       |> List.tryPick (function CombatEvent.TempoShifted (newVor, oldVor, _) -> Some (newVor, oldVor) | _ -> None)
-    Assert.True(tempoShifted.IsSome)
-    let newVor, oldVor = tempoShifted.Value
-    Assert.Equal(target.Id, newVor)
-    Assert.Equal(actor.Id, oldVor)
+    Assert.True(tempoShifted.IsNone, "no tempo change is reported when nobody holds the Vor to give")
 
   [<Fact>]
   let ``Landed strike from the Nach claims the Vor`` () =

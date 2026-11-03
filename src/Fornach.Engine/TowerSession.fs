@@ -497,11 +497,29 @@ module TowerSession =
   let reinforceFromPursuit (state: TowerRunState) (alreadyEngaged: string list) : TowerRunState * TowerEnemy list =
     let advanced, _ = stepEnemies state
 
+    let mutable joining = advanced
+
+    // A joiner opens its own engagement on arrival, so it obeys the same tempo rule as an ambusher: it
+    // closes with the Vor unless the player outmatches it badly enough to cede (cedesInitiative), in
+    // which case it yields. `stepEnemies` decides this for unseen foes but only emits it as an event --
+    // and this path discards those events on purpose -- so re-derive it here and apply it for real.
+    // Without it every joiner kept the factory-default Vor while the player kept theirs, so the pack
+    // could never open the round and a reinforcement's Vor did nothing.
     let joined =
       adjacentEnemies advanced
       |> List.filter (fun e -> not (List.contains e.Id alreadyEngaged))
+      |> List.map (fun e ->
+        if ActionResolver.cedesInitiative joining.Player e.Combatant then
+          { e with Combatant = Combatant.yieldVor e.Combatant }
+        else
+          { e with Combatant = Combatant.seizeVor e.Combatant })
 
-    advanced, joined
+    // A joiner that closes with the Vor knocks the player into the Nach; a pack the player outmatches
+    // cedes instead and leaves the player's tempo alone.
+    if joined |> List.exists (fun e -> e.Combatant.IsInVor) then
+      joining <- { joining with Player = Combatant.yieldVor joining.Player }
+
+    joining, joined
 
   /// Completes an active quest on the floor and awards its reward. The payout is read from the
   /// quest's own `Reward` record, so the completion card cannot promise one thing and pay another.

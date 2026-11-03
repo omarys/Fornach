@@ -2925,7 +2925,14 @@ module ActionResolver =
         match intent with
         | RecoveryAction reset ->
           let recRes = resolveRecovery reset upkeepActor target
-          if upkeepActor.IsInVor || target.IsInNach then
+          // A recovery yields the initiative the actor actually holds. It used to also fire when the
+          // target was in the Nach, which handed the Vor to the foe being recovered against -- so a
+          // player pinned in the Nach who picked a recovery (the menu labels it with a shield, so it
+          // reads as the defensive option) gave the pack the Vor back every round and could never
+          // strike. Two of them alternated the Vor forever: no damage either way, the exchange stuck in
+          // defence. A guard taken from the Nach already seizes the Vor (resolveActiveDefense), so
+          // nothing needs the recovery to do it.
+          if upkeepActor.IsInVor && not target.IsInNach then
             let updatedActor = Combatant.yieldVor recRes.Actor
             let updatedTarget = Combatant.seizeVor recRes.Target
             let tempoEvt = CombatEvent.TempoShifted(updatedTarget.Id, updatedActor.Id, sprintf "%s assumed a recovery posture, yielding the Vor." upkeepActor.Name)
