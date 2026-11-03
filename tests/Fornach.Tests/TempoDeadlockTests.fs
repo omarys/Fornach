@@ -111,3 +111,60 @@ module TempoDeadlockTests =
 
     Assert.True(recovered.Actor.IsInVor, "the recovery must not hand the Vor back to the sprite")
     Assert.True(recovered.Target.IsInNach, "the sprite stays in the Nach")
+
+  [<Fact>]
+  let ``a guard taken from the Nach in a group turn seizes the Vor and cleaves nobody`` () =
+    // Reported: a Bramble Boar ambushed the player into the Nach, and Fortitude Guard did nothing --
+    // no tempo, no collapse, no surrender, indefinitely. Meanwhile a Bandit that joined took damage
+    // from the guard, and stopped taking it once it died. A defensive posture must seize the Vor it is
+    // defending against and must not damage anything.
+    let boar = { makeSprite (makePlayer 3) 1 with Name = "Bramble Boar"; Tempo = TacticalTiming.Vor }
+    let bandit = { makeSprite (makePlayer 3) 2 with Name = "Bandit"; Tempo = TacticalTiming.Nach }
+
+    let player =
+      { makePlayer 3 with
+          Tempo = TacticalTiming.Nach
+          EnemiesFaced = 2 }
+
+    let res = ActionResolver.resolveGroupTurn (makeRoller 7) (ActiveDefense (FortitudeGuard false)) player boar [ bandit ]
+
+    let banditAfter =
+      res.SecondaryTargets |> List.tryFind (fun (c: Combatant) -> c.Id = bandit.Id)
+
+    Assert.True(res.Actor.IsInVor, sprintf "the guard must seize the Vor from the ambusher (got %s)" (describe res.Actor [ res.PrimaryTarget ]))
+    Assert.True(res.PrimaryTarget.IsInNach, "the ambusher yields the Vor")
+    Assert.Equal(bandit.Health.Current, banditAfter |> Option.map (fun c -> c.Health.Current) |> Option.defaultValue bandit.Health.Current)
+
+  [<Fact>]
+  let ``the pack's answer to a guard does not take back the Vor the guard just won`` () =
+    // Reported: Fortitude Guard was taken several times and the exchange never moved -- the player stayed
+    // in the Nach with no collapse and no surrender while the pack kept the initiative. The guard wins the
+    // Vor from the ambusher, and then the pack's answer to that same guard strike hands it straight back,
+    // so a player who defends never keeps the initiative past the end of the round.
+    let mutable boar = { makeSprite (makePlayer 3) 1 with Name = "Bramble Boar"; Tempo = TacticalTiming.Vor }
+    let mutable player = { makePlayer 3 with Tempo = TacticalTiming.Nach; EnemiesFaced = 1 }
+
+    // The guard the player picked, which is also the defense it answers the pack's strike with.
+    let guarded = ActionResolver.resolveGroupTurn (makeRoller 11) (ActiveDefense (FortitudeGuard false)) player boar []
+    player <- guarded.Actor
+    boar <- guarded.PrimaryTarget
+
+    Assert.True(player.IsInVor, sprintf "precondition: the guard seized the Vor (%s)" (describe player [ boar ]))
+
+    let mutable round = 1
+    for _ in 1..3 do
+      // The pack's answer: the foe it was answered against strikes back, with the guard still up.
+      let answer =
+        ActionResolver.resolveExWithDefense
+          (makeRoller 13)
+          (StandardAttack(ForceStrike false))
+          (Some(Guard(FortitudeGuard false)))
+          boar
+          player
+          0
+
+      boar <- answer.Actor
+      player <- answer.Target
+      round <- round + 1
+
+    Assert.True(player.IsInVor, sprintf "a defended round must not hand the Vor back (round %d: %s)" round (describe player [ boar ]))

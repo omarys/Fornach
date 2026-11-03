@@ -180,27 +180,6 @@ module CombatLogger =
       Turns = ResizeArray<CombatTurnRecord>()
       LogDirectory = defaultLogDir }
 
-  /// Records an individual combat turn within a round
-  let recordTurn
-    (session: CombatLogSession)
-    (round: int)
-    (turnNum: int)
-    (actionName: string)
-    (actorBefore: Combatant)
-    (targetBefore: Combatant)
-    (result: ActionResult) : unit =
-    let turnRecord =
-      { Round = round
-        TurnNumber = turnNum
-        ActorName = actorBefore.Name
-        TargetName = targetBefore.Name
-        ActionName = actionName
-        Contest = result.Contest
-        Events = result.Events
-        ActorVitalsAfter = formatVitalsSnapshot result.Actor
-        TargetVitalsAfter = formatVitalsSnapshot result.Target }
-    session.Turns.Add turnRecord
-
   /// Generates the full formatted string representation of the combat session
   let formatSession (session: CombatLogSession) (outcome: string) (finalPlayer: Combatant) (finalOpponent: Combatant) : string =
     let sb = StringBuilder()
@@ -277,3 +256,46 @@ module CombatLogger =
       Console.Error.WriteLine(sprintf "[CombatLogger Warning] Failed to write combat log file: %s" ex.Message)
 
     latestFile, historyFile
+
+  /// Rewrites `logs/combat_latest.log` with everything recorded so far.
+  /// The log used to be written only once, on outcome, so a fight that never ended -- a tempo deadlock,
+  /// the case this file exists to debug -- left no log at all, and a crash lost the whole session.
+  let flushLatest (session: CombatLogSession) (currentActor: Combatant) (currentTarget: Combatant) : unit =
+    try
+      let dir =
+        try
+          if not (Directory.Exists session.LogDirectory) then
+            Directory.CreateDirectory session.LogDirectory |> ignore
+          session.LogDirectory
+        with _ -> Path.Combine(AppContext.BaseDirectory, "logs")
+
+      File.WriteAllText(
+        Path.Combine(dir, "combat_latest.log"),
+        formatSession session "(IN PROGRESS -- last recorded action above)" currentActor currentTarget,
+        Encoding.UTF8
+      )
+    with ex ->
+      Console.Error.WriteLine(sprintf "[CombatLogger Warning] Failed to flush combat log file: %s" ex.Message)
+
+  /// Records an individual combat turn within a round, and flushes `combat_latest.log` so the most
+  /// recent actions are always on disk while the fight is still running.
+  let recordTurn
+    (session: CombatLogSession)
+    (round: int)
+    (turnNum: int)
+    (actionName: string)
+    (actorBefore: Combatant)
+    (targetBefore: Combatant)
+    (result: ActionResult) : unit =
+    let turnRecord =
+      { Round = round
+        TurnNumber = turnNum
+        ActorName = actorBefore.Name
+        TargetName = targetBefore.Name
+        ActionName = actionName
+        Contest = result.Contest
+        Events = result.Events
+        ActorVitalsAfter = formatVitalsSnapshot result.Actor
+        TargetVitalsAfter = formatVitalsSnapshot result.Target }
+    session.Turns.Add turnRecord
+    flushLatest session result.Actor result.Target

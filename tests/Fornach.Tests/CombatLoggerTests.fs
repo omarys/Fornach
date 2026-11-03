@@ -235,3 +235,32 @@ module CombatLoggerTests =
     Assert.Equal(2, TowerDisplay.wrappedRows 100 (String.replicate 150 "x"))
     Assert.Equal(4, TowerDisplay.wrappedRows 100 (String.replicate 300 "x"))
     Assert.Equal(1, TowerDisplay.wrappedRows 100 "")
+
+  [<Fact>]
+  let ``recording a turn writes combat_latest.log while the fight is still running`` () =
+    // A tempo deadlock never reaches an outcome, and the log used to be written only on outcome, so the
+    // one fight worth debugging was the one that left no file. Every recorded action now flushes.
+    let dir = Path.Combine(Path.GetTempPath(), "fornach_log_test_" + Guid.NewGuid().ToString("N"))
+    let player = createTestCombatant "Player" 100 100 500 10
+    let foe = createTestCombatant "Bramble Boar" 100 100 300 10
+
+    let session =
+      { CombatLogger.startSession "flush test" "group" player foe with
+          LogDirectory = dir }
+
+    let result: ActionResult =
+      { Actor = player
+        Target = foe
+        Events = [ CombatEvent.TempoShifted(player.Id, foe.Id, "held the defense and seized the Vor") ]
+        Contest = None }
+
+    CombatLogger.recordTurn session 1 1 "Fortitude Guard" player foe result
+
+    let latest = Path.Combine(dir, "combat_latest.log")
+    Assert.True(File.Exists latest, "combat_latest.log must exist before the combat ends")
+
+    let text = File.ReadAllText latest
+    Assert.Contains("Fortitude Guard", text)
+    Assert.Contains("IN PROGRESS", text)
+    Assert.Contains("seized the Vor", text)
+    Directory.Delete(dir, true)
