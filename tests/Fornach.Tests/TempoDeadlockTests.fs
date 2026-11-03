@@ -168,3 +168,64 @@ module TempoDeadlockTests =
       round <- round + 1
 
     Assert.True(player.IsInVor, sprintf "a defended round must not hand the Vor back (round %d: %s)" round (describe player [ boar ]))
+
+  [<Fact>]
+  let ``a guard is not swallowed when the foe does something other than strike`` () =
+    // Reported: defending several times against a Bramble Boar that held the Vor did nothing at all. The
+    // guard was only ever handed to `resolveAttack`, so any other opponent action -- bracing, shifting,
+    // recovering, deploying -- discarded it: no mitigation, no stacks, no tempo, indefinitely.
+    let player = { makePlayer 8 with Tempo = TacticalTiming.Nach; EnemiesFaced = 1 }
+    let foe = { makeSprite player 1 with Tempo = TacticalTiming.Vor }
+
+    let res =
+      ActionResolver.resolveExWithDefense
+        (makeRoller 17)
+        (ShiftStance CombatStance.PowerStance)
+        (Some(Guard(FortitudeGuard true)))
+        foe
+        player
+        0
+
+    Assert.True(
+      res.Target.IsInVor,
+      sprintf "a guard must still seize the Vor from a foe that does not strike (%s)" (describe res.Target [ res.Actor ]))
+
+    Assert.True(res.Actor.IsInNach, "the foe it was held against yields the Vor")
+
+  [<Fact>]
+  let ``the hold margin scales the status damage a failed strike costs the attacker`` () =
+    // The penalty for swinging into a wall was flat however decisively the guard won. A wider margin is a
+    // worse loss of the bind and should cost the attacker more, capped so one lopsided answer cannot
+    // empty its meters outright.
+    let player = { makePlayer 30 with Tempo = TacticalTiming.Nach; EnemiesFaced = 1 }
+    let foe =
+      { TierFactory.createClassLevel CharacterClass.Fighter 1 with
+          Name = "Bramble Boar"
+          Tempo = TacticalTiming.Vor }
+    let before = foe.Meters.Exhaustion.Value
+
+    let res =
+      ActionResolver.resolveExWithDefense
+        (makeRoller 19)
+        (StandardAttack(ForceStrike false))
+        (Some(Guard(FortitudeGuard true)))
+        foe
+        player
+        0
+
+    let whiffed =
+      res.Events
+      |> List.exists (function
+        | CombatEvent.ComboReset(_, msg) -> msg.Contains "failed to penetrate"
+        | _ -> false)
+
+    Assert.True(whiffed, sprintf "precondition: the guard turned the strike aside (%A)" res.Events)
+
+    let margin =
+      match res.Contest with
+      | Some c -> max 1 (min 5 -c.NetHits)
+      | None -> 1
+
+    // Physical/Power whiffs pay 10 Exhaustion per margin of the hold, on top of the round's 1 upkeep.
+    let spent = res.Actor.Meters.Exhaustion.Value - before
+    Assert.Equal(10 * margin + 1, spent)

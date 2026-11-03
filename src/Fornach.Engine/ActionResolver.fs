@@ -2234,6 +2234,12 @@ module ActionResolver =
           { m with
               Recklessness = Meter.Create(Math.Min(99, m.Recklessness.Value + selfReckSpike)) })
 
+    // The guard's margin is how decisively the defence won the bind: NetHits is negative when the
+    // defender is ahead, so its magnitude is the hold. A six-margin answer should cost the attacker
+    // more than a one-margin one, so the status damage a failed strike pays scales with it. Capped at 5
+    // so one lopsided bind against a badly outclassed foe cannot empty the attacker's meters outright.
+    let holdMargin = Math.Clamp(-contest.NetHits, 1, 5)
+
     if isWhiff then
       // A whiff is the stalemate made concrete: the strike was read and turned aside. Holding the Vor
       // bought no exchange, so the guard meters answer here too — never per swing, only per failure.
@@ -2246,21 +2252,21 @@ module ActionResolver =
           match plane, vector with
           | Physical, Vector.Power ->
             { m with
-                Exhaustion = m.Exhaustion + 10
-                Frustration = m.Frustration + 10 }
+                Exhaustion = m.Exhaustion + 10 * holdMargin
+                Frustration = m.Frustration + 10 * holdMargin }
           | Physical, _ ->
             { m with
-                Frustration = m.Frustration + 15 }
+                Frustration = m.Frustration + 15 * holdMargin }
           | Mental, Vector.Power ->
             { m with
-                CognitiveFatigue = m.CognitiveFatigue + 15
-                Confusion = m.Confusion + 10
-                Frustration = m.Frustration + 10 }
+                CognitiveFatigue = m.CognitiveFatigue + 15 * holdMargin
+                Confusion = m.Confusion + 10 * holdMargin
+                Frustration = m.Frustration + 10 * holdMargin }
           | Mental, _ ->
             { m with
-                Confusion = m.Confusion + 15
-                CognitiveFatigue = m.CognitiveFatigue + 10
-                Frustration = m.Frustration + 10 })
+                Confusion = m.Confusion + 15 * holdMargin
+                CognitiveFatigue = m.CognitiveFatigue + 10 * holdMargin
+                Frustration = m.Frustration + 10 * holdMargin })
       // Whiff: 0 damage, clear combo momentum. Clean deflection - no overwhelm inflicted!
       currentActor <-
         { currentActor with
@@ -2532,14 +2538,18 @@ module ActionResolver =
             match plane with
             | Physical ->
               { m with
-                  Exhaustion = m.Exhaustion + 20
-                  Frustration = m.Frustration + 15 }
+                  Exhaustion = m.Exhaustion + 20 * holdMargin
+                  Frustration = m.Frustration + 15 * holdMargin }
             | Mental ->
               { m with
-                  CognitiveFatigue = m.CognitiveFatigue + 20
-                  Confusion = m.Confusion + 15
-                  Frustration = m.Frustration + 10 })
-        events <- CombatEvent.ComboReset(currentActor.Id, "Strike fully absorbed: the guard answered it.") :: events
+                  CognitiveFatigue = m.CognitiveFatigue + 20 * holdMargin
+                  Confusion = m.Confusion + 15 * holdMargin
+                  Frustration = m.Frustration + 10 * holdMargin })
+        events <-
+          CombatEvent.ComboReset(
+            currentActor.Id,
+            sprintf "Strike fully absorbed: the guard answered it (margin %d)." holdMargin)
+          :: events
 
       // Transient Pain Shock Check (ADR 0009):
       // Single-turn physical HP damage >= 15% Max HP triggers a check against Poise (Fortitude fallback for non-humanoids)
@@ -2955,6 +2965,31 @@ module ActionResolver =
             Contest = None }
         | StandardAttack atk -> resolveAttack roller atk defenseOpt upkeepActor target priorDefenses
         | DeployPreparation (prep, targetIdOpt) -> resolveDeployPreparation prep targetIdOpt upkeepActor target
+
+      // A declared guard is answered by a strike and by nothing else. When the opponent braces, shifts,
+      // recovers or deploys instead, nothing consumed the guard: the defender yielded the initiative and
+      // got no mitigation, no stacks and no tempo for it. A player pinned in the Nach, guarding every
+      // round against a foe that never swings, sat there indefinitely -- no damage either way, the foe
+      // holding the Vor by default. Resolve the unconsumed guard as the posture it is, so a round spent
+      // bracing still seizes. Gated on the defender being in the Nach: that is the only state a held
+      // round can improve, and it keeps the guard from paying its stacks twice when the defender was
+      // holding the Vor anyway.
+      let res =
+        match defenseOpt, intent with
+        // A strike answers the guard, and an active defense is itself the guard: both already resolved.
+        | Some(Guard _), StandardAttack _
+        | Some(Guard _), ActiveDefense _
+        | None, _
+        | Some(SeizeIndes _), _ -> res
+        | Some(Guard defense), _ when res.Target.IsInNach ->
+          let posture = resolveActiveDefense defense res.Target res.Actor
+          { Actor = posture.Target
+            Target = posture.Actor
+            Events = res.Events @ posture.Events
+            Contest = res.Contest }
+        | Some(Guard _), _ -> res
+        | None, _
+        | Some(SeizeIndes _), _ -> res
 
       // The guard meters answer every action taken from the Nach, not just strikes: a fighter pinned
       // there hardens whether they swing, brace, shift or recover. The gain is one stack per foe faced,
