@@ -713,3 +713,47 @@ let ``a defended round pays one guard stack per foe still standing`` () =
   // The guard ceiling is 25, so a full pack cannot be banked in one round only because it overshot.
   Assert.Equal(25, (guardedBy 40).Inertia)
   Assert.True(Combatant.GuardStackCap > Combatant.StackCap, "the guard must bank past the offense ramp")
+
+[<Fact>]
+let ``traumaReset preserves initial enemy spawn levels when player levels up before death`` () =
+  let initialPlayer = createTestPlayer ()
+  let state = TowerSession.initSession initialPlayer 42 1
+  Assert.Equal(initialPlayer.Level, state.CurrentFloor.InitialPlayerLevel)
+
+  // Find the initial levels of non-boss mobs on Floor 1
+  let initialMobLevels =
+    state.CurrentFloor.Entities
+    |> Map.toList
+    |> List.choose (fun (_, ent) ->
+      match ent with
+      | EntityEnemy e when not (e.Id.StartsWith("boss_")) -> Some (e.Id, e.Combatant.Level)
+      | _ -> None)
+
+  Assert.NotEmpty(initialMobLevels)
+
+  // Player gains levels during the floor run (e.g. from defeating enemies)
+  let leveledUpPlayer = TierFactory.scaleCombatantToLevel (initialPlayer.Level + 5) state.Player
+  let stateAfterLevelUp = { state with Player = leveledUpPlayer }
+
+  // Player dies and traumaReset rewinds the floor
+  let resetState = TowerDisplay.traumaReset stateAfterLevelUp
+
+  // The player keeps their progression (level + 5)
+  Assert.Equal(initialPlayer.Level + 5, resetState.Player.Level)
+
+  // But all respawned enemies remain at their initial spawn level
+  let resetMobLevels =
+    resetState.CurrentFloor.Entities
+    |> Map.toList
+    |> List.choose (fun (_, ent) ->
+      match ent with
+      | EntityEnemy e when not (e.Id.StartsWith("boss_")) -> Some (e.Id, e.Combatant.Level)
+      | _ -> None)
+    |> Map.ofList
+
+  for (id, initialLevel) in initialMobLevels do
+    match Map.tryFind id resetMobLevels with
+    | Some resetLevel ->
+      Assert.Equal(initialLevel, resetLevel)
+    | None ->
+      Assert.Fail(sprintf "Enemy %s was not respawned after traumaReset" id)

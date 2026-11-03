@@ -223,7 +223,7 @@ module ActionResolver =
 
       let postEnrageAmount = Math.Max(0, remAmount - enrageShrugged - disciplineShrugged - etherealShrugged)
       let absorbed = int (float postEnrageAmount * targetWithWard.Armor.AbsorptionRatio)
-      let actualDmg = if postEnrageAmount <= 0 then 0 else Math.Max(1, postEnrageAmount - absorbed)
+      let actualDmg = Math.Max(0, postEnrageAmount - absorbed)
       let updatedPool = targetWithWard.Health.ApplyDelta -actualDmg
       let shrugEvts = [
         if enrageShrugged > 0 then
@@ -252,7 +252,8 @@ module ActionResolver =
       // still opens a wound, so a wear-vs-wear grind resolves through the bleed tick instead of
       // turn count. A target already bleeding is not stacked again by the same floor.
       let floored =
-        postEnrageAmount > 0
+        actualDmg > 0
+        && postEnrageAmount > 0
         && postEnrageAmount - absorbed <= 1
         && updatedTarget.BleedStacks = 0
 
@@ -290,7 +291,7 @@ module ActionResolver =
         else 0
 
       let postMitigatedAmount = remAmount - enrageShrugged - disciplineShrugged
-      let actualDmg = if postMitigatedAmount <= 0 then 0 else Math.Max(1, postMitigatedAmount)
+      let actualDmg = Math.Max(0, postMitigatedAmount)
       let updatedPool = targetWithWard.Morale.ApplyDelta -actualDmg
       let updatedTarget = { targetWithWard with Morale = updatedPool }
 
@@ -2238,11 +2239,28 @@ module ActionResolver =
       // bought no exchange, so the guard meters answer here too — never per swing, only per failure.
       if currentActor.IsInVor then
         currentActor <- currentActor |> Combatant.addGuardStacks 1
-      // A defense that holds frustrates the attacker: the Finesse/Reflex meter is fed by being read,
-      // not by swinging. Five clean deflections push it past the 75% strain band (-25% Finesse/Reflex).
+      // Whiffing inflicts status damage (exhaustion/frustration for physical, cognitive fatigue/confusion/frustration for mental)
       currentActor <-
         currentActor
-        |> Combatant.updateMeters (fun m -> { m with Frustration = m.Frustration + 15 })
+        |> Combatant.updateMeters (fun m ->
+          match plane, vector with
+          | Physical, Vector.Power ->
+            { m with
+                Exhaustion = m.Exhaustion + 10
+                Frustration = m.Frustration + 10 }
+          | Physical, _ ->
+            { m with
+                Frustration = m.Frustration + 15 }
+          | Mental, Vector.Power ->
+            { m with
+                CognitiveFatigue = m.CognitiveFatigue + 15
+                Confusion = m.Confusion + 10
+                Frustration = m.Frustration + 10 }
+          | Mental, _ ->
+            { m with
+                Confusion = m.Confusion + 15
+                CognitiveFatigue = m.CognitiveFatigue + 10
+                Frustration = m.Frustration + 10 })
       // Whiff: 0 damage, clear combo momentum. Clean deflection - no overwhelm inflicted!
       currentActor <-
         { currentActor with
@@ -2511,9 +2529,16 @@ module ActionResolver =
         currentActor <-
           currentActor
           |> Combatant.updateMeters (fun m ->
-            { m with
-                Exhaustion = m.Exhaustion + 20
-                Frustration = m.Frustration + 15 })
+            match plane with
+            | Physical ->
+              { m with
+                  Exhaustion = m.Exhaustion + 20
+                  Frustration = m.Frustration + 15 }
+            | Mental ->
+              { m with
+                  CognitiveFatigue = m.CognitiveFatigue + 20
+                  Confusion = m.Confusion + 15
+                  Frustration = m.Frustration + 10 })
         events <- CombatEvent.ComboReset(currentActor.Id, "Strike fully absorbed: the guard answered it.") :: events
 
       // Transient Pain Shock Check (ADR 0009):
@@ -2762,10 +2787,9 @@ module ActionResolver =
 
       // Step H: the initiative does not follow the dice — only a decisive answer turns the tempo.
       let landedActor, landedTarget, tempoMoved =
-        if fullyAbsorbed then
+        if fullyAbsorbed || (CollapseState.isCollapsed finalActor.Collapse) then
           // Nothing got through, so nothing was imposed: the guard answered the strike and takes the
-          // tempo. This has to win over the insist rule below, or an attacker holding the Vor keeps it
-          // merely by having swung into a wall.
+          // tempo. A collapsed foe cannot maintain the initiative either.
           resolveWhiffTempo finalActorWithFluid finalTarget
         elif isAffinityCounter && contest.NetHits <= 1 && finalTarget.IsInNach then
           Combatant.yieldVor finalActorWithFluid, Combatant.seizeVor finalTarget, true
@@ -2773,13 +2797,21 @@ module ActionResolver =
           resolveLandedTempo finalActorWithFluid finalTarget contest.NetHits
 
       if tempoMoved then
-        events <-
-          CombatEvent.TempoShifted(
-            landedActor.Id,
-            landedTarget.Id,
+        let shiftMsg =
+          if fullyAbsorbed then
+            sprintf "%s fully mitigated the strike and seized the Vor from %s." landedTarget.Name landedActor.Name
+          elif CollapseState.isCollapsed finalActor.Collapse then
+            sprintf "%s collapsed from strain and surrendered the Vor to %s." landedActor.Name landedTarget.Name
+          elif isAffinityCounter && contest.NetHits <= 1 then
+            sprintf "%s countered the attack cleanly from the Nach, seizing the Vor!" landedTarget.Name
+          else
             sprintf "%s struck decisively from the Nach, seizing the Vor!" landedActor.Name
-          )
-          :: events
+        let newVorId, prevVorId =
+          if fullyAbsorbed || (CollapseState.isCollapsed finalActor.Collapse) || (isAffinityCounter && contest.NetHits <= 1) then
+            landedTarget.Id, landedActor.Id
+          else
+            landedActor.Id, landedTarget.Id
+        events <- CombatEvent.TempoShifted(newVorId, prevVorId, shiftMsg) :: events
 
       let finalActorWithTempo, finalTargetWithTempo = landedActor, landedTarget
 
@@ -2893,7 +2925,7 @@ module ActionResolver =
         match intent with
         | RecoveryAction reset ->
           let recRes = resolveRecovery reset upkeepActor target
-          if upkeepActor.IsInVor then
+          if upkeepActor.IsInVor || target.IsInNach then
             let updatedActor = Combatant.yieldVor recRes.Actor
             let updatedTarget = Combatant.seizeVor recRes.Target
             let tempoEvt = CombatEvent.TempoShifted(updatedTarget.Id, updatedActor.Id, sprintf "%s assumed a recovery posture, yielding the Vor." upkeepActor.Name)
@@ -2948,11 +2980,11 @@ module ActionResolver =
     | _ ->
       resolveEx roller attackerIntent attacker defender 0
 
-  /// Resolves an action but prevents a single turn from reducing the target's Health or
-  /// Morale from above zero to zero. Used by the story tutorial so a level-1 protagonist
+  /// Resolves an action with defense and encirclement consideration, preventing a single turn from reducing
+  /// the target's Health or Morale from above zero to zero. Used by the story tutorial so a level-1 protagonist
   /// cannot be one-shot. Applied nowhere else, so global balance is untouched.
-  let resolveWithoutLethal (roller: DiceRoller) (intent: ActionIntent) (actor: Combatant) (target: Combatant) : ActionResult =
-    let res = resolve roller intent actor target
+  let resolveWithoutLethalWithDefense (roller: DiceRoller) (intent: ActionIntent) (defenseOpt: DefenseChoice option) (actor: Combatant) (target: Combatant) (priorDefenses: int) : ActionResult =
+    let res = resolveExWithDefense roller intent defenseOpt actor target priorDefenses
 
     let clamp (before: Pool) (after: Pool) =
       if before.Current > 0 && after.Current <= 0 then { after with Current = 1 } else after
@@ -2962,6 +2994,9 @@ module ActionResolver =
           { res.Target with
               Health = clamp target.Health res.Target.Health
               Morale = clamp target.Morale res.Target.Morale } }
+
+  let resolveWithoutLethal (roller: DiceRoller) (intent: ActionIntent) (actor: Combatant) (target: Combatant) : ActionResult =
+    resolveWithoutLethalWithDefense roller intent None actor target 0
 
   /// Resolves an action turn against a primary target, and if in Power or Discipline stance against multiple opponents,
   /// resolves secondary cleave or chained attacks according to martial stance rules.

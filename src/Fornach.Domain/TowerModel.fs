@@ -340,7 +340,10 @@ type TowerFloor =
     /// Ids of enemies the player has actually had in view on this floor. A foe missing from this set
     /// is unseen, and the engagement it starts opens with the foe in the Vor and the player in the Nach.
     SeenEnemies: Set<string>
-    ActiveQuests: TowerQuest list }
+    ActiveQuests: TowerQuest list
+    /// Player level at the time this floor was entered / generated. Spawned enemies scale to this level
+    /// and remain at this level even if the player levels up and dies during the run.
+    InitialPlayerLevel: int }
 
   /// Checks if a tile is valid and unobstructed for movement
   member this.CanMoveTo (pt: Point) : bool =

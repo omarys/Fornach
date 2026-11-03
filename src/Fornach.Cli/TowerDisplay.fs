@@ -701,9 +701,17 @@ module TowerDisplay =
           Collapse = CollapseState.Stable }
     let depthCap, bossOffset = TowerSession.floorScalingFor state.IsStoryMode state.CurrentFloor.FloorNumber
 
+    let floorPlayerLevel =
+      if state.CurrentFloor.InitialPlayerLevel > 0 then state.CurrentFloor.InitialPlayerLevel
+      else state.Player.Level
+
+    let initialPlayer =
+      { state.Player with
+          Progression = { state.Player.Progression with Level = floorPlayerLevel } }
+
     let pristine =
       TowerGenerator.generateFloorForPlane state.Seed state.CurrentFloor.FloorNumber state.IsStoryMode state.Player.Plane
-      |> TowerSession.rescaleFloorEnemiesWith depthCap bossOffset state.Player
+      |> TowerSession.rescaleFloorEnemiesWith depthCap bossOffset initialPlayer
     let pristineMobs =
       pristine.Entities
       |> Map.toList
@@ -733,7 +741,10 @@ module TowerDisplay =
     { state with
         Player = player
         PlayerPosition = state.CurrentFloor.SpawnLocation
-        CurrentFloor = { state.CurrentFloor with Entities = entities } }
+        CurrentFloor =
+          { state.CurrentFloor with
+              Entities = entities
+              InitialPlayerLevel = floorPlayerLevel } }
 
   /// Renders recent messages in a chronicle panel
   let renderMessageLog (state: TowerRunState) (maxLines: int) : Panel =
