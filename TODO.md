@@ -1,78 +1,60 @@
 # TODO List
 
-## Priority Architecture & Feature Roadmap
+**Status:** 631 tests green (359 `Fornach.Tests` + 249 `Fornach.Domain.Tests` + 23 `Fornach.Spatial.Tests`), 0 warnings.
 
-### Current Iteration Priorities
-
-- [x] **1. Juggernaut & Ranger Evaluation**:
-  - Benchmark and tune `Juggernaut` (Power / Discipline) and `Ranger` (Agility / Discipline) progression in [`tests/Fornach.Domain.Tests/MonteCarloSwarmTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Domain.Tests/MonteCarloSwarmTests.fs) and `--balance-matrix` (expanded to 128 matchups).
-
-- [x] **1.1. Tower Inspect / Look Mode**:
-  - Implemented full tile inspection reticle (`x` / `X` / `;`) in [`TowerDisplay.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/TowerDisplay.fs) with Vim/arrow navigation, environmental hazard alerts (Corrosive Acid Slag, Molten Lava Rift, Deep Current, Calming Spores), and chest/shrine detection. Verified in [`TowerTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Tests/TowerTests.fs).
-
-- [x] **1.2. Combat Pacing & One-Shot Elimination (All Tiers)**:
-  - Eliminated instant turn-1 kills across both Novice and Grandmaster duels. Soft-capped `computeTierMultiplier` with diminishing returns (capped at 5.0x), normalized mental base damage, tuned Agility crit multiplier, capped per-strike armor shredding to 25% of max durability, and raised baseline pool floors in `TierFactory.fs`. Both Novice and Grandmaster non-mirror duels now sustain 3–6 tactical rounds.
-
-- [x] **1.3. Higher-Level Enemy Swarm Waves**:
-  - Integrated Veteran (Lv. 40), Master (Lv. 100), and Grandmaster (Lv. 200) multi-enemy swarm waves in [`MonteCarloSwarmTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Domain.Tests/MonteCarloSwarmTests.fs) (expanded to 12 tests, 190 tests overall).
-
-- [x] **1.4. Discipline Attack Separation & Duel Menu Decluttering**:
-  - Enforced strict discipline boundaries in [`ActionResolver.fs`](file:///home/omary/Dev/fornach/src/Fornach.Engine/ActionResolver.fs) and [`Actions.fs`](file:///home/omary/Dev/fornach/src/Fornach.Engine/Actions.fs): physical characters cannot execute magic attacks, and magic characters cannot execute physical martial strikes.
-  - Streamlined duel menu in [`Program.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/Program.fs): filtered choices so physical characters see only physical martial strikes, stances, and `Steady Form` (~9–10 options), while magic characters see only arcane spellcraft with proficiency indicators and `Center Mind` (~11 options). Filtered boss Trauma Gambits to contextual encounters.
-  - Verified with 4 new unit tests in [`ClassBalanceTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Tests/ClassBalanceTests.fs) (194 tests passing across solution).
-
-- [x] **1.5. Magic Complex Forms System (Occult Mental Stances)**:
-  - Modeled Shadowrun Technomancer-inspired *"Weaving Complex Forms"* for arcane combatants: `ResonanceSpike` (Power/Intellect overclocking, +25% spell damage & cognitive fatigue, splash, Fading drain: +10 self-fatigue, +15 self-recklessness), `PhantasmalDiffusion` (Agility/Acuity sensory static, passive clone weaving up to 4, +40% decoy evasion swap bonus, -15% direct damage), and `AegisLattice` (Discipline/Acumen abjuration lattice, +15 Arcane Ward per turn, locks Overchannel, 50% damage reflection + 15 Frustration when ward struck).
-  - Enforced cross-discipline stance separation: physical characters shift physical martial stances; mental characters thread mental complex forms.
-  - Added autonomous AI form evaluation and panic switching under cognitive strain.
-  - Updated duel menus and HUD rendering in [`Display.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/Display.fs), [`TowerDisplay.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/TowerDisplay.fs), and [`Program.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/Program.fs).
-  - Verified with 8 unit tests in [`ClassBalanceTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Tests/ClassBalanceTests.fs) (202 tests passing, 0 warnings) and verified against 128-matchup `--balance-matrix`.
-
-- [x] **1.6. Vor / Nach / Indes Tactical Tempo Integration (ADR 0006)**:
-  - Promoted `TacticalTiming` (`Vor | Nach | Indes`) to `Fornach.Domain` and added `Tempo: TacticalTiming` on `Combatant` (`Combatant.seizeVor`, `yieldVor`, `IsInVor`, `IsInNach`).
-  - Added dynamic Indes thresholds in `IndesResolver.fs`: attacker heavy windup (`IsHeavyWindup`) or high Recklessness ($\ge 60$) reduces Indes threshold by 1 each (stacks with `ParryingBuckler`, clamped at 1).
-  - Wired dynamic round initiative in `Simulation.fs` (`runSingleMatch`) and `Program.fs` (`runInteractiveDuel`, `runStoryDuel`): the combatant holding the Vor attacks first; seizing the Vor in Indes or landing a strike from the Nach flips initiative for the next exchange; recovery in the Vor yields initiative.
-  - Added `[VOR]` and `[NACH]` badges in duel HUD headers and logged `TempoShifted` combat events in `Display.fs`.
-  - Verified with 4 new unit tests in `PreparationTests.fs` (524 tests passing across solution, 0 warnings; `ParallelDeterminismTests`, `MonteCarloSwarmTests`, and `OverallBalanceTests` all green).
-
-- [ ] **2. Infinite Tower Boss Scaling**:
-  - Verify Grief Aspect bosses in [`docs/STORY_AND_TOWER.md`](file:///home/omary/Dev/fornach/docs/STORY_AND_TOWER.md) against the revised preparations and meter interactions.
-
-- [ ] **3. Spatial Grid Integration**:
-  - Connect `Fornach.Spatial` FOV, pathfinding, and directional flanking to the turn resolution loop.
+This file tracks **only open work**. Completed items — the archetype evaluation, the six §1 iteration priorities, the combat pacing work, the bestiary subsystem, the encounter engine, the tempo system and everything through `d4dbf47` — are recorded in [`docs/agents/domain.md`](file:///home/omary/Dev/fornach/docs/agents/domain.md) §1 (what was built) and §5 (the numbered ledger). The numbers in parentheses below are that ledger's item numbers; this file must not invent a second numbering.
 
 ---
 
-### ADR 0004: Monster Bestiary & World Encounters
+## Open Work
 
-Reference: [`docs/adr/0004-monster-bestiary-and-world-encounters.md`](file:///home/omary/Dev/fornach/docs/adr/0004-monster-bestiary-and-world-encounters.md)
+### Feature Work
 
-- [x] **4. Monster Bestiary Subsystem (ADR 0004 Phases 1 & 2)**:
-  - [x] **Taxonomy & Primitives**: Define `MonsterFamily` (Beast, Construct, UndeadWraith, Aberration, GriefManifestation), `MonsterRole`, `MonsterTrait`, and `MonsterTemplate` in `src/Fornach.Domain/Bestiary.fs`.
-  - [x] **Biome Catalog**: Author specialized non-humanoid species across all 7 Tower biomes:
-    - *Quarry Plazas*: Slag Hounds, Stone Gargoyles, Quarry Overseers (Force / Armor crush).
-    - *Pine Cloisters*: Thorn Weavers, Mist Stalkers, Blight Sprites (Finesse / Venom / Phantoms).
-    - *Basalt Calderas*: Magma Crawlers, Basalt Golems, Obsidian Fiends (Recklessness / Lava Rifts).
-    - *Tempest Terraces*: Gale Harpies, Storm Drakes, Cloud Mantises (Knockbacks / Disorient).
-    - *Sunken Boulevards*: Drowned Husks, Mire Crawlers, Siren Specters (Cognitive Doldrums / Morale drain).
-    - *Elysian Sanctuaries*: Seraphic Wardens, Solar Sphinxes, Dawn Heralds (Reflect / Calming aura).
-    - *Celestial Spires*: Starlit Eidolons, Void Reavers, Chrono-Anomalies (Teleport / Turn distortion).
-  - [x] **Tactical Action Intents**: Hook specialized monster attack patterns and reactive/offensive traits (Venomous Sting, Acidic Blood, Molten Aura, Ethereal Carapace, Psychic Doldrums, Relentless Ferocity) into [`ActionResolver.fs`](file:///home/omary/Dev/fornach/src/Fornach.Engine/ActionResolver.fs) and species-instinct profiles into [`AI.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/AI.fs).
-  - [x] **Verification**: Add unit tests in `tests/Fornach.Domain.Tests/BestiaryTests.fs` (212 tests passing, 0 warnings across solution).
+- [ ] **Spatial Grid Integration** (§5 item 3):
+  - FOV is **wired** — [`Vision.fs`](file:///home/omary/Dev/fornach/src/Fornach.Domain/Vision.fs) computes a dilated arc and `TowerSession.updateFov` runs it per move.
+  - Still open: directional flanking and grid pathfinding are **not** connected to turn resolution.
 
-- [x] **5. Dynamic World & Tower Encounters Engine (ADR 0004 Phase 3)**:
-  - [x] **Encounter Domain Models**: Defined `FloorEncounter` (`AmbushLair`, `SacrificialAltar`, `WanderingTrader`, `TreasureVault`, `MechanicalTrapGauntlet`, `MemoryEchoFragment`) in [`TowerModel.fs`](file:///home/omary/Dev/fornach/src/Fornach.Domain/TowerModel.fs).
-  - [x] **Procedural Placement**: Updated [`TowerGenerator.fs`](file:///home/omary/Dev/fornach/src/Fornach.Engine/TowerGenerator.fs) to distribute 2–4 diverse encounters per floor via [`WorldEvents.fs`](file:///home/omary/Dev/fornach/src/Fornach.Engine/WorldEvents.fs) (ambushes along colonnades, secret vaults in alcoves, sacrificial altars in courtyards).
-  - [x] **Interactive TUI Modals**: Built interactive Spectre.Console encounter modals and decision prompts in [`TowerDisplay.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/TowerDisplay.fs) with full Nerd Font glyphs, trading economy (Souls & alchemical trophies), sacrifice pacts, puzzle vaults, disarm mechanics, and roadside memory echo fragments.
-  - [x] **Verification**: Added 8 comprehensive unit tests in [`EncounterTests.fs`](file:///home/omary/Dev/fornach/tests/Fornach.Tests/EncounterTests.fs) (all 221 tests passing cleanly with 0 warnings).
+- [ ] **Infinite Tower Boss Scaling** (§5 item 2):
+  - Verify Grief Aspect bosses in [`docs/STORY_AND_TOWER.md`](file:///home/omary/Dev/fornach/docs/STORY_AND_TOWER.md) against the revised preparations and meter interactions. Covered today only by `StoryBridgeTests.fs`.
 
-- [ ] **6. Main Story World Encounters & Roadside Memories (ADR 0004 Phase 4)**:
-  - [ ] **Sensory Flashbacks**: Scatter interactive roadside memory fragments across story chapters in [`StoryRunner.fs`](file:///home/omary/Dev/fornach/src/Fornach.Story/StoryRunner.fs), unlocking narrative clues about the protagonist's lost twin (Lyra).
-  - [ ] **Psychological Anomaly Events**: Implement atmospheric "Truck-kun" reality breaks (phantom headlights in fog, tire skid marks on cobblestones, radio static).
-  - [ ] **Alternative Resolutions**: Support moral/peaceful encounter resolutions (e.g. comforting a weeping specter to achieve Morale equilibrium without physical bloodshed).
+- [ ] **Quick-Play Mode — automatic encounters** (§5 item 4, forward plan in [`domain.md`](file:///home/omary/Dev/fornach/docs/agents/domain.md) §7):
+  - Attack selection and combat-log visibility are done: [`AttackEstimator.fs`](file:///home/omary/Dev/fornach/src/Fornach.Engine/AttackEstimator.fs) ranks options and `Display.logDamageSummary` / the Chronicle Log viewer (`TowerDisplay.showLogViewer`) report results.
+  - [ ] **Auto-Resolution**: drive map collisions into a full auto round (attack pick + defense + damage application) using the top-ranked option, so an encounter resolves without the tactical menu. Must emit the same `CombatEvent`s so the Chronicle Log keeps working, and must degrade to archetype order when the enemy is `Obscured`.
+  - [ ] **Movement Semantics**: standing still maps to Deep Breath / Steady Stance, advancing into an enemy maps to an attack, retreating maps to a withdrawal round.
 
-- [ ] **7. Quick-Play Mode (automatic encounters)**:
-  - [x] **Effectiveness Ranking**: [`AttackEstimator.fs`](file:///home/omary/Dev/fornach/src/Fornach.Engine/AttackEstimator.fs) scores any attack against scouted enemy stats; the encounter menu orders strikes and spells by expected damage (`Program.buildActionChoices`), falling back to archetype order when the enemy is `Obscured`.
-  - [ ] **Auto-Resolution**: Drive map collisions into a full auto round (attack pick + defense + damage application) using the top-ranked option, so an encounter resolves without the tactical menu.
-  - [x] **Combat Log Visibility**: Resolved actions print applied damage and the vitals swing (`Display.logDamageSummary`); duel, boss, pack and quick-resolve outcomes append a chronicle entry to the map log; `V` opens the scrollable Chronicle Log viewer (`TowerDisplay.showLogViewer`).
-  - [ ] **Movement Semantics**: Standing still maps to Deep Breath / Steady Stance, advancing into an enemy maps to an attack, and retreating maps to a withdrawal round.
+### ADR 0004 — Main Story World Encounters (Phase 4)
+
+Reference: [`docs/adr/0004-monster-bestiary-and-world-encounters.md`](file:///home/omary/Dev/fornach/docs/adr/0004-monster-bestiary-and-world-encounters.md). Phases 1–3 are complete; only Phase 4 is open. This is the one open item with no §5 ledger entry.
+
+- [ ] **Main Story World Encounters & Roadside Memories (ADR 0004 Phase 4)**:
+  - [ ] **Sensory Flashbacks**: scatter interactive roadside memory fragments across story chapters in [`StoryRunner.fs`](file:///home/omary/Dev/fornach/src/Fornach.Story/StoryRunner.fs), unlocking narrative clues about the protagonist's lost twin (Lyra).
+  - [ ] **Psychological Anomaly Events**: atmospheric "Truck-kun" reality breaks (phantom headlights in fog, tire skid marks on cobblestones, radio static). Note the death replay already ships a full Truck-kun animation in [`DeathAnimation.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/DeathAnimation.fs); these are in-world anomalies, not that sequence.
+  - [ ] **Alternative Resolutions**: moral/peaceful encounter resolutions (e.g. comforting a weeping specter to Morale equilibrium without physical bloodshed).
+
+### Balance & Economy
+
+- [ ] **Shrine balance brake** (§5 item 5): repeatable shrines are an unlimited, free full restore — `TowerSession.shrineBlessing` restores Health, Morale, Armor and every meter on *every* visit; only the stat boon is one-time. If the caps are meant to bite, add a per-visit soul cost scaling with floor.
+
+- [ ] **Shrine-gated identification risk** (§5 item 6): `TowerSession.useConsumable` refuses unidentified kinds until a shrine, so a long floor can strand the pack. Measure shrines-per-floor on floors 5+ before deciding whether that is a reward or a trap.
+
+- [ ] **Quest reward payout — implemented, awaiting a play-check** (§5 item 8): `TowerQuest` carries a `Reward: QuestReward` record (`Souls`, `Health`, `Morale`, `FullVitality`, `KeyId`), declared through `questReward souls morale keyId` in [`TowerGenerator.fs`](file:///home/omary/Dev/fornach/src/Fornach.Engine/TowerGenerator.fs); `TowerSession.completeQuest` grants it and the old per-visit hardcoded `+50 Souls / +40 Morale` is gone. Suite green; nobody has read the resulting numbers in play.
+
+### Tempo System
+
+- [ ] **The balance sweeps cannot see tempo at all** (§5 item 28): `--balance-matrix`, `--run-sim` and the swarm cells resolve strikes and damage but not Vor/Nach position, guard stacks, or the ramp meters — which is exactly where the play-test reports live. `Simulation.fs` contains no reference to `Tempo` or `GuardStacks`. **Every** tempo bug in the last four sessions (`c4850e0`, `bb811ce`, `d4dbf47`, and the whiff/absorbed-strike fix in `f4ed026`) was found by a human at the keyboard against a green suite. Until tempo is modelled in the harness, treat "sweep unchanged" as no evidence for any initiative change. Same lesson as §5 item 12 for spender magnitude.
+
+- [ ] **Holding more than one Vor at once is still not implemented** (§5 item 29, ADR 0009 *Multi-Combatant Engagements*). Gated on `Prowess` against the foes' `Prowess`/`Instinct`, deliberately left out; there is no code path for it and no test asserting the single-Vor limit is intentional. The sharp edge: `Combatant.Tempo` is one global field on the player, but `Program.fs:1497-1506` deliberately lets every non-target foe regain the Vor against the player's *other* engagements, so the state "player holds the Vor **and** a foe holds the Vor" is reachable and meaningful. The menu reads only the player's field, so it renders correctly today — but anything that starts reasoning about "who holds the Vor" globally will read that state wrong. Per-engagement tempo is the model; the field is not.
+
+- [ ] **`cedesInitiative` cost grows with pack size** (§5 item 30): six call sites across [`Program.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/Program.fs), [`TowerDisplay.fs`](file:///home/omary/Dev/fornach/src/Fornach.Cli/TowerDisplay.fs) and [`TowerSession.fs`](file:///home/omary/Dev/fornach/src/Fornach.Engine/TowerSession.fs) — one per unseen foe inside the ambush loop and again in the end-of-round reclaim, each reading a `GetCombatStat` pair per tempo vector. Fine at today's pack sizes; hoist the player's stat pair out of the loop if a floor ever fields dozens of foes.
+
+### Awaiting a Play-Check
+
+- [ ] **Frontage 1 against a GrandMaster** (§5 item 24): rank pays for the ring — Poise sets frontage (one lane per 100 points, floored at 1) and Prowess buys interceptions. A single body fighting a GrandMaster is now recorded by the swarm cells as saturation rather than a tipping point. Confirm that is the intended feel and not a silent immunity.
+
+- [ ] **Floors 1–2 under the pessimistic model** (§5 item 17): `rescaleFloorEnemies` at `min (salt % 6) (2 + floor.FloorNumber / 2)` lifted the floor-1 clear from 55% → 98%. If the opening now reads as a corridor rather than a tutorial, the dial is the leading `2` (the measured alternative `1 + floor/2` gives 100/100/85/76/77 at average depth 4.88 — softer and flatter).
+
+---
+
+## Recently Closed — Do Not Re-Report
+
+The initiative deadlocks from the first-floor Blight Sprite ambush are fixed: a declared guard is no longer discarded when the opponent braces instead of striking (`bb811ce`), a pack that collapsed or died surrenders the uncontested Vor (`d4dbf47`), and two earlier deadlocks in the same exchange are closed by `c4850e0` and `f4ed026`. Guards: `tests/Fornach.Tests/TempoDeadlockTests.fs`, `TempoReclaimTests.fs`.
