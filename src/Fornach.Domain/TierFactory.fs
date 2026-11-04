@@ -385,12 +385,35 @@ module TierFactory =
       let factor = float targetLevel / float (max 1 enemy.Level)
       let scale (v: int) = max 1 (int (Math.Round(float v * factor)))
 
+      // Stats ride the level curve, which climbs 45 -> 201 across 40 levels, not linearly with the
+      // level number. Lifting an enemy by the raw ratio inflated it past the curve -- a Lv.3 Bandit's
+      // Fortitude 66 became 176 at Lv.8 -- so contested defense outran the player's best attack stat,
+      // `computeTierMultiplier` returned 0 for negative net hits and weapon damage floored to 1.
+      // Clamping *down* keeps the linear ratio on purpose: floors field content authored above their
+      // level (a Lv.3 Boar on floor 1), and re-deriving those on the curve made the prologue
+      // unsurvivable. Pools and armour keep the linear factor in both directions -- mobs stay tanky.
+      let statFactor =
+        let primAt (lvl: int) =
+          let lvl = max 1 lvl
+          if enemy.Plane = Physical then
+            let prim, _, _, _, _, _ = ProgressionScale.physicalStatsForLevel lvl
+            float prim
+          else
+            let prim, _, _, _, _ = ProgressionScale.magicStatsForLevel lvl
+            float prim
+        if targetLevel > enemy.Level then
+          primAt targetLevel / primAt enemy.Level
+        else
+          factor
+
+      let scaleStat (v: int) = max 1 (int (Math.Round(float v * statFactor)))
+
       let scaledStats =
         Attributes.all
         |> List.fold
           (fun (stats: StatBlock) stat ->
             let current = enemy.Stats.Get stat
-            stats.Modify(stat, scale current - current))
+            stats.Modify(stat, scaleStat current - current))
           enemy.Stats
 
       let scalePool (p: Pool) =

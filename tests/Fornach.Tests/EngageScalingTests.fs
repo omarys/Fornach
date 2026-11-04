@@ -99,3 +99,37 @@ let ``floor entry places mobs within five levels of the player and the boss ten 
   Assert.NotEmpty(bosses)
   for boss in bosses do
     Assert.Equal(30, boss.Combatant.Level)
+
+[<Fact>]
+let ``lifting a mob follows the level curve instead of the raw level ratio`` () =
+  // A floor mob authored at Lv.3 engaged by a Lv.6 player lands at Lv.8. Scaling its stats by the
+  // raw level ratio (8/3) inflated Fortitude 66 -> 176, which outran the player's Force 118: every
+  // ForceStrike returned negative net hits, `computeTierMultiplier` gave 0 and damage floored to 1.
+  // Stats must ride `physicalStatsForLevel` (prim(8)=73) while pools and armour keep the linear factor.
+  let player =
+    { TierFactory.createClassLevel CharacterClass.Warrior 6 with
+        PlayerStyle = true }
+
+  let mob = TierFactory.createClassLevel CharacterClass.Warrior 3
+  let lifted = TierFactory.scaleCombatantToLevel 8 mob
+
+  Assert.Equal(8, lifted.Level)
+
+  // The bug: weapon damage floored out, so the player's best strike estimated exactly zero.
+  Assert.True(AttackEstimator.estimate player lifted (AttackClassification.ForceStrike false) > 0.0)
+
+  // Guard the curve itself rather than one hardcoded number: the lifted stat must sit near
+  // authored * prim(8)/prim(3) and nowhere near the raw ratio's authored * 8/3.
+  let curveFactor =
+    let prim (lvl: int) =
+      let p, _, _, _, _, _ = ProgressionScale.physicalStatsForLevel lvl
+      float p
+    prim 8 / prim 3
+
+  for stat in [ StatId.Fortitude; StatId.Resolve; StatId.Force ] do
+    let authored = float (mob.GetCombatStat stat)
+    let rawRatio = authored * (8.0 / 3.0)
+    let onCurve = authored * curveFactor
+    let actual = float (lifted.GetCombatStat stat)
+    Assert.InRange(actual, onCurve * 0.99, onCurve * 1.01)
+    Assert.True(actual < rawRatio, sprintf "%A stayed at the inflated %f (raw ratio)" stat rawRatio)
