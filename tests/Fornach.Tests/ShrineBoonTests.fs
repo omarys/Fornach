@@ -230,3 +230,31 @@ let ``a shrine grants its stat boon once and cannot be farmed`` () =
     for boon in [ PrimaryPair; SecondaryPair ] do
       for (stat, before, after) in commune cls boon true do
         Assert.Equal(before, after)
+
+[<Fact>]
+let ``a shrine restocks spent preparation uses`` () =
+  // A run used to get its class preparations' uses once, at creation, and never again: ReplenishAll
+  // existed but nothing called it, so spending a preparation was permanent for the whole crawl.
+  let player = playerOf CharacterClass.Fighter
+  let prep = player.Progression.Preparations |> List.head
+  let spent = (player.Progression.SpendPreparation prep.Type).Value
+
+  let drainedState =
+    let state = TowerSession.initSession player 42 1
+    { state with Player = { state.Player with Progression = spent } }
+
+  Assert.Equal(prep.MaxUses - 1, (spent.Preparations |> List.find (fun s -> s.Type = prep.Type)).RemainingUses)
+
+  let after, summary =
+    TowerSession.shrineBlessing (shrineOf PrimaryPair false) drainedState.PlayerPosition drainedState
+
+  let restored = after.Player.Progression.Preparations |> List.find (fun s -> s.Type = prep.Type)
+  Assert.Equal(prep.MaxUses, restored.RemainingUses)
+  Assert.Contains(summary, fun line -> line.Contains("restocks"))
+
+[<Fact>]
+let ``a shrine stays quiet when no preparation was spent`` () =
+  let player = playerOf CharacterClass.Fighter
+  let state = TowerSession.initSession player 42 1
+  let _, summary = TowerSession.shrineBlessing (shrineOf PrimaryPair false) state.PlayerPosition state
+  Assert.DoesNotContain(summary, fun line -> line.Contains("restocks"))

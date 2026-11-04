@@ -227,7 +227,15 @@ module TowerSession =
           WeaponCondition = WeaponCondition.Pristine
           BleedStacks = 0
           LimbDebuff = 0
-          Meters = StatusMeters.Zero }
+          Meters = StatusMeters.Zero
+          // Shrines are the only weapon-repair site, so they are also where a spent preparation
+          // budget comes back. Without this a run gets its class preps' uses once, at creation,
+          // and never again -- and generic Warrior/Rogue start with none at all.
+          Progression = state.Player.Progression.ReplenishAll() }
+
+    let restoredUses =
+      repaired.Progression.TotalRemainingPrepUses
+      - state.Player.Progression.TotalRemainingPrepUses
 
     let revealed = state.UnidentifiedConsumables
 
@@ -246,7 +254,13 @@ module TowerSession =
         spent <- (kind, carried) :: spent
 
     let summary =
-      [ if not revealed.IsEmpty then
+      [ if restoredUses > 0 then
+          sprintf
+            "The shrine restocks %d preparation use%s."
+            restoredUses
+            (if restoredUses = 1 then "" else "s")
+
+        if not revealed.IsEmpty then
           sprintf "The shrine reveals: %s." (revealed |> Seq.map (fun k -> k.Name) |> String.concat ", ")
         for (kind, carried) in List.rev spent do
           let stat = Consumables.materialStat kind player.Class
