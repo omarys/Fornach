@@ -229,3 +229,28 @@ module TempoDeadlockTests =
     // Physical/Power whiffs pay 10 Exhaustion per margin of the hold, on top of the round's 1 upkeep.
     let spent = res.Actor.Meters.Exhaustion.Value - before
     Assert.Equal(10 * margin + 1, spent)
+
+  [<Fact>]
+  let ``a pack that collapsed from exhaustion surrenders the Vor`` () =
+    // Reported: the sprites exhausted themselves and collapsed, but the HUD still showed them in the
+    // Nach and the player kept a defensive-only menu. A collapsed foe cannot hold the initiative, and
+    // the player cannot be pinned in the Nach by nothing.
+    let player = { makePlayer 8 with Tempo = TacticalTiming.Nach; EnemiesFaced = 3 }
+
+    let collapsed =
+      { makeSprite player 1 with
+          Tempo = TacticalTiming.Vor
+          Collapse = CollapseState.Collapsed CollapseReason.SomaticAnoxia }
+
+    let after = ActionResolver.settleTempoVacuum player [ collapsed ]
+
+    Assert.True(after.IsInVor, "the uncontested initiative goes to the player")
+
+  [<Fact>]
+  let ``an uncontested Vor does not move while a standing foe still holds it`` () =
+    let player = { makePlayer 8 with Tempo = TacticalTiming.Nach; EnemiesFaced = 1 }
+    let standing = { makeSprite player 1 with Tempo = TacticalTiming.Vor }
+
+    let after = ActionResolver.settleTempoVacuum player [ standing ]
+
+    Assert.True(after.IsInNach, "a foe still on its feet keeps the Vor")

@@ -178,6 +178,23 @@ module ActionResolver =
     else
       attacker, defender, false
 
+  /// A collapsed, depleted or absent opponent cannot hold the Vor. Once nothing standing holds it the
+  /// initiative is uncontested, so the player takes it rather than being pinned in the Nach against
+  /// nothing. Without this a pack that collapsed from exhaustion left the player in the Nach with a
+  /// defensive-only menu and no opponent left to defend against, which made the exhaustion win
+  /// unreachable: the pack surrendered the fight and kept the initiative that decides the menu.
+  let settleTempoVacuum (player: Combatant) (opponents: Combatant list) : Combatant =
+    let standing (o: Combatant) =
+      o.IsInVor
+      && not o.Health.IsDepleted
+      && not o.Morale.IsDepleted
+      && not (CollapseState.isCollapsed o.Collapse)
+
+    if player.IsInNach && not (List.exists standing opponents) then
+      Combatant.seizeVor player
+    else
+      player
+
   /// Applies pool damage, arcane ward barrier soak, armor soak, and massive blow armor shredding
   let private applyDamage
     (plane: Plane)
@@ -2988,8 +3005,6 @@ module ActionResolver =
             Events = res.Events @ posture.Events
             Contest = res.Contest }
         | Some(Guard _), _ -> res
-        | None, _
-        | Some(SeizeIndes _), _ -> res
 
       // The guard meters answer every action taken from the Nach, not just strikes: a fighter pinned
       // there hardens whether they swing, brace, shift or recover. The gain is one stack per foe faced,

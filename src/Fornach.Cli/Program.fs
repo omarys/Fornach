@@ -411,6 +411,8 @@ module Program =
         enemy
 
     while not combatOver do
+      // A collapsed foe cannot hold the Vor: uncontested, the player takes it.
+      player <- ActionResolver.settleTempoVacuum player [ enemy ]
       let playerHasVor = player.IsInVor || not enemy.IsInVor
       let enemyIntent = AI.chooseIntent enemy player
 
@@ -795,6 +797,7 @@ module Program =
     RuntimeLog.write (sprintf "combat start: %s vs %s (round 1)" currentCombatant.Name currentBoss.Name)
 
     while not combatOver do
+      currentCombatant <- ActionResolver.settleTempoVacuum currentCombatant [ currentBoss ]
       let playerHasVor = currentCombatant.IsInVor || not currentBoss.IsInVor
       let enemyIntent = AI.chooseIntent currentBoss currentCombatant
 
@@ -1216,6 +1219,11 @@ module Program =
       priorDefenses <- 0
       interruptedTarget <- None
       playerActiveDefenseOpt <- None
+      // A foe that collapsed, fell or was never in the Vor cannot hold the initiative. Once nothing
+      // standing holds it the exchange is uncontested and the player takes the Vor, so a pack that
+      // exhausted itself hands over the initiative instead of leaving the player in the Nach.
+      currentPlayer <-
+        ActionResolver.settleTempoVacuum currentPlayer (currentEnemies |> List.map (fun e -> e.Combatant))
       renderGroupHud currentPlayer currentEnemies round (logLines ())
       let livingNow = living ()
       RuntimeLog.write (sprintf "group combat round %d: %d foe(s) standing" round livingNow.Length)
