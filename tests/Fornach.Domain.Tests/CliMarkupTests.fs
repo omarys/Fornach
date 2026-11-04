@@ -80,10 +80,16 @@ module CliMarkupTests =
 
   [<Fact>]
   let ``DeathAnimation truck replay frames parse cleanly in Markup without style errors`` () =
-    let truckFrame2 = @" (   _    _ _\  [[==HONK!==]]  "
-    let row = sprintf "   / \\  [bold yellow]%s[/]" truckFrame2
-    let m = Markup(row)
-    Assert.NotNull(m)
+    for idx in [ 0; 1 ] do
+      for line in DeathAnimation.truckBodyFrames idx do
+        let row = sprintf "[bold white]%s[/]" line
+        let m = Markup(row)
+        Assert.NotNull(m)
+
+    for (r0, r1, r2, r3) in DeathAnimation.impactSequenceFrames do
+      for line in [ r0; r1; r2; r3 ] do
+        let m = Markup(line)
+        Assert.NotNull(m)
 
   [<Fact>]
   let ``Symbol and glyph legend panel parses and renders cleanly without style errors`` () =
@@ -169,3 +175,31 @@ module CliMarkupTests =
     let bracedCounter = counterOf braced
     Assert.Single(bracedCounter) |> ignore
     Assert.Contains("Force Strike", bracedCounter.Head)
+
+  [<Fact>]
+  let ``buildActionChoicesWithTelegraph surfaces preparations, Press the Advantage, and Env Gambits cleanly`` () =
+    let enemy =
+      { StoryBosses.createDenialAspect () with
+          IsStaggered = true }
+
+    let player =
+      { StoryBosses.createProloguePlayer "berserker" with
+          Tempo = TacticalTiming.Vor
+          Momentum = 4
+          Preparations =
+            [ PreparationSlot.create PreparationType.ShockwaveSlam 2
+              PreparationSlot.create PreparationType.ConcealedBlade 2 ] }
+
+    let choices = Program.buildActionChoicesWithTelegraph player enemy None true
+    for choice in choices do
+      Assert.NotNull(Markup(choice))
+
+    let prepChoices = choices |> List.filter (fun c -> c.Contains("Deploy Prep:"))
+    Assert.Equal(2, prepChoices.Length)
+    Assert.Equal(Fornach.Engine.ActionIntent.DeployPreparation(PreparationType.ShockwaveSlam, None), Program.parseActionChoice prepChoices.[0])
+
+    let pressChoices = choices |> List.filter (fun c -> c.Contains("PRESS THE ADVANTAGE"))
+    Assert.NotEmpty(pressChoices)
+
+    let envChoices = choices |> List.filter (fun c -> c.Contains("Env Gambit:"))
+    Assert.NotEmpty(envChoices)

@@ -135,15 +135,41 @@ module Program =
       StandardAttack CalculatedFlawStrike
     elif choice.Contains("Masterful Disarm") then
       StandardAttack (MasterfulDisarm 3)
-    elif choice.Contains("Trauma: Denial Phase Shift") then
+    elif choice.Contains("Deploy Prep: Shockwave Slam") then
+      DeployPreparation (PreparationType.ShockwaveSlam, None)
+    elif choice.Contains("Deploy Prep: Berserk Tincture") then
+      DeployPreparation (PreparationType.BerserkTincture, None)
+    elif choice.Contains("Deploy Prep: Dread Warhorn") then
+      DeployPreparation (PreparationType.DreadWarhorn, None)
+    elif choice.Contains("Deploy Prep: Synaptic Brand") then
+      DeployPreparation (PreparationType.SynapticBrand, None)
+    elif choice.Contains("Deploy Prep: Caltrop Pouch") then
+      DeployPreparation (PreparationType.CaltropPouch, None)
+    elif choice.Contains("Deploy Prep: Concealed Blade") then
+      DeployPreparation (PreparationType.ConcealedBlade, None)
+    elif choice.Contains("Deploy Prep: Mirror Mirage") then
+      DeployPreparation (PreparationType.MirrorMirage, None)
+    elif choice.Contains("Deploy Prep: Prismatic Flare") then
+      DeployPreparation (PreparationType.PrismaticFlare, None)
+    elif choice.Contains("Deploy Prep: Bastion Zone Control") then
+      DeployPreparation (PreparationType.BastionZoneControl, None)
+    elif choice.Contains("Deploy Prep: Parrying Buckler") then
+      DeployPreparation (PreparationType.ParryingBuckler, None)
+    elif choice.Contains("Deploy Prep: Aegis of Retribution") then
+      DeployPreparation (PreparationType.AegisOfRetribution, None)
+    elif choice.Contains("Deploy Prep: Heraldic Treatise") then
+      DeployPreparation (PreparationType.HeraldicTreatise, None)
+    elif choice.Contains("Deploy Prep: Socratic Dossier") then
+      DeployPreparation (PreparationType.SocraticDossier, None)
+    elif choice.Contains("Denial Phase Shift") then
       StandardAttack (TraumaAttack DenialPhaseShift)
-    elif choice.Contains("Trauma: Basalt Eruption") then
+    elif choice.Contains("Basalt Eruption") then
       StandardAttack (TraumaAttack BasaltEruption)
-    elif choice.Contains("Trauma: Coercive Bargain") then
+    elif choice.Contains("Coercive Bargain") then
       StandardAttack (TraumaAttack CoerciveBargain)
-    elif choice.Contains("Trauma: Apathy Doldrums") then
+    elif choice.Contains("Apathy Doldrums") then
       StandardAttack (TraumaAttack ApathyDoldrums)
-    elif choice.Contains("Trauma: Serene Resolution") then
+    elif choice.Contains("Serene Resolution") then
       StandardAttack (TraumaAttack SereneResolution)
     elif choice.Contains("Thread Form: Resonance Spike") then
       ThreadComplexForm ComplexForm.ResonanceSpike
@@ -170,7 +196,47 @@ module Program =
       | _ -> false
     | _ -> false
 
+  let private formatPrepOption (slot: PreparationSlot) : string =
+    let catTag =
+      match slot.Type.Category with
+      | CrowdControl -> "Crowd Control"
+      | SingleTargetDuel -> "Duelist Edge"
+    let shortDesc =
+      match slot.Type with
+      | ShockwaveSlam -> "Surplus NetHits (>=3) splash flat damage to flankers"
+      | BerserkTincture -> "Spike Recklessness into Fever Pitch for bonus dice & damage"
+      | DreadWarhorn -> "Inflict +25 Cognitive Fatigue on all active foes"
+      | SynapticBrand -> "Mark target: criticals deal 2x Morale damage & Rupture"
+      | CaltropPouch -> "Blind flankers, stripping multi-opponent defense penalty"
+      | ConcealedBlade -> "Quick-draw Nach counter: puncture incoming strike & seize Vor"
+      | MirrorMirage -> "Flankers strike illusions (+20 Confusion & lose action)"
+      | PrismaticFlare -> "Blinding burst: enemy Recklessness spikes trigger Morale shock"
+      | BastionZoneControl -> "Plant polearm/shield: cap simultaneous attackers to 3"
+      | ParryingBuckler -> "Widen Indes counter window by -1 threshold"
+      | AegisOfRetribution -> "-35% damage taken & reflect 50% back as radiant damage"
+      | HeraldicTreatise -> "Grant +2 Combat Ramp across all engaged foes"
+      | SocraticDossier -> "Convert target's Recklessness into unmitigated Morale damage"
+    sprintf
+      "🎒 [bold %s]Deploy Prep: %s[/] (%s • %s) [[%d/%d uses]]"
+      Theme.Orange
+      slot.Type.Name
+      catTag
+      shortDesc
+      slot.RemainingUses
+      slot.MaxUses
+
   let private buildActionChoicesCore (player: Combatant) (enemy: Combatant) (enemyIntentOpt: ActionIntent option) : string list =
+    let prepSource =
+      if not player.Preparations.IsEmpty then player.Preparations
+      else player.Progression.Preparations
+    let availablePreps =
+      prepSource
+      |> List.filter (fun s -> s.RemainingUses > 0 && not (player.HasActivePreparation s.Type))
+
+    let pressAdvTag =
+      if enemy.IsStaggered then sprintf " [bold %s]★ PRESS THE ADVANTAGE (Target Staggered!)[/]" Theme.Green
+      else ""
+
     [
       // Finisher (only for the player's operative discipline)
       if enemy.IsExecuteEligible then
@@ -179,17 +245,18 @@ module Program =
         else
           sprintf "☠️  [bold blink %s]EXECUTE FINISHER (Mental Strike)[/]" Theme.Red
 
-      // Psychological Trauma Gambits (only when relevant to boss encounter or manifestation)
-      if enemy.Name.Contains("Acceptance") || player.Name.Contains("Acceptance") then
-        sprintf "🕊️  [bold %s]Trauma: Serene Resolution[/] (Pacifist Release: Drain Recklessness, restore Morale)" Theme.Cyan
-      elif player.Name.Contains("Denial") then
-        sprintf "🌫️  [bold %s]Trauma: Denial Phase Shift[/] (Agility Gambit: Conjure Mirror Clone, inflict Confusion)" Theme.Green
-      elif player.Name.Contains("Anger") then
-        sprintf "🌋 [bold %s]Trauma: Basalt Eruption[/] (Power Gambit: Massive Damage, shred 25 Armor)" Theme.Red
-      elif player.Name.Contains("Bargaining") then
-        sprintf "⚖️  [bold %s]Trauma: Coercive Bargain[/] (Discipline Gambit: Steal 35 Morale to restore Health)" Theme.Purple
-      elif player.Name.Contains("Depression") then
-        sprintf "⚓ [bold %s]Trauma: Apathy Doldrums[/] (Discipline Gambit: Inflict 40 Cognitive Fatigue)" Theme.Comment
+      // Stage Manifestation & High-Ramp Environmental Gambits (when in Vor)
+      if not player.IsInNach then
+        if enemy.Name.Contains("Acceptance") || player.Name.Contains("Acceptance") then
+          sprintf "🕊️  [bold %s]Trauma: Serene Resolution[/] (Pacifist Release: Drain Recklessness & Frustration to 0, +50 Morale)" Theme.Cyan
+        elif enemy.Name.Contains("Denial") || player.Name.Contains("Denial") || (player.Plane = Mental && player.Flow >= 3) then
+          sprintf "🌫️  [bold %s]Env Gambit: Denial Phase Shift[/] (Mist Shroud: 1.25x Agility strike, +25 Confusion, -15 Frustration)" Theme.Green
+        elif enemy.Name.Contains("Anger") || enemy.Name.Contains("Guilt") || player.Name.Contains("Anger") || (player.Plane = Physical && player.Momentum >= 3) then
+          sprintf "🌋 [bold %s]Env Gambit: Basalt Eruption[/] (Quarry Slag Smash: 1.5x Power cleave, shred 25 Armor, +30 Frustration)" Theme.Red
+        elif enemy.Name.Contains("Bargaining") || player.Name.Contains("Bargaining") || (player.Plane = Physical && player.Flow >= 3) then
+          sprintf "⚖️  [bold %s]Env Gambit: Coercive Bargain[/] (Predatory Leverage: Steal 35 Morale to restore +25 HP, +25 Provoke)" Theme.Purple
+        elif enemy.Name.Contains("Depression") || player.Name.Contains("Depression") || (player.Plane = Mental && player.Momentum >= 3) then
+          sprintf "⚓ [bold %s]Trauma: Apathy Doldrums[/] (Submerged Weight: Inflict +40 Cognitive Fatigue & +25 Exhaustion)" Theme.Comment
 
       let assess = TacticalAssessment.assess player enemy
 
@@ -255,12 +322,14 @@ module Program =
           |> List.collect snd
 
       if player.IsInNach then
-        // In Nach (Defender): Action menu is strictly active defenses and recoveries (ADR 0009)
+        // In Nach (Defender): Action menu offers active defenses, Nach-reactive preparations, and recoveries (ADR 0009)
         if player.Plane = Physical then
           let fortCounterTag = if isCounterPower then sprintf " [bold %s]★ Affinity Counter (Mitigates Force)[/]" Theme.Green else ""
           let refCounterTag = if isCounterAgility then sprintf " [bold %s]★ Affinity Counter (Mitigates Finesse)[/]" Theme.Green else ""
           sprintf "🛡️  [%s]Fortitude Guard: Braced Guard[/] (Power Defense • Counter Force Strikes; +25%% mitigation, seize Vor)%s" Theme.Cyan fortCounterTag
           sprintf "🛡️  [%s]Reflex Slip: Evasive Slip[/] (Agility Defense • Counter Finesse Cadences; +25%% mitigation, seize Vor)%s" Theme.Green refCounterTag
+          for slot in availablePreps |> List.filter (fun s -> s.Type = ConcealedBlade || s.Type = ParryingBuckler || s.Type = CaltropPouch || s.Type = BastionZoneControl) do
+            formatPrepOption slot
           sprintf "🛡️  [bold %s]Raise Shield[/] (Bastion Posture: Repair Armor ~36%% of max, Gain 2 Combat Ramp, Bleed Recklessness)%s" Theme.Green raiseShieldTag
           sprintf "🛡️  [%s]Steady Form[/] (Recovery: vent all strain via Poise & Composure, restore Morale, build Combat Ramp)" Theme.Green
         else
@@ -268,24 +337,26 @@ module Program =
           let intCounterTag = if isCounterAgility then sprintf " [bold %s]★ Affinity Counter (Mitigates Agility)[/]" Theme.Green else ""
           sprintf "🧠 [%s]Resolve Anchor: Iron Will[/] (Mental Power Defense • Counter Intellect; +25%% mitigation, seize Vor)%s" Theme.Cyan resCounterTag
           sprintf "👁️ [%s]Intuition Perception: Insight[/] (Mental Agility Defense • Counter Acuity; +25%% mitigation, seize Vor)%s" Theme.Green intCounterTag
+          for slot in availablePreps |> List.filter (fun s -> s.Type = AegisOfRetribution || s.Type = MirrorMirage) do
+            formatPrepOption slot
           sprintf "🧠 [%s]Center Mind[/] (Mental Reset: Drain Recklessness, clear Confusion, restore Arcane Ward)" Theme.Cyan
       elif player.Plane = Physical then
-        // In Vor or Indes (Attacker): Power and Agility vectors plus recoveries
+        // In Vor or Indes (Attacker): Power and Agility vectors plus preparations and recoveries
         let fortSuffix = contestSuffix StatId.Force StatId.Fortitude
         let refSuffix = contestSuffix StatId.Finesse StatId.Reflex
 
         let powerStrikes = [
           sprintf "⚔️  [%s]Force Strike: Standard Cleave[/] (Power Stance • Cleave vs. Fortitude%s)%s" Theme.Red fortSuffix powerCounterTag
-          sprintf "⚡ [bold %s]Force Strike: Wild Blow[/] (Power Stance Gambit: +30 Recklessness, 1.5x Dmg)" Theme.Red
+          sprintf "⚡ [bold %s]Force Strike: Wild Blow[/] (Power Stance Gambit: +30 Recklessness, 1.5x Dmg)%s" Theme.Red pressAdvTag
           if player.Momentum >= 2 then
-            sprintf "🎯 [bold %s]Force Strike: Insight Cleave[/] (Power Stance Gambit: Burn every Momentum stack for a Read Opening, 0 Recklessness)" Theme.Red
+            sprintf "🎯 [bold %s]Force Strike: Insight Cleave[/] (Power Stance Gambit: Burn %d Momentum for a Read Opening, 0 Recklessness)%s" Theme.Red player.Momentum pressAdvTag
         ]
 
         let agilityStrikes = [
           sprintf "⚔️  [%s]Finesse Cadence: Rapid Probing[/] (Agility Stance • Probing Cadence vs. Reflex%s)%s" Theme.Green refSuffix agilityCounterTag
-          sprintf "⚡ [bold %s]Finesse Cadence: Relentless Blitz[/] (Agility Stance Gambit: +25 Recklessness)" Theme.Green
+          sprintf "⚡ [bold %s]Finesse Cadence: Relentless Blitz[/] (Agility Stance Gambit: +25 Recklessness)%s" Theme.Green pressAdvTag
           if player.Flow >= 2 then
-            sprintf "🎯 [bold %s]Finesse Cadence: Threaded Opening[/] (Agility Stance Gambit: Burn every Flow stack to Thread a Vital Opening, 0 Recklessness)" Theme.Green
+            sprintf "🎯 [bold %s]Finesse Cadence: Threaded Opening[/] (Agility Stance Gambit: Burn %d Flow to Thread a Vital Opening, 0 Recklessness)%s" Theme.Green player.Flow pressAdvTag
           if isInterruptibleWindup enemyIntentOpt then
             sprintf "🛡️  [bold %s]Shield Bash[/] (Interrupt the windup — Power: knockdown, Agility: parry + counter window)%s" Theme.Cyan shieldInterruptTag
         ]
@@ -301,6 +372,10 @@ module Program =
 
         yield! rankStrikes martialGroups
 
+        // Tactical Preparations
+        for slot in availablePreps do
+          formatPrepOption slot
+
         // Active Armament Recovery: Shield Bastion Guard
         sprintf "🛡️  [bold %s]Raise Shield[/] (Bastion Posture: Repair Armor ~36%% of max, Gain 2 Combat Ramp, Bleed Recklessness)%s" Theme.Green raiseShieldTag
         // Steady Form: the single recovery action, available to every discipline
@@ -310,7 +385,6 @@ module Program =
         // Arcane Spellcraft (Mental Characters in Vor or Indes)
         let powProf = int (Math.Round(player.GetArcaneProficiency Power * 100.0))
         let agiProf = int (Math.Round(player.GetArcaneProficiency Agility * 100.0))
-        let disProf = int (Math.Round(player.GetArcaneProficiency Discipline * 100.0))
 
         let strainTag (prof: int) =
           if prof < 85 then sprintf " [%s](%d%% Prof - Off-School Strain)[/]" Theme.Comment prof
@@ -322,12 +396,12 @@ module Program =
         let powerSpells = [
           sprintf "✨ [%s]Arcane Cataclysm: Elemental Blast[/] (Resonance Spike Form • Intellect vs. Resolve%s)%s%s" Theme.Pink resolveSuffix (strainTag powProf) powerCounterTag
           if player.ComplexForm <> Some ComplexForm.AegisLattice then
-            sprintf "⚡ [bold %s]Arcane Cataclysm: Overchannel[/] (Resonance Spike Gambit: +35 Recklessness, Splash)%s" Theme.Pink (strainTag powProf)
+            sprintf "⚡ [bold %s]Arcane Cataclysm: Overchannel[/] (Resonance Spike Gambit: +35 Recklessness, Splash)%s%s" Theme.Pink (strainTag powProf) pressAdvTag
         ]
 
         let agilitySpells = [
           sprintf "✨ [%s]Synaptic Glamour: Neural Static[/] (Phantasmal Diffusion Form • Acuity vs. Intuition%s)%s%s" Theme.Purple intuitionSuffix (strainTag agiProf) agilityCounterTag
-          sprintf "⚡ [bold %s]Synaptic Glamour: Mind Fracture[/] (Phantasmal Diffusion Gambit: +25 Recklessness)%s" Theme.Purple (strainTag agiProf)
+          sprintf "⚡ [bold %s]Synaptic Glamour: Mind Fracture[/] (Phantasmal Diffusion Gambit: +25 Recklessness)%s%s" Theme.Purple (strainTag agiProf) pressAdvTag
           sprintf "🪞 [%s]Mirror Illusion: Phantasmal Decoys[/] (Phantasmal Diffusion Form • Weave Mirror Clones)%s" Theme.Purple (strainTag agiProf)
           sprintf "⚡ [bold %s]Mirror Illusion: Decoy Swarm[/] (Phantasmal Diffusion Gambit: +25 Recklessness, Extra Clones)%s" Theme.Purple (strainTag agiProf)
         ]
@@ -342,6 +416,10 @@ module Program =
               ArcaneCataclysm false, powerSpells ]
 
         yield! rankStrikes spellGroups
+
+        // Tactical Preparations
+        for slot in availablePreps do
+          formatPrepOption slot
 
         // Mental Defensive Reset
         sprintf "🧠 [%s]Center Mind[/] (Mental Reset: Drain Recklessness, clear Confusion, restore Arcane Ward)" Theme.Cyan
@@ -459,22 +537,31 @@ module Program =
       if not combatOver then
         Display.renderHUDWithTelegraph player enemy round (Some enemyIntent)
 
+        let choices = buildActionChoicesWithTelegraph player enemy (Some enemyIntent) true
+        let choice =
+          Display.promptSelectionWithHelp
+            (sprintf "[bold %s]Round %d - Select Tactical Action for %s (Press '?' or F1 for Symbol Legend):[/]" Theme.Yellow round player.Name)
+            choices
+            (Some 12)
+            (fun () -> Display.renderHUDWithTelegraph player enemy round (Some enemyIntent))
+
+        let playerIntent = parseActionChoice choice
+        let playerActiveDefenseOpt =
+          match playerIntent with
+          | ActiveDefense def -> Some(Guard def)
+          | StandardAttack atk when choice.Contains("Seize Indes") -> Some(SeizeIndes atk)
+          | _ -> None
+
         let doPlayerTurn (turnNumber: int) =
-          let choices = buildActionChoicesWithTelegraph player enemy (if playerHasVor then Some enemyIntent else None) false
-          let choice =
-            Display.promptSelectionWithHelp
-              (sprintf "[bold %s]Round %d - Select Tactical Action for %s (Press '?' or F1 for Symbol Legend):[/]" Theme.Yellow round player.Name)
-              choices
-              (Some 12)
-              (fun () -> Display.renderHUDWithTelegraph player enemy round (if playerHasVor then Some enemyIntent else None))
-
-          let playerIntent = parseActionChoice choice
-
           let playerBefore = player
           let enemyBefore = enemy
 
           AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes %s...[/]" Theme.Green player.Name choice)
-          let playerResult = ActionResolver.resolve roller playerIntent player enemy
+          let enemyDefOpt =
+            if enemy.IsHumanoid && enemy.IsInNach && not enemy.IsStaggered then
+              Some(Guard(AI.chooseActiveDefense enemy player))
+            else None
+          let playerResult = ActionResolver.resolveExWithDefense roller playerIntent enemyDefOpt player enemy 0
           player <- playerResult.Actor
           enemy <- playerResult.Target
 
@@ -502,7 +589,7 @@ module Program =
                 .RuleStyle(Theme.StyleGreen)
             )
 
-        let doEnemyTurn (turnNumber: int) =
+        let doEnemyTurn (turnNumber: int) (playerDefOpt: DefenseChoice option) =
           let enemyBeforeTurn = enemy
           let playerBeforeTurn = player
 
@@ -514,7 +601,7 @@ module Program =
             else
               let tempoMsg = if not playerHasVor then " (Holding the Vor)" else ""
               AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes telegraphed action%s...[/]" Theme.Pink enemy.Name tempoMsg)
-              ActionResolver.resolve roller enemyIntent enemy player
+              ActionResolver.resolveExWithDefense roller enemyIntent playerDefOpt enemy player 0
 
           enemy <- enemyResult.Actor
           player <- enemyResult.Target
@@ -544,11 +631,15 @@ module Program =
         if playerHasVor then
           doPlayerTurn 1
           if not combatOver then
-            doEnemyTurn 2
+            doEnemyTurn 2 None
         else
           AnsiConsole.MarkupLine(sprintf "\n[bold %s]⚡ %s holds the Vor and strikes first![/]" Theme.Yellow enemy.Name)
-          doEnemyTurn 1
-          if not combatOver then
+          doEnemyTurn 1 playerActiveDefenseOpt
+          let wasGuardConsumed =
+            match playerIntent with
+            | ActiveDefense _ -> true
+            | _ -> false
+          if not combatOver && not wasGuardConsumed then
             doPlayerTurn 2
 
       if not combatOver then
@@ -844,22 +935,31 @@ module Program =
       if not combatOver then
         Display.renderHUDWithTelegraph currentCombatant currentBoss round (Some enemyIntent)
 
+        let choices = buildActionChoicesWithTelegraph currentCombatant currentBoss (Some enemyIntent) true
+        let choice =
+          Display.promptSelectionWithHelp
+            (sprintf "[bold %s]Round %d - Tactical Action against %s (Press '?' or F1 for Symbol Legend):[/]" Theme.Yellow round currentBoss.Name)
+            choices
+            (Some 12)
+            (fun () -> Display.renderHUDWithTelegraph currentCombatant currentBoss round (Some enemyIntent))
+
+        let playerIntent = parseActionChoice choice
+        let playerActiveDefenseOpt =
+          match playerIntent with
+          | ActiveDefense def -> Some(Guard def)
+          | StandardAttack atk when choice.Contains("Seize Indes") -> Some(SeizeIndes atk)
+          | _ -> None
+
         let doPlayerTurn (turnNumber: int) =
-          let choices = buildActionChoicesWithTelegraph currentCombatant currentBoss (if playerHasVor then Some enemyIntent else None) false
-          let choice =
-            Display.promptSelectionWithHelp
-              (sprintf "[bold %s]Round %d - Tactical Action against %s (Press '?' or F1 for Symbol Legend):[/]" Theme.Yellow round currentBoss.Name)
-              choices
-              (Some 12)
-              (fun () -> Display.renderHUDWithTelegraph currentCombatant currentBoss round (if playerHasVor then Some enemyIntent else None))
-
-          let playerIntent = parseActionChoice choice
-
           let playerBefore = currentCombatant
           let bossBefore = currentBoss
 
           AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes %s...[/]" Theme.Green currentCombatant.Name choice)
-          let playerResult = ActionResolver.resolve roller playerIntent currentCombatant currentBoss
+          let bossDefOpt =
+            if currentBoss.IsHumanoid && currentBoss.IsInNach && not currentBoss.IsStaggered then
+              Some(Guard(AI.chooseActiveDefense currentBoss currentCombatant))
+            else None
+          let playerResult = ActionResolver.resolveExWithDefense roller playerIntent bossDefOpt currentCombatant currentBoss 0
           currentCombatant <- playerResult.Actor
           currentBoss <- playerResult.Target
 
@@ -890,7 +990,7 @@ module Program =
                 .RuleStyle(Theme.StyleGreen)
             )
 
-        let doEnemyTurn (turnNumber: int) =
+        let doEnemyTurn (turnNumber: int) (playerDefOpt: DefenseChoice option) =
           let bossBeforeTurn = currentBoss
           let playerBeforeTurn = currentCombatant
 
@@ -904,9 +1004,9 @@ module Program =
               AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s executes telegraphed action%s...[/]" Theme.Pink currentBoss.Name tempoMsg)
               if floorNumber = 1 then
                 // Tutorial grace: the level-1 protagonist cannot be one-shot on the opening stage.
-                ActionResolver.resolveWithoutLethal roller enemyIntent currentBoss currentCombatant
+                ActionResolver.resolveWithoutLethalWithDefense roller enemyIntent playerDefOpt currentBoss currentCombatant 0
               else
-                ActionResolver.resolve roller enemyIntent currentBoss currentCombatant
+                ActionResolver.resolveExWithDefense roller enemyIntent playerDefOpt currentBoss currentCombatant 0
 
           currentBoss <- enemyResult.Actor
           currentCombatant <- enemyResult.Target
@@ -938,11 +1038,15 @@ module Program =
         if playerHasVor then
           doPlayerTurn 1
           if not combatOver then
-            doEnemyTurn 2
+            doEnemyTurn 2 None
         else
           AnsiConsole.MarkupLine(sprintf "\n[bold %s]⚡ %s holds the Vor and strikes first![/]" Theme.Yellow currentBoss.Name)
-          doEnemyTurn 1
-          if not combatOver then
+          doEnemyTurn 1 playerActiveDefenseOpt
+          let wasGuardConsumed =
+            match playerIntent with
+            | ActiveDefense _ -> true
+            | _ -> false
+          if not combatOver && not wasGuardConsumed then
             doPlayerTurn 2
 
       if not combatOver then
@@ -1310,7 +1414,11 @@ module Program =
                 .RuleStyle(Theme.StyleGreen)
             )
 
-        if not combatOver then
+        let wasGuardConsumedByPack =
+          openedByPack
+          && (match intent with ActiveDefense _ -> true | _ -> false)
+
+        if not combatOver && not wasGuardConsumedByPack then
           // 3. Player action via the group-turn resolver (cleave/splash onto nearby foes).
           // Read target and secondaries afresh from currentEnemies so packPhase state
           // (damage, meters, collapse, tempo) is preserved rather than overwritten by stale snapshots.

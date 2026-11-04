@@ -175,16 +175,32 @@ module Display =
       if m.Value >= 75 then Theme.Red
       elif m.Value >= 40 then Theme.Yellow
       else colorHex
-    sprintf "%s [%s]%s[/][%s]%s[/] [bold %s]%3d%%[/]"
-      (label.PadRight barLabelWidth) warnColor filled Theme.CurrentLine empty Theme.Foreground m.Value
+
+    let debuffTag =
+      if m.Value < 75 then ""
+      elif label.Contains("Exhaustion") then sprintf " [bold %s]⚠ -25%% FORCE/FORT[/]" Theme.Red
+      elif label.Contains("Overwhelm") then sprintf " [bold %s]⚠ -25%% FIN/REF[/]" Theme.Red
+      elif label.Contains("Frustration") then sprintf " [bold %s]⚠ -50%% POISE · MASKED[/]" Theme.Red
+      elif label.Contains("Recklessness") then sprintf " [bold blink %s]⚠ CRIT EXPOSED[/]" Theme.Red
+      elif label.Contains("Fatigue") then sprintf " [bold %s]⚠ -25%% INT/ACU[/]" Theme.Red
+      else sprintf " [bold %s]⚠ CRITICAL STRAIN[/]" Theme.Red
+
+    sprintf "%s [%s]%s[/][%s]%s[/] [bold %s]%3d%%[/]%s"
+      (label.PadRight barLabelWidth) warnColor filled Theme.CurrentLine empty Theme.Foreground m.Value debuffTag
+
+  let private renderPips (count: int) (maxPips: int) (colorHex: string) : string =
+    let clamped = Math.Clamp(count, 0, maxPips)
+    let filled = String('◆', clamped)
+    let empty = String('◇', maxPips - clamped)
+    sprintf "[bold %s]%s[/][%s]%s[/]" colorHex filled Theme.CurrentLine empty
 
   /// The tactical-timing badge: who holds the initiative right now. The whole Vor/Nach/Indes system
   /// is invisible unless the panel says so, so every combatant panel carries it in its header.
   let tempoBadge (c: Combatant) : string =
     match c.Tempo with
     | TacticalTiming.Vor -> sprintf "[bold %s]⚡ VOR[/]" Theme.Yellow
-    | TacticalTiming.Nach -> sprintf "[%s]NACH[/]" Theme.Comment
-    | TacticalTiming.Indes -> sprintf "[bold %s]INDES[/]" Theme.Cyan
+    | TacticalTiming.Nach -> sprintf "[%s]🛡️ NACH[/]" Theme.Comment
+    | TacticalTiming.Indes -> sprintf "[bold %s]⚔️ INDES[/]" Theme.Cyan
 
   let createCombatantPanel (c: Combatant) (borderColor: Color) (headerColor: string) (observerOpt: Combatant option) =
     let grid = Grid()
@@ -233,27 +249,21 @@ module Display =
         sprintf "[%s]%d / %d[/] [%s](%d%% soak)[/]" Theme.Comment c.Armor.Current c.Armor.Max Theme.Yellow armorPct
     grid.AddRow(Markup(sprintf "%-22s %s" " Armor Integrity" armorText)) |> ignore
 
-    // Combat ramp: rises on every attack, cashed by a same-vector special. Flow pays 6% a stack,
-    // Momentum 1% — the label has to match `Combatant.GetCombatStat`'s ramp.
-    if c.Flow > 0 || c.Momentum > 0 then
-      let rampText =
-        sprintf
-          "[bold %s]Flow %d[/] [%s]/ Momentum %d[/] [grey](+%d%% Finesse/Reflex, +%d%% Force/Prowess)[/]"
-          Theme.Green
-          c.Flow
-          Theme.Comment
-          c.Momentum
-          (c.Flow * 6)
-          c.Momentum
+    // Active Preparations (if any)
+    if not c.ActivePreparations.IsEmpty then
+      let prepPills =
+        c.ActivePreparations
+        |> List.map (fun ap -> sprintf "[bold %s][[%s • %dt]][/]" Theme.Green ap.Type.Name ap.DurationTurns)
+        |> String.concat " "
+      grid.AddRow(Markup(sprintf "%-22s %s" "🎯 Active Prep" prepPills)) |> ignore
 
-      grid.AddRow(Markup(sprintf "%-22s %s" " Combat Ramp" rampText)) |> ignore
-
-    if c.BleedStacks > 0 || c.LimbDebuff > 0 || c.ArcaneWard > 0 || c.MirrorClones > 0 then
-      let bleedText = if c.BleedStacks > 0 then sprintf "[bold %s]%d Bleed Stacks[/] " Theme.Red c.BleedStacks else ""
+    if c.IsStaggered || c.BleedStacks > 0 || c.LimbDebuff > 0 || c.ArcaneWard > 0 || c.MirrorClones > 0 then
+      let staggerText = if c.IsStaggered then sprintf "[bold blink %s]💥 STAGGERED[/] " Theme.Red else ""
+      let bleedText = if c.BleedStacks > 0 then sprintf "[bold %s]🩸 %d Bleed[/] " Theme.Red c.BleedStacks else ""
       let limbText = if c.LimbDebuff > 0 then sprintf "[%s]-%d Reflex (Crippled)[/] " Theme.Orange c.LimbDebuff else ""
-      let wardText = if c.ArcaneWard > 0 then sprintf "[bold %s]🛡️ %d Arcane Ward[/] " Theme.Cyan c.ArcaneWard else ""
-      let cloneText = if c.MirrorClones > 0 then sprintf "[bold %s]🪞 %d Mirror Clones[/] " Theme.Purple c.MirrorClones else ""
-      grid.AddRow(Markup(sprintf "%-22s %s%s%s%s" "󱁕 Special State" wardText cloneText bleedText limbText)) |> ignore
+      let wardText = if c.ArcaneWard > 0 then sprintf "[bold %s]🛡️ %d Ward[/] " Theme.Cyan c.ArcaneWard else ""
+      let cloneText = if c.MirrorClones > 0 then sprintf "[bold %s]🪞 %d Clones[/] " Theme.Purple c.MirrorClones else ""
+      grid.AddRow(Markup(sprintf "%-22s %s%s%s%s%s" "󱁕 Special State" staggerText wardText cloneText bleedText limbText)) |> ignore
 
     // Tactical Assessment (Acumen vs Composure)
     match observerOpt with
@@ -283,33 +293,43 @@ module Display =
 
     grid.AddRow(Rule().RuleStyle(Theme.StyleCurrentLine)) |> ignore
 
-    // Shared Entropy & Momentum
+    // Shared Entropy & Visual Pip Ramp
     grid.AddRow(Markup(renderMeter "󰈸 Recklessness" c.Meters.Recklessness Theme.Orange)) |> ignore
-    // The ramp meters, in the shorthand players see in the strike menu: Flow / Momentum.
-    let comboText =
+    let guardStacks = if c.Plane = Mental then c.Focus else c.Inertia
+    let rampText =
       sprintf
-        "[%s]F%d · M%d ramp[/] | [%s]I%d · F%d guard[/] | [%s]%d combo[/]"
-        Theme.Purple
-        c.Flow
+        "[%s]Flow[/] %s [grey](+%d%%)[/] · [%s]Mom[/] %s [grey](+%d%%)[/] · [%s]Guard[/] %s · [%s]%d hit chain[/]"
+        Theme.Green
+        (renderPips c.Flow 5 Theme.Green)
+        (c.Flow * 6)
+        Theme.Red
+        (renderPips c.Momentum 5 Theme.Red)
         c.Momentum
-        Theme.Orange
-        c.Inertia
-        c.Focus
+        Theme.Cyan
+        (renderPips guardStacks 5 Theme.Cyan)
         Theme.Pink
         c.ComboTracker.ConsecutiveHits
-    grid.AddRow(Markup(sprintf "%-22s %s" "󰓥 Tactical Combo" comboText)) |> ignore
+    grid.AddRow(Markup(sprintf "%-22s %s" "󰓥 Combat Ramp" rampText)) |> ignore
     grid.AddRow(Rule().RuleStyle(Theme.StyleCurrentLine)) |> ignore
 
-    // Physical Status Meters
+    // Physical & Emotional Status Meters (Fixed: removed duplicate Frustration row)
     grid.AddRow(Markup(renderMeter "󰒓 Exhaustion" c.Meters.Exhaustion Theme.Yellow)) |> ignore
-    grid.AddRow(Markup(renderMeter "󰓎 Frustration" c.Meters.Frustration Theme.Pink)) |> ignore
-    grid.AddRow(Markup(renderMeter "󰞷 Frustration" c.Meters.Frustration Theme.Orange)) |> ignore
-    grid.AddRow(Rule().RuleStyle(Theme.StyleCurrentLine)) |> ignore
+    grid.AddRow(Markup(renderMeter "󰞷 Frustration" c.Meters.Frustration Theme.Pink)) |> ignore
 
-    // Mental / Social Status Meters
-    grid.AddRow(Markup(renderMeter "󰧑 Cognitive Fatigue" c.Meters.CognitiveFatigue Theme.Purple)) |> ignore
-    grid.AddRow(Markup(renderMeter "󰘚 Confusion" c.Meters.Confusion Theme.Comment)) |> ignore
-    grid.AddRow(Markup(renderMeter "󰈸 Provoke" c.Meters.Provoke Theme.Red)) |> ignore
+    // Mental / Social Status Meters (Condensed when all 0 on a Physical combatant to keep panel compact)
+    let hasMentalStrain =
+      c.Plane = Mental
+      || c.Meters.CognitiveFatigue.Value > 0
+      || c.Meters.Confusion.Value > 0
+      || c.Meters.Provoke.Value > 0
+
+    if hasMentalStrain then
+      grid.AddRow(Rule().RuleStyle(Theme.StyleCurrentLine)) |> ignore
+      grid.AddRow(Markup(renderMeter "󰧑 Cognitive Fatigue" c.Meters.CognitiveFatigue Theme.Purple)) |> ignore
+      grid.AddRow(Markup(renderMeter "󰘚 Confusion" c.Meters.Confusion Theme.Comment)) |> ignore
+      grid.AddRow(Markup(renderMeter "󰈸 Provoke" c.Meters.Provoke Theme.Red)) |> ignore
+    else
+      grid.AddRow(Markup(sprintf "%-22s [%s]Clear (0%% Fatigue · 0%% Confusion · 0%% Provoke)[/]" "󰧑 Mental Strain" Theme.Comment)) |> ignore
 
     // Collapse Indicator
     match c.Collapse with
@@ -672,9 +692,23 @@ module Display =
     AnsiConsole.Clear()
     AnsiConsole.Write(
       Rule(sprintf "[bold %s]󰓥 Fornach Duel Arena ── Round %d[/]" Theme.Yellow roundNumber)
-        .LeftJustified()
+        .Centered()
         .RuleStyle(Theme.StylePurple)
     )
+
+    // Tempo & Opportunity Clash Strip
+    let tempoStrip =
+      if enemy.IsExecuteEligible then
+        sprintf "[bold blink %s]☠ THRESHOLD SNAP: %s HAS COLLAPSED ── DELIVER THE EXECUTION FINISHER! ☠[/]" Theme.Red (Markup.Escape enemy.Name)
+      elif enemy.IsStaggered then
+        sprintf "[bold %s]★ PRESS THE ADVANTAGE: %s IS STAGGERED (Turn Skipped) ── UNLEASH YOUR COMBO! ★[/]" Theme.Green (Markup.Escape enemy.Name)
+      elif player.IsInVor || not enemy.IsInVor then
+        sprintf "[bold %s]⚡ YOU HOLD THE VOR[/] [%s]── You dictate the exchange! Strike into an[/] [bold %s]★ Opening[/] [%s]to keep initiative.[/]" Theme.Yellow Theme.Comment Theme.Green Theme.Comment
+      else
+        sprintf "[bold %s]🛡️ IN THE NACH (%s holds the Vor)[/] [%s]── Read the windup below! Match[/] [bold %s]★ Affinity Counter[/] [%s]or wager[/] [bold %s]⚔️ Seize Indes[/][%s]![/]"
+          Theme.Cyan (Markup.Escape enemy.Name) Theme.Comment Theme.Green Theme.Comment Theme.Yellow Theme.Comment
+
+    AnsiConsole.Write(Align.Center(Markup(tempoStrip)))
     AnsiConsole.Write(grid)
 
     match enemyIntentOpt with
@@ -707,64 +741,76 @@ module Display =
       let def = contest.Defender
       let tierMult = ActionResolver.computeTierMultiplier contest.NetHits
 
-      let table = Table().Border(TableBorder.Rounded).BorderColor(Theme.ColorCurrentLine).Expand()
-      table.AddColumn(TableColumn(sprintf "[bold %s]Participant[/]" Theme.Foreground)) |> ignore
-      table.AddColumn(TableColumn(sprintf "[bold %s]Stat Value[/]" Theme.Foreground)) |> ignore
-      table.AddColumn(TableColumn(sprintf "[bold %s]Dice Rolled[/]" Theme.Foreground)) |> ignore
-      table.AddColumn(TableColumn(sprintf "[bold %s]Floor Hits[/]" Theme.Foreground)) |> ignore
-      table.AddColumn(TableColumn(sprintf "[bold %s]Rolled Hits[/]" Theme.Foreground)) |> ignore
-      table.AddColumn(TableColumn(sprintf "[bold %s]Total Hits[/]" Theme.Foreground)) |> ignore
-
       let formatRolls (rolls: int list) =
-        let maxDisplay = 12
+        let maxDisplay = 8
         let rollStr =
           rolls
           |> Seq.truncate maxDisplay
           |> Seq.map (fun r -> if r >= 5 then sprintf "[bold %s]%d[/]" Theme.Green r else sprintf "[%s]%d[/]" Theme.Comment r)
-          |> String.concat ", "
-        if rolls.Length > maxDisplay then sprintf "[[%s, ... (+%d)]]" rollStr (rolls.Length - maxDisplay)
+          |> String.concat ","
+        if rolls.Length > maxDisplay then sprintf "[[%s..+%d]]" rollStr (rolls.Length - maxDisplay)
         else sprintf "[[%s]]" rollStr
 
-      table.AddRow(
-        Markup(sprintf "[bold %s]Attacker: %s[/]" Theme.Green actorName),
-        Markup(sprintf "[bold %s]%d[/]" Theme.Foreground atk.StatValue),
-        Markup(formatRolls atk.RawRolls),
-        Markup(sprintf "[%s]+%d[/]" Theme.Cyan atk.FloorHits),
-        Markup(sprintf "[%s]%d[/]" Theme.Green atk.RolledHits),
-        Markup(sprintf "[bold %s]%d[/]" Theme.Green atk.TotalHits)
-      ) |> ignore
-
-      table.AddRow(
-        Markup(sprintf "[bold %s]Defender[/]" Theme.Pink),
-        Markup(sprintf "[bold %s]%d[/]" Theme.Foreground def.StatValue),
-        Markup(formatRolls def.RawRolls),
-        Markup(sprintf "[%s]+%d[/]" Theme.Cyan def.FloorHits),
-        Markup(sprintf "[%s]%d[/]" Theme.Pink def.RolledHits),
-        Markup(sprintf "[bold %s]%d[/]" Theme.Pink def.TotalHits)
-      ) |> ignore
+      // Visual Tug-of-War Clash Bar (16 cells total)
+      let totalPool = Math.Max(1, atk.TotalHits + def.TotalHits)
+      let atkCells = Math.Clamp(int (Math.Round(float atk.TotalHits / float totalPool * 16.0)), 1, 15)
+      let defCells = 16 - atkCells
+      let clashBar =
+        sprintf "[bold %s]%s[/][bold %s]⚡[/][bold %s]%s[/]"
+          Theme.Green (String('█', atkCells))
+          Theme.Yellow
+          Theme.Pink (String('█', defCells))
 
       let outcomeText =
         if contest.IsWhiff then
-          sprintf "[bold %s]WHIFF (Attack Deflected / Absorbed) - 0.00x Damage[/]" Theme.Red
+          sprintf "[bold %s]🛡️ DEFLECTED / WHIFF[/] [%s](0.00x Damage)[/]" Theme.Red Theme.Comment
         else
           let critTag = if contest.IsCritical then sprintf " [bold %s]★ CRITICAL STRIKE ★[/]" Theme.Yellow else ""
-          sprintf "[bold %s]PENETRATING HIT: %+d Net Hits[/] -> [bold %s]Tier Multiplier: %.2fx[/]%s"
+          sprintf "[bold %s]⚔ PENETRATING HIT (%+d Net)[/] ──► [bold %s]%.2fx Multiplier[/]%s"
             Theme.Green contest.NetHits Theme.Yellow tierMult critTag
 
-      let rowsList = ResizeArray<IRenderable>()
-      rowsList.Add(table)
-      rowsList.Add(Markup(sprintf "  [bold %s]Action:[/] [bold underline %s]%s[/]" Theme.Foreground Theme.Yellow actionName))
-      if contest.EncirclementPenalty > 0 then
-        rowsList.Add(Markup(sprintf "  [bold %s]Encirclement Flank Penalty:[/] [bold %s]-%d Defense Hits[/]" Theme.Orange Theme.Red contest.EncirclementPenalty))
-      rowsList.Add(Markup(sprintf "  [bold %s]Contest Resolution:[/] %s" Theme.Foreground outcomeText))
+      let flankNote =
+        if contest.EncirclementPenalty > 0 then
+          sprintf "  [bold %s](Flank Penalty: -%d Def Hits)[/]" Theme.Orange contest.EncirclementPenalty
+        else ""
 
-      let panelContent = Rows(rowsList |> Seq.toArray)
+      let clashGrid = Grid()
+      clashGrid.AddColumn(GridColumn()) |> ignore
+      clashGrid.AddRow(Markup(sprintf "  [bold %s]Action:[/] %s" Theme.Foreground actionName)) |> ignore
+      clashGrid.AddRow(
+        Markup(
+          sprintf
+            "  [bold %s]⚔ %s[/] [grey](Stat %d)[/] [bold %s]%d Hits[/] [grey](+%d flr, %d roll %s)[/]   %s   [bold %s]%d Hits[/] [grey](+%d flr, %d roll %s)[/] [bold %s]🛡 Defender[/] [grey](Stat %d)[/]"
+            Theme.Green
+            (Markup.Escape actorName)
+            atk.StatValue
+            Theme.Green
+            atk.TotalHits
+            atk.FloorHits
+            atk.RolledHits
+            (formatRolls atk.RawRolls)
+            clashBar
+            Theme.Pink
+            def.TotalHits
+            def.FloorHits
+            def.RolledHits
+            (formatRolls def.RawRolls)
+            Theme.Pink
+            def.StatValue
+        )
+      ) |> ignore
+      clashGrid.AddRow(Markup(sprintf "  [bold %s]Verdict:[/] %s%s" Theme.Foreground outcomeText flankNote)) |> ignore
+
+      let borderCol =
+        if contest.IsWhiff then Theme.ColorRed
+        elif contest.IsCritical then Theme.ColorYellow
+        else Theme.ColorCurrentLine
 
       let summaryPanel =
-        Panel(panelContent)
-          .Header(stripNerdGlyphs (sprintf "[bold %s] 󰓥 Tactical Contest Inspection [/]" Theme.Purple))
+        Panel(clashGrid)
+          .Header(stripNerdGlyphs (sprintf "[bold %s] ⚔ TACTICAL CLASH BREAKDOWN [/]" Theme.Purple))
           .Border(BoxBorder.Rounded)
-          .BorderColor(Theme.ColorCurrentLine)
+          .BorderColor(borderCol)
           .Expand()
 
       AnsiConsole.Write(summaryPanel :> IRenderable)

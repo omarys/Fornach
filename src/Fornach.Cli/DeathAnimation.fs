@@ -6,153 +6,188 @@ open Spectre.Console
 
 module DeathAnimation =
 
-  // The truck drives LEFT, so its cab and windshield face left and the horn trails behind it.
-  // NOTE: these strings go through Markup — the `[[` and `]]` around HONK are Spectre escapes that
-  // render as literal brackets, so the horn costs 2 cells less on screen than in source. Keep the
-  // art free of other brackets, which Markup would eat as tags.
-  let private truckFrames =
-    [| @"                    ______   "
-       @"                __.`/_||_|\  "
-       @"                /_ _    _   )  [[==HONK!==]] "
-       @"               '-(_)--(_)-`= " |]
+  /// Heavy cab-over box truck ("Truck-kun") driving LEFT.
+  /// Kept free of raw single brackets (`[` / `]`) so Spectre.Console Markup never misinterprets art as style tags;
+  /// literal brackets use doubled `[[` and `]]`.
+  let truckBodyFrames (step: int) : string array =
+    let wheel = if step % 4 < 2 then "(O)" else "(@)"
+    let horn =
+      if step % 4 < 2 then "[[==HONK!!==]]  ~ ░"
+      else "[[==BLAAARE!==]] ░▒"
 
-  /// The road stops two cells short of the console: a borderless Panel still carries one cell of
-  /// padding per side, and a line that fills the width exactly spills its last characters onto a
-  /// wrapped line.
-  let private roadLine (consoleWidth: int) = String('=', Math.Max(1, consoleWidth - 2))
+    [| @"      ___________________________            "
+       @"   __/   |  [[FORNACH EXPRESS]]  |           "
+       @"  |[[  ]]|   HEAVY FREIGHT       |  " + horn
+       @"  |______|_______________________|           "
+       sprintf @"  '-%s---%s-----------%s---%s'   ~ ░▒▓   " wheel wheel wheel wheel |]
 
-  let private impactFrames =
-    [| @"      \  |  /      "
-       @"    -- CRASH! --   "
-       @"      /  |  \      " |]
+  /// Generates a diagonal rain line across the sky for the given animation frame
+  let private rainLine (width: int) (step: int) (rowSalt: int) : string =
+    let usable = Math.Max(10, width - 4)
+    let chars =
+      Array.init usable (fun col ->
+        let h = (col * 7 + step * 3 + rowSalt * 13) % 19
+        if h = 0 then '/'
+        elif h = 5 then '\''
+        elif h = 11 then '.'
+        else ' ')
+    sprintf "[#6272a4]%s[/]" (String(chars))
+
+  /// Two-lane wet asphalt road surface with dashed center divider
+  let private roadSurface (consoleWidth: int) (step: int) : string * string =
+    let w = Math.Max(10, consoleWidth - 4)
+    let divider =
+      Array.init w (fun i -> if ((i + step) % 6) < 3 then '-' else ' ')
+      |> String
+    let asphalt = String('═', w)
+    sprintf "[bold #f1fa8c]%s[/]" divider, sprintf "[#6272a4]%s[/]" asphalt
+
+  /// Multi-frame impact and windshield shatter sequence
+  let impactSequenceFrames : (string * string * string * string) array =
+    [| ( @"        \   *   |   *   /        ",
+         @"    * ── [[ C R A S H ! ! ]] ── * ",
+         @"        /   *   |   *   \        ",
+         "bold #f1fa8c on #ff5555" )
+       ( @"   ✦  \  .  *  / \  *  .  /  ✦   ",
+         @"  ── ✦ [[ SHATTERED GLASS ]] ✦ ── ",
+         @"   ✦  /  '  *  \ /  *  '  \  ✦   ",
+         "bold white on #ff5555" )
+       ( @"  .  *    /     |     \    *  .  ",
+         @"     ((  TRAUMA IMPACT!!  ))     ",
+         @"  '  *    \     |     /    *  '  ",
+         "bold #ffb86c on #44475a" ) |]
 
   /// Plays the Truck-kun replay sequence across the terminal width
   let playTruckReplay () =
     AnsiConsole.Clear()
     AnsiConsole.Cursor.Hide()
 
-    let consoleWidth = Math.Max(60, AnsiConsole.Profile.Width)
+    let consoleWidth = Math.Max(70, AnsiConsole.Profile.Width)
     let playerPos = 8
-    // Frame width including the horn trailing behind, plus one cell so the horn never touches the
-    // right edge and trips the wrap.
-    let truckWidth = 44
-    let totalSteps = consoleWidth - playerPos
+    let truckWidth = 46
+    let startPos = Math.Max(playerPos + 6, consoleWidth - truckWidth - 2)
 
-    // Phase 1: High-speed approach
+    // Phase 1 & 2: High-speed storm approach + multi-frame impact shatter
     AnsiConsole
       .Live(Panel(Text("")))
       .AutoClear(false)
       .Overflow(VerticalOverflow.Crop)
       .Start(fun ctx ->
-        for step in 0..2..totalSteps do
-          let currentTruckPos = consoleWidth - step - truckWidth
+        let mutable currentTruckPos = startPos
+        let mutable step = 0
+
+        while currentTruckPos > playerPos + 4 do
           let grid = Grid()
           grid.AddColumn(GridColumn().NoWrap()) |> ignore
 
-          // Empty buffer rows to vertically center the road
-          for _ in 1..3 do
-            grid.AddRow(Text("")) |> ignore
+          // Atmospheric storm sky
+          grid.AddRow(Markup(rainLine consoleWidth step 1)) |> ignore
+          grid.AddRow(Markup(rainLine consoleWidth step 2)) |> ignore
 
-          if currentTruckPos > playerPos + 4 then
-            // Truck hurtling towards player
-            let padLeft = Math.Max(0, currentTruckPos)
-            let playerPad = playerPos
+          let frames = truckBodyFrames step
+          let gap = Math.Max(0, currentTruckPos - playerPos - 5)
+          let playerPad = String(' ', playerPos)
+          let isClose = gap < 18
 
-            let row0 =
-              sprintf
-                "%s[bold red]@_@[/] %s%s"
-                (String(' ', playerPad))
-                (String(' ', Math.Max(0, padLeft - playerPad - 4)))
-                truckFrames.[0]
+          // Player reactions & halogen headlight cone
+          let playerHead = if isClose then "[bold #ff5555]@_@[/]" else "[bold #f1fa8c] o [/]"
+          let playerTorso = if isClose then "[bold #f1fa8c]\\|/[/]" else "[bold #8be9fd]/|\\[/]"
+          let playerLegs = "[bold #f8f8f2]/ \\[/]"
 
-            let row1 =
-              sprintf
-                "%s |   %s[bold white on red]%s[/]"
-                (String(' ', playerPad))
-                (String(' ', Math.Max(0, padLeft - playerPad - 4)))
-                truckFrames.[1]
+          let beamLen = Math.Min(gap, 16)
+          let darkGap = Math.Max(0, gap - beamLen)
+          let upperBeam =
+            if beamLen > 0 then
+              sprintf "%s[bold #f1fa8c]%s[/]" (String(' ', darkGap)) (String('/', beamLen))
+            else
+              String(' ', gap)
+          let mainBeam =
+            if beamLen > 0 then
+              let beamColor = if isClose then "bold #282a36 on #f1fa8c" else "bold #f1fa8c"
+              sprintf "%s[%s]%s[/]" (String(' ', darkGap)) beamColor (String('═', beamLen))
+            else
+              String(' ', gap)
+          let lowerBeam =
+            if beamLen > 0 then
+              sprintf "%s[bold #ffb86c]%s[/]" (String(' ', darkGap)) (String('\\', beamLen))
+            else
+              String(' ', gap)
 
-            let row2 =
-              sprintf
-                "%s/ \\  %s[bold yellow]%s[/]"
-                (String(' ', playerPad))
-                (String(' ', Math.Max(0, padLeft - playerPad - 4)))
-                truckFrames.[2]
+          let row0 = sprintf "%s    %s[bold #f8f8f2]%s[/]" playerPad (String(' ', gap)) frames.[0]
+          let row1 = sprintf "%s    %s[bold #ff5555]%s[/]" playerPad upperBeam frames.[1]
+          let row2 = sprintf "%s%s %s[bold #f8f8f2 on #ff5555]%s[/]" playerPad playerHead mainBeam frames.[2]
+          let row3 = sprintf "%s%s %s[bold #ff5555]%s[/]" playerPad playerTorso lowerBeam frames.[3]
+          let row4 = sprintf "%s%s %s[bold #6272a4]%s[/]" playerPad playerLegs (String(' ', gap)) frames.[4]
 
-            let row3 =
-              sprintf
-                "%s     %s[bold grey]%s[/]"
-                (String(' ', playerPad))
-                (String(' ', Math.Max(0, padLeft - playerPad - 4)))
-                truckFrames.[3]
+          grid.AddRow(Markup row0) |> ignore
+          grid.AddRow(Markup row1) |> ignore
+          grid.AddRow(Markup row2) |> ignore
+          grid.AddRow(Markup row3) |> ignore
+          grid.AddRow(Markup row4) |> ignore
 
-            grid.AddRow(Markup row0) |> ignore
-            grid.AddRow(Markup row1) |> ignore
-            grid.AddRow(Markup row2) |> ignore
-            grid.AddRow(Markup row3) |> ignore
-            grid.AddRow(Markup(sprintf "[grey]%s[/]" (roadLine consoleWidth)))
-            |> ignore
+          let divider, asphalt = roadSurface consoleWidth step
+          grid.AddRow(Markup divider) |> ignore
+          grid.AddRow(Markup asphalt) |> ignore
 
-            ctx.UpdateTarget(Panel(grid).Border(BoxBorder.None))
-            Thread.Sleep 25
-          else
-            // Phase 2: Instant Impact
-            grid.AddRow(
-              Markup(
-                sprintf
-                  "%s[bold yellow on red]%s[/]"
-                  (String(' ', playerPos))
-                  impactFrames.[0]
-              )
-            )
-            |> ignore
+          let headerText =
+            if isClose then "[bold #ff5555] ⚠ SCREEEEECH!! HIGH BEAMS IN YOUR LANE!! ⚠ [/]"
+            else "[bold #8be9fd] 🌧️ RAIN-SLICKED CROSSING ── ONCOMING HEADLIGHTS [/]"
 
-            grid.AddRow(
-              Markup(
-                sprintf
-                  "%s[bold white on red]%s[/]"
-                  (String(' ', playerPos))
-                  impactFrames.[1]
-              )
-            )
-            |> ignore
+          ctx.UpdateTarget(
+            Panel(grid)
+              .Header(headerText)
+              .Border(BoxBorder.Heavy)
+              .BorderColor(if isClose then Theme.ColorRed else Theme.ColorComment)
+          )
 
-            grid.AddRow(
-              Markup(
-                sprintf
-                  "%s[bold yellow on red]%s[/]"
-                  (String(' ', playerPos))
-                  impactFrames.[2]
-              )
-            )
-            |> ignore
+          Thread.Sleep 28
+          // Truck accelerates as it closes in
+          let stride = if isClose then 4 else 3
+          currentTruckPos <- currentTruckPos - stride
+          step <- step + 1
 
-            grid.AddRow(
-              Markup(sprintf "[bold red]%s[/]" (roadLine consoleWidth))
-            )
-            |> ignore
+        // Phase 2: Multi-frame Impact & Shattered Windshield
+        for i in 0 .. impactSequenceFrames.Length - 1 do
+          let f0, f1, f2, styleTag = impactSequenceFrames.[i]
+          let grid = Grid()
+          grid.AddColumn(GridColumn().NoWrap()) |> ignore
 
-            ctx.UpdateTarget(Panel(grid).Border(BoxBorder.None))
-            Thread.Sleep 200)
+          grid.AddRow(Markup(rainLine consoleWidth (step + i) 3)) |> ignore
+          grid.AddRow(Text("")) |> ignore
 
-    // Phase 3: Blinding White Screen Flash
-    Thread.Sleep 100
+          let pad = String(' ', Math.Max(2, playerPos - 2))
+          grid.AddRow(Markup(sprintf "%s[%s]%s[/]" pad styleTag f0)) |> ignore
+          grid.AddRow(Markup(sprintf "%s[%s]%s[/]" pad styleTag f1)) |> ignore
+          grid.AddRow(Markup(sprintf "%s[%s]%s[/]" pad styleTag f2)) |> ignore
+          grid.AddRow(Text("")) |> ignore
+
+          let _, asphalt = roadSurface consoleWidth (step + i)
+          grid.AddRow(Markup(sprintf "[bold #ff5555]%s[/]" (String('═', Math.Max(10, consoleWidth - 4))))) |> ignore
+          grid.AddRow(Markup asphalt) |> ignore
+
+          ctx.UpdateTarget(
+            Panel(grid)
+              .Header("[bold #f8f8f2 on #ff5555] ☠ FATAL COLLISION ── WINDSHIELD SHATTERED ☠ [/]")
+              .Border(BoxBorder.Double)
+              .BorderColor(Theme.ColorRed)
+          )
+          Thread.Sleep 180)
+
+    // Phase 3: Blinding Halogen Whiteout Flash
+    Thread.Sleep 80
     AnsiConsole.Clear()
-    let whiteLine = String(' ', consoleWidth)
-
-    for _ in 1..12 do
+    let whiteLine = String(' ', Math.Max(20, consoleWidth - 2))
+    for _ in 1..10 do
       AnsiConsole.MarkupLine(sprintf "[on white]%s[/]" whiteLine)
+    Thread.Sleep 220
 
-    Thread.Sleep 400
-
-    // Phase 4: Fade to Rain & Charcoal Mist
+    // Phase 4: ICU Monitor Flatline & Trauma Loop Rewind
     AnsiConsole.Clear()
-    AnsiConsole.MarkupLine
-      "[grey]The blaring horn fades into cold, driving rain...[/]"
-
-    Thread.Sleep 800
-    AnsiConsole.MarkupLine
-      "[bold red]Truck-kun claims another victim. Rewinding timeline...[/]\n"
-
-    Thread.Sleep 1000
+    AnsiConsole.WriteLine()
+    AnsiConsole.MarkupLine(sprintf "  [bold #50fa7b]ICU MONITOR:[/] [bold #ff5555]───/\\────/\\────────────────────────── [[ FLATLINE ]][/]")
+    Thread.Sleep 450
+    AnsiConsole.MarkupLine(sprintf "  [italic #6272a4]The blaring horn dissolves into cold, driving rain and shattering glass...[/]")
+    Thread.Sleep 550
+    AnsiConsole.MarkupLine(sprintf "  [bold #bd93f9]⏪ TRAUMA LOOP ACTIVATED:[/] [bold #f1fa8c]Truck-kun claims another victim. Rewinding timeline...[/]\n")
+    Thread.Sleep 850
     AnsiConsole.Cursor.Show()

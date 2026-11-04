@@ -589,10 +589,10 @@ module TowerDisplay =
         | WeaponCondition.Broken -> Theme.Red, "Broken (-50% dmg) ☠"
       row (sprintf "%-22s [bold %s]%s[/]" "󰚌 Weapon Integrity" weaponCondColor weaponCondDesc) |> ignore
 
-    // Emotional Meters
-    row (Display.renderMeter "󰈸 Recklessness" p.Meters.Recklessness Theme.Red) |> ignore
-    row (Display.renderMeter "󰓎 Frustration" p.Meters.Frustration Theme.Yellow) |> ignore
-    row (Display.renderMeter "󰒓 Exhaustion" p.Meters.Exhaustion Theme.Purple) |> ignore
+    // Physical & Emotional Strain Meters
+    row (Display.renderMeter "󰈸 Recklessness" p.Meters.Recklessness Theme.Orange) |> ignore
+    row (Display.renderMeter "󰒓 Exhaustion" p.Meters.Exhaustion Theme.Yellow) |> ignore
+    row (Display.renderMeter "󰞷 Frustration" p.Meters.Frustration Theme.Pink) |> ignore
 
     row (sprintf "[bold %s]─── 󰒋 ASCENSION STATUS ───[/]" Theme.Cyan) |> ignore
     let doorState =
@@ -1459,6 +1459,19 @@ module TowerDisplay =
       // with the inline combat and dialog output this loop writes.
       AnsiConsole.Write(grid)
       AnsiConsole.Write(bottomPanel)
+      if inspectCursor.IsNone then
+        let hotkeys =
+          sprintf
+            "[%s][[WASD/hjkl]][/] [%s]Move[/]  [%s][[Space/.]][/] [%s]Rest & Hone[/]  [%s][[x/;]][/] [%s]Inspect[/]  [%s][[i]][/] [%s]Items[/]  [%s][[c]][/] [%s]Sheet[/]  [%s][[v]][/] [%s]Log[/]  [%s][[?/F1]][/] [%s]Help[/]  [%s][[q]][/] [%s]Retreat[/]"
+            Theme.Yellow Theme.Comment
+            Theme.Green Theme.Comment
+            Theme.Cyan Theme.Comment
+            Theme.Pink Theme.Comment
+            Theme.Purple Theme.Comment
+            Theme.Orange Theme.Comment
+            Theme.Yellow Theme.Comment
+            Theme.Red Theme.Comment
+        AnsiConsole.Write(Align.Center(Markup(hotkeys)))
       endFrame ()
 
       // Read player command
