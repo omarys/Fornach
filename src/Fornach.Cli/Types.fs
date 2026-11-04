@@ -58,6 +58,7 @@ type GroupSingleResult =
     TotalAoOsTriggered: int
     TotalCleaves: int
     TotalChains: int
+    TotalTempoShifts: int
     Condition: WinCondition }
 
 type GroupSimulationSummary =
@@ -79,6 +80,7 @@ type GroupSimulationSummary =
     AvgAoOsTriggered: float
     AvgCleaves: float
     AvgChains: float
+    AvgTempoShifts: float
     HealthDepletions: int
     MoraleDepletions: int
     Executions: int }

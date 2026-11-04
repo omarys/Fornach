@@ -417,79 +417,87 @@ module Simulation =
     let mutable totalAoOs = 0
     let mutable totalCleaves = 0
     let mutable totalChains = 0
+    let mutable tempoShifts = 0
 
     while winnerIsSolo.IsNone && round <= maxRounds do
+      // Who holds the Vor decides which side resolves first. A living pack member in the Vor while the
+      // solo opens in the Nach means the pack strikes first. A contested or ambiguous state -- both
+      // sides holding it, or neither -- deliberately falls back to solo-first so the harness stays
+      // deterministic.
+      let packHasVor =
+        mob
+        |> List.exists (fun m ->
+          m.IsInVor
+          && not m.Health.IsDepleted
+          && not m.Morale.IsDepleted)
+
       // Phase 1: Solo Turn (Focus fire optimal target + Cleave / Chain adjacent opponents)
-      if not mob.IsEmpty then
-        let target = policy.ChooseTarget solo mob
-        let adjacentTargets = mob |> List.filter (fun m -> m.Id <> target.Id)
-        let intentSolo = policy.ChooseIntent solo target mob.Length
-        let groupRes = ActionResolver.resolveGroupTurn roller intentSolo solo target adjacentTargets
-        solo <- groupRes.Actor
+      let resolveSoloPhase () =
+        if not mob.IsEmpty then
+          let target = policy.ChooseTarget solo mob
+          let adjacentTargets = mob |> List.filter (fun m -> m.Id <> target.Id)
+          let intentSolo = policy.ChooseIntent solo target mob.Length
+          let groupRes = ActionResolver.resolveGroupTurn roller intentSolo solo target adjacentTargets
+          solo <- groupRes.Actor
 
-        let cleaveHits = groupRes.Events |> List.filter (function CombatEvent.CleaveExecuted _ -> true | _ -> false) |> List.length
-        let chainHits = groupRes.Events |> List.filter (function CombatEvent.StrikeChained _ -> true | _ -> false) |> List.length
-        totalCleaves <- totalCleaves + cleaveHits
-        totalChains <- totalChains + chainHits
+          let cleaveHits = groupRes.Events |> List.filter (function CombatEvent.CleaveExecuted _ -> true | _ -> false) |> List.length
+          let chainHits = groupRes.Events |> List.filter (function CombatEvent.StrikeChained _ -> true | _ -> false) |> List.length
+          let tempoHits = groupRes.Events |> List.filter (function CombatEvent.TempoShifted (_, _, _) -> true | _ -> false) |> List.length
+          totalCleaves <- totalCleaves + cleaveHits
+          totalChains <- totalChains + chainHits
+          tempoShifts <- tempoShifts + tempoHits
 
-        let executedIds =
-          groupRes.Events
-          |> List.choose (function CombatEvent.Executed (_, tid, _) -> Some tid | _ -> None)
-          |> Set.ofList
-
-        let allResolved = groupRes.PrimaryTarget :: groupRes.SecondaryTargets
-
-        // Update mob with resolved targets, apply turn upkeep, and filter out defeated
-        mob <-
-          allResolved
-          |> List.map (fun m ->
-            let up, _ = ActionResolver.applyTurnUpkeep m
-            up)
-          |> List.filter (fun m ->
-            not (Set.contains m.Id executedIds)
-            && not m.Health.IsDepleted
-            && not m.Morale.IsDepleted)
-
-        // Enraged Berserker Frenzy Attack: Berserk Tincture unleashes an immediate savage follow-up swing!
-        if solo.HasActivePreparation PreparationType.BerserkTincture && not mob.IsEmpty && not solo.Health.IsDepleted && not solo.Morale.IsDepleted then
-          let frenzyTarget = policy.ChooseTarget solo mob
-          let frenzyAdjacent = mob |> List.filter (fun m -> m.Id <> frenzyTarget.Id)
-          let frenzyIntent = StandardAttack (ForceStrike false)
-          let frenzyRes = ActionResolver.resolveGroupTurn roller frenzyIntent solo frenzyTarget frenzyAdjacent
-          solo <- frenzyRes.Actor
-
-          let frenzyCleaves = frenzyRes.Events |> List.filter (function CombatEvent.CleaveExecuted _ -> true | _ -> false) |> List.length
-          totalCleaves <- totalCleaves + frenzyCleaves
-
-          let frenzyExecutedIds =
-            frenzyRes.Events
+          let executedIds =
+            groupRes.Events
             |> List.choose (function CombatEvent.Executed (_, tid, _) -> Some tid | _ -> None)
             |> Set.ofList
 
-          let allFrenzyResolved = frenzyRes.PrimaryTarget :: frenzyRes.SecondaryTargets
+          let allResolved = groupRes.PrimaryTarget :: groupRes.SecondaryTargets
 
+          // Update mob with resolved targets, apply turn upkeep, and filter out defeated
           mob <-
-            allFrenzyResolved
+            allResolved
             |> List.map (fun m ->
               let up, _ = ActionResolver.applyTurnUpkeep m
               up)
             |> List.filter (fun m ->
-              not (Set.contains m.Id frenzyExecutedIds)
+              not (Set.contains m.Id executedIds)
               && not m.Health.IsDepleted
               && not m.Morale.IsDepleted)
 
-      // Check win/loss after solo attack
-      if mob.IsEmpty then
-        winnerIsSolo <- Some true
-        condition <- HealthDepleted
-      elif solo.Health.IsDepleted then
-        winnerIsSolo <- Some false
-        condition <- HealthDepleted
-      elif solo.Morale.IsDepleted then
-        winnerIsSolo <- Some false
-        condition <- MoraleDepleted
-      else
-        // Phase 2: Swarm Turn (All surviving mob members attack Solo concurrently)
+          // Enraged Berserker Frenzy Attack: Berserk Tincture unleashes an immediate savage follow-up swing!
+          if solo.HasActivePreparation PreparationType.BerserkTincture && not mob.IsEmpty && not solo.Health.IsDepleted && not solo.Morale.IsDepleted then
+            let frenzyTarget = policy.ChooseTarget solo mob
+            let frenzyAdjacent = mob |> List.filter (fun m -> m.Id <> frenzyTarget.Id)
+            let frenzyIntent = StandardAttack (ForceStrike false)
+            let frenzyRes = ActionResolver.resolveGroupTurn roller frenzyIntent solo frenzyTarget frenzyAdjacent
+            solo <- frenzyRes.Actor
+
+            let frenzyCleaves = frenzyRes.Events |> List.filter (function CombatEvent.CleaveExecuted _ -> true | _ -> false) |> List.length
+            let frenzyTempoHits = frenzyRes.Events |> List.filter (function CombatEvent.TempoShifted (_, _, _) -> true | _ -> false) |> List.length
+            totalCleaves <- totalCleaves + frenzyCleaves
+            tempoShifts <- tempoShifts + frenzyTempoHits
+
+            let frenzyExecutedIds =
+              frenzyRes.Events
+              |> List.choose (function CombatEvent.Executed (_, tid, _) -> Some tid | _ -> None)
+              |> Set.ofList
+
+            let allFrenzyResolved = frenzyRes.PrimaryTarget :: frenzyRes.SecondaryTargets
+
+            mob <-
+              allFrenzyResolved
+              |> List.map (fun m ->
+                let up, _ = ActionResolver.applyTurnUpkeep m
+                up)
+              |> List.filter (fun m ->
+                not (Set.contains m.Id frenzyExecutedIds)
+                && not m.Health.IsDepleted
+                && not m.Morale.IsDepleted)
+
+
+      // Phase 2: Swarm Turn (All surviving mob members attack Solo concurrently)
+      let resolveSwarmPhase () =
         // Poise sets the frontage: how many bodies can reach the solo at once, from eight down to one.
         // When BastionZoneControl is active, only the 3 frontline tiles in front of the Warden can swing.
         // Each clone that vanishes/shatters blocks that tile space until the end of the round!
@@ -520,7 +528,9 @@ module Simulation =
             availableSwings <- Math.Max(0, availableSwings - 1)
 
           let aooHits = mobRes.Events |> List.filter (function CombatEvent.AttackOfOpportunityTriggered _ -> true | _ -> false) |> List.length
+          let tempoHits = mobRes.Events |> List.filter (function CombatEvent.TempoShifted (_, _, _) -> true | _ -> false) |> List.length
           totalAoOs <- totalAoOs + aooHits
+          tempoShifts <- tempoShifts + tempoHits
 
           match mobRes.Contest with
           | Some c ->
@@ -552,7 +562,9 @@ module Simulation =
             peakPenalty <- Math.Max(peakPenalty, priorDefenses)
             mobIdx <- mobIdx + 1
 
-        // Phase 3: Solo Upkeep at end of round
+
+      // Phase 3: Solo Upkeep at end of round
+      let resolveSoloUpkeep () =
         if winnerIsSolo.IsNone then
           let swarmExertion = if mob.Length >= 3 then 1 else 0
           solo <-
@@ -572,6 +584,35 @@ module Simulation =
           elif solo.Morale.IsDepleted then
             winnerIsSolo <- Some false
             condition <- MoraleDepleted
+
+
+      // Win/loss adjudication, checked at the same points as before: a phase that clears the pack or
+      // drops the solo ends the fight before the other side acts. A phase that already decided the fight
+      // (execution finisher, collapse) keeps its own condition.
+      let adjudicate () =
+        if winnerIsSolo.IsNone then
+          if mob.IsEmpty then
+            winnerIsSolo <- Some true
+            condition <- HealthDepleted
+          elif solo.Health.IsDepleted then
+            winnerIsSolo <- Some false
+            condition <- HealthDepleted
+          elif solo.Morale.IsDepleted then
+            winnerIsSolo <- Some false
+            condition <- MoraleDepleted
+
+      if packHasVor && solo.IsInNach then
+        resolveSwarmPhase ()
+        adjudicate ()
+        if winnerIsSolo.IsNone then
+          resolveSoloPhase ()
+          adjudicate ()
+      else
+        resolveSoloPhase ()
+        adjudicate ()
+        if winnerIsSolo.IsNone then resolveSwarmPhase ()
+
+      resolveSoloUpkeep ()
 
       if winnerIsSolo.IsNone then
         round <- round + 1
@@ -593,6 +634,7 @@ module Simulation =
       TotalAoOsTriggered = totalAoOs
       TotalCleaves = totalCleaves
       TotalChains = totalChains
+      TotalTempoShifts = tempoShifts
       Condition = condition }, solo
 
   let runPreparedGroupMatch
@@ -672,6 +714,7 @@ module Simulation =
     let avgAoO = results |> List.averageBy (fun r -> float r.TotalAoOsTriggered)
     let avgCleaves = results |> List.averageBy (fun r -> float r.TotalCleaves)
     let avgChains = results |> List.averageBy (fun r -> float r.TotalChains)
+    let avgTempoShifts = results |> List.averageBy (fun r -> float r.TotalTempoShifts)
 
     let winningResults = results |> List.filter (fun r -> r.SoloWon)
     let avgSoloHP = if winningResults.IsEmpty then 0.0 else winningResults |> List.averageBy (fun r -> r.SoloRemainingHPPct)
@@ -705,6 +748,7 @@ module Simulation =
       AvgAoOsTriggered = avgAoO
       AvgCleaves = avgCleaves
       AvgChains = avgChains
+      AvgTempoShifts = avgTempoShifts
       HealthDepletions = healthKills
       MoraleDepletions = moraleKills
       Executions = executions }
@@ -803,6 +847,7 @@ module Simulation =
     telemetryTable.AddRow("Attacks of Opportunity Triggered", sprintf "[bold %s]%.2f / encounter[/]" Theme.Cyan summary.AvgAoOsTriggered, "Preemptive interception of flankers via Agility / Discipline disparity") |> ignore
     telemetryTable.AddRow("Cleave Attacks Executed", sprintf "[bold %s]%.2f / encounter[/]" Theme.Red summary.AvgCleaves, "Power Stance sweeping multi-target cleaves (disparity-scaled recklessness)") |> ignore
     telemetryTable.AddRow("Cadence Chains Flowed", sprintf "[bold %s]%.2f / encounter[/]" Theme.Purple summary.AvgChains, "Discipline Stance fluid chained strikes (0 recklessness, +1 Combat Ramp)") |> ignore
+    telemetryTable.AddRow("Vor / Nach Tempo Shifts", sprintf "[bold %s]%.2f / encounter[/]" Theme.Yellow summary.AvgTempoShifts, "Initiative changing hands between the solo and the pack (previously invisible to this sweep)") |> ignore
     telemetryTable.AddRow("Average Rounds to Resolution", sprintf "[bold %s]%.2f rounds[/]" Theme.Cyan summary.AvgRounds, sprintf "Bounded between %d and %d rounds" summary.MinRounds summary.MaxRounds) |> ignore
     telemetryTable.AddRow("Victorious Champion HP", sprintf "[bold %s]%.1f%% remaining[/]" Theme.Green summary.AvgSoloRemainingHP, "Average HP buffer retained upon clearing the swarm") |> ignore
 
