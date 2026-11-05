@@ -105,8 +105,16 @@ module StoryTutorialTests =
 
     Assert.Contains(events, (function TowerEvent.ChestOpened(_, _, _) -> true | _ -> false))
     // Sharpened Caltrops grant Reflex +5, folded permanently into the base stats.
-    Assert.Equal(reflexBefore + 5, nextState.Player.Stats.Get StatId.Reflex)
-    Assert.Equal(inventoryBefore + 1, nextState.InventoryItems.Length)
+    // Derive the expectation from the caltrops' own declared percentage rather than a magic number, so
+    // rescaling item bonuses does not silently invalidate this test.
+    let caltropsPct =
+      reward
+      |> Option.bind (fun (item: EquipmentItem) ->
+        item.StatPercentBonuses |> List.tryFind (fun (stat, _) -> stat = StatId.Reflex))
+      |> Option.map snd
+      |> Option.defaultValue 0
+    Assert.Equal(reflexBefore + StatBonus.percentOf reflexBefore caltropsPct, nextState.Player.Stats.Get StatId.Reflex)
+    Assert.Equal(min (inventoryBefore + 1) TowerSession.carriedItemSlots, nextState.InventoryItems.Length)
     Assert.Contains(nextState.InventoryItems, (fun (it: EquipmentItem) -> it.Name = "Sharpened Caltrops"))
 
   [<Fact>]

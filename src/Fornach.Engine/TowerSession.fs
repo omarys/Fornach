@@ -245,6 +245,18 @@ module TowerSession =
 
   /// The pair a shrine sharpens for a given plane — `StatBoon.pairOf`, kept here so session callers
   /// read the same class lock the altars use.
+  /// Two carried relics, newest first. A third pickup retires the oldest.
+  let carriedItemSlots = 2
+
+  /// Relics only apply to the level they were acquired on: the percentage resolves once against the
+  /// stats as they stand at pickup and is then frozen into them, so its share thins out as levels add
+  /// primaries. Nothing is re-applied on level-up. With two slots the oldest is the one that goes.
+  let grantItem (item: EquipmentItem) (player: Combatant) (inventory: EquipmentItem list) =
+    let kept =
+      if inventory.Length >= carriedItemSlots then inventory |> List.truncate (carriedItemSlots - 1) else inventory
+
+    Combatant.applyItemBonus item player, item :: kept
+
   let shrineBoonPair (plane: Plane) (boon: StatBoon) : StatId * StatId = StatBoon.pairOf plane boon
 
   /// Percentage each stat of the pair gains on a shrine's first commune.
@@ -819,8 +831,9 @@ module TowerSession =
 
         match chest.ItemReward with
         | Some item ->
-          newItems <- item :: newItems
-          newPlayer <- Combatant.applyItemBonus item newPlayer
+          let grantedPlayer, grantedItems = grantItem item newPlayer newItems
+          newPlayer <- grantedPlayer
+          newItems <- grantedItems
           rewardMsg <- sprintf "Obtained relic: %s!" item.Name
         | None -> ()
 
@@ -1151,8 +1164,8 @@ module TowerSession =
       | Tempered (relic, defences, temper) ->
         // The relic's percentages resolve against the bearer inside `applyItemBonus`; the
         // enlightenment is a flat temper on the defences of the plane the bearer does not walk.
-        newItems <- relic :: newItems
-        let attended = Combatant.applyItemBonus relic costPlayer
+        let attended, grantedItems = grantItem relic costPlayer newItems
+        newItems <- grantedItems
 
         rewardedPlayer <-
           { attended with
@@ -1171,8 +1184,9 @@ module TowerSession =
       | RelicReward item ->
         // No scaling here. The relic's bonuses are already percentages and `applyItemBonus` resolves
         // them against the bearer, exactly as it does for every other piece of equipment.
-        newItems <- item :: newItems
-        rewardedPlayer <- Combatant.applyItemBonus item rewardedPlayer
+        let grantedPlayer, grantedItems = grantItem item rewardedPlayer newItems
+        newItems <- grantedItems
+        rewardedPlayer <- grantedPlayer
 
       let updatedAltar = { altar with IsUsed = true }
       let updatedEntities = Map.add altarPt (EntityEncounter (SacrificialAltar updatedAltar)) state.CurrentFloor.Entities
@@ -1233,12 +1247,14 @@ module TowerSession =
             let updatedFloor = { state.CurrentFloor with Entities = updatedEntities }
             let logMsg = sprintf "Purchased %s from %s for %d Souls!" ware.Item.Name merchant.Name ware.CostSouls
 
+            let purchasedPlayer, purchasedItems = grantItem ware.Item state.Player state.InventoryItems
+
             Ok { state with
                    CurrentFloor = updatedFloor
                    Souls = state.Souls - ware.CostSouls
                    Trophies = updatedTrophies
-                   Player = Combatant.applyItemBonus ware.Item state.Player
-                   InventoryItems = ware.Item :: state.InventoryItems
+                   Player = purchasedPlayer
+                   InventoryItems = purchasedItems
                    MessageLog = logMsg :: state.MessageLog }
     | _ -> Error "No merchant found at this location."
 
@@ -1270,11 +1286,15 @@ module TowerSession =
           let updatedFloor = { state.CurrentFloor with Entities = updatedEntities }
           let logMsg = sprintf "Unlocked %s! Recovered +%d Souls and %d rare relic(s)!" vault.Name vault.BonusSouls vault.Relics.Length
 
+          let vaultPlayer, vaultItems =
+            vault.Relics
+            |> List.fold (fun (p, items) it -> grantItem it p items) (state.Player, state.InventoryItems)
+
           Ok { state with
                  CurrentFloor = updatedFloor
                  Souls = state.Souls + vault.BonusSouls
-                 Player = vault.Relics |> List.fold (fun p it -> Combatant.applyItemBonus it p) state.Player
-                 InventoryItems = vault.Relics @ state.InventoryItems
+                 Player = vaultPlayer
+                 InventoryItems = vaultItems
                  MessageLog = logMsg :: state.MessageLog }
     | _ -> Error "No vault found at this location."
 
