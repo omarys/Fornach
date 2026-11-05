@@ -17,6 +17,7 @@
     <Compile Include="WorldEvents.fs" />
     <Compile Include="TowerGenerator.fs" />
     <Compile Include="TowerSession.fs" />
+    <Compile Include="CombatSimulation.fs" />
   </ItemGroup>
 
   <ItemGroup>

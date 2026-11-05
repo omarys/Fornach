@@ -17,6 +17,9 @@ module AI =
       /// The attack to commit to, given the actor and the target it is facing.
       ChooseAttack: Combatant -> Combatant -> ActionIntent }
 
+  /// What a setting registers so the engine can resolve a combatant's `Policy`.
+  type PolicyTable = Map<PolicyId, AttackPolicy>
+
   /// Selects the execution plane based on the actor's operative discipline
   let private chooseExecutePlane (actor: Combatant) : Plane =
     actor.Plane

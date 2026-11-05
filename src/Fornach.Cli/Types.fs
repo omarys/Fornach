@@ -11,81 +11,6 @@ type ArchetypeInfo =
     Description: string
     Factory: unit -> Combatant }
 
-type WinCondition =
-  | HealthDepleted
-  | MoraleDepleted
-  | ExecutionFinisher of Plane
-  | CollapseDecisive of CollapseReason
-  | Stalemate
-
-type SingleCombatResult =
-  { WinnerName: string option
-    WinnerId: CombatantId option
-    WinnerIsA: bool option
-    LoserName: string option
-    Rounds: int
-    Condition: WinCondition
-    TotalWhiffs: int
-    TotalCrits: int }
-
-type SimulationSummary =
-  { ArchetypeNameA: string
-    ArchetypeNameB: string
-    TotalIterations: int
-    WinsA: int
-    WinsB: int
-    Stalemates: int
-    AvgRounds: float
-    MinRounds: int
-    MaxRounds: int
-    HealthDepletions: int
-    MoraleDepletions: int
-    Executions: int
-    TotalWhiffs: int
-    TotalCrits: int }
-
-type GroupSingleResult =
-  { SoloWon: bool
-    Rounds: int
-    OpponentsInitial: int
-    OpponentsEliminated: int
-    SoloRemainingHPPct: float
-    SoloRemainingMoralePct: float
-    SoloExhaustion: int
-    SoloFrustration: int
-    TotalCritsDealtByMob: int
-    PeakEncirclementPenalty: int
-    TotalAoOsTriggered: int
-    TotalCleaves: int
-    TotalChains: int
-    TotalTempoShifts: int
-    Condition: WinCondition }
-
-type GroupSimulationSummary =
-  { SoloArchetypeName: string
-    MobArchetypeName: string
-    MobCount: int
-    TotalIterations: int
-    SoloWins: int
-    MobWins: int
-    Stalemates: int
-    SoloWinRate: float
-    AvgRounds: float
-    MinRounds: int
-    MaxRounds: int
-    AvgEliminations: float
-    EliminationDistribution: (int * int * float) list // (kills, occurrences, percentage)
-    AvgPeakPenalty: float
-    AvgSoloRemainingHP: float
-    AvgAoOsTriggered: float
-    AvgCleaves: float
-    AvgChains: float
-    AvgTempoShifts: float
-    HealthDepletions: int
-    MoraleDepletions: int
-    Executions: int }
-
-
 type CliOptions =
   | InteractiveMenu
   | RunSimulation of archetypeA: string * archetypeB: string * iterations: int
@@ -95,27 +20,10 @@ type CliOptions =
   | RunBestiarySwarmMatrix of selectedTier: CombatTier option
   | RunProgressionSimulation of runs: int * maxFloors: int
 
-/// One floor's contribution to the progression report.
-type FloorSimStat =
-  { Floor: int
-    Reached: int
-    Wins: int
-    AvgLevel: float
-    AvgHpPct: float
-    AvgMoralePct: float }
-
-/// Whole-run view: how deep runs get when every floor is fought with the real scaling and the real
-/// growth applied. This is the only measurement that can answer "does the player outscale the tower".
-type ProgressionSimReport =
-  { Runs: int
-    MaxFloors: int
-    RunsWon: int
-    AvgFloorsReached: float
-    Floors: FloorSimStat list }
-
 /// Debug/test-play launch options parsed alongside the CliOptions mode.
 /// Enabled = --debug/-d (HUD overlay + seed printout);
 /// ForcedSeed = --seed N (overrides the randomly chosen run seed).
 type DebugOptions =
   { Enabled: bool
     ForcedSeed: int option }
+
