@@ -153,8 +153,8 @@ type Combatant =
   member this.MeterGainFactor =
     this.MonsterTraits
     |> List.fold
-        (fun acc trait ->
-            match trait with
+        (fun acc monsterTrait ->
+            match monsterTrait with
             | MonsterTrait.StoicResistance pct -> acc * (1.0 - float pct / 100.0)
             | _ -> acc)
         1.0

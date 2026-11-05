@@ -167,9 +167,10 @@ let ``Winning combat encounter advances story to post_combat and awards shattere
   Assert.True(runner.State.HasMemory "shattered_windshield")
 
 [<Fact>]
-let ``StoryBosses resolves all 5 Grief Aspects with correct stances and pools`` () =
+let ``StoryBosses resolves all 6 Grief Aspects with correct stances and pools`` () =
   let testCases =
-    [ ("denial_aspect", "Aspect of Denial", CombatStance.AgilityStance, 5200)
+    [ ("guilt_aspect", "Aspect of Guilt", CombatStance.PowerStance, 6400)
+      ("denial_aspect", "Aspect of Denial", CombatStance.AgilityStance, 6500)
       ("anger_aspect", "Aspect of Anger", CombatStance.PowerStance, 7600)
       ("bargaining_aspect", "Aspect of Bargaining", CombatStance.DisciplineStance, 10200)
       ("depression_aspect", "Aspect of Depression", CombatStance.DisciplineStance, 11000)

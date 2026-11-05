@@ -392,10 +392,10 @@ module StoryBosses =
   // verified at 40 seeds. They exist because one global number cannot serve both a physical aspect
   // that could not lose at any pool size and a mental one whose round count refused to move.
   let createGuiltAspect () : Combatant =
-    createGuiltAspectRaw () |> applyTuning { PoolFactor = 1.5; PotencyFactor = 1.7 }
+    createGuiltAspectRaw () |> applyTuning { PoolFactor = 2.0; PotencyFactor = 1.36 }
 
   let createDenialAspect () : Combatant =
-    createDenialAspectRaw () |> applyTuning { PoolFactor = 2.0; PotencyFactor = 1.45 }
+    createDenialAspectRaw () |> applyTuning { PoolFactor = 2.5; PotencyFactor = 1.0 }
 
   let createAngerAspect () : Combatant =
     createAngerAspectRaw () |> applyTuning { PoolFactor = 2.0; PotencyFactor = 1.02 }

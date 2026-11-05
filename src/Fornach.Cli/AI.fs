@@ -46,11 +46,23 @@ module AI =
     // -------------------------------------------------------------------------
     // Boss Grief Aspect AI Behaviors
     // -------------------------------------------------------------------------
-    if self.Name.Contains("Denial") then
+    if self.Name.Contains("Guilt") then
+      // Guilt is the heavy of the six: 210 Force behind a sledgehammer and almost no reach into the
+      // mind. It has no branch of its own here, so it used to fall through to the GriefManifestation
+      // profile below, which hands out a Mental attack -- and `AttackClassification.IsAllowedFor`
+      // refuses that outright for a Physical actor. The resolver then burned the turn on "cannot
+      // execute magic attacks", so the Aspect of Guilt never landed a blow in any fight.
+      StandardAttack (ForceStrike isGambit)
+    elif self.Name.Contains("Denial") then
       if self.MirrorClones < 2 && self.Meters.Recklessness.Value < 70 then
         StandardAttack (TraumaAttack DenialPhaseShift)
       else
-        StandardAttack (FinesseCadence isGambit)
+        // Denial resolves on the mental plane (Acuity 210 and Intellect 180 outweigh Finesse 235 once
+        // the Warrior plane flip applies), so the FinesseCadence press this branch used to make was
+        // refused outright -- once its clones were up the Aspect simply stopped attacking. Glamour is
+        // the mental plane's basic strike, the way the wraiths use it, and unlike Decoy Swarm it does
+        // not stack Recklessness onto a target already being buried in it.
+        StandardAttack (SynapticGlamour isGambit)
     elif self.Name.Contains("Anger") then
       if self.Meters.Recklessness.Value < 65 then
         StandardAttack (TraumaAttack BasaltEruption)
@@ -72,11 +84,20 @@ module AI =
     // Monster Species Instinct Profiles (ADR 0004)
     // -------------------------------------------------------------------------
     elif self.MonsterFamily = Some MonsterFamily.Beast then
-      // Beasts strike ferally, exploiting bleeding prey or lunging with agile cadences
-      if opponent.BleedStacks > 0 || finesse >= force then
-        StandardAttack (FinesseCadence isGambit)
+      // Beasts strike ferally, exploiting bleeding prey or lunging with agile cadences. Both of those
+      // are physical, and a beast can resolve mental: ADR 0009 zeroes Prowess on non-humanoids, which
+      // is enough to tip a Warrior-class beast over the mental threshold. Ask before committing, so a
+      // mental beast attacks with the cataclysm its plane allows instead of losing every turn.
+      let feral =
+        if opponent.BleedStacks > 0 || finesse >= force then
+          FinesseCadence isGambit
+        else
+          ForceStrike isGambit
+
+      if feral.IsAllowedFor self then
+        StandardAttack feral
       else
-        StandardAttack (ForceStrike isGambit)
+        StandardAttack (ArcaneCataclysm isGambit)
     elif self.MonsterFamily = Some MonsterFamily.Construct then
       // Constructs hold immovable bastion discipline, smashing with calculated stone blows
       if self.Stance <> CombatStance.PowerStance && self.Meters.Recklessness.Value < 35 then
@@ -93,8 +114,13 @@ module AI =
       else
         StandardAttack (SynapticGlamour isGambit)
     elif self.MonsterFamily = Some MonsterFamily.GriefManifestation then
-      // Grief manifestations strike with dialectical acumen interrogations
-      StandardAttack (AcumenInterrogation isGambit)
+      // Grief manifestations strike with dialectical acumen interrogations, but only those that
+      // actually reach the mind. Ask the same gate the resolver applies rather than assuming: a
+      // refused attack is not downgraded, it costs the whole turn.
+      if (AcumenInterrogation isGambit).IsAllowedFor self then
+        StandardAttack (AcumenInterrogation isGambit)
+      else
+        StandardAttack (ForceStrike isGambit)
     elif self.Plane = Physical then
       // Tactical Stance & Attack Evaluation (ADR 0009):
       // When outnumbered (surroundingOpponents >= 2) and Prowess is viable, shift to Discipline Stance for bastion stabilization.

@@ -81,3 +81,82 @@ let ``steady form drains cognitive fatigue since the two resets were merged`` ()
     after.Actor.Meters.CognitiveFatigue.Value < before,
     sprintf "fatigue stayed at %d" after.Actor.Meters.CognitiveFatigue.Value
   )
+
+// ---------------------------------------------------------------------------
+// Plane legality: the AI must never propose an attack the resolver will refuse.
+//
+// `AttackClassification.IsAllowedFor` has no fallback: a refused attack costs the actor its whole
+// turn. A single illegal branch therefore deletes a combatant from the fight without any error,
+// which is exactly how the Aspect of Guilt spent every round of every encounter doing nothing.
+// ---------------------------------------------------------------------------
+
+/// Straddles each threshold the offensive profiles branch on: recklessness 25/35/65/70, cognitive
+/// fatigue 80, and the opponent's morale 40.
+let private meterSweep = [ 0; 30; 70; 100 ]
+
+let private setMeter (target: int) (meter: Meter) = meter + (target - meter.Value)
+
+let private aspects () =
+  [ "Guilt", StoryBosses.createGuiltAspect ()
+    "Denial", StoryBosses.createDenialAspect ()
+    "Anger", StoryBosses.createAngerAspect ()
+    "Bargaining", StoryBosses.createBargainingAspect ()
+    "Depression", StoryBosses.createDepressionAspect ()
+    "Acceptance", StoryBosses.createAcceptanceAspect () ]
+
+[<Fact>]
+let ``no aspect is ever handed an attack its own plane refuses`` () =
+  let opponents = [ "fighter", fighter (); "mage", mage () ]
+
+  let illegal =
+    [ for name, actor in aspects () do
+        for opponentName, opponent in opponents do
+          for recklessness in meterSweep do
+            for cognitive in meterSweep do
+              for morale in meterSweep do
+                let actor =
+                  actor
+                  |> Combatant.updateMeters (fun m ->
+                    { m with
+                        Recklessness = setMeter recklessness m.Recklessness
+                        CognitiveFatigue = setMeter cognitive m.CognitiveFatigue })
+
+                let opponent = { opponent with Morale = { opponent.Morale with Current = morale } }
+
+                match AI.chooseIntent actor opponent with
+                | ActionIntent.StandardAttack attack when not (attack.IsAllowedFor actor) ->
+                  yield
+                    sprintf
+                      "%s (plane %A) vs %s [reck %d, cognitive %d, morale %d] -> %A (plane %A)"
+                      name
+                      actor.Plane
+                      opponentName
+                      recklessness
+                      cognitive
+                      morale
+                      attack
+                      attack.Plane
+                | _ -> () ]
+
+  Assert.Empty illegal
+
+[<Fact>]
+let ``no bestiary family is ever handed an attack its own plane refuses`` () =
+  let opponent = fighter ()
+
+  let illegal =
+    [ for template in Bestiary.allMonsters do
+        let actor = Bestiary.createMonster template
+
+        for recklessness in meterSweep do
+          let actor =
+            actor
+            |> Combatant.updateMeters (fun m -> { m with Recklessness = setMeter recklessness m.Recklessness })
+
+          match AI.chooseIntent actor opponent with
+          | ActionIntent.StandardAttack attack when not (attack.IsAllowedFor actor) ->
+            yield sprintf "%s (plane %A) -> %A (plane %A)" template.Name actor.Plane attack attack.Plane
+          | _ -> () ]
+
+  Assert.Empty illegal
+
