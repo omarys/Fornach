@@ -83,44 +83,43 @@ module AI =
     // -------------------------------------------------------------------------
     // Monster Species Instinct Profiles (ADR 0004)
     // -------------------------------------------------------------------------
-    elif self.MonsterFamily = Some MonsterFamily.Beast then
-      // Beasts strike ferally, exploiting bleeding prey or lunging with agile cadences. Both of those
-      // are physical, and a beast can resolve mental: ADR 0009 zeroes Prowess on non-humanoids, which
-      // is enough to tip a Warrior-class beast over the mental threshold. Ask before committing, so a
-      // mental beast attacks with the cataclysm its plane allows instead of losing every turn.
-      let feral =
-        if opponent.BleedStacks > 0 || finesse >= force then
-          FinesseCadence isGambit
+    elif self.MonsterFamily.IsSome then
+      // A species instinct names the vector that suits its temperament, and the temperament is written
+      // for the archetype rather than for the plane the combatant actually resolves on. ADR 0009 zeroes
+      // Prowess on non-humanoids, which by itself can tip a Warrior-class monster over the mental
+      // threshold, so the dragon lunges, the sentinel swings, the wraith sings -- and the resolver
+      // refuses all three. `IsAllowedFor` has no fallback: a refused attack is not downgraded, it costs
+      // the whole turn. Commit through the same gate the resolver applies, and fall back to the basic
+      // strike of the plane the combatant really occupies rather than of the one it looks like.
+      let commit (preferred: AttackClassification) =
+        if preferred.IsAllowedFor self then
+          StandardAttack preferred
         else
-          ForceStrike isGambit
+          StandardAttack (if self.Plane = Mental then SynapticGlamour isGambit else ForceStrike isGambit)
 
-      if feral.IsAllowedFor self then
-        StandardAttack feral
-      else
-        StandardAttack (ArcaneCataclysm isGambit)
-    elif self.MonsterFamily = Some MonsterFamily.Construct then
-      // Constructs hold immovable bastion discipline, smashing with calculated stone blows
-      if self.Stance <> CombatStance.PowerStance && self.Meters.Recklessness.Value < 35 then
+      match self.MonsterFamily with
+      | Some MonsterFamily.Construct when self.Stance <> CombatStance.PowerStance && self.Meters.Recklessness.Value < 35 ->
+        // Constructs hold immovable bastion discipline, and set their feet before they swing
         ShiftStance CombatStance.PowerStance
-      else
-        StandardAttack (ForceStrike isGambit)
-    elif self.MonsterFamily = Some MonsterFamily.UndeadWraith then
-      // Wraiths bypass physical armor entirely, singing sorrowful glamours that erode Morale
-      StandardAttack (SynapticGlamour isGambit)
-    elif self.MonsterFamily = Some MonsterFamily.Aberration then
-      // Aberrations warp focus with psychic cataclysms or erratic pulses
-      if intellect >= acuity then
-        StandardAttack (ArcaneCataclysm isGambit)
-      else
-        StandardAttack (SynapticGlamour isGambit)
-    elif self.MonsterFamily = Some MonsterFamily.GriefManifestation then
-      // Grief manifestations strike with dialectical acumen interrogations, but only those that
-      // actually reach the mind. Ask the same gate the resolver applies rather than assuming: a
-      // refused attack is not downgraded, it costs the whole turn.
-      if (AcumenInterrogation isGambit).IsAllowedFor self then
-        StandardAttack (AcumenInterrogation isGambit)
-      else
-        StandardAttack (ForceStrike isGambit)
+      | Some MonsterFamily.Beast ->
+        // Beasts strike ferally, exploiting bleeding prey or lunging with agile cadences
+        commit (if opponent.BleedStacks > 0 || finesse >= force then
+                  FinesseCadence isGambit
+                else
+                  ForceStrike isGambit)
+      | Some MonsterFamily.Construct ->
+        // ...then smash with calculated stone blows
+        commit (ForceStrike isGambit)
+      | Some MonsterFamily.UndeadWraith ->
+        // Wraiths bypass physical armor entirely, singing sorrowful glamours that erode Morale
+        commit (SynapticGlamour isGambit)
+      | Some MonsterFamily.Aberration ->
+        // Aberrations warp focus with psychic cataclysms or erratic pulses
+        commit (if intellect >= acuity then ArcaneCataclysm isGambit else SynapticGlamour isGambit)
+      | Some MonsterFamily.GriefManifestation ->
+        // Grief manifestations strike with dialectical acumen interrogations
+        commit (AcumenInterrogation isGambit)
+      | _ -> commit (ForceStrike isGambit)
     elif self.Plane = Physical then
       // Tactical Stance & Attack Evaluation (ADR 0009):
       // When outnumbered (surroundingOpponents >= 2) and Prowess is viable, shift to Discipline Stance for bastion stabilization.

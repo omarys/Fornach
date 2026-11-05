@@ -146,17 +146,31 @@ let ``no bestiary family is ever handed an attack its own plane refuses`` () =
 
   let illegal =
     [ for template in Bestiary.allMonsters do
-        let actor = Bestiary.createMonster template
+        // Stance matters: the Construct profile sets its feet on one turn and swings on the next, so a
+        // sweep that only ever looks at the monster's opening stance never sees the strike at all. The
+        // Aspect of the Seraphic Warden hid behind exactly that gap -- a mental construct whose second
+        // turn was a physical ForceStrike the resolver refused.
+        for stance in
+          [ CombatStance.PowerStance
+            CombatStance.AgilityStance
+            CombatStance.DisciplineStance ] do
+          for recklessness in meterSweep do
+            let actor =
+              Bestiary.createMonster template
+              |> Combatant.setStance stance
+              |> Combatant.updateMeters (fun m -> { m with Recklessness = setMeter recklessness m.Recklessness })
 
-        for recklessness in meterSweep do
-          let actor =
-            actor
-            |> Combatant.updateMeters (fun m -> { m with Recklessness = setMeter recklessness m.Recklessness })
-
-          match AI.chooseIntent actor opponent with
-          | ActionIntent.StandardAttack attack when not (attack.IsAllowedFor actor) ->
-            yield sprintf "%s (plane %A) -> %A (plane %A)" template.Name actor.Plane attack attack.Plane
-          | _ -> () ]
+            match AI.chooseIntent actor opponent with
+            | ActionIntent.StandardAttack attack when not (attack.IsAllowedFor actor) ->
+              yield
+                sprintf
+                  "%s (plane %A, stance %A) -> %A (plane %A)"
+                  template.Name
+                  actor.Plane
+                  stance
+                  attack
+                  attack.Plane
+            | _ -> () ]
 
   Assert.Empty illegal
 
