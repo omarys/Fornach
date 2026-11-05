@@ -4,7 +4,8 @@ open Fornach.Domain
 
 /// The five signature presses a manifestation can commit to, named for the stat each one contests
 /// rather than for the story that fields it. Which Aspect commits to which press, and what a player
-/// reads when it lands, both live in `Fornach.Story` and `Fornach.Cli`: an engine that names its own
+/// reads when it lands, both live in the game above the engine (`Trucked.Story` and `Trucked.Cli`):
+/// an engine that names its own
 /// mechanics can be handed a different set of manifestations without a rename.
 type TraumaGambit =
   /// Agility/Mental, Finesse vs. Reflex and Intuition. Shifts out of phase, conjures a mirror clone, inflicts Confusion

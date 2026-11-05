@@ -1,3 +1,20 @@
+# Fornach agent notes
+
+Fornach is the engine. The game built on it — the tower, the story and both terminal clients — lives
+in the sibling repo [Trucked](../trucked) and consumes this one as NuGet packages.
+
+## The boundary
+
+- **Here:** dice pools, action resolution, collapse and execution, stat scaling, the spatial grid and
+  field of view, and the headless balance harness (`Fornach.Engine.CombatSimulation`).
+- **Not here:** any tower, floor, shrine, loot, story or UI concept. The engine names no Aspect, no
+  story gambit and no protagonist — a rule that needs a name like `"Guilt"` is a policy the game
+  registers into `AI.PolicyTable`.
+- Nothing below the game may draw: `CombatSimulation` returns records, and a client renders them.
+- Changing the engine means `dotnet pack` into `packages/` and bumping `FornachVersion` in
+  `../trucked/Directory.Build.props`. NuGet caches by version, so re-packing under the same version is
+  invisible to the game.
+
 <!-- OPENWIKI:START -->
 
 ## OpenWiki

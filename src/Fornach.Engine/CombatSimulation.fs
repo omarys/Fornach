@@ -632,6 +632,65 @@ module CombatSimulation =
     List.init iterations (fun _ ->
       runSingleGroupMatch policies roller soloFactory mobFactory mobCount maxRounds)
 
+  /// Folds a batch of 1-vs-N fights into the numbers the dashboard prints.
+  ///
+  /// Pure and free of any progress bar, so the CLI can draw while it runs and a test
+  /// that skips the drawing still reports the same figures.
+  let summarizeGroup
+    (soloName: string)
+    (mobName: string)
+    (mobCount: int)
+    (iterations: int)
+    (results: GroupSingleResult list)
+    : GroupSimulationSummary =
+    let soloWins = results |> List.filter (fun r -> r.SoloWon) |> List.length
+    let mobWins = results |> List.filter (fun r -> not r.SoloWon && r.Condition <> Stalemate) |> List.length
+    let stalemates = results |> List.filter (fun r -> r.Condition = Stalemate) |> List.length
+    let soloWinRate = (float soloWins / float iterations) * 100.0
+    let resolvedRounds = results |> List.filter (fun r -> r.Condition <> Stalemate) |> List.map (fun r -> r.Rounds)
+    let avgRounds = if resolvedRounds.IsEmpty then 0.0 else resolvedRounds |> List.averageBy float
+    let minRounds = if resolvedRounds.IsEmpty then 0 else List.min resolvedRounds
+    let maxRounds = if resolvedRounds.IsEmpty then 0 else List.max resolvedRounds
+    let avgElim = results |> List.averageBy (fun r -> float r.OpponentsEliminated)
+    let avgPeakPen = results |> List.averageBy (fun r -> float r.PeakEncirclementPenalty)
+    let avgAoO = results |> List.averageBy (fun r -> float r.TotalAoOsTriggered)
+    let avgCleaves = results |> List.averageBy (fun r -> float r.TotalCleaves)
+    let avgChains = results |> List.averageBy (fun r -> float r.TotalChains)
+    let avgTempoShifts = results |> List.averageBy (fun r -> float r.TotalTempoShifts)
+    let winningResults = results |> List.filter (fun r -> r.SoloWon)
+    let avgSoloHP = if winningResults.IsEmpty then 0.0 else winningResults |> List.averageBy (fun r -> float r.SoloRemainingHPPct)
+    let elimDist =
+      [ 0 .. mobCount ]
+      |> List.map (fun k ->
+        let count = results |> List.filter (fun r -> r.OpponentsEliminated = k) |> List.length
+        let pct = (float count / float iterations) * 100.0
+        (k, count, pct))
+    let healthKills = results |> List.filter (fun r -> r.Condition = HealthDepleted) |> List.length
+    let moraleKills = results |> List.filter (fun r -> r.Condition = MoraleDepleted) |> List.length
+    let executions = results |> List.filter (fun r -> match r.Condition with ExecutionFinisher _ -> true | _ -> false) |> List.length
+    { SoloArchetypeName = soloName
+      MobArchetypeName = mobName
+      MobCount = mobCount
+      TotalIterations = iterations
+      SoloWins = soloWins
+      MobWins = mobWins
+      Stalemates = stalemates
+      SoloWinRate = soloWinRate
+      AvgRounds = avgRounds
+      MinRounds = minRounds
+      MaxRounds = maxRounds
+      AvgEliminations = avgElim
+      EliminationDistribution = elimDist
+      AvgPeakPenalty = avgPeakPen
+      AvgSoloRemainingHP = avgSoloHP
+      AvgAoOsTriggered = avgAoO
+      AvgCleaves = avgCleaves
+      AvgChains = avgChains
+      AvgTempoShifts = avgTempoShifts
+      HealthDepletions = healthKills
+      MoraleDepletions = moraleKills
+      Executions = executions }
+
   let evaluateMobWinRate
     (policies: AI.PolicyTable)
     (championFactory: unit -> Combatant)

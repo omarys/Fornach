@@ -3,13 +3,15 @@ namespace Fornach.Tests
 open Xunit
 open Fornach.Domain
 open Fornach.Engine
-open Fornach.Cli
 
 /// The 1-vs-N balance harness used to resolve every round solo-first, so a pack that held the Vor still ate
 /// the champion's opening strike — the blind spot that let four combat bugs ship through a green suite.
 /// These pin the Vor-ordered phases the sweeps now run, and the telemetry that makes the tempo movement the
 /// harness used to discard visible.
 module TempoSweepTests =
+  /// The engine's own AI. These tests measure default behaviour, so no game
+  /// presses are registered and the table is empty by construction.
+  let policies : AI.PolicyTable = Map.empty
 
   let private makeRoller (seed: int) : DiceRoller =
     let rng = System.Random(seed)
@@ -27,22 +29,22 @@ module TempoSweepTests =
 
   /// `GroupSingleResult` reports what happened, not who acted first, so the order is taken from the two policy
   /// hooks the harness calls once per side: `ChooseIntent` on the solo's turn and `ChooseDefense` on the
-  /// pack's. Both delegate to `Simulation.aiPolicy`, so the fight itself is exactly the sweeps' fight.
+  /// pack's. Both delegate to `CombatSimulation.aiPolicy`, so the fight itself is exactly the sweeps' fight.
   let private runRecordingActOrder (solo: Combatant) (mobs: Combatant list) (seed: int) =
     let calls = ResizeArray<string>()
 
     let probe =
-      { Simulation.aiPolicy with
+      { CombatSimulation.aiPolicy policies with
           ChooseIntent =
             fun s t n ->
               calls.Add "solo"
-              Simulation.aiPolicy.ChooseIntent s t n
+              (CombatSimulation.aiPolicy policies).ChooseIntent s t n
           ChooseDefense =
             fun s a ->
               calls.Add "pack"
-              Simulation.aiPolicy.ChooseDefense s a }
+              (CombatSimulation.aiPolicy policies).ChooseDefense s a }
 
-    let result, _ = Simulation.runPreparedGroupMatchWith probe (makeRoller seed) solo mobs 1
+    let result, _ = CombatSimulation.runPreparedGroupMatchWith policies probe (makeRoller seed) solo mobs 1
     List.ofSeq calls, result
 
   [<Fact>]
@@ -76,7 +78,7 @@ module TempoSweepTests =
     let solo = makeSolo () |> Combatant.yieldVor
     let mobs = makePack solo 2 |> List.map Combatant.seizeVor
 
-    let result, _ = Simulation.runPreparedGroupMatchWith Simulation.aiPolicy roller solo mobs 20
+    let result, _ = CombatSimulation.runPreparedGroupMatchWith policies (CombatSimulation.aiPolicy policies) roller solo mobs 20
 
     Assert.True(result.Rounds > 1, sprintf "expected a multi-round fight, got %d round(s)" result.Rounds)
     Assert.True(result.TotalTempoShifts > 0, "the harness must observe the tempo shifts the resolver emits")

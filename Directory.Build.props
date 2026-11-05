@@ -1,0 +1,22 @@
+<Project>
+
+  <!--
+    The engine is consumed as a package by the games built on it, so every project
+    shares one version and one output folder: `dotnet pack` drops the three
+    packable assemblies into `packages/`, which is the local feed a game's
+    nuget.config points at.
+
+    Only Fornach.Domain, Fornach.Engine and Fornach.Spatial set IsPackable=true.
+    Tests and anything else that is not part of the engine's surface stay
+    unpackable by default.
+  -->
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+    <Authors>Fornach</Authors>
+    <Product>Fornach</Product>
+    <PackageOutputPath>$(MSBuildThisFileDirectory)packages</PackageOutputPath>
+    <IsPackable>false</IsPackable>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+</Project>

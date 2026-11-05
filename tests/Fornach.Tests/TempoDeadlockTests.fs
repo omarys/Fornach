@@ -3,7 +3,6 @@ namespace Fornach.Tests
 open Xunit
 open Fornach.Domain
 open Fornach.Engine
-open Fornach.Cli
 
 /// A Blight Sprite ambush reported looping in defence forever: the pack's opening strike won the player
 /// the Vor through an Indes answer, then the recovery the player had picked from the Nach -- the only

@@ -3,7 +3,6 @@ module Fornach.Tests.AiStanceTests
 open Xunit
 open Fornach.Domain
 open Fornach.Engine
-open Fornach.Cli
 
 [<Fact>]
 let ``a physical duelist with tied attributes strikes instead of shuffling stances`` () =

@@ -5,9 +5,11 @@ open Xunit
 open Xunit.Abstractions
 open Fornach.Domain
 open Fornach.Engine
-open Fornach.Cli
 
 module PeerClassBalanceTests =
+  /// The engine's own AI. These tests measure default behaviour, so no game
+  /// presses are registered and the table is empty by construction.
+  let policies : AI.PolicyTable = Map.empty
 
   type MatchupOutcomeRow = {
     Tier: CombatTier
@@ -56,7 +58,7 @@ module PeerClassBalanceTests =
         let factoryA () = { TierFactory.createClassTier clsA tier with PlayerStyle = true }
         let factoryB () = TierFactory.createClassTier clsB tier
 
-        let summary = Simulation.runHeadlessBatch factoryA factoryB runsPerMatchup roller
+        let summary = CombatSimulation.runHeadlessBatch policies factoryA factoryB runsPerMatchup roller
         let winRateA = (float summary.WinsA / float summary.TotalIterations) * 100.0
         let winRateB = (float summary.WinsB / float summary.TotalIterations) * 100.0
 
@@ -130,7 +132,7 @@ module PeerClassBalanceTests =
       let factoryA () = { TierFactory.createClassTier CharacterClass.Fighter CombatTier.Master with PlayerStyle = true }
       let factoryB () = TierFactory.createClassTier CharacterClass.Mage CombatTier.Master
 
-      let summary = Simulation.runHeadlessBatch factoryA factoryB runs roller
+      let summary = CombatSimulation.runHeadlessBatch policies factoryA factoryB runs roller
       let winRateA = (float summary.WinsA / float summary.TotalIterations) * 100.0
       let winRateB = (float summary.WinsB / float summary.TotalIterations) * 100.0
 
@@ -148,7 +150,7 @@ module PeerClassBalanceTests =
       let runs = 50
 
       for tier in [ CombatTier.Veteran; CombatTier.Master ] do
-        let summary = Simulation.runHeadlessBatch
+        let summary = CombatSimulation.runHeadlessBatch policies
                         (fun () -> { TierFactory.createClassTier CharacterClass.Fighter tier with PlayerStyle = true })
                         (fun () -> TierFactory.createClassTier CharacterClass.Mage tier)
                         runs roller

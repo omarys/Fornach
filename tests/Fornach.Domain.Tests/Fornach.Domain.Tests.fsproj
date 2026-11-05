@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <Compile Include="Generators.fs" />
+    <Compile Include="BalanceBatches.fs" />
     <Compile Include="MeterProperties.fs" />
     <Compile Include="CollapseProperties.fs" />
     <Compile Include="AttributeMappingTests.fs" />
@@ -22,8 +23,6 @@
     <Compile Include="ParallelDeterminismTests.fs" />
     <Compile Include="BestiaryTests.fs" />
     <Compile Include="BestiarySwarmTests.fs" />
-    <Compile Include="CliMarkupTests.fs" />
-    <Compile Include="TacticalAssessmentTests.fs" />
     <Compile Include="StanceGrowthTests.fs" />
     <Compile Include="StatBonusTests.fs" />
     <Compile Include="PainShockTests.fs" />
@@ -31,7 +30,6 @@
     <Compile Include="TempoReclaimTests.fs" />
     <Compile Include="GuardRampTests.fs" />
     <Compile Include="FlankDamageTests.fs" />
-    <Compile Include="BossTuningTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -45,7 +43,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Fornach.Domain\Fornach.Domain.fsproj" />
     <ProjectReference Include="..\..\src\Fornach.Engine\Fornach.Engine.fsproj" />
-    <ProjectReference Include="..\..\src\Fornach.Cli\Fornach.Cli.fsproj" />
   </ItemGroup>
 
 </Project>

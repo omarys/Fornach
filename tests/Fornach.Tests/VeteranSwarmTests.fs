@@ -3,7 +3,9 @@ module Fornach.Tests.VeteranSwarmTests
 open Xunit
 open Fornach.Domain
 open Fornach.Engine
-open Fornach.Cli
+/// The engine's own AI. These tests measure default behaviour, so no game presses
+/// are registered and the table is empty by construction.
+let private policies : AI.PolicyTable = Map.empty
 
 /// Per-cell seeded roller, so one matchup's result does not depend on how many dice earlier cells used.
 let private roller (seed: int) : DiceRoller =
@@ -33,7 +35,7 @@ let ``Grandmaster and Legend champions are not overrun by swarming veterans`` ()
             let seed = 7000 + tierIndex * 400 + classIndex * 100 + mobIndex * 10
 
             let tippingPoint =
-              Simulation.findSwarmTippingPoint
+              CombatSimulation.findSwarmTippingPoint policies
                 (fun () -> makeChampion cls)
                 (fun () -> TierFactory.createClassTier mobCls CombatTier.Veteran)
                 swarmCap

@@ -5,11 +5,12 @@ open Xunit
 open Xunit.Abstractions
 open Fornach.Domain
 open Fornach.Engine
-open Fornach.Cli
-open Fornach.Cli.Simulation
 
 [<Collection("SimulationBatch")>]
 module BestiarySwarmTests =
+  /// The engine's own AI. These tests measure default behaviour, so no game
+  /// presses are registered and the table is empty by construction.
+  let policies : AI.PolicyTable = Map.empty
 
   type BestiarySwarmFixture(output: ITestOutputHelper) =
 
@@ -44,7 +45,7 @@ module BestiarySwarmTests =
         output.WriteLine("| Monster | Biome | Role | Monster Tier | Fighter | Mage |")
         output.WriteLine("|:--------|:------|:-----|:-------------|:-------:|:----:|")
 
-        let tierRows = Simulation.runBestiarySwarmBatch championLevel maxMobCount iterationsPerProbe roller (fun () -> ())
+        let tierRows = CombatSimulation.runBestiarySwarmBatch policies championLevel maxMobCount iterationsPerProbe roller (fun () -> ())
         Assert.Equal(21, tierRows.Length)
 
         for r in tierRows do
@@ -82,7 +83,7 @@ module BestiarySwarmTests =
         for cls in [ CharacterClass.Warrior; CharacterClass.Rogue; CharacterClass.Mage ] do
           let champFactory () = TierFactory.createClassTier cls tier
           let mobFactory () = Bestiary.createMonster m
-          let tp = Simulation.findSwarmTippingPoint champFactory mobFactory maxMob iters roller
+          let tp = CombatSimulation.findSwarmTippingPoint policies champFactory mobFactory maxMob iters roller
           match tp with
           | OverrunBy n ->
             Assert.True(n <= 5, sprintf "Novice %A should be overwhelmed by small pack of %s (Actual N*: %d)" cls m.Name n)
@@ -103,7 +104,7 @@ module BestiarySwarmTests =
       let wardenFactory () = TierFactory.createClassTier CharacterClass.Warrior tier
       for m in [ hound; crawler ] do
         let mobFactory () = Bestiary.createMonster m
-        let tp = Simulation.findSwarmTippingPoint wardenFactory mobFactory maxMob iters roller
+        let tp = CombatSimulation.findSwarmTippingPoint policies wardenFactory mobFactory maxMob iters roller
         match tp with
         | Impenetrable cap ->
           Assert.True(cap >= 20, sprintf "GM Warden should be impenetrable or withstand large mob of %s (Cap: %d)" m.Name cap)
@@ -128,7 +129,7 @@ module BestiarySwarmTests =
         for cls in [ CharacterClass.Rogue; CharacterClass.Warrior; CharacterClass.Mage ] do
           let champFactory () = TierFactory.createClassTier cls tier
           let mobFactory () = Bestiary.createMonster boss
-          let tp = Simulation.findSwarmTippingPoint champFactory mobFactory maxMob iters roller
+          let tp = CombatSimulation.findSwarmTippingPoint policies champFactory mobFactory maxMob iters roller
           match tp with
           | OverrunBy n ->
             Assert.True(n <= 4, sprintf "Colossus %s should overrun Master %A in small numbers (Actual N*: %d)" boss.Name cls n)

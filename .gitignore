@@ -10,3 +10,6 @@ logs/
 
 # openlore analysis artifacts
 .openlore/
+
+# local NuGet feed produced by `dotnet pack`
+packages/

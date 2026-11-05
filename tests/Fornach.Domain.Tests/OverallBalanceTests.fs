@@ -5,17 +5,19 @@ open Xunit
 open Xunit.Abstractions
 open Fornach.Domain
 open Fornach.Engine
-open Fornach.Cli
 
 module OverallBalanceTests =
+  /// The engine's own AI. These tests measure default behaviour, so no game
+  /// presses are registered and the table is empty by construction.
+  let policies : AI.PolicyTable = Map.empty
 
   type ChampionBalanceRow = {
     ArchetypeName: string
     Class: CharacterClass
     Tier: CombatTier
-    WarriorTippingPoint: Simulation.TippingPointResult
-    RogueTippingPoint: Simulation.TippingPointResult
-    MageTippingPoint: Simulation.TippingPointResult
+    WarriorTippingPoint: TippingPointResult
+    RogueTippingPoint: TippingPointResult
+    MageTippingPoint: TippingPointResult
     TacticalNote: string
   }
 
@@ -70,13 +72,13 @@ module OverallBalanceTests =
           let champFactory () = TierFactory.createClassTier cls tier
 
           let warriorTP =
-            Simulation.findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Warrior Novice) maxMobCount iterationsPerProbe roller
+            CombatSimulation.findSwarmTippingPoint policies champFactory (fun () -> TierFactory.createClassTier CharacterClass.Warrior Novice) maxMobCount iterationsPerProbe roller
 
           let rogueTP =
-            Simulation.findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Rogue Novice) maxMobCount iterationsPerProbe roller
+            CombatSimulation.findSwarmTippingPoint policies champFactory (fun () -> TierFactory.createClassTier CharacterClass.Rogue Novice) maxMobCount iterationsPerProbe roller
 
           let mageTP =
-            Simulation.findSwarmTippingPoint champFactory (fun () -> TierFactory.createClassTier CharacterClass.Mage Novice) maxMobCount iterationsPerProbe roller
+            CombatSimulation.findSwarmTippingPoint policies champFactory (fun () -> TierFactory.createClassTier CharacterClass.Mage Novice) maxMobCount iterationsPerProbe roller
 
           let row = {
             ArchetypeName = sprintf "%s %s" (tier.ToString()) cls.Name
@@ -137,9 +139,9 @@ module OverallBalanceTests =
       let mageMob = fun () -> TierFactory.createClassTier CharacterClass.Mage CombatTier.Novice
       let warriorMob = fun () -> TierFactory.createClassTier CharacterClass.Warrior CombatTier.Novice
 
-      let tpNoviceWarrior = Simulation.findSwarmTippingPoint noviceBerserker warriorMob 50 10 roller
-      let tpGMWarrior = Simulation.findSwarmTippingPoint gmBerserker warriorMob 50 10 roller
-      let tpGMMage = Simulation.findSwarmTippingPoint gmBerserker mageMob 50 10 roller
+      let tpNoviceWarrior = CombatSimulation.findSwarmTippingPoint policies noviceBerserker warriorMob 50 10 roller
+      let tpGMWarrior = CombatSimulation.findSwarmTippingPoint policies gmBerserker warriorMob 50 10 roller
+      let tpGMMage = CombatSimulation.findSwarmTippingPoint policies gmBerserker mageMob 50 10 roller
 
       Assert.True(tpGMWarrior.Value > tpNoviceWarrior.Value, "GrandMaster Berserker holds against significantly more Warriors than Novice.")
       Assert.True(tpGMWarrior.Value >= tpGMMage.Value, "Berserker should be more vulnerable to Arcane Mages targeting Mental plane than to Physical Warriors.")
@@ -151,7 +153,7 @@ module OverallBalanceTests =
       let gmDuelist = fun () -> TierFactory.createClassTier CharacterClass.Rogue CombatTier.GrandMaster
       let rogueMob = fun () -> TierFactory.createClassTier CharacterClass.Rogue CombatTier.Novice
 
-      let tpGMRogue = Simulation.findSwarmTippingPoint gmDuelist rogueMob 50 10 roller
+      let tpGMRogue = CombatSimulation.findSwarmTippingPoint policies gmDuelist rogueMob 50 10 roller
       Assert.True(tpGMRogue.Value >= 25, sprintf "GrandMaster Duelist should withstand at least 25 Rogues (Actual: %d)" tpGMRogue.Value)
 
     [<Fact>]
@@ -166,8 +168,8 @@ module OverallBalanceTests =
       let masterFighter = fun () -> TierFactory.createClassTier CharacterClass.Fighter CombatTier.Master
       let mageMob = fun () -> TierFactory.createClassTier CharacterClass.Mage CombatTier.Novice
 
-      let tpMage = Simulation.findSwarmTippingPoint masterMage mageMob 100 10 roller
-      let tpFighter = Simulation.findSwarmTippingPoint masterFighter mageMob 100 10 roller
+      let tpMage = CombatSimulation.findSwarmTippingPoint policies masterMage mageMob 100 10 roller
+      let tpFighter = CombatSimulation.findSwarmTippingPoint policies masterFighter mageMob 100 10 roller
 
       Assert.True(tpMage.Value >= 10, sprintf "Master Mage should withstand 10+ Mages (Actual: %d)" tpMage.Value)
       Assert.True(tpFighter.Value >= 10, sprintf "Master Fighter should withstand 10+ Mages (Actual: %d)" tpFighter.Value)

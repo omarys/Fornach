@@ -6,34 +6,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="OptimalPlayTests.fs" />
-    <Compile Include="StoryBridgeTests.fs" />
-    <Compile Include="StorySpatialTests.fs" />
-    <Compile Include="StoryTutorialTests.fs" />
-    <Compile Include="StoryIntroCurveTests.fs" />
-    <Compile Include="GriefAspectLadderTests.fs" />
-    <Compile Include="TowerTests.fs" />
     <Compile Include="EnemyMovementTests.fs" />
-    <Compile Include="EncounterTests.fs" />
     <Compile Include="ProgressionTests.fs" />
-    <Compile Include="BalanceRegressionTests.fs" />
     <Compile Include="StanceTests.fs" />
-    <Compile Include="ClassBalanceTests.fs" />
-    <Compile Include="AttackEstimatorTests.fs" />
     <Compile Include="EngageScalingTests.fs" />
-    <Compile Include="MenuCancelTests.fs" />
-    <Compile Include="HudAlignmentTests.fs" />
     <Compile Include="RoomPlacementTests.fs" />
-    <Compile Include="AiRecoveryLockTests.fs" />
     <Compile Include="AmbushScalingTests.fs" />
     <Compile Include="AiStanceTests.fs" />
-    <Compile Include="CombatLoggerTests.fs" />
-    <Compile Include="GroupEngagementTests.fs" />
     <Compile Include="TempoDeadlockTests.fs" />
     <Compile Include="TempoSweepTests.fs" />
-    <Compile Include="FlankSessionTests.fs" />
-    <Compile Include="DebugToolingTests.fs" />
-    <Compile Include="CombatTacticsTests.fs" />
     <Compile Include="RepairTests.fs" />
     <Compile Include="VeteranSwarmTests.fs" />
     <Compile Include="MentalDefenseTests.fs" />
@@ -58,8 +39,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Fornach.Domain\Fornach.Domain.fsproj" />
     <ProjectReference Include="..\..\src\Fornach.Engine\Fornach.Engine.fsproj" />
-    <ProjectReference Include="..\..\src\Fornach.Story\Fornach.Story.fsproj" />
-    <ProjectReference Include="..\..\src\Fornach.Cli\Fornach.Cli.fsproj" />
   </ItemGroup>
 
 </Project>

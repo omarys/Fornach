@@ -36,7 +36,7 @@
   - High-commitment power strikes and gambits generate **Recklessness** (0–100%).
   - Six status debuff meters (**Exhaustion**, **Overwhelm**, **Frustration**, **Cognitive Fatigue**, **Confusion**, **Provoke**).
   - Crossing 100% on any meter triggers a **Collapse** state (75% defense penalty), exposing the combatant to an immediate lethal **Execution Finisher**.
-- **Spectre.Console Frontend (`Fornach.Cli`)**:
+- **Spectre.Console frontend**: the interactive and headless clients live in the [Trucked](https://github.com/opensec-git/Trucked) game, built on these packages. The engine itself draws nothing — `CombatSimulation` returns records a UI renders.
   - **Interactive Duel Arena**: Dual ANSI character panels, colorized resource bars, categorized action selection, and roll inspection callouts.
   - **Monte-Carlo Balance Simulator**: Headless batch simulator running 50–5000 duels with live progress tracking and statistical balance dashboards.
   - **Custom Combatant Workbench**: Interactive tool to craft and balance custom stat profiles.
@@ -65,11 +65,13 @@
 ## Project Structure
 
 ```
-Dev/combat/
+Dev/fornach/
 ├── Fornach.slnx                 # .NET 10 Solution file
 ├── mise.toml                    # Task runner and environment definitions
 ├── .contextive/                 # Ubiquitous language definition mappings
 ├── src/
+│   ├── Fornach.Spatial/         # Grid, geometry, field of view, pathfinding
+│   │
 │   ├── Fornach.Domain/          # 100% functionally pure domain models
 │   │   ├── Common.fs            # Planes, Vectors, Modes, Coordinates
 │   │   ├── Identifiers.fs       # Strongly-typed IDs (CombatantId, StatId)
@@ -81,26 +83,15 @@ Dev/combat/
 │   │   ├── CombatEvent.fs       # Pure domain events emitted during turns
 │   │   └── Combatant.fs         # Aggregate root and collapse evaluators
 │   │
-│   ├── Fornach.Engine/          # Functional combat resolution engine
-│   │   ├── DicePool.fs          # Bounded opposed pool resolver (4-20 dice)
-│   │   ├── Actions.fs           # Action classifications, intents, results
-│   │   └── ActionResolver.fs    # Tiered multipliers, passives, hooks, whiffs
-│   │
-│   └── Fornach.Cli/             # Spectre.Console terminal UI & test harness
-│       ├── Types.fs             # Simulation types and CLI models
-│       ├── Archetypes.fs        # Preset tiers (Novice, Veteran, Master, GrandMaster) & custom factory
-│       ├── AI.fs                # Tactical heuristic AI evaluator
-│       ├── Display.fs           # ANSI HUD, resource bars, roll breakdown, event logger
-│       ├── Simulation.fs        # Headless Monte-Carlo runner & dashboard tables
-│       └── Program.fs           # Entry point, CLI args (--sim), interactive menu loop
+│   └── Fornach.Engine/          # Functional combat resolution engine
+│       ├── DicePool.fs          # Bounded opposed pool resolver (4-20 dice)
+│       ├── Actions.fs           # Action classifications, intents, results
+│       ├── ActionResolver.fs    # Tiered multipliers, passives, hooks, whiffs
+│       └── CombatSimulation.fs  # Headless balance harness: batches, summaries, frontiers
 │
 └── tests/
-    └── Fornach.Domain.Tests/    # Unit & property-based test suite (FsCheck + xUnit)
-        ├── Generators.fs        # Domain generators for property-based tests
-        ├── MeterProperties.fs   # Invariant tests for 0-100 bounded meters
-        ├── CollapseProperties.fs# Invariant tests for collapse thresholds
-        ├── AttributeMappingTests.fs # Canonical and social stat mapping tests
-        └── DicePoolTests.fs     # Pool bounds, floor hits, vector rules, whiffs
+    ├── Fornach.Domain.Tests/    # Unit & property-based suite (FsCheck + xUnit)
+    └── Fornach.Spatial.Tests/   # Grid, vision and pathfinding suite
 ```
 
 ---
@@ -117,7 +108,7 @@ Dev/combat/
 # Build the entire solution (zero warnings)
 dotnet build Fornach.slnx
 
-# Run all 25 unit and property-based tests
+# Run the full suite
 dotnet test Fornach.slnx
 ```
 
@@ -127,43 +118,22 @@ mise run build
 mise run test
 ```
 
----
+### Using the engine from a game
 
-## Running the CLI Frontend (`Fornach.Cli`)
-
-### 1. Interactive Menu Mode
-Launch the interactive terminal interface:
-```bash
-dotnet run --project src/Fornach.Cli
-# or:
-mise run run
-```
-
-The menu provides:
-1. ⚔️ **Interactive Duel Arena**: Playable turn-by-turn combat with categorized menus (Physical, Social, Arcane, Recovery, Finisher), dynamic ANSI health/morale meters, tactical roll breakdown, and combat event logs.
-2. 📊 **Monte-Carlo Balance Simulator**: Select any two combatants and simulate 50 to 1000 iterations to evaluate statistical balance and round pacing.
-3. 🛠️ **Custom Combatant Builder**: Design combatants with custom stat allotments and immediately test them in combat.
-4. 📜 **View Archetype Roster**: Inspect preset character sheets across Novice, Veteran, Master, and GrandMaster tiers.
-
-### 2. Headless Simulation Mode (Scriptable / CI)
-Run batch simulations directly from the command line:
+Fornach ships as three packages — `Fornach.Spatial`, `Fornach.Domain`, `Fornach.Engine` — to the
+local feed in `packages/`. Pack a new one after any engine change:
 
 ```bash
-# Balanced tactical duel (Veteran vs. Veteran)
-dotnet run --project src/Fornach.Cli -- --sim -a1 "Veteran Fighter" -a2 "Veteran Mage" -n 100
-
-# Skewed matchup verification (GrandMaster vs. Novice)
-dotnet run --project src/Fornach.Cli -- --sim -a1 "Grandmaster Fighter" -a2 "Soldier" -n 50
-
-# Mirror match balance check
-dotnet run --project src/Fornach.Cli -- --sim -a1 "Veteran Mage" -a2 "Veteran Mage" -n 100
+dotnet pack src/Fornach.Spatial -c Release -o packages
+dotnet pack src/Fornach.Domain  -c Release -o packages
+dotnet pack src/Fornach.Engine  -c Release -o packages
 ```
 
-#### CLI Simulation Flags:
-- `--sim` / `-s`: Run in headless simulation mode (skips interactive menu).
-- `-a1` / `--archetype1 <name>`: First combatant name (default: `"Veteran Fighter"`).
-- `-a2` / `--archetype2 <name>`: Second combatant name (default: `"Veteran Mage"`).
-- `-n` / `--iterations <count>`: Number of simulated duels (default: `100`).
+A game consumes them with a `nuget.config` pointing at `../fornach/packages` and a
+`PackageReference Include="Fornach.Engine" Version="x.y.z"`. Bump the version in
+`Directory.Build.props` when the API changes. The first game is
+[Trucked](https://github.com/opensec-git/Trucked) — the tower, the story and the terminal UI all
+live there, not here.
 
 ---
 

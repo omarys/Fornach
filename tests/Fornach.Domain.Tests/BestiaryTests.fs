@@ -4,7 +4,6 @@ open System
 open Xunit
 open Fornach.Domain
 open Fornach.Engine
-open Fornach.Cli
 
 module BestiaryTests =
 

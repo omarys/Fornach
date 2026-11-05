@@ -3,22 +3,14 @@ openlore:
   version: 1.2.0
   generatedAt: 2026-10-19T20:43:58.098Z
   domains:
-    - agents
-    - fornach-cli
     - fornach-domain
     - fornach-engine
     - fornach-spatial
-    - fornach-story
     - openwiki-visualizer
   confidence: 0.95
 context: |-
   # User-provided context (preserved)
-  # Auto-detected by openlore
-  Tech stack: F#, .NET
-  Architecture: Layered (routes → controllers → services → repositories)
-  Domains: context, fornach-cli, fornach-domain, fornach-engine, fornach-spatial, fornach-story
-
-  # Auto-detected by openlore
-  Tech stack: F#, .NET
-  Architecture: Layered (routes → controllers → services → repositories)
-  Domains: agents, fornach-cli, fornach-domain, fornach-engine, fornach-spatial, fornach-story, openwiki, openwiki-visualizer
+  # Fornach is the engine only. The game built on it — tower, story and clients — lives in ../trucked.
+  Tech stack: F#, .NET 10
+  Architecture: Layered (spatial → domain → engine), pure and console-free below the game
+  Domains: fornach-domain, fornach-engine, fornach-spatial, openwiki-visualizer
