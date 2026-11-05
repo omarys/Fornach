@@ -173,4 +173,3 @@ let ``no bestiary family is ever handed an attack its own plane refuses`` () =
             | _ -> () ]
 
   Assert.Empty illegal
-
