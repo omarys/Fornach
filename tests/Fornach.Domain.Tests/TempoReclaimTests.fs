@@ -150,7 +150,9 @@ module TempoReclaimTests =
 
     Assert.Equal(30, rested.Meters.Exhaustion.Value)
     Assert.Equal(30, rested.Meters.Frustration.Value)
-    Assert.Equal(30, rested.Meters.Recklessness.Value)
+    // Recklessness is a slow-burning fever rather than acute pressure, so it bleeds at 1% a turn
+    // while the others clear at 10.
+    Assert.Equal(39, rested.Meters.Recklessness.Value)
 
   [<Fact>]
   let ``Status decay floors at zero`` () =

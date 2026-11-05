@@ -176,13 +176,19 @@ module TowerSession =
   /// open does not stop it for the same reason armor still gets tended.
   let restDecayStatus = 10
 
+  /// Recklessness is the exception: it is a slow-burning fever rather than an acute pressure, so it
+  /// bleeds off at 1% a turn while the other meters clear at 10. Meter.Max is 100 and the meter renders
+  /// as a percentage, so 1% is one point.
+  let restDecayRecklessness = 1
+
   let decayStatusMeters (m: StatusMeters) =
     let d (meter: Meter) = Meter.Create(meter.Value - restDecayStatus)
+    let dr (meter: Meter) = Meter.Create(meter.Value - restDecayRecklessness)
 
     { m with
         Exhaustion = d m.Exhaustion
         Frustration = d m.Frustration
-        Recklessness = d m.Recklessness
+        Recklessness = dr m.Recklessness
         CognitiveFatigue = d m.CognitiveFatigue
         Confusion = d m.Confusion
         Provoke = d m.Provoke }
