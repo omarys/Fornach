@@ -21,6 +21,22 @@ run = "dotnet build Fornach.slnx -c Release --nologo"
 description = "Run the test suite"
 run = "dotnet test Fornach.slnx --nologo -v q"
 
+[tasks.pack]
+description = "Pack the engine into the local feed that games consume (packages/)"
+run = """
+set -e
+dotnet pack src/Fornach.Spatial -c Release --nologo
+dotnet pack src/Fornach.Domain  -c Release --nologo
+dotnet pack src/Fornach.Engine  -c Release --nologo
+echo "packed Fornach $(grep -oP '(?<=<Version>)[^<]+' Directory.Build.props) into packages/"
+echo "Games pin this as FornachVersion. Re-packing under an existing version is"
+echo "invisible to them: NuGet caches by version, so bump <Version> first."
+"""
+
+[tasks.version]
+description = "Show the engine version games are pinning"
+run = "grep -oP '(?<=<Version>)[^<]+' Directory.Build.props"
+
 [tasks.game]
 description = "Launch the interactive Spectre.Console CLI arena (the Trucked game, from ../trucked)"
 run = "dotnet run --project ../trucked/src/Trucked.Cli"

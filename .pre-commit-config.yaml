@@ -17,20 +17,23 @@ repos:
         entry: dotnet build Fornach.slnx -c Release -v q --nologo
         language: system
         pass_filenames: false
-        files: \.(fs|fsproj|slnx)$
+        files: \.(fs|fsproj|slnx|props)$
 
       - id: dotnet-test
-        name: dotnet test (Unit & property tests)
-        entry: dotnet test tests/Fornach.Domain.Tests/Fornach.Domain.Tests.fsproj --nologo -v q
+        name: dotnet test (unit, property and balance suites)
+        entry: dotnet test Fornach.slnx --nologo -v q
         language: system
         pass_filenames: false
         stages: [pre-push]
         files: \.(fs|fsproj)$
 
-      - id: sim-check
-        name: balance simulation sanity check
-        entry: dotnet run --project src/Fornach.Cli -c Release -- --sim -a1 "Veteran Juggernaut" -a2 "Veteran Inquisitor" -n 25
+      # The engine's surface is what a game compiles against, so a push has to
+      # prove it still packs. The packages are not committed (see .gitignore);
+      # this only checks the pack succeeds at the version in Directory.Build.props.
+      - id: dotnet-pack
+        name: dotnet pack (engine packages still build)
+        entry: bash -c 'set -e; dotnet pack src/Fornach.Spatial -c Release --nologo; dotnet pack src/Fornach.Domain -c Release --nologo; dotnet pack src/Fornach.Engine -c Release --nologo'
         language: system
         pass_filenames: false
         stages: [pre-push]
-        files: \.(fs|fsproj)$
+        files: \.(fs|fsproj|props)$

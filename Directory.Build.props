@@ -17,6 +17,19 @@
     <PackageOutputPath>$(MSBuildThisFileDirectory)packages</PackageOutputPath>
     <IsPackable>false</IsPackable>
     <Deterministic>true</Deterministic>
+    <!-- Names the file the ItemGroup below packs; inert in unpackable projects. -->
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <!--
+    A game reads these packages, not this repo, so the README has to travel with
+    them. Included by path from the repo root because the projects sit two levels
+    down. Keyed on the file rather than IsPackable: this file is evaluated before
+    the project body, so IsPackable is still its default false here, and a None
+    item is inert in projects that never pack.
+  -->
+  <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)README.md')">
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
 
 </Project>
