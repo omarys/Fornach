@@ -25,7 +25,7 @@ let ``pool factor scales both pools and nothing else`` () =
 
 [<Fact>]
 let ``potency factor scales the stat block and leaves pools alone`` () =
-  let guilt = StoryBosses.createGuiltAspect ()
+  let guilt = StoryBosses.createGuiltAspectRaw ()
 
   let tuned =
     StoryBosses.applyTuning { PoolFactor = 1.0; PotencyFactor = 1.5 } guilt

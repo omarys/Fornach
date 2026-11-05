@@ -169,11 +169,11 @@ let ``Winning combat encounter advances story to post_combat and awards shattere
 [<Fact>]
 let ``StoryBosses resolves all 5 Grief Aspects with correct stances and pools`` () =
   let testCases =
-    [ ("denial_aspect", "Aspect of Denial", CombatStance.AgilityStance, 2600)
-      ("anger_aspect", "Aspect of Anger", CombatStance.PowerStance, 3800)
-      ("bargaining_aspect", "Aspect of Bargaining", CombatStance.DisciplineStance, 3400)
-      ("depression_aspect", "Aspect of Depression", CombatStance.DisciplineStance, 4400)
-      ("acceptance_aspect", "Aspect of Acceptance", CombatStance.DisciplineStance, 4800) ]
+    [ ("denial_aspect", "Aspect of Denial", CombatStance.AgilityStance, 5200)
+      ("anger_aspect", "Aspect of Anger", CombatStance.PowerStance, 7600)
+      ("bargaining_aspect", "Aspect of Bargaining", CombatStance.DisciplineStance, 10200)
+      ("depression_aspect", "Aspect of Depression", CombatStance.DisciplineStance, 11000)
+      ("acceptance_aspect", "Aspect of Acceptance", CombatStance.DisciplineStance, 7200) ]
 
   for (enemyId, expectedName, expectedStance, expectedHealth) in testCases do
     let boss = StoryBosses.createEnemy enemyId
@@ -203,14 +203,14 @@ let ``Depression Aspect initializes with cognitive fatigue and impenetrable fort
   let depression = StoryBosses.createEnemy "depression"
   Assert.Equal(40, depression.Meters.CognitiveFatigue.Value)
   Assert.Equal(200, depression.Armor.Max)
-  Assert.True(depression.Stats.Get StatId.Fortitude >= 130)
+  Assert.True(depression.Stats.Get StatId.Fortitude >= 70) // 130 authored, x0.55 potency dial
 
 [<Fact>]
 let ``Acceptance Aspect initializes with equilibrium meters and high resolve`` () =
   let acceptance = StoryBosses.createEnemy "acceptance"
   Assert.Equal(0, acceptance.Meters.Recklessness.Value)
   Assert.Equal(0, acceptance.Meters.CognitiveFatigue.Value)
-  Assert.Equal(5000, acceptance.Morale.Current)
+  Assert.Equal(7500, acceptance.Morale.Current)
   Assert.True(acceptance.Stats.Get StatId.Resolve >= 90)
 
 [<Fact>]
@@ -506,8 +506,8 @@ let ``boss gear contributes its pools but not its percentages or recklessness de
   // wrong in the other direction: +67% Force on a block already authored as a final stat line took
   // three aspects to a one-round kill. Only the additive pools are folded.
   let anger = StoryBosses.createEnemy "anger"
-  Assert.Equal(3800, anger.Health.Current) // authored 3300 + greatsword HealthBonus 500
+  Assert.Equal(7600, anger.Health.Current) // (authored 3300 + greatsword HealthBonus 500) x2 pool dial
   Assert.Equal(45, anger.Meters.Recklessness.Value) // authored 45, NOT 45 + the greatsword's delta
 
   let acceptance = StoryBosses.createEnemy "acceptance"
-  Assert.Equal(5000, acceptance.Morale.Current) // authored 4100 + linen MoraleBonus 900
+  Assert.Equal(7500, acceptance.Morale.Current) // authored 4100 + linen MoraleBonus 900

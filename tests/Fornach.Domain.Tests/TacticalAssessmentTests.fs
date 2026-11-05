@@ -62,7 +62,7 @@ module TacticalAssessmentTests =
   [<Fact>]
   let ``Aspect of Guilt primary stat is Force and defensive flaw is Reflex`` () =
     let player = StoryBosses.createProloguePlayer "warden"
-    let guilt = StoryBosses.createGuiltAspect ()
+    let guilt = StoryBosses.createGuiltAspectRaw ()
 
     let assess = TacticalAssessment.assess player guilt
 

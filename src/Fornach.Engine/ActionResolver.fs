@@ -307,7 +307,17 @@ module ActionResolver =
           Math.Max(1, int (Math.Round(float remAmount * 0.15)))
         else 0
 
-      let postMitigatedAmount = remAmount - enrageShrugged - disciplineShrugged
+      // Composure is the mental counterpart of ArmorIntegrity. Physical damage is soaked by armor,
+      // but mental damage had no soak at all, so a single exchange burst removed most of a Morale pool
+      // and no boss-side dial could lengthen a mental fight. This is a bounded fraction rather than a
+      // pool, so unlike armor it cannot absorb indefinitely.
+      let composureShrugged =
+        if remAmount > 0 then
+          let shrugFactor = Math.Min(0.55, float (targetWithWard.GetStat Composure) / 400.0)
+          Math.Max(1, int (Math.Round(float remAmount * shrugFactor)))
+        else 0
+
+      let postMitigatedAmount = remAmount - enrageShrugged - disciplineShrugged - composureShrugged
       let actualDmg = Math.Max(0, postMitigatedAmount)
       let updatedPool = targetWithWard.Morale.ApplyDelta -actualDmg
       let updatedTarget = { targetWithWard with Morale = updatedPool }
@@ -317,6 +327,8 @@ module ActionResolver =
           CombatEvent.EnrageDamageShrugged(target.Id, enrageShrugged)
         if disciplineShrugged > 0 then
           CombatEvent.ComposureDamageShrugged(target.Id, disciplineShrugged)
+        if composureShrugged > 0 then
+          CombatEvent.ComposureDamageShrugged(target.Id, composureShrugged)
       ]
 
       let evt =

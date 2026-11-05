@@ -45,7 +45,7 @@ module StoryBosses =
           Combatant.applyItemBonus { it with StatPercentBonuses = []; StartingRecklessnessDelta = 0 } acc)
         { c with EquippedItems = items }
 
-  let createGuiltAspect () : Combatant =
+  let createGuiltAspectRaw () : Combatant =
     let stats =
       StatBlock.Create
         [ StatId.Force, 210 // Heavy kinetic output, crushing hammer
@@ -98,7 +98,7 @@ module StoryBosses =
     |> equip [ hammer; plate ]
 
   /// Creates the manifestation of Denial encountered in the Shrouded Grove.
-  let createDenialAspect () : Combatant =
+  let createDenialAspectRaw () : Combatant =
     let stats =
       StatBlock.Create
         [ StatId.Force, 120
@@ -161,7 +161,7 @@ module StoryBosses =
     |> equip [ daggers; veil; relic ]
 
   /// Creates the manifestation of Anger encountered in the Basalt Caldera.
-  let createAngerAspect () : Combatant =
+  let createAngerAspectRaw () : Combatant =
     let stats =
       StatBlock.Create
         [ StatId.Force, 270 // Destructive kinetic fury
@@ -213,7 +213,7 @@ module StoryBosses =
     |> equip [ greatsword; carapace ]
 
   /// Creates the manifestation of Bargaining encountered at the Shattered Promontory.
-  let createBargainingAspect () : Combatant =
+  let createBargainingAspectRaw () : Combatant =
     let stats =
       StatBlock.Create
         [ StatId.Force, 150
@@ -264,7 +264,7 @@ module StoryBosses =
     |> equip [ rapier; cloak ]
 
   /// Creates the manifestation of Depression encountered in the Sunken Metropolis.
-  let createDepressionAspect () : Combatant =
+  let createDepressionAspectRaw () : Combatant =
     let stats =
       StatBlock.Create
         [ StatId.Force, 120
@@ -316,7 +316,7 @@ module StoryBosses =
     |> equip [ anchor; shroud ]
 
   /// Creates the manifestation of Acceptance encountered in the White Meadow.
-  let createAcceptanceAspect () : Combatant =
+  let createAcceptanceAspectRaw () : Combatant =
     let stats =
       StatBlock.Create
         [ StatId.Force, 200
@@ -386,6 +386,29 @@ module StoryBosses =
   /// block and its pools by one factor, so every Aspect keeps the authored stat ratios, stance, kit
   /// and starting meters. Anything already levelled (TierFactory-built archetypes, the tutorial
   /// Bandit Leader) is returned untouched.
+
+  // Measured per-aspect corrections. `PoolFactor` was swept until the fight lasted, `PotencyFactor`
+  // until the aspect could actually kill; both were read off a 16-seed grid per aspect and are
+  // verified at 40 seeds. They exist because one global number cannot serve both a physical aspect
+  // that could not lose at any pool size and a mental one whose round count refused to move.
+  let createGuiltAspect () : Combatant =
+    createGuiltAspectRaw () |> applyTuning { PoolFactor = 1.5; PotencyFactor = 1.7 }
+
+  let createDenialAspect () : Combatant =
+    createDenialAspectRaw () |> applyTuning { PoolFactor = 2.0; PotencyFactor = 1.45 }
+
+  let createAngerAspect () : Combatant =
+    createAngerAspectRaw () |> applyTuning { PoolFactor = 2.0; PotencyFactor = 1.02 }
+
+  let createBargainingAspect () : Combatant =
+    createBargainingAspectRaw () |> applyTuning { PoolFactor = 3.0; PotencyFactor = 0.85 }
+
+  let createDepressionAspect () : Combatant =
+    createDepressionAspectRaw () |> applyTuning { PoolFactor = 2.5; PotencyFactor = 0.55 }
+
+  let createAcceptanceAspect () : Combatant =
+    createAcceptanceAspectRaw () |> applyTuning { PoolFactor = 1.5; PotencyFactor = 1.45 }
+
   let scaleToStage (floorNumber: int) (boss: Combatant) : Combatant =
     if boss.Level > 1 then
       boss
