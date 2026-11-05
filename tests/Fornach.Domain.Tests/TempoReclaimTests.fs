@@ -138,27 +138,42 @@ module TempoReclaimTests =
   [<Fact>]
   let ``Status pressure bleeds off out of combat`` () =
     // The 1% a defended round costs is meant to be temporary, so it must not compound across a floor.
+    // Walking is a light burn and waiting is a proper rest, so every meter bleeds at the same rate
+    // for the same activity - no meter is special-cased.
     let tired =
       TierFactory.createClassLevel CharacterClass.Fighter 20 |> player
       |> Combatant.updateMeters (fun m ->
         { m with
             Exhaustion = m.Exhaustion + 40
             Frustration = m.Frustration + 40
-            Recklessness = m.Recklessness + 40 })
+            Recklessness = m.Recklessness + 40
+            CognitiveFatigue = m.CognitiveFatigue + 40
+            Confusion = m.Confusion + 40
+            Provoke = m.Provoke + 40 })
 
-    let rested = TowerSession.recoverOutOfCombat tired 5 0 0 0
+    let walked = TowerSession.recoverOutOfCombat tired 5 0 0 0 TowerSession.walkDecayStatus
 
-    Assert.Equal(30, rested.Meters.Exhaustion.Value)
-    Assert.Equal(30, rested.Meters.Frustration.Value)
-    // Recklessness is a slow-burning fever rather than acute pressure, so it bleeds at 1% a turn
-    // while the others clear at 10.
-    Assert.Equal(39, rested.Meters.Recklessness.Value)
+    Assert.Equal(39, walked.Meters.Exhaustion.Value)
+    Assert.Equal(39, walked.Meters.Frustration.Value)
+    Assert.Equal(39, walked.Meters.Recklessness.Value)
+    Assert.Equal(39, walked.Meters.CognitiveFatigue.Value)
+    Assert.Equal(39, walked.Meters.Confusion.Value)
+    Assert.Equal(39, walked.Meters.Provoke.Value)
+
+    let waited = TowerSession.recoverOutOfCombat tired 5 0 0 0 TowerSession.waitDecayStatus
+
+    Assert.Equal(30, waited.Meters.Exhaustion.Value)
+    Assert.Equal(30, waited.Meters.Frustration.Value)
+    Assert.Equal(30, waited.Meters.Recklessness.Value)
+    Assert.Equal(30, waited.Meters.CognitiveFatigue.Value)
+    Assert.Equal(30, waited.Meters.Confusion.Value)
+    Assert.Equal(30, waited.Meters.Provoke.Value)
 
   [<Fact>]
   let ``Status decay floors at zero`` () =
     let clean = TierFactory.createClassLevel CharacterClass.Fighter 20 |> player
 
-    let rested = TowerSession.recoverOutOfCombat clean 5 0 0 0
+    let rested = TowerSession.recoverOutOfCombat clean 5 0 0 0 TowerSession.walkDecayStatus
 
     Assert.Equal(0, rested.Meters.Exhaustion.Value)
     Assert.Equal(0, rested.Meters.Frustration.Value)

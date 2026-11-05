@@ -32,7 +32,7 @@ let private wounded (bleedStacks: int) =
 /// The out-of-combat recovery the safe-step branch runs: 10% Health, 5% armor, one bleed stack closed.
 /// Morale regen is far stingier (1%), so these cases pass a flat amount the test controls.
 let private safeStep (state: TowerRunState) =
-  let player = TowerSession.recoverOutOfCombat state.Player TowerSession.bleedClosedPerStep 20 20 3
+  let player = TowerSession.recoverOutOfCombat state.Player TowerSession.bleedClosedPerStep 20 20 3 TowerSession.walkDecayStatus
   TowerSession.honeOnSafeStep { state with Player = player }
 
 [<Fact>]
@@ -53,13 +53,13 @@ let ``a turn of waiting closes five bleed stacks and never below zero`` () =
 let ``a wound still bleeding holds Health and Morale shut while armor is tended anyway`` () =
   let player = wounded 6
 
-  let stepped = TowerSession.recoverOutOfCombat player TowerSession.bleedClosedPerStep 20 20 3
+  let stepped = TowerSession.recoverOutOfCombat player TowerSession.bleedClosedPerStep 20 20 3 TowerSession.walkDecayStatus
   Assert.Equal(5, stepped.BleedStacks)
   Assert.Equal(100, stepped.Health.Current)
   Assert.Equal(100, stepped.Morale.Current)
   Assert.Equal(28, stepped.Armor.Current)
 
-  let rested = TowerSession.recoverOutOfCombat player TowerSession.bleedClosedPerRest 66 66 10
+  let rested = TowerSession.recoverOutOfCombat player TowerSession.bleedClosedPerRest 66 66 10 TowerSession.waitDecayStatus
   Assert.Equal(1, rested.BleedStacks)
   Assert.Equal(100, rested.Health.Current)
   Assert.Equal(100, rested.Morale.Current)
@@ -87,13 +87,13 @@ let ``four bleeding safe steps still hone the weapon on the fourth`` () =
 [<Fact>]
 let ``the turn that closes the wound is the turn the regen resumes`` () =
   // A step closes the last stack.
-  let stepped = TowerSession.recoverOutOfCombat (wounded 1) TowerSession.bleedClosedPerStep 20 20 3
+  let stepped = TowerSession.recoverOutOfCombat (wounded 1) TowerSession.bleedClosedPerStep 20 20 3 TowerSession.walkDecayStatus
   Assert.Equal(0, stepped.BleedStacks)
   Assert.Equal(120, stepped.Health.Current)
   Assert.Equal(120, stepped.Morale.Current)
 
   // A wait closes five, so five stacks are the last of the wound too.
-  let rested = TowerSession.recoverOutOfCombat (wounded 5) TowerSession.bleedClosedPerRest 66 66 10
+  let rested = TowerSession.recoverOutOfCombat (wounded 5) TowerSession.bleedClosedPerRest 66 66 10 TowerSession.waitDecayStatus
   Assert.Equal(0, rested.BleedStacks)
   // Health stops at the 60% rest cap; Morale carries on to whatever the turn bought it.
   Assert.Equal(120, rested.Health.Current)
@@ -106,7 +106,7 @@ let ``a bleeding delver who keeps waiting clears the wound and then starts heali
 
   while player.BleedStacks > 0 && turns < 20 do
     let before = player
-    player <- TowerSession.recoverOutOfCombat player TowerSession.bleedClosedPerRest 66 66 16
+    player <- TowerSession.recoverOutOfCombat player TowerSession.bleedClosedPerRest 66 66 16 TowerSession.waitDecayStatus
     turns <- turns + 1
 
     if player.BleedStacks > 0 then
@@ -127,6 +127,6 @@ let ``a bleeding delver who keeps waiting clears the wound and then starts heali
 
   // Healthy and unbloodied, the patient keeps healing up toward the rest cap.
   let damaged = { player with Health = { player.Health with Current = 100 } }
-  let rested = TowerSession.recoverOutOfCombat damaged TowerSession.bleedClosedPerRest 66 66 16
+  let rested = TowerSession.recoverOutOfCombat damaged TowerSession.bleedClosedPerRest 66 66 16 TowerSession.waitDecayStatus
   Assert.Equal(120, rested.Health.Current)
   Assert.Equal(0, rested.BleedStacks)

@@ -1894,7 +1894,8 @@ module TowerDisplay =
                       TowerSession.bleedClosedPerStep
                       heal
                       morale
-                      tendedArmor }
+                      tendedArmor
+                      TowerSession.walkDecayStatus }
 
             state <- TowerSession.honeOnSafeStep state
 
@@ -1923,10 +1924,15 @@ module TowerDisplay =
             let armorRepair = Math.Max(1, int (float state.Player.Armor.Max * 0.33))
             let honedWeapon = TowerSession.restHoneWeapon state.Player.WeaponCondition
             let recovered =
-              TowerSession.recoverOutOfCombat state.Player TowerSession.bleedClosedPerRest heal morale armorRepair
+              TowerSession.recoverOutOfCombat
+                state.Player
+                TowerSession.bleedClosedPerRest
+                heal
+                morale
+                armorRepair
+                TowerSession.waitDecayStatus
             let restedPlayer =
               { Combatant.clearStacks recovered with
-                  Meters = StatusMeters.Zero
                   WeaponCondition = honedWeapon }
             let weaponMsg =
               if honedWeapon <> state.Player.WeaponCondition then

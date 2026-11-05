@@ -174,21 +174,18 @@ module TowerSession =
   /// Status meters are pressure, not damage: they bleed off whenever nothing is engaged, so the 1% a
   /// defended round costs cannot compound into a permanent debuff across a whole floor. Bleeding being
   /// open does not stop it for the same reason armor still gets tended.
-  let restDecayStatus = 10
+  /// Walking is a light burn, waiting is a proper rest. Meter.Max is 100 and the meter renders as a
+  /// percentage, so these are 1% and 10% of the meter per turn.
+  let walkDecayStatus = 1
+  let waitDecayStatus = 10
 
-  /// Recklessness is the exception: it is a slow-burning fever rather than an acute pressure, so it
-  /// bleeds off at 1% a turn while the other meters clear at 10. Meter.Max is 100 and the meter renders
-  /// as a percentage, so 1% is one point.
-  let restDecayRecklessness = 1
-
-  let decayStatusMeters (m: StatusMeters) =
-    let d (meter: Meter) = Meter.Create(meter.Value - restDecayStatus)
-    let dr (meter: Meter) = Meter.Create(meter.Value - restDecayRecklessness)
+  let decayStatusMeters (decay: int) (m: StatusMeters) =
+    let d (meter: Meter) = Meter.Create(meter.Value - decay)
 
     { m with
         Exhaustion = d m.Exhaustion
         Frustration = d m.Frustration
-        Recklessness = dr m.Recklessness
+        Recklessness = d m.Recklessness
         CognitiveFatigue = d m.CognitiveFatigue
         Confusion = d m.Confusion
         Provoke = d m.Provoke }
@@ -197,7 +194,14 @@ module TowerSession =
   /// regenerate once that has stopped the wound. Armor is tended either way — gear is maintained
   /// regardless of what is bleeding. The combat ramp decays one stack per turn here: this function
   /// only runs when nothing is engaged, which is what keeps the meters a within-fight ramp.
-  let recoverOutOfCombat (player: Combatant) (bleedClosed: int) (heal: int) (morale: int) (armorRepair: int) =
+  let recoverOutOfCombat
+    (player: Combatant)
+    (bleedClosed: int)
+    (heal: int)
+    (morale: int)
+    (armorRepair: int)
+    (statusDecay: int)
+    =
     let bleed = closeBleed player.BleedStacks bleedClosed
 
     { Combatant.decayStacks player with
@@ -205,7 +209,7 @@ module TowerSession =
         Health = restRecoverHealthWhenWoundClosed bleed player.Health heal
         Morale = restRecoverMoraleWhenWoundClosed bleed player.Morale morale
         Armor = restRepairArmor player.Armor armorRepair
-        Meters = decayStatusMeters player.Meters }
+        Meters = decayStatusMeters statusDecay player.Meters }
 
   /// One step short of Pristine: resting hones a ruined weapon but cannot restore it.
   let restHoneWeapon (weapon: WeaponCondition) =
