@@ -46,3 +46,14 @@ let ``tuning survives stage scaling`` () =
 
   Assert.Equal(plain.Health.Maximum * 2, tuned.Health.Maximum)
   Assert.True(tuned.Stats.Get StatId.Force >= plain.Stats.Get StatId.Force)
+
+[<Fact>]
+let ``potency below one reduces the stat block`` () =
+  // StatBonus.percentOf clamps to `max 1`, so routing a reduction through ApplyPercentBonuses turns
+  // -40% into +1 point. The dial has to scale directly or "weaker" is silently "very slightly stronger".
+  let guilt = StoryBosses.createGuiltAspect ()
+
+  let tuned =
+    StoryBosses.applyTuning { PoolFactor = 1.0; PotencyFactor = 0.5 } guilt
+
+  Assert.Equal(guilt.Stats.Get StatId.Force / 2, tuned.Stats.Get StatId.Force)
