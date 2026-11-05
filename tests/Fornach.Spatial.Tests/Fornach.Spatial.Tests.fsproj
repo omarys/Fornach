@@ -19,6 +19,7 @@
     <Compile Include="FovTests.fs" />
     <Compile Include="PathfindingTests.fs" />
     <Compile Include="DijkstraTests.fs" />
+    <Compile Include="FlankingTests.fs" />
     <ProjectReference Include="..\..\src\Fornach.Spatial\Fornach.Spatial.fsproj" />
   </ItemGroup>
 

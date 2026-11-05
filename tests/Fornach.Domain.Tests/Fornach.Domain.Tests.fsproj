@@ -30,6 +30,7 @@
     <Compile Include="ActiveDefenseTests.fs" />
     <Compile Include="TempoReclaimTests.fs" />
     <Compile Include="GuardRampTests.fs" />
+    <Compile Include="FlankDamageTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

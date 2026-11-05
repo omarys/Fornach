@@ -8,6 +8,7 @@
   <ItemGroup>
     <Compile Include="Point.fs" />
     <Compile Include="Direction.fs" />
+    <Compile Include="Flanking.fs" />
     <Compile Include="Distance.fs" />
     <Compile Include="Line.fs" />
     <Compile Include="Los.fs" />

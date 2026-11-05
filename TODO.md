@@ -12,7 +12,8 @@ This file tracks **only open work**. Completed items — the archetype evaluatio
 
 - [ ] **Spatial Grid Integration** (§5 item 3):
   - FOV is **wired** — [`Vision.fs`](file:///home/omary/Dev/fornach/src/Fornach.Domain/Vision.fs) computes a dilated arc and `TowerSession.updateFov` runs it per move.
-  - Still open: directional flanking and grid pathfinding are **not** connected to turn resolution.
+  - Directional flanking is **wired** — `Fornach.Spatial.Flanking` classifies each foe's approach against the player's facing, and `TowerSession.flankOf` feeds a damage multiplier (Front 1.0 / Flank 1.15 / Rear 1.30) into every enemy strike in the pack duel.
+  - Still open: grid pathfinding is **not** connected to turn resolution.
 
 - [ ] **Infinite Tower Boss Scaling** (§5 item 2) — verified, and the scaling is sound; the **tuning** is not.
   - The scaling works. `scaleToStage` ([`Bosses.fs:329`](file:///home/omary/Dev/fornach/src/Fornach.Domain/Bosses.fs)) normalises the level-40-authored block down to `ProgressionScale.storyGuardianLevel floor`, then `TowerSession.rescaleFloorEnemiesWith` lifts the boss to `player.Level + 10` (`floorScalingFor` returns `bossOffset = 10`). Measured: a level-6 player on story floor 2 meets Aspect of Guilt at **Lv.16, HP 3002, Force 113** — not the authored Lv.1/HP 2800/Force 210 block.

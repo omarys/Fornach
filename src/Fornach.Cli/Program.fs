@@ -1206,7 +1206,7 @@ module Program =
   /// Interactive duel against a pack of enemies, modelled on runStoryDuel. The lone player resolves
   /// actions through the group-turn resolver (cleaves/splashes) while each surviving enemy strikes
   /// back in turn. When canFlee, the player may disengage at the cost of one parting strike per foe.
-  let private runStoryGroupDuel (floorNumber: int) (player: Combatant) (enemies: TowerEnemy list) (canFlee: bool) (reinforce: TowerDisplay.GroupDuelReinforce option) : TowerDisplay.GroupDuelResult =
+  let private runStoryGroupDuel (floorNumber: int) (player: Combatant) (enemies: TowerEnemy list) (canFlee: bool) (reinforce: TowerDisplay.GroupDuelReinforce option) (flankOf: CombatantId -> Fornach.Spatial.Flank) : TowerDisplay.GroupDuelResult =
     let rng = Random()
     let roller : DiceRoller = fun min max -> rng.Next(min, max + 1)
 
@@ -1294,14 +1294,15 @@ module Program =
               | Some def -> Some def
               | None -> Some(Guard(AI.chooseActiveDefense currentPlayer e.Combatant))
             else None
+          let flankMult = flankOf e.Combatant.Id |> TowerSession.flankDamageMultiplier
           let r =
             if isStaggered then
               AnsiConsole.MarkupLine(sprintf "\n[bold %s]⚡ %s is staggered from the technique interrupt! Attack defused![/]" Theme.Yellow e.Name)
               ActionResolver.resolve roller intent e.Combatant currentPlayer
             elif floorNumber = 1 then
-              ActionResolver.resolveWithoutLethalWithDefense roller intent defOpt e.Combatant currentPlayer priorDefenses
+              ActionResolver.resolveWithoutLethalWithDefenseFlank roller intent defOpt e.Combatant currentPlayer priorDefenses flankMult
             else
-              ActionResolver.resolveExWithDefense roller intent defOpt e.Combatant currentPlayer priorDefenses
+              ActionResolver.resolveExWithDefenseFlank roller intent defOpt e.Combatant currentPlayer priorDefenses flankMult
           CombatLogger.recordTurn session round turnNum (sprintf "%A" intent) e.Combatant playerBeforeTurn r
           turnNum <- turnNum + 1
           appendTurn (sprintf "Round %d — %s strikes %s — %s" round e.Name currentPlayer.Name (Display.intentLogLabel intent e.Combatant)) r.Events
@@ -1367,11 +1368,12 @@ module Program =
         for e in living () |> List.truncate 4 do
           let intent = AI.chooseIntent e.Combatant currentPlayer
           let playerBeforeTurn = currentPlayer
+          let flankMult = flankOf e.Combatant.Id |> TowerSession.flankDamageMultiplier
           let r =
             if floorNumber = 1 then
-              ActionResolver.resolveWithoutLethalWithDefense roller intent None e.Combatant currentPlayer priorDefenses
+              ActionResolver.resolveWithoutLethalWithDefenseFlank roller intent None e.Combatant currentPlayer priorDefenses flankMult
             else
-              ActionResolver.resolveEx roller intent e.Combatant currentPlayer priorDefenses
+              ActionResolver.resolveExWithDefenseFlank roller intent None e.Combatant currentPlayer priorDefenses flankMult
           CombatLogger.recordTurn session round turnNum (sprintf "%A" intent) e.Combatant playerBeforeTurn r
           turnNum <- turnNum + 1
           appendTurn (sprintf "Round %d — %s strikes %s (parting blow) — %s" round e.Name currentPlayer.Name (Display.intentLogLabel intent e.Combatant)) r.Events

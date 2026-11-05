@@ -49,6 +49,31 @@ type TowerRunState =
 
 module TowerSession =
 
+  /// Damage multiplier for a strike arriving from the given side. Head-on is neutral; the flanks and the
+  /// rear punish a defender who cannot watch every approach at once.
+  let flankDamageMultiplier (flank: Flank) : float =
+    match flank with
+    | Flank.Front -> 1.0
+    | Flank.Flank -> 1.15
+    | Flank.Rear -> 1.30
+
+  /// Classifies an attacker's approach against the direction the player is facing. A foe whose tile is
+  /// unknown, or a player with no facing yet, is treated as head-on so callers without a grid are unaffected.
+  let flankOf (state: TowerRunState) : CombatantId -> Flank =
+    let positions =
+      state.CurrentFloor.Entities
+      |> Map.toSeq
+      |> Seq.choose (fun (pt, ent) ->
+        match ent with
+        | EntityEnemy e -> Some(e.Combatant.Id, pt)
+        | _ -> None)
+      |> Map.ofSeq
+
+    fun attackerId ->
+      match state.Facing, Map.tryFind attackerId positions with
+      | Some facing, Some pos -> Flanking.classify facing state.PlayerPosition pos
+      | _ -> Flank.Front
+
   /// Recalculates field-of-view and updates explored memory
   let updateFov (state: TowerRunState) : TowerRunState =
     let cone =

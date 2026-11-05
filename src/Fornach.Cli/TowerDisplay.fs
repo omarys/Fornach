@@ -1116,7 +1116,7 @@ module TowerDisplay =
     (initialPlayer: Combatant)
     (startFloor: int)
     (onCombatDuel: int -> Combatant -> Combatant -> (CombatOutcome * Combatant))
-    (onGroupCombat: int -> Combatant -> TowerEnemy list -> bool -> GroupDuelReinforce option -> GroupDuelResult)
+    (onGroupCombat: int -> Combatant -> TowerEnemy list -> bool -> GroupDuelReinforce option -> (CombatantId -> Fornach.Spatial.Flank) -> GroupDuelResult)
     (onDefeatAnimation: unit -> unit)
     (debug: bool)
     (forcedSeed: int option)
@@ -1170,7 +1170,7 @@ module TowerDisplay =
           // Nach. The in-fight card keeps its damage; only the stance is taken from the engine's verdict.
           { midFightPlayer with Tempo = advanced.Player.Tempo }, active @ joined
 
-        let result = onGroupCombat floorNum state.Player engaged canFlee (Some reinforce)
+        let result = onGroupCombat floorNum state.Player engaged canFlee (Some reinforce) (TowerSession.flankOf state)
         // Armour and weapon wear outlasts the fight: it is repaired by resting, by walking, or at a
         // shrine, never for free when the last foe drops. Applies to both sides.
         state <- { state with Player = result.Player }
@@ -2006,7 +2006,7 @@ module TowerDisplay =
     (initialPlayer: Combatant)
     (startFloor: int)
     (onCombatDuel: int -> Combatant -> Combatant -> (CombatOutcome * Combatant))
-    (onGroupCombat: int -> Combatant -> TowerEnemy list -> bool -> GroupDuelReinforce option -> GroupDuelResult)
+    (onGroupCombat: int -> Combatant -> TowerEnemy list -> bool -> GroupDuelReinforce option -> (CombatantId -> Fornach.Spatial.Flank) -> GroupDuelResult)
     (onDefeatAnimation: unit -> unit)
     (debug: bool)
     (forcedSeed: int option) : unit =
@@ -2017,7 +2017,7 @@ module TowerDisplay =
     (initialPlayer: Combatant)
     (startFloor: int)
     (onCombatDuel: int -> Combatant -> Combatant -> (CombatOutcome * Combatant))
-    (onGroupCombat: int -> Combatant -> TowerEnemy list -> bool -> GroupDuelReinforce option -> GroupDuelResult)
+    (onGroupCombat: int -> Combatant -> TowerEnemy list -> bool -> GroupDuelReinforce option -> (CombatantId -> Fornach.Spatial.Flank) -> GroupDuelResult)
     (onDefeatAnimation: unit -> unit)
     (debug: bool)
     (forcedSeed: int option) : unit =

@@ -1020,6 +1020,7 @@ module ActionResolver =
     (actor: Combatant)
     (target: Combatant)
     (priorDefenses: int)
+    (flankMult: float)
     : ActionResult =
     let mutable currentActor = actor
     let mutable currentTarget = target
@@ -2488,7 +2489,7 @@ module ActionResolver =
         else
           // ADR 0009: Base physical HP damage scaled down by 30% on standard attacks to prioritize tactical meter collapses
           let scaledBase = if isFinisherOrGambit || plane = Mental then float baseDamage else float baseDamage * 0.70
-          Math.Max(1, int (scaledBase * tierMult * gambitMult * classMult * weaponEff * critDmgMult * berserkMult * indesPenaltyMult * formDmgMult * attackDamageMitigation * ferocityMult * packMult * recklessnessDmgMult * affinityMitigationMult * passiveFinisherBonusDmg))
+          Math.Max(1, int (scaledBase * tierMult * gambitMult * classMult * weaponEff * critDmgMult * berserkMult * indesPenaltyMult * formDmgMult * attackDamageMitigation * ferocityMult * packMult * recklessnessDmgMult * affinityMitigationMult * passiveFinisherBonusDmg * flankMult))
 
       // Aegis of Retribution: 35% damage reduction applied to recipient
       let rawDmg =
@@ -2967,7 +2968,9 @@ module ActionResolver =
   /// are owned by the combat ramp (Momentum, Flow) and by gear; a won encounter pays the Discipline
   /// pair (`Combatant.growFromEncounter`), never Force/Finesse/Intellect/Acuity.
 
-  let resolveExWithDefense (roller: DiceRoller) (intent: ActionIntent) (defenseOpt: DefenseChoice option) (actor: Combatant) (target: Combatant) (priorDefenses: int) : ActionResult =
+  /// `flankMult` carries the geometric bonus from `Fornach.Spatial.Flanking`; 1.0 means the strike is
+  /// met head-on or the caller has no grid. See `resolveExWithDefense` for the geometry-neutral entry.
+  let resolveExWithDefenseFlank (roller: DiceRoller) (intent: ActionIntent) (defenseOpt: DefenseChoice option) (actor: Combatant) (target: Combatant) (priorDefenses: int) (flankMult: float) : ActionResult =
     let upkeepActor, upkeepEvents = applyTurnUpkeep actor
     if upkeepActor.Health.IsDepleted then
       { Actor = upkeepActor
@@ -3007,7 +3010,7 @@ module ActionResolver =
             Target = target
             Events = [ CombatEvent.ComboReset(upkeepActor.Id, msg) ]
             Contest = None }
-        | StandardAttack atk -> resolveAttack roller atk defenseOpt upkeepActor target priorDefenses
+        | StandardAttack atk -> resolveAttack roller atk defenseOpt upkeepActor target priorDefenses flankMult
         | DeployPreparation (prep, targetIdOpt) -> resolveDeployPreparation prep targetIdOpt upkeepActor target
 
       // A declared guard is answered by a strike and by nothing else. When the opponent braces, shifts,
@@ -3051,6 +3054,10 @@ module ActionResolver =
 
       { guarded with Events = upkeepEvents @ guarded.Events }
 
+  /// Geometry-neutral entry point: callers with no grid keep the previous behaviour exactly.
+  let resolveExWithDefense (roller: DiceRoller) (intent: ActionIntent) (defenseOpt: DefenseChoice option) (actor: Combatant) (target: Combatant) (priorDefenses: int) : ActionResult =
+    resolveExWithDefenseFlank roller intent defenseOpt actor target priorDefenses 1.0
+
   let resolveEx (roller: DiceRoller) (intent: ActionIntent) (actor: Combatant) (target: Combatant) (priorDefenses: int) : ActionResult =
     resolveExWithDefense roller intent None actor target priorDefenses
 
@@ -3067,8 +3074,8 @@ module ActionResolver =
   /// Resolves an action with defense and encirclement consideration, preventing a single turn from reducing
   /// the target's Health or Morale from above zero to zero. Used by the story tutorial so a level-1 protagonist
   /// cannot be one-shot. Applied nowhere else, so global balance is untouched.
-  let resolveWithoutLethalWithDefense (roller: DiceRoller) (intent: ActionIntent) (defenseOpt: DefenseChoice option) (actor: Combatant) (target: Combatant) (priorDefenses: int) : ActionResult =
-    let res = resolveExWithDefense roller intent defenseOpt actor target priorDefenses
+  let resolveWithoutLethalWithDefenseFlank (roller: DiceRoller) (intent: ActionIntent) (defenseOpt: DefenseChoice option) (actor: Combatant) (target: Combatant) (priorDefenses: int) (flankMult: float) : ActionResult =
+    let res = resolveExWithDefenseFlank roller intent defenseOpt actor target priorDefenses flankMult
 
     let clamp (before: Pool) (after: Pool) =
       if before.Current > 0 && after.Current <= 0 then { after with Current = 1 } else after
@@ -3078,6 +3085,9 @@ module ActionResolver =
           { res.Target with
               Health = clamp target.Health res.Target.Health
               Morale = clamp target.Morale res.Target.Morale } }
+
+  let resolveWithoutLethalWithDefense (roller: DiceRoller) (intent: ActionIntent) (defenseOpt: DefenseChoice option) (actor: Combatant) (target: Combatant) (priorDefenses: int) : ActionResult =
+    resolveWithoutLethalWithDefenseFlank roller intent defenseOpt actor target priorDefenses 1.0
 
   let resolveWithoutLethal (roller: DiceRoller) (intent: ActionIntent) (actor: Combatant) (target: Combatant) : ActionResult =
     resolveWithoutLethalWithDefense roller intent None actor target 0
