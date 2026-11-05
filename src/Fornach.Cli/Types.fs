@@ -26,4 +26,3 @@ type CliOptions =
 type DebugOptions =
   { Enabled: bool
     ForcedSeed: int option }
-
