@@ -2,18 +2,34 @@ namespace Fornach.Engine
 
 open Fornach.Domain
 
-/// Psychological Trauma Gambits and specialized boss manifestations
+/// The five signature presses a manifestation can commit to, named for the stat each one contests
+/// rather than for the story that fields it. Which Aspect commits to which press, and what a player
+/// reads when it lands, both live in `Fornach.Story` and `Fornach.Cli`: an engine that names its own
+/// mechanics can be handed a different set of manifestations without a rename.
 type TraumaGambit =
-  /// Denial (Agility/Mental): Asserts reality never happened; conjures a mirror clone, evades, and inflicts Confusion
-  | DenialPhaseShift
-  /// Anger (Power/Physical): Volcanic fury that smashes molten basalt into the target, shredding armor and inflicting Frustration
-  | BasaltEruption
-  /// Bargaining (Discipline/Mental): A predatory transaction stealing Morale to restore vitality, inflicting Provoke and Frustration
-  | CoerciveBargain
-  /// Depression (Discipline/Mental): The crushing weight of apathy dragging the spirit under; inflicts deep Cognitive Fatigue and Exhaustion
-  | ApathyDoldrums
-  /// Acceptance (Discipline/Mental): Peaceful surrender of hostility; calms Recklessness to 0 and restores Morale to both combatants
-  | SereneResolution
+  /// Agility/Mental, Finesse vs. Reflex and Intuition. Shifts out of phase, conjures a mirror clone, inflicts Confusion
+  | FinesseGambit
+  /// Power/Physical, Force vs. Fortitude and Resolve. Smashes through the target's armour and inflicts Frustration
+  | ForceGambit
+  /// Discipline/Mental, Acumen vs. Poise and Composure. A predatory transaction stealing Morale to restore vitality, provoking
+  | AcumenGambit
+  /// Discipline/Mental, Fortitude vs. Poise and Composure. Drags the spirit under; deep Cognitive Fatigue and Exhaustion
+  | FortitudeGambit
+  /// Discipline/Mental, Composure vs. Fortitude and Resolve. Surrenders hostility, calming Recklessness to 0 and restoring Morale
+  | ComposureGambit
+
+  /// The stat this press is rolled on, as the engine calls it.
+  member this.Name : string =
+    match this with
+    | FinesseGambit -> "Finesse"
+    | ForceGambit -> "Force"
+    | AcumenGambit -> "Acumen"
+    | FortitudeGambit -> "Fortitude"
+    | ComposureGambit -> "Composure"
+
+  /// The name this press carries in a combat event. Deliberately mechanical: the CLI renders the story's
+  /// name for it (`Display.gambitDisplayName`) so neither vocabulary has to know the other.
+  member this.Label : string = sprintf "Trauma Gambit: %s" this.Name
 
 /// Classifies offensive actions across Physical, Social, and Arcane disciplines
 type AttackClassification =
@@ -89,9 +105,9 @@ type AttackClassification =
     | RunicWardTrap _
     | DisorientingShockwave _
     | StaffSiphon -> CombatMode.Arcane
-    | TraumaAttack BasaltEruption -> CombatMode.Physical
-    | TraumaAttack (CoerciveBargain | ApathyDoldrums | SereneResolution) -> CombatMode.Social
-    | TraumaAttack DenialPhaseShift -> CombatMode.Arcane
+    | TraumaAttack ForceGambit -> CombatMode.Physical
+    | TraumaAttack (AcumenGambit | FortitudeGambit | ComposureGambit) -> CombatMode.Social
+    | TraumaAttack FinesseGambit -> CombatMode.Arcane
 
   /// Identifies the underlying stat Vector (Power, Agility, or Discipline)
   member this.Vector : Vector =
@@ -100,13 +116,13 @@ type AttackClassification =
     | ForceInsightStrike
     | AuthorityDecree _
     | ArcaneCataclysm _
-    | TraumaAttack BasaltEruption -> Power
+    | TraumaAttack ForceGambit -> Power
     | FinesseCadence _
     | FinesseInsightStrike
     | GuileDeception _
     | SynapticGlamour _
     | MirrorIllusion _
-    | TraumaAttack DenialPhaseShift -> Agility
+    | TraumaAttack FinesseGambit -> Agility
     | ProwessStrike _
     | ShieldBash _
     | CalculatedFlawStrike
@@ -115,7 +131,7 @@ type AttackClassification =
     | RunicWardTrap _
     | DisorientingShockwave _
     | StaffSiphon
-    | TraumaAttack (CoerciveBargain | ApathyDoldrums | SereneResolution) -> Discipline
+    | TraumaAttack (AcumenGambit | FortitudeGambit | ComposureGambit) -> Discipline
 
   /// Identifies the target Plane (Physical or Mental)
   member this.Plane : Plane =
@@ -128,7 +144,7 @@ type AttackClassification =
     | ShieldBash _
     | CalculatedFlawStrike
     | MasterfulDisarm _
-    | TraumaAttack BasaltEruption -> Physical
+    | TraumaAttack ForceGambit -> Physical
     | AuthorityDecree _
     | GuileDeception _
     | AcumenInterrogation _
@@ -138,7 +154,7 @@ type AttackClassification =
     | RunicWardTrap _
     | DisorientingShockwave _
     | StaffSiphon
-    | TraumaAttack (DenialPhaseShift | CoerciveBargain | ApathyDoldrums | SereneResolution) -> Mental
+    | TraumaAttack (FinesseGambit | AcumenGambit | FortitudeGambit | ComposureGambit) -> Mental
 
   /// Verifies if this attack classification is permitted for the combatant's operative plane
   member this.IsAllowedFor (actor: Combatant) : bool =
@@ -167,10 +183,10 @@ type AttackClassification =
     match this with
     | ForceStrike _
     | ForceInsightStrike
-    | TraumaAttack BasaltEruption -> Force, [ Fortitude; Resolve ]
+    | TraumaAttack ForceGambit -> Force, [ Fortitude; Resolve ]
     | FinesseCadence _
     | FinesseInsightStrike
-    | TraumaAttack DenialPhaseShift -> Finesse, [ Reflex; Intuition ]
+    | TraumaAttack FinesseGambit -> Finesse, [ Reflex; Intuition ]
     | ProwessStrike _
     | ShieldBash _
     | CalculatedFlawStrike
@@ -184,9 +200,9 @@ type AttackClassification =
     | RunicWardTrap _
     | DisorientingShockwave _
     | StaffSiphon
-    | TraumaAttack CoerciveBargain -> Acumen, [ Poise; Composure ]
-    | TraumaAttack ApathyDoldrums -> Fortitude, [ Poise; Composure ]
-    | TraumaAttack SereneResolution -> Composure, [ Fortitude; Resolve ]
+    | TraumaAttack AcumenGambit -> Acumen, [ Poise; Composure ]
+    | TraumaAttack FortitudeGambit -> Fortitude, [ Poise; Composure ]
+    | TraumaAttack ComposureGambit -> Composure, [ Fortitude; Resolve ]
 
 /// Classifies active defensive counters in the Nach across Physical and Mental planes (ADR 0009)
 type DefenseClassification =

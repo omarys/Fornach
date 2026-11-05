@@ -33,7 +33,7 @@ module StoryTutorialTests =
       | "mesmer" -> CharacterClass.Mage
       | "abjurer" -> CharacterClass.Mage
       | _ -> CharacterClass.Mage
-    Assert.Equal("Protagonist", player.Name)
+    Assert.Equal("PlayerCharacter", player.Name)
     Assert.Equal(1, player.Level)
     Assert.Equal(expectedClass, player.Class)
 

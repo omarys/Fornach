@@ -752,7 +752,7 @@ module CombatSimulation =
       // climbs with the opposition's flat, non-compounding stats.
       let mutable player =
         { TierFactory.createClassLevel playerClass 1 with
-            Name = "Protagonist"
+            Name = "PlayerCharacter"
             PlayerStyle = true }
         |> Combatant.seizeVor
       let mutable floor = 1

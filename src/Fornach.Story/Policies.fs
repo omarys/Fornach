@@ -25,7 +25,7 @@ module Policies =
   /// unlike Decoy Swarm it does not stack Recklessness onto a target already being buried in it.
   let private denial (self: Combatant) (_: Combatant) : ActionIntent =
     if self.MirrorClones < 2 && self.Meters.Recklessness.Value < 70 then
-      StandardAttack (TraumaAttack DenialPhaseShift)
+      StandardAttack (TraumaAttack FinesseGambit)
     else
       StandardAttack (SynapticGlamour (isGambit self))
 
@@ -33,27 +33,27 @@ module Policies =
   /// deliberately rather than a low-risk press: a reckless Aspect has nothing left to protect.
   let private anger (self: Combatant) (_: Combatant) : ActionIntent =
     if self.Meters.Recklessness.Value < 65 then
-      StandardAttack (TraumaAttack BasaltEruption)
+      StandardAttack (TraumaAttack ForceGambit)
     else
       StandardAttack (ForceStrike true)
 
   /// Bargaining only has something to trade while the target still has morale left to lose.
   let private bargaining (self: Combatant) (opponent: Combatant) : ActionIntent =
     if opponent.Morale.Current > 40 && self.Meters.Recklessness.Value < 65 then
-      StandardAttack (TraumaAttack CoerciveBargain)
+      StandardAttack (TraumaAttack AcumenGambit)
     else
       StandardAttack (AcumenInterrogation (isGambit self))
 
   /// Depression settles on a mind that has not already been worn down.
   let private depression (self: Combatant) (opponent: Combatant) : ActionIntent =
     if opponent.Meters.CognitiveFatigue.Value < 80 then
-      StandardAttack (TraumaAttack ApathyDoldrums)
+      StandardAttack (TraumaAttack FortitudeGambit)
     else
       StandardAttack (ForceStrike false)
 
   /// Acceptance has no branch to make. It simply resolves.
   let private acceptance (_: Combatant) (_: Combatant) : ActionIntent =
-    StandardAttack (TraumaAttack SereneResolution)
+    StandardAttack (TraumaAttack ComposureGambit)
 
   /// The table the CLI hands to `AI.chooseIntentUsing`.
   let all : Map<PolicyId, AI.AttackPolicy> =

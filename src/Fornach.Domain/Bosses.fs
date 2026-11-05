@@ -604,7 +604,7 @@ module StoryBosses =
       |> List.fold (fun (c: Combatant) item -> Combatant.applyItemBonus item c) (TierFactory.createClassLevel cls 1)
 
     { geared with
-        Name = "Protagonist"
+        Name = "PlayerCharacter"
         EquippedItems = equipped
         // The protagonist is the only player-style combatant: fluid stances/forms, preparations and a
         // varied attack kit. Everything else fights plainly.

@@ -59,7 +59,7 @@ module ActionResolver =
   /// party — and cost the Rogue a third of its tower climb.
   let resolveMentalDefenseFor (attacker: Combatant) (target: Combatant) (rawDef: int) : int =
     let multiplier =
-      if (target.Class.IsPlayerClass || target.Name = "Protagonist") && target.MonsterFamily.IsNone then
+      if (target.Class.IsPlayerClass || target.Name = "PlayerCharacter") && target.MonsterFamily.IsNone then
         if target.Plane = Physical then
           // Melee player classes are braced against mental blowouts; magic users less so.
           if target.Class = CharacterClass.Fighter then 1.25 else 1.10
@@ -1062,7 +1062,7 @@ module ActionResolver =
           // floors, Agility parries, Discipline breaks the weapon), so the transition must not
           // normalise the actor to Discipline before the bash resolves.
           | ProwessStrike _ | CalculatedFlawStrike | MasterfulDisarm _ -> Some CombatStance.DisciplineStance
-          | TraumaAttack BasaltEruption -> Some CombatStance.PowerStance
+          | TraumaAttack ForceGambit -> Some CombatStance.PowerStance
           | _ -> None
 
         match fluidStanceOpt with
@@ -1075,8 +1075,8 @@ module ActionResolver =
         let fluidFormOpt =
           match atk with
           | ArcaneCataclysm _ | AuthorityDecree _ -> Some ComplexForm.ResonanceSpike
-          | SynapticGlamour _ | MirrorIllusion _ | GuileDeception _ | TraumaAttack DenialPhaseShift -> Some ComplexForm.PhantasmalDiffusion
-          | RunicWardTrap _ | DisorientingShockwave _ | StaffSiphon | AcumenInterrogation _ | TraumaAttack (CoerciveBargain | ApathyDoldrums | SereneResolution) -> Some ComplexForm.AegisLattice
+          | SynapticGlamour _ | MirrorIllusion _ | GuileDeception _ | TraumaAttack FinesseGambit -> Some ComplexForm.PhantasmalDiffusion
+          | RunicWardTrap _ | DisorientingShockwave _ | StaffSiphon | AcumenInterrogation _ | TraumaAttack (AcumenGambit | FortitudeGambit | ComposureGambit) -> Some ComplexForm.AegisLattice
           | _ -> None
 
         match fluidFormOpt with
@@ -1142,11 +1142,11 @@ module ActionResolver =
       | MirrorIllusion true -> true, "Arcane Gambit: Decoy Swarm", 25
       | RunicWardTrap true -> true, "Arcane Gambit: Anomalous Glyph", 30
       | DisorientingShockwave true -> true, "Arcane Gambit: Resonant Shockwave", 25
-      | TraumaAttack DenialPhaseShift -> true, "Trauma Gambit: Denial Phase Shift", 15
-      | TraumaAttack BasaltEruption -> true, "Trauma Gambit: Basalt Eruption", 35
-      | TraumaAttack CoerciveBargain -> true, "Trauma Gambit: Coercive Bargain", 20
-      | TraumaAttack ApathyDoldrums -> true, "Trauma Gambit: Apathy Doldrums", 10
-      | TraumaAttack SereneResolution -> false, "", 0
+      | TraumaAttack FinesseGambit -> true, FinesseGambit.Label, 15
+      | TraumaAttack ForceGambit -> true, ForceGambit.Label, 35
+      | TraumaAttack AcumenGambit -> true, AcumenGambit.Label, 20
+      | TraumaAttack FortitudeGambit -> true, FortitudeGambit.Label, 10
+      | TraumaAttack ComposureGambit -> false, "", 0
       | _ -> false, "", 0
 
     // Only a landed strike feeds the ramps: a whiff buys no Momentum/Flow at all, so the spender's
@@ -1188,11 +1188,7 @@ module ActionResolver =
         | RunicWardTrap _ -> "Runic Ward Trap"
         | DisorientingShockwave _ -> "Disorienting Shockwave"
         | StaffSiphon -> "Staff Siphon"
-        | TraumaAttack DenialPhaseShift -> "Denial Phase Shift"
-        | TraumaAttack BasaltEruption -> "Basalt Eruption"
-        | TraumaAttack CoerciveBargain -> "Coercive Bargain"
-        | TraumaAttack ApathyDoldrums -> "Apathy Doldrums"
-        | TraumaAttack SereneResolution -> "Serene Resolution"
+        | TraumaAttack g -> g.Label
         | _ -> "Arcane Spell"
       currentActor <- currentActor |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue + strain })
       events <- CombatEvent.ArcaneStrainIncurred(currentActor.Id, spellName, strain, profPct) :: events
@@ -1214,10 +1210,10 @@ module ActionResolver =
       let wardErected = Math.Max(10, int (float (currentActor.GetStat Acumen) * glyphScale * profRatio))
       currentActor <- currentActor |> Combatant.addWard wardErected
       events <- CombatEvent.ArcaneWardErected(currentActor.Id, wardErected, currentActor.ArcaneWard) :: events
-    | TraumaAttack DenialPhaseShift ->
+    | TraumaAttack FinesseGambit ->
       currentActor <- currentActor |> Combatant.addClones 1
       events <- CombatEvent.MirrorClonesConjured(currentActor.Id, 1, currentActor.MirrorClones) :: events
-    | TraumaAttack SereneResolution ->
+    | TraumaAttack ComposureGambit ->
       currentActor <- currentActor |> Combatant.updateMeters (fun m -> { m with Recklessness = Meter.Zero })
       currentTarget <- currentTarget |> Combatant.updateMeters (fun m -> { m with Recklessness = Meter.Zero })
     | _ -> ()
@@ -1565,7 +1561,7 @@ module ActionResolver =
 
         off, def, (mult * profMult), disp, upd
 
-      | TraumaAttack DenialPhaseShift ->
+      | TraumaAttack FinesseGambit ->
         let off = currentActor.GetCombatStat Finesse
         let rawDef = (currentTarget.GetCombatStat Reflex + currentTarget.GetCombatStat Intuition) / 2
         let def = resolveMentalDefense rawDef
@@ -1577,7 +1573,7 @@ module ActionResolver =
               Frustration = m.Frustration - 15 }
         off, def, 1.25, disp, upd
 
-      | TraumaAttack BasaltEruption ->
+      | TraumaAttack ForceGambit ->
         let off = currentActor.GetCombatStat Force
         let def = (currentTarget.GetCombatStat Fortitude + currentTarget.GetCombatStat Resolve) / 2
         let disparity = Math.Max(0, off - def)
@@ -1590,7 +1586,7 @@ module ActionResolver =
         currentTarget <- { currentTarget with Armor = currentTarget.Armor.Shred 25 }
         off, def, 1.50, disp, upd
 
-      | TraumaAttack CoerciveBargain ->
+      | TraumaAttack AcumenGambit ->
         let off = currentActor.GetCombatStat Acumen
         let rawDef = currentTarget.GetGuard(plane, true)
         let def = resolveMentalDefense rawDef
@@ -1604,7 +1600,7 @@ module ActionResolver =
         currentActor <- { currentActor with Health = currentActor.Health.ApplyDelta 25 }
         off, def, 1.15, disp, upd
 
-      | TraumaAttack ApathyDoldrums ->
+      | TraumaAttack FortitudeGambit ->
         let off = currentActor.GetCombatStat Fortitude
         let rawDef = currentTarget.GetGuard(plane, true)
         let def = resolveMentalDefense rawDef
@@ -1616,7 +1612,7 @@ module ActionResolver =
               Exhaustion = m.Exhaustion + 8 }
         off, def, 0.70, disp, upd
 
-      | TraumaAttack SereneResolution ->
+      | TraumaAttack ComposureGambit ->
         let off = currentActor.GetCombatStat Composure
         let rawDef = (currentTarget.GetCombatStat Fortitude + currentTarget.GetCombatStat Resolve) / 2
         let def = resolveMentalDefense rawDef

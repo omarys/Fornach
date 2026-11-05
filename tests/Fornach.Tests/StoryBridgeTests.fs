@@ -17,7 +17,7 @@ let private createTestPlayer () =
         StatId.Prowess, 50
         StatId.Poise, 50 ]
 
-  Combatant.create (CombatantId.New()) "Protagonist" 150 150 stats
+  Combatant.create (CombatantId.New()) "PlayerCharacter" 150 150 stats
 
 [<Fact>]
 let ``StoryRunner properly invokes bound F# callbacks when stepping through Ink knots``
@@ -426,7 +426,7 @@ let ``Denial Phase Shift gambit conjures a mirror clone and inflicts confusion``
   let target = createTestPlayer ()
   let initialClones = actor.MirrorClones
 
-  let result = ActionResolver.resolve roller (StandardAttack (TraumaAttack DenialPhaseShift)) actor target
+  let result = ActionResolver.resolve roller (StandardAttack (TraumaAttack FinesseGambit)) actor target
   Assert.Equal(initialClones + 1, result.Actor.MirrorClones)
   Assert.True(result.Target.Meters.Confusion.Value > target.Meters.Confusion.Value)
 
@@ -436,7 +436,7 @@ let ``Basalt Eruption gambit smashes target armor and inflicts overwhelm`` () =
   let actor = StoryBosses.createEnemy "anger_aspect"
   let target = { (createTestPlayer ()) with Armor = ArmorIntegrity.Create 50 }
 
-  let result = ActionResolver.resolve roller (StandardAttack (TraumaAttack BasaltEruption)) actor target
+  let result = ActionResolver.resolve roller (StandardAttack (TraumaAttack ForceGambit)) actor target
   Assert.True(result.Target.Armor.Current <= 25)
   Assert.True(result.Target.Meters.Frustration.Value > 0)
   Assert.True(result.Actor.Meters.Recklessness.Value > actor.Meters.Recklessness.Value)
@@ -448,7 +448,7 @@ let ``Coercive Bargain drains target morale to restore actor vitality and inflic
   let target = createTestPlayer ()
   let initialTargetMorale = target.Morale.Current
 
-  let result = ActionResolver.resolve roller (StandardAttack (TraumaAttack CoerciveBargain)) actor target
+  let result = ActionResolver.resolve roller (StandardAttack (TraumaAttack AcumenGambit)) actor target
   Assert.True(result.Target.Morale.Current < initialTargetMorale)
   Assert.True(result.Actor.Health.Current > 100)
   Assert.True(result.Target.Meters.Provoke.Value > 0)
@@ -459,7 +459,7 @@ let ``Apathy Doldrums inflicts heavy cognitive fatigue and a survivable exhausti
   let actor = StoryBosses.createEnemy "depression_aspect"
   let target = createTestPlayer ()
 
-  let result = ActionResolver.resolve roller (StandardAttack (TraumaAttack ApathyDoldrums)) actor target
+  let result = ActionResolver.resolve roller (StandardAttack (TraumaAttack FortitudeGambit)) actor target
   Assert.True(result.Target.Meters.CognitiveFatigue.Value >= 40)
   // Exhaustion stays modest on purpose: at the old 25 a Depression fight hit 100 by round 3 and
   // executed the player regardless of how it was played.
@@ -471,7 +471,7 @@ let ``Serene Resolution calms recklessness to zero and restores morale to both c
   let actor = { (StoryBosses.createEnemy "acceptance_aspect") with Meters = { StatusMeters.Zero with Recklessness = Meter.Create 30 }; Morale = { Current = 200; Maximum = 500 } }
   let target = { (createTestPlayer ()) with Meters = { StatusMeters.Zero with Recklessness = Meter.Create 40 }; Morale = { Current = 50; Maximum = 150 } }
 
-  let result = ActionResolver.resolve roller (StandardAttack (TraumaAttack SereneResolution)) actor target
+  let result = ActionResolver.resolve roller (StandardAttack (TraumaAttack ComposureGambit)) actor target
   Assert.Equal(0, result.Actor.Meters.Recklessness.Value)
   Assert.Equal(0, result.Target.Meters.Recklessness.Value)
   Assert.True(result.Actor.Morale.Current >= 250)
@@ -487,19 +487,19 @@ let ``AI accurately selects thematic trauma gambits for each Grief Aspect`` () =
   let target = createTestPlayer ()
 
   let denialIntent = AI.chooseIntentUsing Policies.all denial target
-  Assert.Equal(StandardAttack (TraumaAttack DenialPhaseShift), denialIntent)
+  Assert.Equal(StandardAttack (TraumaAttack FinesseGambit), denialIntent)
 
   let angerIntent = AI.chooseIntentUsing Policies.all anger target
-  Assert.Equal(StandardAttack (TraumaAttack BasaltEruption), angerIntent)
+  Assert.Equal(StandardAttack (TraumaAttack ForceGambit), angerIntent)
 
   let bargainingIntent = AI.chooseIntentUsing Policies.all bargaining target
-  Assert.Equal(StandardAttack (TraumaAttack CoerciveBargain), bargainingIntent)
+  Assert.Equal(StandardAttack (TraumaAttack AcumenGambit), bargainingIntent)
 
   let depressionIntent = AI.chooseIntentUsing Policies.all depression target
-  Assert.Equal(StandardAttack (TraumaAttack ApathyDoldrums), depressionIntent)
+  Assert.Equal(StandardAttack (TraumaAttack FortitudeGambit), depressionIntent)
 
   let acceptanceIntent = AI.chooseIntentUsing Policies.all acceptance target
-  Assert.Equal(StandardAttack (TraumaAttack SereneResolution), acceptanceIntent)
+  Assert.Equal(StandardAttack (TraumaAttack ComposureGambit), acceptanceIntent)
 
 [<Fact>]
 let ``every Grief Aspect names a policy the story table resolves`` () =
@@ -539,7 +539,7 @@ let ``the engine fights a Grief Aspect generically when no policy table is suppl
 
   let target = createTestPlayer ()
   Assert.Equal(StandardAttack (AcumenInterrogation true), AI.chooseIntent denial target)
-  Assert.Equal(StandardAttack (TraumaAttack DenialPhaseShift), AI.chooseIntentUsing Policies.all denial target)
+  Assert.Equal(StandardAttack (TraumaAttack FinesseGambit), AI.chooseIntentUsing Policies.all denial target)
 
 [<Fact>]
 let ``boss gear contributes its pools but not its percentages or recklessness delta`` () =
@@ -552,3 +552,25 @@ let ``boss gear contributes its pools but not its percentages or recklessness de
 
   let acceptance = StoryBosses.createEnemy "acceptance"
   Assert.Equal(7500, acceptance.Morale.Current) // authored 4100 + linen MoraleBonus 900
+
+[<Fact>]
+let ``every trauma gambit is named for its stat in the engine and for its Aspect in the CLI`` () =
+  // The engine calls each press after the stat it contests; the player reads the Aspect's name. The two
+  // vocabularies meet only in `Display.gambitDisplayName`, so this pins the meeting points rather than the
+  // strings: a rename on either side that forgets the other fails here instead of in a fight.
+  let gambits =
+    [ FinesseGambit, "Finesse", "Denial Phase Shift"
+      ForceGambit, "Force", "Basalt Eruption"
+      AcumenGambit, "Acumen", "Coercive Bargain"
+      FortitudeGambit, "Fortitude", "Apathy Doldrums"
+      ComposureGambit, "Composure", "Serene Resolution" ]
+  for gambit, stat, storyName in gambits do
+    Assert.Equal(stat, gambit.Name)
+    Assert.Equal(sprintf "Trauma Gambit: %s" stat, gambit.Label)
+    Assert.Equal(storyName, Display.gambitDisplayName gambit.Label)
+
+[<Fact>]
+let ``a gambit name the CLI does not know is shown under the engine's own label`` () =
+  // Ordinary gambits are declared with their own name already, so the trauma table must not swallow them.
+  Assert.Equal("Social Gambit: Imperious Demand", Display.gambitDisplayName "Social Gambit: Imperious Demand")
+  Assert.Equal("", Display.gambitDisplayName "")

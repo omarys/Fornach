@@ -25,7 +25,7 @@ module StorySpatialTests =
           StatId.Intuition, 60
           StatId.Acumen, 60
           StatId.Composure, 60 ]
-    Combatant.create (CombatantId.New()) "Protagonist" 250 250 stats
+    Combatant.create (CombatantId.New()) "PlayerCharacter" 250 250 stats
 
   [<Fact>]
   let ``Story Mode Stage 1 opens in a rain-soaked forest with the shivering boy, grinding mobs, and the Bandit Leader`` () =

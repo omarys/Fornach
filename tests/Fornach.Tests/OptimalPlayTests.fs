@@ -59,7 +59,7 @@ module OptimalPlayer =
 
   /// The five grief gambits are psychological, so they belong to the mental pool.
   let traumaGambits =
-    [ DenialPhaseShift; BasaltEruption; CoerciveBargain; ApathyDoldrums; SereneResolution ]
+    [ FinesseGambit; ForceGambit; AcumenGambit; FortitudeGambit; ComposureGambit ]
 
   let poolFor (solo: Combatant) =
     if solo.Plane = Physical then

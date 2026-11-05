@@ -162,15 +162,15 @@ module Program =
     elif choice.Contains("Deploy Prep: Socratic Dossier") then
       DeployPreparation (PreparationType.SocraticDossier, None)
     elif choice.Contains("Denial Phase Shift") then
-      StandardAttack (TraumaAttack DenialPhaseShift)
+      StandardAttack (TraumaAttack FinesseGambit)
     elif choice.Contains("Basalt Eruption") then
-      StandardAttack (TraumaAttack BasaltEruption)
+      StandardAttack (TraumaAttack ForceGambit)
     elif choice.Contains("Coercive Bargain") then
-      StandardAttack (TraumaAttack CoerciveBargain)
+      StandardAttack (TraumaAttack AcumenGambit)
     elif choice.Contains("Apathy Doldrums") then
-      StandardAttack (TraumaAttack ApathyDoldrums)
+      StandardAttack (TraumaAttack FortitudeGambit)
     elif choice.Contains("Serene Resolution") then
-      StandardAttack (TraumaAttack SereneResolution)
+      StandardAttack (TraumaAttack ComposureGambit)
     elif choice.Contains("Thread Form: Resonance Spike") then
       ThreadComplexForm ComplexForm.ResonanceSpike
     elif choice.Contains("Thread Form: Phantasmal Diffusion") then

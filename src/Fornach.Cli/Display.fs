@@ -402,6 +402,24 @@ module Display =
 
   /// Formats an autonomous combatant's telegraphed action intent into:
   /// (title: string, description: string, counterplayTip: string, vectorTag: string)
+  /// The engine names a gambit for the stat it contests; the story names it for the Aspect that commits
+  /// to it. This table is the only place the two vocabularies meet, so either side can be renamed without
+  /// the other noticing.
+  let private traumaGambitStoryNames : (string * string) list =
+    [ FinesseGambit.Label, "Denial Phase Shift"
+      ForceGambit.Label, "Basalt Eruption"
+      AcumenGambit.Label, "Coercive Bargain"
+      FortitudeGambit.Label, "Apathy Doldrums"
+      ComposureGambit.Label, "Serene Resolution" ]
+
+  /// Renders a gambit name carried by a combat event as the story names it, leaving anything it does not
+  /// recognise untouched -- ordinary gambits are already named by their own declaration.
+  let gambitDisplayName (engineName: string) : string =
+    traumaGambitStoryNames
+    |> List.tryFind (fun (engineLabel, _) -> engineLabel = engineName)
+    |> Option.map snd
+    |> Option.defaultValue engineName
+
   let formatTelegraphedIntent (intent: ActionIntent) (actor: Combatant) : string * string * string * string =
     match intent with
     | StandardAttack atk ->
@@ -531,27 +549,27 @@ module Display =
         "Channeling the staff to drain morale and siphon mental clarity.",
         "Interrupt or break engagement.",
         "Discipline"
-      | TraumaAttack BasaltEruption ->
+      | TraumaAttack ForceGambit ->
         sprintf "🌋 [bold %s]TRAUMA GAMBIT: Basalt Eruption[/]" Theme.Red,
         "Volcanic rage swelling to pulverize armor and flesh!",
         sprintf "Evade or interrupt with [bold %s]Shield Bash[/]!" Theme.Cyan,
         "Power"
-      | TraumaAttack DenialPhaseShift ->
+      | TraumaAttack FinesseGambit ->
         sprintf "🌫️ [bold %s]TRAUMA GAMBIT: Denial Phase Shift[/]" Theme.Green,
         "Shifting phase through phantasmal decoys!",
         "Discipline containment or keen focus.",
         "Agility"
-      | TraumaAttack CoerciveBargain ->
+      | TraumaAttack AcumenGambit ->
         sprintf "⚖️ [bold %s]TRAUMA GAMBIT: Coercive Bargain[/]" Theme.Purple,
         "Enforcing a predatory psychic contract to drain Morale!",
         "Break contract with relentless force.",
         "Discipline"
-      | TraumaAttack ApathyDoldrums ->
+      | TraumaAttack FortitudeGambit ->
         sprintf "⚓ [bold %s]TRAUMA GAMBIT: Apathy Doldrums[/]" Theme.Comment,
         "Drowning focus in numbing cognitive apathy!",
         "Venting breath or steeled resolve.",
         "Discipline"
-      | TraumaAttack SereneResolution ->
+      | TraumaAttack ComposureGambit ->
         sprintf "🕊️ [bold %s]Pacifist Release: Serene Resolution[/]" Theme.Cyan,
         "Accepting the inevitable, calming all turbulent entropy.",
         "Hold your ground.",
@@ -909,7 +927,7 @@ module Display =
         AnsiConsole.MarkupLine(sprintf "  [bold %s]>> PASSIVE:[/] Vital Opening! Dealt [bold %s]+%d %s bonus damage[/]!" Theme.Yellow Theme.Yellow bonusDmg plStr)
 
     | CombatEvent.GambitDeclared (_, name, cost) ->
-      AnsiConsole.MarkupLine(sprintf "  [bold %s]⚡ GAMBIT DECLARED:[/] [bold underline %s]%s[/] (+%d Recklessness)" Theme.Orange Theme.Orange name cost)
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]⚡ GAMBIT DECLARED:[/] [bold underline %s]%s[/] (+%d Recklessness)" Theme.Orange Theme.Orange (gambitDisplayName name) cost)
 
     | CombatEvent.GambitPunished (_, reason) ->
       AnsiConsole.MarkupLine(sprintf "  [bold %s]✖ GAMBIT PUNISHED:[/] %s" Theme.Red reason)
@@ -973,7 +991,7 @@ module Display =
       AnsiConsole.MarkupLine(sprintf "  [bold %s]⚡ CHAIN FLOW #%d:[/] Disciplined cadence flowed into adjacent target for [bold %s]%d damage[/]! (0 Recklessness)" Theme.Purple step Theme.Red dmg)
 
     | CombatEvent.ArcaneStrainIncurred (_, spellName, strain, profPct) ->
-      AnsiConsole.MarkupLine(sprintf "  [bold %s]⚡ ARCANE STRAIN:[/] Off-specialization cast of [bold underline %s]%s[/] (%d%% proficiency) caused [bold %s]+%d Cognitive Fatigue[/]!" Theme.Purple Theme.Cyan spellName profPct Theme.Purple strain)
+      AnsiConsole.MarkupLine(sprintf "  [bold %s]⚡ ARCANE STRAIN:[/] Off-specialization cast of [bold underline %s]%s[/] (%d%% proficiency) caused [bold %s]+%d Cognitive Fatigue[/]!" Theme.Purple Theme.Cyan (gambitDisplayName spellName) profPct Theme.Purple strain)
 
     | CombatEvent.MirrorClonesConjured (_, count, total) ->
       AnsiConsole.MarkupLine(sprintf "  [bold %s]🪞 MIRROR ILLUSION:[/] Conjured [bold %s]+%d phantasmal mirror decoys[/] (Total Active: [bold %s]%d[/])." Theme.Purple Theme.Cyan count Theme.Purple total)

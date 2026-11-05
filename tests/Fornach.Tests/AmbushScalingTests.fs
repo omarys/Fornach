@@ -20,7 +20,7 @@ let private best (a: Combatant) (d: Combatant) =
 /// they are fought - otherwise a first-floor ambush is unwinnable rather than hard.
 /// The ambush duel is handed straight to group combat from the spawn event, so it never passes
 /// through enemiesAggroed and never sees the engage-time clamp. Three level-20 Blight Sprites used
-/// to land ApathyDoldrums on a level-2 player and collapse them (Cognitive Fatigue) in one round.
+/// to land FortitudeGambit on a level-2 player and collapse them (Cognitive Fatigue) in one round.
 [<Fact>]
 let ``ambush spawns are clamped to the player's level`` () =
     let player = playerAt 3

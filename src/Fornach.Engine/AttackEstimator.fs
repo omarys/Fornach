@@ -29,10 +29,10 @@ module AttackEstimator =
       match attack with
       | ForceStrike _
       | ForceInsightStrike
-      | TraumaAttack BasaltEruption -> { actor with Stance = CombatStance.PowerStance }
+      | TraumaAttack ForceGambit -> { actor with Stance = CombatStance.PowerStance }
       | FinesseCadence _
       | FinesseInsightStrike
-      | TraumaAttack DenialPhaseShift -> { actor with Stance = CombatStance.AgilityStance }
+      | TraumaAttack FinesseGambit -> { actor with Stance = CombatStance.AgilityStance }
       | ProwessStrike _
       | CalculatedFlawStrike
       | MasterfulDisarm _ -> { actor with Stance = CombatStance.DisciplineStance }
@@ -47,7 +47,7 @@ module AttackEstimator =
       | SynapticGlamour _
       | MirrorIllusion _
       | GuileDeception _
-      | TraumaAttack DenialPhaseShift ->
+      | TraumaAttack FinesseGambit ->
         { actor with
             ComplexForm = Some ComplexForm.PhantasmalDiffusion
             Stance = CombatStance.AgilityStance }
@@ -55,7 +55,7 @@ module AttackEstimator =
       | DisorientingShockwave _
       | StaffSiphon
       | AcumenInterrogation _
-      | TraumaAttack (CoerciveBargain | ApathyDoldrums | SereneResolution) ->
+      | TraumaAttack (AcumenGambit | FortitudeGambit | ComposureGambit) ->
         { actor with
             ComplexForm = Some ComplexForm.AegisLattice
             Stance = CombatStance.DisciplineStance }
