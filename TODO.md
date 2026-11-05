@@ -1,6 +1,6 @@
 # TODO List
 
-**Status:** 631 tests green (359 `Fornach.Tests` + 249 `Fornach.Domain.Tests` + 23 `Fornach.Spatial.Tests`), 0 warnings.
+**Status:** 648 tests green (370 `Fornach.Tests` + 251 `Fornach.Domain.Tests` + 27 `Fornach.Spatial.Tests`), 0 warnings.
 
 This file tracks **only open work**. Completed items — the archetype evaluation, the six §1 iteration priorities, the combat pacing work, the bestiary subsystem, the encounter engine, the tempo system and everything through `d4dbf47` — are recorded in [`docs/agents/domain.md`](file:///home/omary/Dev/fornach/docs/agents/domain.md) §1 (what was built) and §5 (the numbered ledger). The numbers in parentheses below are that ledger's item numbers; this file must not invent a second numbering.
 
@@ -10,18 +10,11 @@ This file tracks **only open work**. Completed items — the archetype evaluatio
 
 ### Feature Work
 
-- [ ] **Spatial Grid Integration** (§5 item 3):
-  - FOV is **wired** — [`Vision.fs`](file:///home/omary/Dev/fornach/src/Fornach.Domain/Vision.fs) computes a dilated arc and `TowerSession.updateFov` runs it per move.
-  - Directional flanking is **wired** — `Fornach.Spatial.Flanking` classifies each foe's approach against the player's facing, and `TowerSession.flankOf` feeds a damage multiplier (Front 1.0 / Flank 1.15 / Rear 1.30) into every enemy strike in the pack duel.
-  - Still open: grid pathfinding is **not** connected to turn resolution.
-
-- [ ] **Infinite Tower Boss Scaling** (§5 item 2) — verified, and the scaling is sound; the **tuning** is not.
+- [ ] **Infinite Tower Boss Scaling** (§5 item 2) — scaling and tuning are both verified sound now; what remains open is **boss gear**.
   - The scaling works. `scaleToStage` ([`Bosses.fs:329`](file:///home/omary/Dev/fornach/src/Fornach.Domain/Bosses.fs)) normalises the level-40-authored block down to `ProgressionScale.storyGuardianLevel floor`, then `TowerSession.rescaleFloorEnemiesWith` lifts the boss to `player.Level + 10` (`floorScalingFor` returns `bossOffset = 10`). Measured: a level-6 player on story floor 2 meets Aspect of Guilt at **Lv.16, HP 3002, Force 113** — not the authored Lv.1/HP 2800/Force 210 block.
   - `StoryBosses.createEnemy` ([`StoryRunner.fs:92`](file:///home/omary/Dev/fornach/src/Fornach.Story/StoryRunner.fs)) returns the unscaled authored block at `Level = 1`, and `StoryEvent.CombatInitiated` has **no consumer anywhere in the CLI** — combat is driven by `TowerEvent.GroupCombatTriggered` from the rescaled floor. So that factory is test-only; `StoryBridgeTests` asserting the authored constants is correct, not a bug.
-  - **Win rates** (240 simulated duels, prepared Warrior with the prologue kit at `storyGuardianLevel`, 40 seeds each, via `runPreparedGroupMatchWith`): Guilt **70%** (9 rounds), Denial **90%** (3), Anger **15%** (2), Bargaining **100%** (3), Depression **22%** (1), Acceptance **97%** (2). All wins are `HealthDepleted`; losses are `HealthDepleted` or `MoraleDepleted`.
-  - **Two bosses are lethal, three are trivial, and one is tuned.** Anger (Force 298) and Depression kill the player in one to two rounds — Depression drains Morale outright (31 of 40 losses are `MoraleDepleted`). Bargaining and the *final* boss Acceptance die in two to three rounds against pools of 16K and 27K, which is the solo's per-round swing count outrunning boss pools rather than a fight. Only Guilt reads as an exchange, and it loses to `ExecutionFinisher Physical`.
-  - **Cause of the spread**: `scaleToStage` multiplies pools by an extra `toughness = 2.0` while stats stay on the curve, so a boss that wins the stat race one-shots, and a boss that loses it melts. The `+10` level offset is uniform, so it cannot differentiate them. Retuning needs a per-Aspect pool/stat decision, not a global dial — this is a design call, not a bug fix.
-  - **Boss gear is half-applied.** No boss calls `applyItemBonus`; each assigns `EquippedItems` directly ([`Bosses.fs:48,108,157,206,254,316`](file:///home/omary/Dev/fornach/src/Fornach.Domain/Bosses.fs)), and `applyItemBonus` has exactly one call site, the fold in `createProloguePlayer` (`:515`). So `HealthBonus` / `MoraleBonus` / `StatPercentBonuses` / `StartingRecklessnessDelta` on boss gear are **inert** (Depression's `HealthBonus = 600` and `MoraleBonus = 400` do nothing), while the `Triggers` lists **do** fire because `ActionResolver` reads `EquippedItems` live at [`ActionResolver.fs:432,448`](file:///home/omary/Dev/fornach/src/Fornach.Engine/ActionResolver.fs). Fixing this changes every boss's pools, so it belongs with the retune above.
+  - **Resolved in `d828607`** — the spread was never the boss pools. Per-action Exhaustion (`12 + disparity/4`, five sites in `ActionResolver.fs`) plus `ApathyDoldrums` (`+25`) broke the player's *own* meter, and Exhaustion 100 forces the next defense into a Collapse, which is an ExecutionFinisher — so any fight past a few rounds executed the player whatever the boss's stats were. Three successive boss stat cuts produced byte-identical results, which is what identified the meter rather than the block. Halving the per-action cost and `ApathyDoldrums` 25 → 8 put all six Aspects in band.
+  - **Boss gear is half-applied.** No boss calls `applyItemBonus`; each assigns `EquippedItems` directly ([`Bosses.fs:48,108,157,206,254,316`](file:///home/omary/Dev/fornach/src/Fornach.Domain/Bosses.fs)), and `applyItemBonus` has exactly one call site, the fold in `createProloguePlayer` (`:515`). So `HealthBonus` / `MoraleBonus` / `StatPercentBonuses` / `StartingRecklessnessDelta` on boss gear are **inert** (Depression's `HealthBonus = 600` and `MoraleBonus = 400` do nothing), while the `Triggers` lists **do** fire because `ActionResolver` reads `EquippedItems` live at [`ActionResolver.fs:432,448`](file:///home/omary/Dev/fornach/src/Fornach.Engine/ActionResolver.fs). Fixing it changes every boss's pools, so it needs its own measurement pass now that the tuning baseline is trustworthy.
   - Non-humanoid stat zeroing ([`Combatant.fs:186-188`](file:///home/omary/Dev/fornach/src/Fornach.Domain/Combatant.fs), ADR 0009) discards Guilt's authored `Prowess 160` / `Poise 185`; `GetGuard` falls back to raw Fortitude and `Frontage` stays 8. Intended, but worth knowing when reading the blocks.
   - Bosses never accrue guard stacks or ramp meters: `addStacks`/`addGuardStacks` no-op when `not c.PlayerStyle` ([`Combatant.fs:420-431`](file:///home/omary/Dev/fornach/src/Fornach.Domain/Combatant.fs)) and every boss is `PlayerStyle = false`. Their Nach-based guard accrual is structurally impossible, not merely slow.
 
@@ -65,5 +58,7 @@ Reference: [`docs/adr/0004-monster-bestiary-and-world-encounters.md`](file:///ho
 ---
 
 ## Recently Closed — Do Not Re-Report
+
+- **Spatial Grid Integration** (§5 item 3) — complete. FOV was already wired; directional flanking landed in `721376a`; and grid pathfinding was **already** wired through `TowerSession.stepEnemies` calling `Pathfinding.aStar`, covered by `EnemyMovementTests`, `PursuitPaceTests`, `ChokepointTests` and `AmbushTempoTests`. The "pathfinding is not connected" claim was stale — do not re-open it.
 
 The initiative deadlocks from the first-floor Blight Sprite ambush are fixed: a declared guard is no longer discarded when the opponent braces instead of striking (`bb811ce`), a pack that collapsed or died surrenders the uncontested Vor (`d4dbf47`), and two earlier deadlocks in the same exchange are closed by `c4850e0` and `f4ed026`. Guards: `tests/Fornach.Tests/TempoDeadlockTests.fs`, `TempoReclaimTests.fs`.
