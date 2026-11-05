@@ -57,9 +57,13 @@ module ActionResolver =
   /// is soft to a caster's art it has never met; it is not soft to a knife-fighter's trick. Handing the
   /// relief to every mental strike provoked enemies into Recklessness instead — which buffs the provoked
   /// party — and cost the Rogue a third of its tower climb.
+  ///
+  /// "Is this the player?" is answered by `PlayerStyle`, the flag the ramp and the estimator already read,
+  /// rather than by the protagonist's name: the story's climber is built on a generic class, so the class
+  /// alone would defend it as an enemy.
   let resolveMentalDefenseFor (attacker: Combatant) (target: Combatant) (rawDef: int) : int =
     let multiplier =
-      if (target.Class.IsPlayerClass || target.Name = "PlayerCharacter") && target.MonsterFamily.IsNone then
+      if (target.Class.IsPlayerClass || target.PlayerStyle) && target.MonsterFamily.IsNone then
         if target.Plane = Physical then
           // Melee player classes are braced against mental blowouts; magic users less so.
           if target.Class = CharacterClass.Fighter then 1.25 else 1.10

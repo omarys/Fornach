@@ -574,3 +574,16 @@ let ``a gambit name the CLI does not know is shown under the engine's own label`
   // Ordinary gambits are declared with their own name already, so the trauma table must not swallow them.
   Assert.Equal("Social Gambit: Imperious Demand", Display.gambitDisplayName "Social Gambit: Imperious Demand")
   Assert.Equal("", Display.gambitDisplayName "")
+
+[<Fact>]
+let ``the player's mental guard is recognised by PlayerStyle and not by its name`` () =
+  // The story's climber is built on a generic class, so `Class.IsPlayerClass` cannot see it and the rule
+  // used to fall back to the name "PlayerCharacter" -- which braced any combatant that happened to share
+  // it. `PlayerStyle` is the flag the ramp and the estimator already read, so the name test is gone.
+  let caster = { createTestPlayer () with Class = CharacterClass.Mage } // attacker on the mental plane
+  let player = { createTestPlayer () with PlayerStyle = true } // generic class, physical plane
+  let sameStatsAsAMob = { player with PlayerStyle = false }
+  // Player branch: a generic physical-plane climber takes 1.10 of the raw defence.
+  Assert.Equal(110, ActionResolver.resolveMentalDefenseFor caster player 100)
+  // Enemy branch at level 1 takes 0.70. Carrying the player's name must buy nothing.
+  Assert.Equal(70, ActionResolver.resolveMentalDefenseFor caster sameStatsAsAMob 100)
