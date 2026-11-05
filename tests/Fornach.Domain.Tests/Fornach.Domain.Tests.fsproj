@@ -31,6 +31,7 @@
     <Compile Include="TempoReclaimTests.fs" />
     <Compile Include="GuardRampTests.fs" />
     <Compile Include="FlankDamageTests.fs" />
+    <Compile Include="BossTuningTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

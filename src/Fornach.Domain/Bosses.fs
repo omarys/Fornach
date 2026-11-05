@@ -7,6 +7,40 @@ module StoryBosses =
   /// Folds a boss's kit the way the player's kit is folded. Bosses used to assign `EquippedItems`
   /// directly, which skipped `HealthBonus`, `MoraleBonus` and `StatPercentBonuses` outright - only the
   /// `Triggers` ever fired, because the resolver reads equipped gear live at damage time.
+  /// Every stat the potency dial can touch. Scaling the whole block rather than one stat keeps the
+  /// dial honest: an aspect's offense and its guard are both functions of the same authored line.
+  let private allStats =
+    [ StatId.Force
+      StatId.Finesse
+      StatId.Prowess
+      StatId.Fortitude
+      StatId.Poise
+      StatId.Composure
+      StatId.Acumen
+      StatId.Intellect
+      StatId.Intuition
+      StatId.Acuity
+      StatId.Reflex
+      StatId.Resolve ]
+
+  /// The two per-aspect dials. `PoolFactor` sets how long the fight lasts; `PotencyFactor` sets whether
+  /// the aspect can actually kill. They are independent on purpose: sweeping pools alone proved that the
+  /// physical three could not lose at any pool size, and the mental three could not win at any pool size.
+  type AspectTuning = { PoolFactor: float; PotencyFactor: float }
+
+  let neutralTuning = { PoolFactor = 1.0; PotencyFactor = 1.0 }
+
+  let applyTuning (t: AspectTuning) (c: Combatant) : Combatant =
+    let pct = int (System.Math.Round((t.PotencyFactor - 1.0) * 100.0))
+
+    let grow (pool: Pool) =
+      pool.RaiseMaximum(int (float pool.Maximum * t.PoolFactor) - pool.Maximum)
+
+    { c with
+        Stats = if pct = 0 then c.Stats else c.Stats.ApplyPercentBonuses [ for s in allStats -> s, pct ]
+        Health = grow c.Health
+        Morale = grow c.Morale }
+
   let private equip (items: EquipmentItem list) (c: Combatant) : Combatant =
     items
     |> List.fold
