@@ -636,13 +636,13 @@ module ProlongedBattleTests =
     let opponent = createFighter 45 40 25 25 30 30
 
     // 1-on-1 duel: stays in Power Stance (highest stat is Force)
-    let duelIntent = Fornach.Cli.AI.chooseIntent grandmaster opponent
+    let duelIntent = Fornach.Engine.AI.chooseIntent grandmaster opponent
     match duelIntent with
     | StandardAttack (ForceStrike _) -> ()
     | other -> Assert.Fail(sprintf "Expected ForceStrike in 1v1 duel, got %A" other)
 
     // Outnumbered (5 opponents): AI recognizes swarm and shifts to Discipline Stance!
-    let swarmIntent = Fornach.Cli.AI.chooseIntentWithContext grandmaster opponent 5
+    let swarmIntent = Fornach.Engine.AI.chooseIntentWithContext grandmaster opponent 5
     match swarmIntent with
     | ShiftStance CombatStance.DisciplineStance -> ()
     | other -> Assert.Fail(sprintf "Expected ShiftStance DisciplineStance when outnumbered, got %A" other)

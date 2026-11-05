@@ -13,6 +13,7 @@
     <Compile Include="ActionResolver.fs" />
     <Compile Include="AttackEstimator.fs" />
     <Compile Include="CombatLogger.fs" />
+    <Compile Include="AI.fs" />
     <Compile Include="WorldEvents.fs" />
     <Compile Include="TowerGenerator.fs" />
     <Compile Include="TowerSession.fs" />

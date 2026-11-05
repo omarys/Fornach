@@ -8,7 +8,6 @@
   <ItemGroup>
     <Compile Include="Types.fs" />
     <Compile Include="Archetypes.fs" />
-    <Compile Include="AI.fs" />
     <Compile Include="Theme.fs" />
     <Compile Include="EnvironmentScenes.fs" />
     <Compile Include="Display.fs" />

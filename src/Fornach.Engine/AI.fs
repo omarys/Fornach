@@ -1,4 +1,4 @@
-namespace Fornach.Cli
+namespace Fornach.Engine
 
 open System
 open Fornach.Domain
