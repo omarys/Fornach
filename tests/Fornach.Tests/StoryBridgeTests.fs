@@ -170,10 +170,10 @@ let ``Winning combat encounter advances story to post_combat and awards shattere
 let ``StoryBosses resolves all 5 Grief Aspects with correct stances and pools`` () =
   let testCases =
     [ ("denial_aspect", "Aspect of Denial", CombatStance.AgilityStance, 2600)
-      ("anger_aspect", "Aspect of Anger", CombatStance.PowerStance, 3300)
-      ("bargaining_aspect", "Aspect of Bargaining", CombatStance.DisciplineStance, 3100)
-      ("depression_aspect", "Aspect of Depression", CombatStance.DisciplineStance, 3800)
-      ("acceptance_aspect", "Aspect of Acceptance", CombatStance.DisciplineStance, 4400) ]
+      ("anger_aspect", "Aspect of Anger", CombatStance.PowerStance, 3800)
+      ("bargaining_aspect", "Aspect of Bargaining", CombatStance.DisciplineStance, 3400)
+      ("depression_aspect", "Aspect of Depression", CombatStance.DisciplineStance, 4400)
+      ("acceptance_aspect", "Aspect of Acceptance", CombatStance.DisciplineStance, 4800) ]
 
   for (enemyId, expectedName, expectedStance, expectedHealth) in testCases do
     let boss = StoryBosses.createEnemy enemyId
@@ -210,7 +210,7 @@ let ``Acceptance Aspect initializes with equilibrium meters and high resolve`` (
   let acceptance = StoryBosses.createEnemy "acceptance"
   Assert.Equal(0, acceptance.Meters.Recklessness.Value)
   Assert.Equal(0, acceptance.Meters.CognitiveFatigue.Value)
-  Assert.Equal(4100, acceptance.Morale.Current)
+  Assert.Equal(5000, acceptance.Morale.Current)
   Assert.True(acceptance.Stats.Get StatId.Resolve >= 90)
 
 [<Fact>]
@@ -499,3 +499,15 @@ let ``AI accurately selects thematic trauma gambits for each Grief Aspect`` () =
 
   let acceptanceIntent = AI.chooseIntent acceptance target
   Assert.Equal(StandardAttack (TraumaAttack SereneResolution), acceptanceIntent)
+
+[<Fact>]
+let ``boss gear contributes its pools but not its percentages or recklessness delta`` () =
+  // Bosses assigned `EquippedItems` directly, so no gear bonus ever landed. Folding the whole kit is
+  // wrong in the other direction: +67% Force on a block already authored as a final stat line took
+  // three aspects to a one-round kill. Only the additive pools are folded.
+  let anger = StoryBosses.createEnemy "anger"
+  Assert.Equal(3800, anger.Health.Current) // authored 3300 + greatsword HealthBonus 500
+  Assert.Equal(45, anger.Meters.Recklessness.Value) // authored 45, NOT 45 + the greatsword's delta
+
+  let acceptance = StoryBosses.createEnemy "acceptance"
+  Assert.Equal(5000, acceptance.Morale.Current) // authored 4100 + linen MoraleBonus 900

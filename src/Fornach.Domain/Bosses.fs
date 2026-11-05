@@ -4,6 +4,20 @@ open System
 
 module StoryBosses =
   /// Creates the manifestation of Guilt and Hesitation encountered in the quarry pit.
+  /// Folds a boss's kit the way the player's kit is folded. Bosses used to assign `EquippedItems`
+  /// directly, which skipped `HealthBonus`, `MoraleBonus` and `StatPercentBonuses` outright - only the
+  /// `Triggers` ever fired, because the resolver reads equipped gear live at damage time.
+  let private equip (items: EquipmentItem list) (c: Combatant) : Combatant =
+    items
+    |> List.fold
+        (fun (acc: Combatant) it ->
+          // Only the pools are folded. An aspect's authored block is already its final stat and meter
+          // line, so gear percentages (+67% Force) roughly double a tuned gap, and a recklessness delta
+          // silently overrides a meter the block sets on purpose - Anger's authored 45 became 75, which
+          // changed which gambit the AI picks. Both are withheld; the additive pools are not.
+          Combatant.applyItemBonus { it with StatPercentBonuses = []; StartingRecklessnessDelta = 0 } acc)
+        { c with EquippedItems = items }
+
   let createGuiltAspect () : Combatant =
     let stats =
       StatBlock.Create
@@ -46,14 +60,15 @@ module StoryBosses =
         StartingRecklessnessDelta = 0
         Triggers = [] }
 
+
     { guilt with
         Armor = ArmorIntegrity.Create 150
-        EquippedItems = [ hammer; plate ]
         Stance = CombatStance.PowerStance
         Meters =
           { guilt.Meters with
               CognitiveFatigue = Meter.Create 25
               Recklessness = Meter.Create 15 } }
+    |> equip [ hammer; plate ]
 
   /// Creates the manifestation of Denial encountered in the Shrouded Grove.
   let createDenialAspect () : Combatant =
@@ -111,12 +126,12 @@ module StoryBosses =
     { denial with
         Armor = ArmorIntegrity.Create 120
         MirrorClones = 2
-        EquippedItems = [ daggers; veil; relic ]
         Stance = CombatStance.AgilityStance
         Meters =
           { denial.Meters with
               Confusion = Meter.Create 10
               Recklessness = Meter.Create 5 } }
+    |> equip [ daggers; veil; relic ]
 
   /// Creates the manifestation of Anger encountered in the Basalt Caldera.
   let createAngerAspect () : Combatant =
@@ -163,12 +178,12 @@ module StoryBosses =
 
     { anger with
         Armor = ArmorIntegrity.Create 170
-        EquippedItems = [ greatsword; carapace ]
         Stance = CombatStance.PowerStance
         Meters =
           { anger.Meters with
               Recklessness = Meter.Create 45
               Frustration = Meter.Create 40 } }
+    |> equip [ greatsword; carapace ]
 
   /// Creates the manifestation of Bargaining encountered at the Shattered Promontory.
   let createBargainingAspect () : Combatant =
@@ -215,11 +230,11 @@ module StoryBosses =
 
     { bargaining with
         Armor = ArmorIntegrity.Create 150
-        EquippedItems = [ rapier; cloak ]
         Stance = CombatStance.DisciplineStance
         Meters =
           { bargaining.Meters with
               Exhaustion = Meter.Create 20 } }
+    |> equip [ rapier; cloak ]
 
   /// Creates the manifestation of Depression encountered in the Sunken Metropolis.
   let createDepressionAspect () : Combatant =
@@ -266,12 +281,12 @@ module StoryBosses =
 
     { depression with
         Armor = ArmorIntegrity.Create 200
-        EquippedItems = [ anchor; shroud ]
         Stance = CombatStance.DisciplineStance
         Meters =
           { depression.Meters with
               CognitiveFatigue = Meter.Create 40
               Exhaustion = Meter.Create 30 } }
+    |> equip [ anchor; shroud ]
 
   /// Creates the manifestation of Acceptance encountered in the White Meadow.
   let createAcceptanceAspect () : Combatant =
@@ -331,9 +346,9 @@ module StoryBosses =
 
     { acceptance with
         Armor = ArmorIntegrity.Create 180
-        EquippedItems = [ staff; linen; relic ]
         Stance = CombatStance.DisciplineStance
         Meters = StatusMeters.Zero }
+    |> equip [ staff; linen; relic ]
 
   /// The stat magnitude the manifestations are authored at. Their blocks sit on the level-40
   /// (Veteran) curve: Guilt's Force 210 against the curve's 201, Acceptance's Resolve 310.
