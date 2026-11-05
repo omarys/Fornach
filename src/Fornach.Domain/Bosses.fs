@@ -21,7 +21,10 @@ module StoryBosses =
           StatId.Composure, 150 ]
 
     let id = CombatantId.New()
-    let guilt = { Combatant.create id "Aspect of Guilt" 2800 2400 stats with MonsterFamily = Some MonsterFamily.GriefManifestation }
+    let guilt =
+      { Combatant.create id "Aspect of Guilt" 2800 2400 stats with
+          MonsterFamily = Some MonsterFamily.GriefManifestation
+          MonsterTraits = [ StoicResistance 70 ] }
 
     let hammer =
       { Name = "Quarry Sledgehammer"
@@ -70,7 +73,10 @@ module StoryBosses =
           StatId.Composure, 155 ]
 
     let id = CombatantId.New()
-    let denial = { Combatant.create id "Aspect of Denial" 2600 2600 stats with MonsterFamily = Some MonsterFamily.GriefManifestation }
+    let denial =
+      { Combatant.create id "Aspect of Denial" 2600 2600 stats with
+          MonsterFamily = Some MonsterFamily.GriefManifestation
+          MonsterTraits = [ StoicResistance 70 ] }
 
     let daggers =
       { Name = "Twin Mirage Daggers"
@@ -130,7 +136,10 @@ module StoryBosses =
           StatId.Composure, 0 ] // Consumed by blind rage
 
     let id = CombatantId.New()
-    let anger = { Combatant.create id "Aspect of Anger" 3300 2200 stats with MonsterFamily = Some MonsterFamily.GriefManifestation }
+    let anger =
+      { Combatant.create id "Aspect of Anger" 3300 2200 stats with
+          MonsterFamily = Some MonsterFamily.GriefManifestation
+          MonsterTraits = [ StoicResistance 70 ] }
 
     let greatsword =
       { Name = "Slag-Forged Greatsword"
@@ -175,11 +184,14 @@ module StoryBosses =
           StatId.Resolve, 240
           StatId.Acuity, 250
           StatId.Intuition, 240
-          StatId.Acumen, 280 // Transactional, looking for any trade
+          StatId.Acumen, 200 // Transactional, looking for any trade
           StatId.Composure, 170 ]
 
     let id = CombatantId.New()
-    let bargaining = { Combatant.create id "Aspect of Bargaining" 3100 3200 stats with MonsterFamily = Some MonsterFamily.GriefManifestation }
+    let bargaining =
+      { Combatant.create id "Aspect of Bargaining" 3100 3200 stats with
+          MonsterFamily = Some MonsterFamily.GriefManifestation
+          MonsterTraits = [ StoicResistance 70 ] }
 
     let rapier =
       { Name = "Gale-Wind Rapier"
@@ -214,7 +226,7 @@ module StoryBosses =
     let stats =
       StatBlock.Create
         [ StatId.Force, 120
-          StatId.Fortitude, 310 // Heavy, unmoving waterlogged weight
+          StatId.Fortitude, 220 // Heavy, unmoving waterlogged weight
           StatId.Finesse, 90
           StatId.Reflex, 95
           StatId.Prowess, 140
@@ -223,11 +235,14 @@ module StoryBosses =
           StatId.Resolve, 320 // Impenetrable numbness
           StatId.Acuity, 100
           StatId.Intuition, 130
-          StatId.Acumen, 130
-          StatId.Composure, 280 ] // Cold, still waters
+          StatId.Acumen, 90
+          StatId.Composure, 140 ] // Cold, still waters
 
     let id = CombatantId.New()
-    let depression = { Combatant.create id "Aspect of Depression" 3800 3800 stats with MonsterFamily = Some MonsterFamily.GriefManifestation }
+    let depression =
+      { Combatant.create id "Aspect of Depression" 3800 2800 stats with
+          MonsterFamily = Some MonsterFamily.GriefManifestation
+          MonsterTraits = [ StoicResistance 70 ] }
 
     let anchor =
       { Name = "Anchor of Apathy"
@@ -237,7 +252,7 @@ module StoryBosses =
         HealthBonus = 0
         MoraleBonus = 0
         StartingRecklessnessDelta = -10
-        Triggers = [ OnHitLanded(fun _ -> [ InflictDebuff(false, "Exhaustion", 30) ]) ] }
+        Triggers = [ OnHitLanded(fun _ -> [ InflictDebuff(false, "Exhaustion", 3) ]) ] }
 
     let shroud =
       { Name = "Shroud of Still Waters"
@@ -247,7 +262,7 @@ module StoryBosses =
         HealthBonus = 600
         MoraleBonus = 400
         StartingRecklessnessDelta = 0
-        Triggers = [ OnDamageReceived(fun _ -> [ InflictDebuff(false, "Exhaustion", 15) ]) ] }
+        Triggers = [ OnDamageReceived(fun _ -> [ InflictDebuff(false, "Exhaustion", 2) ]) ] }
 
     { depression with
         Armor = ArmorIntegrity.Create 200
@@ -276,7 +291,10 @@ module StoryBosses =
           StatId.Composure, 300 ] // Peaceful harmony
 
     let id = CombatantId.New()
-    let acceptance = { Combatant.create id "Aspect of Acceptance" 4400 4100 stats with MonsterFamily = Some MonsterFamily.GriefManifestation }
+    let acceptance =
+      { Combatant.create id "Aspect of Acceptance" 4400 4100 stats with
+          MonsterFamily = Some MonsterFamily.GriefManifestation
+          MonsterTraits = [ StoicResistance 70 ] }
 
     let staff =
       { Name = "Unfinished Crossing Staff"

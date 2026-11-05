@@ -453,14 +453,16 @@ let ``Coercive Bargain drains target morale to restore actor vitality and inflic
   Assert.True(result.Target.Meters.Provoke.Value > 0)
 
 [<Fact>]
-let ``Apathy Doldrums inflicts heavy cognitive fatigue and exhaustion`` () =
+let ``Apathy Doldrums inflicts heavy cognitive fatigue and a survivable exhaustion tick`` () =
   let roller : DiceRoller = fun _ _ -> 3
   let actor = StoryBosses.createEnemy "depression_aspect"
   let target = createTestPlayer ()
 
   let result = ActionResolver.resolve roller (StandardAttack (TraumaAttack ApathyDoldrums)) actor target
   Assert.True(result.Target.Meters.CognitiveFatigue.Value >= 40)
-  Assert.True(result.Target.Meters.Exhaustion.Value >= 25)
+  // Exhaustion stays modest on purpose: at the old 25 a Depression fight hit 100 by round 3 and
+  // executed the player regardless of how it was played.
+  Assert.InRange(result.Target.Meters.Exhaustion.Value, 8, 15)
 
 [<Fact>]
 let ``Serene Resolution calms recklessness to zero and restores morale to both combatants`` () =

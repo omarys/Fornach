@@ -171,6 +171,10 @@ type MonsterTrait =
   | PsychicDoldrums of passiveCognitiveFatigue: int
   | MoltenAura of physicalBurn: int
   | ChillingPresence of exhaustionDrain: int
+  /// Damps the status-meter pressure a target takes from incoming strikes. Grief Aspects carry this
+  /// so the Exhaustion clock cannot collapse an authored multi-round fight in two rounds and bypass
+  /// its pools entirely (collapse makes the target executable, and execution ignores pools).
+  | StoicResistance of meterReductionPct: int
 
   member this.Name : string =
     match this with
@@ -183,3 +187,4 @@ type MonsterTrait =
     | PsychicDoldrums _ -> "Psychic Doldrums"
     | MoltenAura _ -> "Molten Aura"
     | ChillingPresence _ -> "Chilling Presence"
+    | StoicResistance _ -> "Stoic Resistance"

@@ -1223,10 +1223,10 @@ module ActionResolver =
         let ratio = float off / Math.Max(1.0, float def)
         let baseExhaust =
           if off >= def then
-            12 + ((off - def) / 4)
+            6 + ((off - def) / 4)
           else
             int (Math.Round(12.0 * Math.Pow(ratio, 2.0)))
-        let exhaust = fun isCrit -> baseExhaust + (if isCrit then 25 else 0)
+        let exhaust = fun isCrit -> baseExhaust + (if isCrit then 10 else 0)
         let disp = fun isCrit -> if isCrit then Some(CrushingBlow(exhaust true)) else None
 
         let upd isCrit (m: StatusMeters) =
@@ -1244,10 +1244,10 @@ module ActionResolver =
         let ratio = float off / Math.Max(1.0, float def)
         let baseExhaust =
           if off >= def then
-            12 + ((off - def) / 4)
+            6 + ((off - def) / 4)
           else
             int (Math.Round(12.0 * Math.Pow(ratio, 2.0)))
-        let exhaust = fun isCrit -> baseExhaust + (if isCrit then 25 else 0)
+        let exhaust = fun isCrit -> baseExhaust + (if isCrit then 10 else 0)
         let disp = fun isCrit -> if isCrit then Some(CrushingBlow(exhaust true)) else None
 
         let upd isCrit (m: StatusMeters) =
@@ -1267,7 +1267,7 @@ module ActionResolver =
         let ratio = float off / Math.Max(1.0, float def)
         let baseFrustration =
           if off >= def then
-            12 + ((off - def) / 4)
+            6 + ((off - def) / 4)
           else
             int (Math.Round(12.0 * Math.Pow(ratio, 2.0)))
         let overwhelm = fun isCrit -> baseFrustration + (if isCrit then 20 else 0)
@@ -1288,7 +1288,7 @@ module ActionResolver =
         let ratio = float off / Math.Max(1.0, float def)
         let baseFrustration =
           if off >= def then
-            12 + ((off - def) / 4)
+            6 + ((off - def) / 4)
           else
             int (Math.Round(12.0 * Math.Pow(ratio, 2.0)))
         let overwhelm = fun isCrit -> baseFrustration + (if isCrit then 20 else 0)
@@ -1313,7 +1313,7 @@ module ActionResolver =
         let ratio = float off / Math.Max(1.0, float def)
         let baseFrustrate =
           if off >= def then
-            12 + ((off - def) / 4)
+            6 + ((off - def) / 4)
           else
             int (Math.Round(12.0 * Math.Pow(ratio, 2.0)))
         let frustrate = fun isCrit -> baseFrustrate + (if isCrit then 25 else 0)
@@ -1600,7 +1600,7 @@ module ActionResolver =
         let upd isCrit (m: StatusMeters) =
           { m with
               CognitiveFatigue = m.CognitiveFatigue + 40 + (disparity / 10)
-              Exhaustion = m.Exhaustion + 25 }
+              Exhaustion = m.Exhaustion + 8 }
         off, def, 0.70, disp, upd
 
       | TraumaAttack SereneResolution ->
@@ -2505,8 +2505,35 @@ module ActionResolver =
       // Track Recklessness before updates for Neurotoxin check
       let reckBefore = currentTarget.Meters.Recklessness.Value
 
-      // Apply dynamic status meters to target
-      currentTarget <- Combatant.updateMeters (meterUpdates isCrit) currentTarget
+      // Apply dynamic status meters to target, damped by the target's meter resistance. Only the
+      // pressure added by this strike is damped; drains and pre-existing values pass through.
+      let meterFactor = currentTarget.MeterGainFactor
+
+      if meterFactor >= 1.0 then
+        currentTarget <- Combatant.updateMeters (meterUpdates isCrit) currentTarget
+      else
+        let before = currentTarget.Meters
+        let after = (meterUpdates isCrit) before
+
+        let damp (b: Meter) (a: Meter) =
+          let delta = a.Value - b.Value
+
+          if delta <= 0 then
+            a
+          else
+            Meter.Create(b.Value + int (Math.Round(float delta * meterFactor)))
+
+        currentTarget <-
+          Combatant.updateMeters
+            (fun _ ->
+              { after with
+                  Recklessness = damp before.Recklessness after.Recklessness
+                  Exhaustion = damp before.Exhaustion after.Exhaustion
+                  Frustration = damp before.Frustration after.Frustration
+                  CognitiveFatigue = damp before.CognitiveFatigue after.CognitiveFatigue
+                  Confusion = damp before.Confusion after.Confusion
+                  Provoke = damp before.Provoke after.Provoke })
+            currentTarget
 
       // Resonance Spike: volatile overclocking inflicts +20 Cognitive Fatigue on the target
       if plane = Mental && currentActor.ComplexForm = Some ComplexForm.ResonanceSpike then

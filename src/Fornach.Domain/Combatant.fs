@@ -147,6 +147,18 @@ type Combatant =
   /// Defenses drop by 75% when in a collapsed state
   member this.EffectiveDefenseMultiplier = if this.IsExecuteEligible then 0.25 else 1.0
 
+  /// Fraction of incoming status-meter pressure this combatant actually takes. Collapse makes a
+  /// target executable and execution ignores pools, so an undamped Exhaustion clock decides fights
+  /// that were authored to run on their pools. `StoicResistance` damps it for such targets.
+  member this.MeterGainFactor =
+    this.MonsterTraits
+    |> List.fold
+        (fun acc trait ->
+            match trait with
+            | MonsterTrait.StoicResistance pct -> acc * (1.0 - float pct / 100.0)
+            | _ -> acc)
+        1.0
+
   /// Checks if a preparation is currently active and unexpired
   member this.HasActivePreparation(prepType: PreparationType) : bool =
     this.ActivePreparations
