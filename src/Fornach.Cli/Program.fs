@@ -492,7 +492,7 @@ module Program =
       // A collapsed foe cannot hold the Vor: uncontested, the player takes it.
       player <- ActionResolver.settleTempoVacuum player [ enemy ]
       let playerHasVor = player.IsInVor || not enemy.IsInVor
-      let enemyIntent = AI.chooseIntent enemy player
+      let enemyIntent = AI.chooseIntentUsing Policies.all enemy player
 
       let isLoneBeastFleeEligible =
         enemy.IsBeast
@@ -890,7 +890,7 @@ module Program =
     while not combatOver do
       currentCombatant <- ActionResolver.settleTempoVacuum currentCombatant [ currentBoss ]
       let playerHasVor = currentCombatant.IsInVor || not currentBoss.IsInVor
-      let enemyIntent = AI.chooseIntent currentBoss currentCombatant
+      let enemyIntent = AI.chooseIntentUsing Policies.all currentBoss currentCombatant
 
       let isLoneBeastFleeEligible =
         currentBoss.IsBeast
@@ -1287,7 +1287,7 @@ module Program =
           // Resolved once so the log line below can name the technique the foe actually used.
           let intent =
             if isStaggered then RecoveryAction SteadyForm
-            else AI.chooseIntent e.Combatant currentPlayer
+            else AI.chooseIntentUsing Policies.all e.Combatant currentPlayer
           let defOpt =
             if priorDefenses = 0 && currentPlayer.IsHumanoid then
               match playerActiveDefenseOpt with
@@ -1349,7 +1349,7 @@ module Program =
 
       // 2. Action selection (with an optional disengage)
       let targetCombatant = target.Combatant
-      let targetIntent = AI.chooseIntent targetCombatant currentPlayer
+      let targetIntent = AI.chooseIntentUsing Policies.all targetCombatant currentPlayer
       let actionChoices =
         buildActionChoicesWithTelegraph currentPlayer targetCombatant (Some targetIntent) true
         @ (if canFlee then [ "🏃  Disengage (withdraw — each foe strikes as you break away)" ] else [])
@@ -1366,7 +1366,7 @@ module Program =
         AnsiConsole.MarkupLine(sprintf "\n[bold %s]%s breaks away, but the pack lashes out![/]" Theme.Yellow currentPlayer.Name)
         let mutable survived = true
         for e in living () |> List.truncate 4 do
-          let intent = AI.chooseIntent e.Combatant currentPlayer
+          let intent = AI.chooseIntentUsing Policies.all e.Combatant currentPlayer
           let playerBeforeTurn = currentPlayer
           let flankMult = flankOf e.Combatant.Id |> TowerSession.flankDamageMultiplier
           let r =

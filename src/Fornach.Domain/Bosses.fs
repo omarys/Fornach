@@ -65,7 +65,8 @@ module StoryBosses =
     let guilt =
       { Combatant.create id "Aspect of Guilt" 2800 2400 stats with
           MonsterFamily = Some MonsterFamily.GriefManifestation
-          MonsterTraits = [ StoicResistance 70 ] }
+          MonsterTraits = [ StoicResistance 70 ]
+          Policy = Some PolicyIds.griefGuilt }
 
     let hammer =
       { Name = "Quarry Sledgehammer"
@@ -118,7 +119,8 @@ module StoryBosses =
     let denial =
       { Combatant.create id "Aspect of Denial" 2600 2600 stats with
           MonsterFamily = Some MonsterFamily.GriefManifestation
-          MonsterTraits = [ StoicResistance 70 ] }
+          MonsterTraits = [ StoicResistance 70 ]
+          Policy = Some PolicyIds.griefDenial }
 
     let daggers =
       { Name = "Twin Mirage Daggers"
@@ -181,7 +183,8 @@ module StoryBosses =
     let anger =
       { Combatant.create id "Aspect of Anger" 3300 2200 stats with
           MonsterFamily = Some MonsterFamily.GriefManifestation
-          MonsterTraits = [ StoicResistance 70 ] }
+          MonsterTraits = [ StoicResistance 70 ]
+          Policy = Some PolicyIds.griefAnger }
 
     let greatsword =
       { Name = "Slag-Forged Greatsword"
@@ -233,7 +236,8 @@ module StoryBosses =
     let bargaining =
       { Combatant.create id "Aspect of Bargaining" 3100 3200 stats with
           MonsterFamily = Some MonsterFamily.GriefManifestation
-          MonsterTraits = [ StoicResistance 70 ] }
+          MonsterTraits = [ StoicResistance 70 ]
+          Policy = Some PolicyIds.griefBargaining }
 
     let rapier =
       { Name = "Gale-Wind Rapier"
@@ -284,7 +288,8 @@ module StoryBosses =
     let depression =
       { Combatant.create id "Aspect of Depression" 3800 2800 stats with
           MonsterFamily = Some MonsterFamily.GriefManifestation
-          MonsterTraits = [ StoicResistance 70 ] }
+          MonsterTraits = [ StoicResistance 70 ]
+          Policy = Some PolicyIds.griefDepression }
 
     let anchor =
       { Name = "Anchor of Apathy"
@@ -336,7 +341,8 @@ module StoryBosses =
     let acceptance =
       { Combatant.create id "Aspect of Acceptance" 4400 4100 stats with
           MonsterFamily = Some MonsterFamily.GriefManifestation
-          MonsterTraits = [ StoicResistance 70 ] }
+          MonsterTraits = [ StoicResistance 70 ]
+          Policy = Some PolicyIds.griefAcceptance }
 
     let staff =
       { Name = "Unfinished Crossing Staff"

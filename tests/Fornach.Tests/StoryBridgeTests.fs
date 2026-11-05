@@ -486,20 +486,60 @@ let ``AI accurately selects thematic trauma gambits for each Grief Aspect`` () =
   let acceptance = StoryBosses.createEnemy "acceptance_aspect"
   let target = createTestPlayer ()
 
-  let denialIntent = AI.chooseIntent denial target
+  let denialIntent = AI.chooseIntentUsing Policies.all denial target
   Assert.Equal(StandardAttack (TraumaAttack DenialPhaseShift), denialIntent)
 
-  let angerIntent = AI.chooseIntent anger target
+  let angerIntent = AI.chooseIntentUsing Policies.all anger target
   Assert.Equal(StandardAttack (TraumaAttack BasaltEruption), angerIntent)
 
-  let bargainingIntent = AI.chooseIntent bargaining target
+  let bargainingIntent = AI.chooseIntentUsing Policies.all bargaining target
   Assert.Equal(StandardAttack (TraumaAttack CoerciveBargain), bargainingIntent)
 
-  let depressionIntent = AI.chooseIntent depression target
+  let depressionIntent = AI.chooseIntentUsing Policies.all depression target
   Assert.Equal(StandardAttack (TraumaAttack ApathyDoldrums), depressionIntent)
 
-  let acceptanceIntent = AI.chooseIntent acceptance target
+  let acceptanceIntent = AI.chooseIntentUsing Policies.all acceptance target
   Assert.Equal(StandardAttack (TraumaAttack SereneResolution), acceptanceIntent)
+
+[<Fact>]
+let ``every Grief Aspect names a policy the story table resolves`` () =
+  // The id is a string on both sides of a project boundary: the Aspect carries it and the story table
+  // resolves it. A typo on either side is silent -- the combatant simply falls back to the engine's
+  // generic discipline and fights a different fight -- so the contract is asserted rather than trusted.
+  let aspects =
+    [ "guilt_aspect"
+      "denial_aspect"
+      "anger_aspect"
+      "bargaining_aspect"
+      "depression_aspect"
+      "acceptance_aspect" ]
+    |> List.map StoryBosses.createEnemy
+
+  for aspect in aspects do
+    match aspect.Policy with
+    | None -> failwithf "%s carries no policy id, so the engine's generic discipline would fight it" aspect.Name
+    | Some id ->
+      Assert.True(
+        Policies.all.ContainsKey id,
+        sprintf "%s names %s, which the story table does not register" aspect.Name id.Value
+      )
+
+  Assert.Equal(6, Policies.all.Count)
+
+[<Fact>]
+let ``the engine fights a Grief Aspect generically when no policy table is supplied`` () =
+  // This is the point of the seam: `AI` holds no branch that knows what an Aspect is. Handed no table it
+  // fights one as the GriefManifestation species it is -- Denial argues on the mental plane, so the
+  // species profile hands it an acumen interrogation and never phases out of the world. The signature
+  // press appears only once the story hands its own table over.
+  let denial =
+    { (StoryBosses.createEnemy "denial_aspect") with
+        MirrorClones = 0
+        Meters = { StatusMeters.Zero with Recklessness = Meter.Create 10 } }
+
+  let target = createTestPlayer ()
+  Assert.Equal(StandardAttack (AcumenInterrogation true), AI.chooseIntent denial target)
+  Assert.Equal(StandardAttack (TraumaAttack DenialPhaseShift), AI.chooseIntentUsing Policies.all denial target)
 
 [<Fact>]
 let ``boss gear contributes its pools but not its percentages or recklessness delta`` () =

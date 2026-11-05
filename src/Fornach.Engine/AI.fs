@@ -6,6 +6,17 @@ open Fornach.Engine
 
 module AI =
 
+  /// A ruleset-supplied behaviour for one named combatant: the point at which it breaks off to recover,
+  /// and the press it commits to when it decides to attack. The engine owns neither -- it looks the
+  /// combatant's `Policy` up in the table its caller supplies and keeps its own generic discipline when
+  /// the table registers nothing, so a new setting hands the engine its signature moves without the
+  /// engine learning what any of them mean.
+  type AttackPolicy =
+    { /// Recklessness at or above which this combatant recovers rather than pressing.
+      RecoveryThreshold: int
+      /// The attack to commit to, given the actor and the target it is facing.
+      ChooseAttack: Combatant -> Combatant -> ActionIntent }
+
   /// Selects the execution plane based on the actor's operative discipline
   let private chooseExecutePlane (actor: Combatant) : Plane =
     actor.Plane
@@ -27,8 +38,9 @@ module AI =
     else
       RecoveryAction CenterMind
 
-  /// Selects an offensive action intent based on the actor's strongest stat vector and discipline
-  let private chooseOffensiveAttack (self: Combatant) (opponent: Combatant) (surroundingOpponents: int) : ActionIntent =
+  /// Selects an offensive action intent for a combatant with no registered policy: species instinct
+  /// first, then the discipline that suits the plane it actually resolves on.
+  let private chooseGenericAttack (self: Combatant) (opponent: Combatant) (surroundingOpponents: int) : ActionIntent =
     let force = self.GetStat Force
     let finesse = self.GetStat Finesse
     let prowess = self.GetStat Prowess
@@ -44,46 +56,9 @@ module AI =
     let bestMental = Math.Max(intellect, Math.Max(acuity, acumen))
 
     // -------------------------------------------------------------------------
-    // Boss Grief Aspect AI Behaviors
-    // -------------------------------------------------------------------------
-    if self.Name.Contains("Guilt") then
-      // Guilt is the heavy of the six: 210 Force behind a sledgehammer and almost no reach into the
-      // mind. It has no branch of its own here, so it used to fall through to the GriefManifestation
-      // profile below, which hands out a Mental attack -- and `AttackClassification.IsAllowedFor`
-      // refuses that outright for a Physical actor. The resolver then burned the turn on "cannot
-      // execute magic attacks", so the Aspect of Guilt never landed a blow in any fight.
-      StandardAttack (ForceStrike isGambit)
-    elif self.Name.Contains("Denial") then
-      if self.MirrorClones < 2 && self.Meters.Recklessness.Value < 70 then
-        StandardAttack (TraumaAttack DenialPhaseShift)
-      else
-        // Denial resolves on the mental plane (Acuity 210 and Intellect 180 outweigh Finesse 235 once
-        // the Warrior plane flip applies), so the FinesseCadence press this branch used to make was
-        // refused outright -- once its clones were up the Aspect simply stopped attacking. Glamour is
-        // the mental plane's basic strike, the way the wraiths use it, and unlike Decoy Swarm it does
-        // not stack Recklessness onto a target already being buried in it.
-        StandardAttack (SynapticGlamour isGambit)
-    elif self.Name.Contains("Anger") then
-      if self.Meters.Recklessness.Value < 65 then
-        StandardAttack (TraumaAttack BasaltEruption)
-      else
-        StandardAttack (ForceStrike true)
-    elif self.Name.Contains("Bargaining") then
-      if opponent.Morale.Current > 40 && self.Meters.Recklessness.Value < 65 then
-        StandardAttack (TraumaAttack CoerciveBargain)
-      else
-        StandardAttack (AcumenInterrogation isGambit)
-    elif self.Name.Contains("Depression") then
-      if opponent.Meters.CognitiveFatigue.Value < 80 then
-        StandardAttack (TraumaAttack ApathyDoldrums)
-      else
-        StandardAttack (ForceStrike false)
-    elif self.Name.Contains("Acceptance") then
-      StandardAttack (TraumaAttack SereneResolution)
-    // -------------------------------------------------------------------------
     // Monster Species Instinct Profiles (ADR 0004)
     // -------------------------------------------------------------------------
-    elif self.MonsterFamily.IsSome then
+    if self.MonsterFamily.IsSome then
       // A species instinct names the vector that suits its temperament, and the temperament is written
       // for the archetype rather than for the plane the combatant actually resolves on. ADR 0009 zeroes
       // Prowess on non-humanoids, which by itself can tip a Warrior-class monster over the mental
@@ -184,6 +159,18 @@ module AI =
           else
             StandardAttack (DisorientingShockwave isGambit)
 
+  /// Selects an offensive action intent, deferring to the ruleset's registered policy for this combatant
+  /// when there is one and falling back to the engine's generic discipline when there is not.
+  let private chooseOffensiveAttack
+    (policy: AttackPolicy option)
+    (self: Combatant)
+    (opponent: Combatant)
+    (surroundingOpponents: int)
+    : ActionIntent =
+    match policy with
+    | Some registered -> registered.ChooseAttack self opponent
+    | None -> chooseGenericAttack self opponent surroundingOpponents
+
   /// Selects the optimal active defense in the Nach based on telegraphed attack vector and discipline reading (ADR 0009)
   let chooseActiveDefense (self: Combatant) (opponent: Combatant) : DefenseClassification =
     if opponent.Plane = Mental then
@@ -205,8 +192,27 @@ module AI =
         if self.GetCombatStat StatId.Fortitude >= self.GetCombatStat StatId.Reflex then FortitudeGuard false
         else ReflexSlip false
 
-  /// Top-level tactical decision evaluator for autonomous combatants with surrounding opponent count
-  let chooseIntentWithContext (self: Combatant) (opponent: Combatant) (surroundingOpponents: int) : ActionIntent =
+  /// The behaviour the caller's ruleset registered for this combatant, if any.
+  let private policyFor (policies: Map<PolicyId, AttackPolicy>) (self: Combatant) : AttackPolicy option =
+    self.Policy |> Option.bind (fun id -> Map.tryFind id policies)
+
+  /// Top-level tactical decision evaluator for autonomous combatants with surrounding opponent count.
+  /// `policies` is the ruleset's table of named behaviours: whatever it registers is what its combatants
+  /// do, and a combatant it registers nothing for falls back to the generic discipline.
+  let private chooseIntentCore
+    (policies: Map<PolicyId, AttackPolicy>)
+    (self: Combatant)
+    (opponent: Combatant)
+    (surroundingOpponents: int)
+    : ActionIntent =
+    let policy = policyFor policies self
+    // Where this combatant breaks off to recover. The generic 40 is the engine's; a ruleset that wants a
+    // combatant to hold the line longer raises it rather than teaching the engine about that combatant.
+    let recoveryAt =
+      policy
+      |> Option.map (fun registered -> registered.RecoveryThreshold)
+      |> Option.defaultValue 40
+
     if self.Meters.Recklessness.Value >= 75
        || self.Meters.Exhaustion.Value >= 75
        || self.Meters.Frustration.Value >= 75
@@ -302,7 +308,7 @@ module AI =
         ExecuteStrike (chooseExecutePlane self)
 
       // 2. If self is reaching dangerous entropy or status debuff levels, bleed Recklessness
-      elif (if self.Name.Contains("Anger") then self.Meters.Recklessness.Value >= 95 else self.Meters.Recklessness.Value >= 40)
+      elif self.Meters.Recklessness.Value >= recoveryAt
            || self.Meters.Exhaustion.Value >= 65
            || self.Meters.Frustration.Value >= 65
            || self.Meters.CognitiveFatigue.Value >= 65
@@ -312,11 +318,30 @@ module AI =
 
       // 3. Otherwise, launch an offensive strike leveraging primary attributes and stance mechanics
       else
-        chooseOffensiveAttack self opponent surroundingOpponents
+        chooseOffensiveAttack policy self opponent surroundingOpponents
+
+  /// Top-level tactical decision evaluator for autonomous combatants with surrounding opponent count,
+  /// against the engine's generic discipline with no ruleset policies registered.
+  let chooseIntentWithContext (self: Combatant) (opponent: Combatant) (surroundingOpponents: int) : ActionIntent =
+    chooseIntentCore Map.empty self opponent surroundingOpponents
 
   /// Top-level tactical decision evaluator for autonomous combatants in 1-on-1 duels
   let chooseIntent (self: Combatant) (opponent: Combatant) : ActionIntent =
     chooseIntentWithContext self opponent 1
+
+  /// Top-level tactical decision evaluator that resolves each combatant's registered policy through the
+  /// ruleset's table. Anything the table does not name behaves exactly as `chooseIntent` does.
+  let chooseIntentUsing (policies: Map<PolicyId, AttackPolicy>) (self: Combatant) (opponent: Combatant) : ActionIntent =
+    chooseIntentCore policies self opponent 1
+
+  /// Swarm-aware variant of `chooseIntentUsing`.
+  let chooseIntentWithContextUsing
+    (policies: Map<PolicyId, AttackPolicy>)
+    (self: Combatant)
+    (opponent: Combatant)
+    (surroundingOpponents: int)
+    : ActionIntent =
+    chooseIntentCore policies self opponent surroundingOpponents
 
   /// Selects the optimal target from a group of opponents:
   /// 1. Prioritize Execute-eligible targets to eliminate an action economy threat immediately.

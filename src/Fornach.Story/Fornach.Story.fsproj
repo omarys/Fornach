@@ -7,6 +7,7 @@
   <ItemGroup>
     <Compile Include="StoryTypes.fs" />
     <Compile Include="Bosses.fs" />
+    <Compile Include="Policies.fs" />
     <Compile Include="StoryRunner.fs" />
   </ItemGroup>
 

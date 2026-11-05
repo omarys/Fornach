@@ -4,6 +4,7 @@ open System
 open Spectre.Console
 open Fornach.Domain
 open Fornach.Engine
+open Fornach.Story
 
 module Simulation =
 
@@ -25,7 +26,7 @@ module Simulation =
         let recovered = actor |> Combatant.clearStagger
         if actorIsA then combA <- recovered else combB <- recovered
       else
-        let intent = AI.chooseIntent actor target
+        let intent = AI.chooseIntentUsing Policies.all actor target
         let defOpt =
           if target.IsHumanoid && target.IsInNach then
             Some(Guard(AI.chooseActiveDefense target actor))
@@ -396,7 +397,7 @@ module Simulation =
 
   let aiPolicy =
     { ChooseTarget = fun solo mob -> AI.chooseGroupTarget solo mob
-      ChooseIntent = fun solo target swings -> AI.chooseIntentWithContext solo target swings
+      ChooseIntent = fun solo target swings -> AI.chooseIntentWithContextUsing Policies.all solo target swings
       ChooseDefense = fun solo attacker -> AI.chooseActiveDefense solo attacker }
 
   let runPreparedGroupMatchWith
@@ -513,7 +514,7 @@ module Simulation =
 
         while mobIdx < mob.Length && swingsCount < availableSwings && winnerIsSolo.IsNone do
           let attacker = mob.[mobIdx]
-          let intentMob = AI.chooseIntent attacker solo
+          let intentMob = AI.chooseIntentUsing Policies.all attacker solo
           let defOpt = if priorDefenses = 0 && solo.IsHumanoid then Some(Guard(policy.ChooseDefense solo attacker)) else None
           let mobRes = ActionResolver.resolveExWithDefense roller intentMob defOpt attacker solo priorDefenses
           let newAttacker = mobRes.Actor

@@ -99,7 +99,13 @@ type Combatant =
     /// Tactical tempo in the Vor / Nach paradigm
     Tempo: TacticalTiming
     /// True when staggered by Pain Shock, losing the next action/turn (ADR 0009)
-    IsStaggered: bool }
+    IsStaggered: bool
+    /// Named behaviour the owning ruleset supplies for this combatant. The engine looks the id up in the
+    /// table its caller passes to `AI.chooseIntentUsing` and keeps its own generic discipline when the id
+    /// is absent or unregistered, so this is the seam a new setting uses to give its combatants their own
+    /// signature moves without teaching the engine what those moves are. `None` is the common case: every
+    /// plain opposition combatant behaves on the engine's generic profile.
+    Policy: PolicyId option }
 
   /// Tactical tempo state helpers
   member this.IsInVor = this.Tempo = TacticalTiming.Vor
@@ -335,7 +341,8 @@ type Combatant =
       PlayerStyle = false
       EnemiesFaced = 0
       Tempo = TacticalTiming.Vor
-      IsStaggered = false }
+      IsStaggered = false
+      Policy = None }
 
   /// Factory for creating a combatant with explicit class archetype and progression level
   static member createWithClass id name maxHealth maxMorale (stats: StatBlock) (cls: CharacterClass) (level: int) =
@@ -383,7 +390,8 @@ type Combatant =
       PlayerStyle = false
       EnemiesFaced = 0
       Tempo = TacticalTiming.Vor
-      IsStaggered = false }
+      IsStaggered = false
+      Policy = None }
 
   /// Updates the combatant's tactical tempo (Vor / Nach)
   static member withTempo (tempo: TacticalTiming) (c: Combatant) = { c with Tempo = tempo }

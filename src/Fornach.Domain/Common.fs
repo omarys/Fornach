@@ -188,3 +188,25 @@ type MonsterTrait =
     | MoltenAura _ -> "Molten Aura"
     | ChillingPresence _ -> "Chilling Presence"
     | StoicResistance _ -> "Stoic Resistance"
+
+/// Names a combatant behaviour the ruleset owns. The engine never interprets an id: it looks it up in
+/// the table its caller hands it and keeps its own generic discipline when the table names nothing. The
+/// Grief Aspects are the first users -- each names a signature press -- but a new setting can name its
+/// own presses without the engine learning what any of them mean.
+[<Struct>]
+type PolicyId =
+  | PolicyId of string
+  member this.Value =
+    match this with
+    | PolicyId id -> id
+
+/// The policy ids the shipped story ruleset uses. Declared once here because both sides of the
+/// contract live in different projects -- the Aspect that carries the id and the table that resolves it
+/// -- and a typo on either side would silently drop the combatant back to the generic discipline.
+module PolicyIds =
+  let griefGuilt = PolicyId "grief.guilt"
+  let griefDenial = PolicyId "grief.denial"
+  let griefAnger = PolicyId "grief.anger"
+  let griefBargaining = PolicyId "grief.bargaining"
+  let griefDepression = PolicyId "grief.depression"
+  let griefAcceptance = PolicyId "grief.acceptance"
