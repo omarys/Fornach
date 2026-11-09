@@ -1119,6 +1119,61 @@ module TowerSession =
           let movedState = { nextState with PlayerPosition = targetPt }
           updateFov movedState, events
 
+  /// Resolves environmental hazard consequences when a combatant is knocked back.
+  /// Computes the destination tile displaced 1 step away from the attacker's position,
+  /// checks the tile on the floor, and applies hazard or wall collision effects.
+  let resolveKnockbackHazard
+    (floor: TowerFloor)
+    (attackerPos: Point)
+    (targetPos: Point)
+    (target: Combatant) : Combatant * CombatEvent list =
+    let dx =
+      if targetPos.X = attackerPos.X then 0
+      elif targetPos.X > attackerPos.X then 1 else -1
+    let dy =
+      if targetPos.Y = attackerPos.Y then 0
+      elif targetPos.Y > attackerPos.Y then 1 else -1
+
+    let pushDelta =
+      if dx = 0 && dy = 0 then { X = 0; Y = -1 }
+      else { X = dx; Y = dy }
+
+    let destPt = targetPos + pushDelta
+
+    match Map.tryFind destPt floor.Tiles with
+    | Some (Hazard LavaRift) ->
+      let damagedTarget = { target with Health = target.Health.ApplyDelta -15 }
+      let evt = CombatEvent.HazardPushed(target.Id, "Molten Lava Rift", 15, "Knocked backwards into a Molten Lava Rift! Sizzling magma inflicts 15 direct burn damage!")
+      damagedTarget, [ evt ]
+
+    | Some (Hazard AcidSlag) ->
+      let damagedTarget = { target with Armor = target.Armor.Shred 15 }
+      let evt = CombatEvent.HazardPushed(target.Id, "Corrosive Acid Slag", 15, "Knocked backwards into Corrosive Acid Slag! Acid dissolves 15 armor durability!")
+      damagedTarget, [ evt ]
+
+    | Some (Hazard DeepCurrent) ->
+      let damagedTarget = { target with Meters = { target.Meters with Exhaustion = target.Meters.Exhaustion + 15 } }
+      let evt = CombatEvent.HazardPushed(target.Id, "Deep Floodwater Current", 15, "Knocked backwards into Deep Floodwater! Murky undertow inflicts +15 Exhaustion drag!")
+      damagedTarget, [ evt ]
+
+    | Some (Hazard CalmingSpores) ->
+      let clearedTarget = { target with Meters = { target.Meters with Recklessness = Meter.Zero } }
+      let evt = CombatEvent.HazardPushed(target.Id, "Calming Spores", 0, "Knocked backwards into Calming Spores! Fragrant psychotropic pollen clears Recklessness to 0!")
+      clearedTarget, [ evt ]
+
+    | Some Pillar | None ->
+      // Solid stone wall or monolith impact: momentum resets and frustration spikes
+      let stunnedTarget =
+        let m = target.Meters
+        { Combatant.clearStacks target with
+            Meters = { m with Frustration = m.Frustration + 10 } }
+      let evt = CombatEvent.HazardPushed(target.Id, "Solid Stone Wall", 10, "Violently slammed against a solid stone wall! Momentum shattered and frustration spikes (+10)!")
+      stunnedTarget, [ evt ]
+
+    | Some _ ->
+      // Standard walkable floor: clear displacement without environmental damage
+      target, []
+
   /// Resolves an altar sacrifice: pays cost, grants reward, marks altar used
   let applyAltarSacrifice (altarPt: Point) (state: TowerRunState) : Result<TowerRunState, string> =
     match Map.tryFind altarPt state.CurrentFloor.Entities with
@@ -1331,6 +1386,13 @@ module TowerSession =
       [ sprintf "LEVEL UP! You are now Level %d (from %d). All attributes, Health, Morale, and Armor scale to your new mastery.%s"
           profile.Level previousLevel rankLine ]
 
+  /// Computes the experience multiplier and bonus designation based on a combatant's current Recklessness
+  let recklessnessXpBonus (recklessness: int) : float * string option =
+    if recklessness >= 75 then 2.0, Some "★ RAZOR'S EDGE (+100% XP bonus!)"
+    elif recklessness >= 50 then 1.5, Some "🔥 Fever Pitch (+50% XP bonus!)"
+    elif recklessness >= 25 then 1.25, Some "⚡ Aggressive Drive (+25% XP bonus!)"
+    else 1.0, None
+
   /// Marks a defeated enemy on the floor and awards its dropped key, souls, and alchemical trophies
   let resolveEnemyDefeat (enemyId: string) (state: TowerRunState) : TowerRunState =
     let mutable droppedKeyOpt = None
@@ -1356,6 +1418,14 @@ module TowerSession =
     match defeatedEnemyOpt with
     | Some e ->
       let baseXp = e.Combatant.Level * 10 + 25
+      let recklessMult, recklessLabelOpt = recklessnessXpBonus state.Player.Meters.Recklessness.Value
+      let scaledBaseXp = int (Math.Round(float baseXp * recklessMult))
+
+      match recklessLabelOpt with
+      | Some label ->
+        logMessages <- sprintf "Fervor Reward: %s" label :: logMessages
+      | None -> ()
+
       // The stage guardian carries the keystone; beating it opens the gate and hands the protagonist
       // the strength the next biome assumes. Ordinary kills keep the normal per-kill value, except
       // on the tutorial floor, where every kill accelerates leveling.
@@ -1382,9 +1452,9 @@ module TowerSession =
         let mutable needed = -profile.CurrentXP
         for lvl in profile.Level .. targetLevel - 1 do
           needed <- needed + ProgressionProfile.ExperienceForNextLevel lvl
-        newXp <- baseXp + max 0 needed
+        newXp <- scaledBaseXp + max 0 needed
       | None ->
-        newXp <- baseXp
+        newXp <- scaledBaseXp
       // Look up monster loot in Bestiary
       let monsterTemplateOpt =
         Bestiary.allMonsters

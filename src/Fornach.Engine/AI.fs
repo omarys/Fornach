@@ -394,3 +394,22 @@ module AI =
           | target :: _ -> target
           | [] ->
             list |> List.minBy (fun m -> m.Health.Current + m.Morale.Current)
+
+  /// Evaluates whether an intelligent or elite enemy adapts to repetitive defensive postures.
+  /// If the player repeats the exact same defense posture consecutively against an enemy of level >= 2 or humanoid,
+  /// the enemy reads the pattern and gains a tactical advantage.
+  let adaptToDefensiveRepetition (enemy: Combatant) (prevDefense: DefenseChoice option) (currentDefense: DefenseChoice option) : bool =
+    match prevDefense, currentDefense with
+    | Some (Guard d1), Some (Guard d2) when d1 = d2 && (enemy.Level >= 2 || enemy.IsHumanoid) -> true
+    | _ -> false
+
+  /// Feints: given an elite enemy's telegraphed intent, converts the attack vector to counter the player's anticipated defense
+  let feintConvertVector (intent: ActionIntent) (anticipatedDefense: DefenseClassification) : ActionIntent =
+    match intent, anticipatedDefense with
+    | StandardAttack (ForceStrike isHeavy), FortitudeGuard _ ->
+      // Telegraphed a Power blow, but if player turtles with FortitudeGuard, convert to slicing Finesse Cadence
+      StandardAttack (FinesseCadence isHeavy)
+    | StandardAttack (FinesseCadence isHeavy), ReflexSlip _ ->
+      // Telegraphed an Agility blow, but if player slips/dodges, convert to crushing ForceStrike
+      StandardAttack (ForceStrike isHeavy)
+    | other, _ -> other

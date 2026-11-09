@@ -52,7 +52,15 @@ type ConsecutiveComboTracker =
   /// Resets all offensive momentum (triggered on recovery actions or misses)
   member this.ResetCombo() = ConsecutiveComboTracker.Zero
 
-/// Aggregate root representing an active participant in physical/mental combat
+/// Trigger contexts for rule-bending combat modifiers and relics
+[<RequireQualifiedAccess>]
+type RelicHookTrigger =
+  | OnStrikeLanded of isCritical: bool * netHits: int
+  | OnWhiff of isAttacker: bool
+  | OnTempoShifted of seizedVor: bool
+  | OnIndesResolved of won: bool
+  | OnStrainThreshold of strainType: string
+
 type Combatant =
   { Id: CombatantId
     Name: string
@@ -105,11 +113,22 @@ type Combatant =
     /// is absent or unregistered, so this is the seam a new setting uses to give its combatants their own
     /// signature moves without teaching the engine what those moves are. `None` is the common case: every
     /// plain opposition combatant behaves on the engine's generic profile.
-    Policy: PolicyId option }
+    Policy: PolicyId option
+    /// Active rule-bending relic modifiers carried by this combatant
+    RelicModifiers: RelicModifier list } with
 
-  /// Tactical tempo state helpers
-  member this.IsInVor = this.Tempo = TacticalTiming.Vor
-  member this.IsInNach = this.Tempo = TacticalTiming.Nach
+    /// Tactical tempo state helpers
+    member this.IsInVor = this.Tempo = TacticalTiming.Vor
+    member this.IsInNach = this.Tempo = TacticalTiming.Nach
+
+and RelicModifier = {
+  Id: string
+  Name: string
+  Description: string
+  Apply: RelicHookTrigger -> Combatant -> Combatant option -> (Combatant * Combatant option * CombatEvent list)
+}
+
+type Combatant with
 
   /// True for humanoids (characters without a non-humanoid MonsterFamily)
   member this.IsHumanoid = this.MonsterFamily.IsNone
@@ -342,7 +361,8 @@ type Combatant =
       EnemiesFaced = 0
       Tempo = TacticalTiming.Vor
       IsStaggered = false
-      Policy = None }
+      Policy = None
+      RelicModifiers = [] }
 
   /// Factory for creating a combatant with explicit class archetype and progression level
   static member createWithClass id name maxHealth maxMorale (stats: StatBlock) (cls: CharacterClass) (level: int) =
@@ -391,7 +411,8 @@ type Combatant =
       EnemiesFaced = 0
       Tempo = TacticalTiming.Vor
       IsStaggered = false
-      Policy = None }
+      Policy = None
+      RelicModifiers = [] }
 
   /// Updates the combatant's tactical tempo (Vor / Nach)
   static member withTempo (tempo: TacticalTiming) (c: Combatant) = { c with Tempo = tempo }

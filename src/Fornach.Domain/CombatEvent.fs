@@ -246,3 +246,12 @@ type CombatEvent =
 
   /// Player executed a fleeing wounded beast
   | BeastExecuted of playerId: CombatantId * beastId: CombatantId
+
+  /// Combatant knocked back by heavy impact (e.g. Force Strike or Shield Bash)
+  | CombatantKnockedBack of actorId: CombatantId * targetId: CombatantId * tiles: int
+
+  /// Target pushed into an environmental hazard or obstacle
+  | HazardPushed of targetId: CombatantId * hazardType: string * damage: int * description: string
+
+  /// Rule-bending relic hook triggered an active modification during combat
+  | RelicEffectTriggered of combatantId: CombatantId * relicName: string * summary: string

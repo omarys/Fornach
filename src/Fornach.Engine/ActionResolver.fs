@@ -50,6 +50,35 @@ module ActionResolver =
 
     flagMult * (1.0 + spentPerStack * float stackSpend)
 
+  /// Dispatches active relic hooks across the actor and optional opponent
+  let applyRelicHooks (trigger: RelicHookTrigger) (actor: Combatant) (targetOpt: Combatant option) : Combatant * Combatant option * CombatEvent list =
+    let mutable currentActor = actor
+    let mutable currentTarget = targetOpt
+    let mutable events = []
+
+    for relic in actor.RelicModifiers do
+      let updatedActor, updatedTarget, relicEvts = relic.Apply trigger currentActor currentTarget
+      currentActor <- updatedActor
+      currentTarget <- updatedTarget
+      events <- events @ relicEvts
+
+    match targetOpt with
+    | Some target ->
+      let oppTrigger =
+        match trigger with
+        | RelicHookTrigger.OnWhiff isAtk -> RelicHookTrigger.OnWhiff (not isAtk)
+        | other -> other
+      for relic in target.RelicModifiers do
+        let updatedOpp, updatedActor, relicEvts = relic.Apply oppTrigger (Option.defaultValue target currentTarget) (Some currentActor)
+        currentTarget <- Some updatedOpp
+        match updatedActor with
+        | Some a -> currentActor <- a
+        | None -> ()
+        events <- events @ relicEvts
+    | None -> ()
+
+    currentActor, currentTarget, events
+
   /// Mental strikes land through the defender's class grounding / resilience. Shared with the menu's
   /// estimate so ranking cannot drift from resolution.
   ///
@@ -126,8 +155,9 @@ module ActionResolver =
   /// extra defensive hit: the strike is blunted and the Indes window (`Indes.evaluateIndesWithAttacker`)
   /// widens by that same hit, because both read the same `Defender.TotalHits`. This is the whole price
   /// of holding the Vor, and it is why yielding the initiative is a posture instead of a punishment.
-  let applyNachPosture (defender: Combatant) (contest: ContestResult) : ContestResult =
-    if not defender.IsInNach then
+  let applyNachPostureWithFlank (flankMult: float) (defender: Combatant) (contest: ContestResult) : ContestResult =
+    // A rear attack (flankMult >= 1.30) catches the defender unaware, bypassing the Nach's +1 defensive hit.
+    if (not defender.IsInNach) || flankMult >= 1.30 then
       contest
     else
       let defenderHits = contest.Defender.TotalHits + 1
@@ -138,6 +168,9 @@ module ActionResolver =
           NetHits = netHits
           IsCritical = netHits >= 5
           IsWhiff = netHits <= 0 }
+
+  let applyNachPosture (defender: Combatant) (contest: ContestResult) : ContestResult =
+    applyNachPostureWithFlank 1.0 defender contest
 
   /// Who holds the initiative after a strike lands. Landing used to hand the attacker the Vor outright,
   /// which made the tempo a tautology: whoever swung last held it, so it flipped every round in strict
@@ -2219,7 +2252,8 @@ module ActionResolver =
         effectivePriorDefenses
 
     // The Nach answers before the net count does: one extra defensive hit against every strike it takes.
-    let contest = applyNachPosture currentTarget contest
+    // If arriving from the rear (flankMult >= 1.30), the Nach's posture hit is bypassed!
+    let contest = applyNachPostureWithFlank flankMult currentTarget contest
 
     if contest.EncirclementPenalty > 0 then
       events <- CombatEvent.EncirclementPenalized(currentTarget.Id, effectivePriorDefenses, contest.EncirclementPenalty) :: events
@@ -2364,9 +2398,21 @@ module ActionResolver =
 
       let finalActorWithFluid, fluidEvts = applyFluidTransition finalActor
 
-      { Actor = finalActorWithFluid
-        Target = currentTarget
-        Events = events @ fluidEvts
+      // Relic hook dispatch: OnWhiff
+      let tempoShifted = events |> List.exists (function CombatEvent.TempoShifted _ -> true | _ -> false)
+      let relicActor, relicTargetOpt, relicEvts =
+        applyRelicHooks (RelicHookTrigger.OnWhiff true) finalActorWithFluid (Some currentTarget)
+      let currentTarget1 = Option.defaultValue currentTarget relicTargetOpt
+      let tempoActor, tempoTargetOpt, tempoEvts =
+        if tempoShifted then
+          applyRelicHooks (RelicHookTrigger.OnTempoShifted(relicActor.IsInVor)) relicActor (Some currentTarget1)
+        else
+          relicActor, Some currentTarget1, []
+      let finalTargetWithRelics = Option.defaultValue currentTarget1 tempoTargetOpt
+
+      { Actor = tempoActor
+        Target = finalTargetWithRelics
+        Events = events @ fluidEvts @ relicEvts @ tempoEvts
         Contest = Some contest }
 
     else
@@ -2803,6 +2849,17 @@ module ActionResolver =
         events <- CombatEvent.StaffSiphoned(currentActor.Id, currentTarget.Id, siphonedFatigue, siphonedReck, wardGain) :: events
       | _ -> ()
 
+      // Knockback on heavy physical impacts: Force strikes and Shield Bash with surplus net hits
+      let isKnockbackStrike =
+        match atk with
+        | ForceStrike isWild when (isWild && contest.NetHits >= 2) || (contest.NetHits >= 4) -> true
+        | ForceInsightStrike when contest.NetHits >= 3 -> true
+        | ShieldBash _ when contest.NetHits >= 2 -> true
+        | _ -> false
+
+      if isKnockbackStrike then
+        events <- CombatEvent.CombatantKnockedBack(currentActor.Id, currentTarget.Id, 1) :: events
+
       // Step E: Evaluate Consecutive Passives (scaled by damage dealt)
       let postPassiveActor, postPassiveTarget, passiveEvents =
         evaluatePassives roller vector plane dmgEvt.Amount currentActor currentTarget
@@ -2880,11 +2937,31 @@ module ActionResolver =
             landedActor.Id, landedTarget.Id
         events <- CombatEvent.TempoShifted(newVorId, prevVorId, shiftMsg) :: events
 
-      let finalActorWithTempo, finalTargetWithTempo = landedActor, landedTarget
+      let isCritical = contest.NetHits >= 3
+      let isIndesWon = events |> List.exists (function CombatEvent.IndesSeized _ -> true | _ -> false)
+      let tempoShifted = events |> List.exists (function CombatEvent.TempoShifted _ -> true | _ -> false)
 
-      { Actor = finalActorWithTempo
-        Target = finalTargetWithTempo
-        Events = events @ fluidEvts
+      let strikeActor, strikeTargetOpt, strikeEvts =
+        applyRelicHooks (RelicHookTrigger.OnStrikeLanded(isCritical, contest.NetHits)) landedActor (Some landedTarget)
+      let landedTarget1 = Option.defaultValue landedTarget strikeTargetOpt
+
+      let indesActor, indesTargetOpt, indesEvts =
+        if isIndesWon then
+          applyRelicHooks (RelicHookTrigger.OnIndesResolved true) strikeActor (Some landedTarget1)
+        else
+          strikeActor, Some landedTarget1, []
+      let landedTarget2 = Option.defaultValue landedTarget1 indesTargetOpt
+
+      let tempoActor, tempoTargetOpt, tempoEvts =
+        if tempoShifted then
+          applyRelicHooks (RelicHookTrigger.OnTempoShifted(strikeActor.IsInVor)) indesActor (Some landedTarget2)
+        else
+          indesActor, Some landedTarget2, []
+      let finalTargetWithRelics = Option.defaultValue landedTarget2 tempoTargetOpt
+
+      { Actor = tempoActor
+        Target = finalTargetWithRelics
+        Events = events @ fluidEvts @ strikeEvts @ indesEvts @ tempoEvts
         Contest = Some contest }
 
   // =========================================================================
