@@ -3,7 +3,7 @@
 # Pinned to the `10` major rather than "latest": the projects target net10.0, so
 # a major bump would silently install a runtime the build cannot use.
 [tools]
-dotnet = "10"
+dotnet = "11"
 pre-commit = "latest"
 
 [env]
