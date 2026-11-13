@@ -22,6 +22,7 @@
     <Compile Include="ChokepointTests.fs" />
     <Compile Include="AmbushTempoTests.fs" />
     <Compile Include="StalemateTests.fs" />
+    <Compile Include="WaitTests.fs" />
     <Compile Include="BleedRecoveryTests.fs" />
     <Compile Include="LootConsumableTests.fs" />
     <Compile Include="ShrineBlessingTests.fs" />

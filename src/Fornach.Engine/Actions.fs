@@ -260,6 +260,11 @@ type ActionIntent =
   | ActiveDefense of DefenseClassification
   /// A defensive stabilization or posture recovery
   | RecoveryAction of DefensiveReset
+  /// A held round: the combatant passes instead of striking. Performs the Steady Form recovery, cedes the
+  /// Vor to an engaged foe that does not already hold it, and leaves the combatant only the attack of
+  /// opportunity a provoking foe grants. Distinct from `RecoveryAction`: the recovery is the same effect,
+  /// but a held round spends the whole turn and gives up the initiative.
+  | Wait
   /// An execution attempt against an opponent currently in a Collapsed state
   | ExecuteStrike of Plane
   /// Shifting active tactical stance (Power, Agility, Discipline)

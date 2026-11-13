@@ -1786,7 +1786,14 @@ module ActionResolver =
     // --- Step B.4: Defender Preemptive Attack of Opportunity against Flank / Encirclement ---
     let mutable flankDefusedByAoO = false
 
-    if priorDefenses >= 1 && priorDefenses <= currentTarget.AttackOfOpportunityCapacity && plane = Physical then
+    // `priorDefenses` counts the defences the defender has already answered this round, so a combatant who
+    // spent the round holding answered none and would never be eligible for the reactive strike the held round
+    // leaves them. The wait itself is the spent action, so it supplies one defence of credit; capacity and
+    // plane still decide whether that credit buys anything.
+    let opportunityCredit =
+      if currentTarget.HeldRound then Math.Max(priorDefenses, 1) else priorDefenses
+
+    if opportunityCredit >= 1 && opportunityCredit <= currentTarget.AttackOfOpportunityCapacity && plane = Physical then
       let defFinesse = currentTarget.GetStat Finesse
       let atkReflex = currentActor.GetStat Reflex
       let agilityDelta = defFinesse - atkReflex
@@ -3061,6 +3068,14 @@ module ActionResolver =
   /// met head-on or the caller has no grid. See `resolveExWithDefense` for the geometry-neutral entry.
   let resolveExWithDefenseFlank (roller: DiceRoller) (intent: ActionIntent) (defenseOpt: DefenseChoice option) (actor: Combatant) (target: Combatant) (priorDefenses: int) (flankMult: float) : ActionResult =
     let upkeepActor, upkeepEvents = applyTurnUpkeep actor
+
+    // A held round is the spent action behind a reactive strike and it is spent the moment the combatant acts
+    // again: any other intent clears the credit the wait banked, so it cannot outlive its round.
+    let upkeepActor =
+      match intent with
+      | Wait -> upkeepActor
+      | _ -> Combatant.clearHeldRound upkeepActor
+
     if upkeepActor.Health.IsDepleted then
       { Actor = upkeepActor
         Target = target
@@ -3086,6 +3101,27 @@ module ActionResolver =
           else
             recRes
         | ActiveDefense defense -> resolveActiveDefense defense upkeepActor target
+        | Wait ->
+          // A held round buys the Steady Form recovery and pays for it with the initiative: the actor takes the
+          // recovery, hands the Vor to the engaged foe that does not already hold it, and throws no strike. It
+          // is deliberately not a fourth reset -- the recovery is the same effect `RecoveryAction SteadyForm`
+          // produces -- but the cession is unconditional, which is what makes it a pass rather than a posture.
+          let recRes = resolveRecovery SteadyForm upkeepActor target
+          let actorYieldedSolely = recRes.Target.IsInNach
+          let waitingActor = recRes.Actor |> Combatant.yieldVor |> Combatant.holdRound
+          let cededTarget =
+            if actorYieldedSolely then Combatant.seizeVor recRes.Target else recRes.Target
+
+          let tempoMsg =
+            if actorYieldedSolely then
+              sprintf "%s held the round, ceding the Vor to %s." upkeepActor.Name cededTarget.Name
+            else
+              sprintf "%s held the round, yielding the initiative to %s, who already held the Vor." upkeepActor.Name cededTarget.Name
+
+          { recRes with
+              Actor = waitingActor
+              Target = cededTarget
+              Events = recRes.Events @ [ CombatEvent.TempoShifted(cededTarget.Id, waitingActor.Id, tempoMsg) ] }
         | ExecuteStrike plane -> resolveExecute plane upkeepActor target
         | ShiftStance stance -> resolveShiftStance stance upkeepActor target
         | ThreadComplexForm form -> resolveThreadComplexForm form upkeepActor target

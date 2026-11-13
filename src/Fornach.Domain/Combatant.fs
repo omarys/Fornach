@@ -108,6 +108,11 @@ type Combatant =
     Tempo: TacticalTiming
     /// True when staggered by Pain Shock, losing the next action/turn (ADR 0009)
     IsStaggered: bool
+    /// True while the combatant's last action was a held round (`ActionIntent.Wait`). A held round is the
+    /// spent action behind a reactive strike: `ActionResolver` counts defences already answered this round
+    /// (`priorDefenses`), and a combatant who waited answered none, so this flag supplies that credit for the
+    /// attack of opportunity until the combatant acts again and clears it.
+    HeldRound: bool
     /// Named behaviour the owning ruleset supplies for this combatant. The engine looks the id up in the
     /// table its caller passes to `AI.chooseIntentUsing` and keeps its own generic discipline when the id
     /// is absent or unregistered, so this is the seam a new setting uses to give its combatants their own
@@ -361,6 +366,7 @@ type Combatant with
       EnemiesFaced = 0
       Tempo = TacticalTiming.Vor
       IsStaggered = false
+      HeldRound = false
       Policy = None
       RelicModifiers = [] }
 
@@ -411,6 +417,7 @@ type Combatant with
       EnemiesFaced = 0
       Tempo = TacticalTiming.Vor
       IsStaggered = false
+      HeldRound = false
       Policy = None
       RelicModifiers = [] }
 
@@ -428,6 +435,13 @@ type Combatant with
 
   /// Clears stagger after lost action
   static member clearStagger (c: Combatant) = { c with IsStaggered = false }
+
+  /// Marks the combatant as having spent its round holding (a pass), which is the spent action an attack of
+  /// opportunity needs
+  static member holdRound (c: Combatant) = { c with HeldRound = true }
+
+  /// Clears the held round once the combatant acts again, so the credit cannot outlive the round it was spent in
+  static member clearHeldRound (c: Combatant) = { c with HeldRound = false }
 
   /// Pure helper to update status meters.
   static member updateMeters (updater: StatusMeters -> StatusMeters) (c: Combatant) =
