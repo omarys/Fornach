@@ -41,6 +41,66 @@ module AI =
     else
       RecoveryAction CenterMind
 
+  /// The Recklessness a voluntary gamble may leave us at. Recklessness 75 penalises every defence stat and
+  /// 100 forces a `RecklessExposure` collapse, so half the meter is the most a gamble may spend without
+  /// buying the exposure the meter exists to threaten.
+  let gambleCeiling = 50
+
+  /// A foe is dangerous when the exchange outlasts a burst. The estimator already predicts damage per
+  /// round, so danger is expected rounds-to-kill: three rounds is the boundary between a foe that dies to
+  /// the opener and one that is still standing when our own pool runs dry.
+  let dangerousRounds = 3.0
+
+  /// The basic strikes this combatant's plane may legally throw, through the resolver's own gate: a
+  /// refused attack is not downgraded, it costs the whole turn, so it is never a candidate.
+  ///
+  /// Only the strikes the generic discipline already chooses between. `ProwessStrike` and `ShieldBash`
+  /// are excluded deliberately: `estimate` scores each attack from the stance that attack wants, and
+  /// those two carry their own stance multiplier on top, so they would win every comparison on the
+  /// multiplier rather than on the combatant's stats.
+  let basicAttacks (self: Combatant) : AttackClassification list =
+    let candidates =
+      match self.Plane with
+      | Physical -> [ ForceStrike false; FinesseCadence false ]
+      | Mental -> [ SynapticGlamour false; ArcaneCataclysm false; AcumenInterrogation false ]
+
+    candidates |> List.filter (fun attack -> attack.IsAllowedFor self)
+
+  /// The gambit form of a basic strike: the same contest, bought with Recklessness.
+  let asGambit (attack: AttackClassification) : AttackClassification =
+    match attack with
+    | ForceStrike _ -> ForceStrike true
+    | FinesseCadence _ -> FinesseCadence true
+    | ProwessStrike _ -> ProwessStrike true
+    | ShieldBash _ -> ShieldBash true
+    | SynapticGlamour _ -> SynapticGlamour true
+    | ArcaneCataclysm _ -> ArcaneCataclysm true
+    | AcumenInterrogation _ -> AcumenInterrogation true
+    | other -> other
+
+  /// The player's own attack: the estimator's best basic strike against a foe a burst will finish, and the
+  /// gambit form of that same strike against one that will still be standing -- while the Recklessness
+  /// budget allows the gamble. Opposition keeps the generic discipline; this keys on `PlayerStyle`, the
+  /// flag the ramp, the estimator and the mental-defence relief already read.
+  let chooseEstimatedAttack (self: Combatant) (opponent: Combatant) : ActionIntent option =
+    if not self.PlayerStyle then
+      None
+    else
+      match basicAttacks self with
+      | [] -> None
+      | basics ->
+        let best =
+          basics
+          |> List.maxBy (fun attack -> AttackEstimator.estimate self opponent attack)
+
+        let roundsToKill =
+          float opponent.Health.Current / Math.Max(1.0, AttackEstimator.estimate self opponent best)
+
+        let wantsGamble =
+          roundsToKill > dangerousRounds && self.Meters.Recklessness.Value < gambleCeiling
+
+        Some(StandardAttack(if wantsGamble then asGambit best else best))
+
   /// Selects an offensive action intent for a combatant with no registered policy: species instinct
   /// first, then the discipline that suits the plane it actually resolves on.
   let private chooseGenericAttack (self: Combatant) (opponent: Combatant) (surroundingOpponents: int) : ActionIntent =
@@ -172,7 +232,14 @@ module AI =
     : ActionIntent =
     match policy with
     | Some registered -> registered.ChooseAttack self opponent
-    | None -> chooseGenericAttack self opponent surroundingOpponents
+    | None ->
+      let generic = chooseGenericAttack self opponent surroundingOpponents
+
+      // The player's own strike is the estimator's, but only where the generic discipline had already
+      // decided to attack: stance shifts and form threading still belong to it.
+      match generic, chooseEstimatedAttack self opponent with
+      | StandardAttack _, Some estimated -> estimated
+      | _ -> generic
 
   /// Selects the optimal active defense in the Nach based on telegraphed attack vector and discipline reading (ADR 0009)
   let chooseActiveDefense (self: Combatant) (opponent: Combatant) : DefenseClassification =
