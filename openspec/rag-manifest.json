@@ -1,56 +1,19 @@
 {
-  "generatedAt": "2026-10-19T20:43:58.125Z",
+  "generatedAt": "2026-11-14T03:11:35.784Z",
   "specVersion": "1.0.0",
   "domains": [
-    {
-      "domain": "agents",
-      "specPath": "openspec/specs/agents/spec.md",
-      "sourceFiles": [
-        "/home/omary/Dev/fornach/.pre-commit-config.yaml",
-        "/home/omary/Dev/fornach/CONTEXT.md",
-        "/home/omary/Dev/fornach/mise.toml",
-        "/home/omary/Dev/fornach/README.md",
-        "/home/omary/Dev/fornach/TODO.md",
-        "/home/omary/Dev/fornach/.gitignore",
-        "/home/omary/Dev/fornach/AGENTS.md",
-        "/home/omary/Dev/fornach/dotnet-tools.json",
-        "/home/omary/Dev/fornach/Fornach.slnx",
-        "/home/omary/Dev/fornach/package.json",
-        "/home/omary/Dev/fornach/skills-lock.json"
-      ],
-      "requirementCount": 20,
-      "dependsOn": [],
-      "calledBy": []
-    },
-    {
-      "domain": "fornach-cli",
-      "specPath": "openspec/specs/fornach-cli/spec.md",
-      "sourceFiles": [
-        "/home/omary/Dev/fornach/src/Fornach.Cli/Types.fs",
-        "/home/omary/Dev/fornach/src/Fornach.Cli/Archetypes.fs",
-        "/home/omary/Dev/fornach/src/Fornach.Cli/EnvironmentScenes.fs",
-        "/home/omary/Dev/fornach/src/Fornach.Cli/AI.fs",
-        "/home/omary/Dev/fornach/src/Fornach.Cli/Simulation.fs",
-        "/home/omary/Dev/fornach/src/Fornach.Cli/TowerDisplay.fs",
-        "/home/omary/Dev/fornach/src/Fornach.Cli/DeathAnimation.fs",
-        "/home/omary/Dev/fornach/src/Fornach.Cli/Theme.fs",
-        "/home/omary/Dev/fornach/src/Fornach.Cli/Display.fs",
-        "/home/omary/Dev/fornach/src/Fornach.Cli/Fornach.Cli.fsproj",
-        "/home/omary/Dev/fornach/src/Fornach.Cli/Program.fs"
-      ],
-      "requirementCount": 72,
-      "dependsOn": [],
-      "calledBy": []
-    },
     {
       "domain": "fornach-domain",
       "specPath": "openspec/specs/fornach-domain/spec.md",
       "sourceFiles": [
         "/home/omary/Dev/fornach/src/Fornach.Domain/TowerModel.fs",
+        "/home/omary/Dev/fornach/src/Fornach.Domain/Bestiary.fs",
+        "/home/omary/Dev/fornach/src/Fornach.Domain/Bosses.fs",
         "/home/omary/Dev/fornach/src/Fornach.Domain/Classes.fs",
         "/home/omary/Dev/fornach/src/Fornach.Domain/Combatant.fs",
         "/home/omary/Dev/fornach/src/Fornach.Domain/CombatEvent.fs",
         "/home/omary/Dev/fornach/src/Fornach.Domain/Common.fs",
+        "/home/omary/Dev/fornach/src/Fornach.Domain/Consumables.fs",
         "/home/omary/Dev/fornach/src/Fornach.Domain/Preparations.fs",
         "/home/omary/Dev/fornach/src/Fornach.Domain/TierFactory.fs",
         "/home/omary/Dev/fornach/src/Fornach.Domain/Attributes.fs",
@@ -58,8 +21,6 @@
         "/home/omary/Dev/fornach/src/Fornach.Domain/TacticalAssessment.fs",
         "/home/omary/Dev/fornach/src/Fornach.Domain/TowerTheme.fs",
         "/home/omary/Dev/fornach/src/Fornach.Domain/Vision.fs",
-        "/home/omary/Dev/fornach/src/Fornach.Domain/Bestiary.fs",
-        "/home/omary/Dev/fornach/src/Fornach.Domain/Bosses.fs",
         "/home/omary/Dev/fornach/src/Fornach.Domain/Collapse.fs",
         "/home/omary/Dev/fornach/src/Fornach.Domain/Equipment.fs",
         "/home/omary/Dev/fornach/src/Fornach.Domain/Identifiers.fs",
@@ -67,7 +28,7 @@
         "/home/omary/Dev/fornach/src/Fornach.Domain/Triggers.fs",
         "/home/omary/Dev/fornach/src/Fornach.Domain/Fornach.Domain.fsproj"
       ],
-      "requirementCount": 107,
+      "requirementCount": 96,
       "dependsOn": [],
       "calledBy": []
     },
@@ -75,6 +36,8 @@
       "domain": "fornach-engine",
       "specPath": "openspec/specs/fornach-engine/spec.md",
       "sourceFiles": [
+        "/home/omary/Dev/fornach/src/Fornach.Engine/AI.fs",
+        "/home/omary/Dev/fornach/src/Fornach.Engine/CombatSimulation.fs",
         "/home/omary/Dev/fornach/src/Fornach.Engine/Actions.fs",
         "/home/omary/Dev/fornach/src/Fornach.Engine/CombatLogger.fs",
         "/home/omary/Dev/fornach/src/Fornach.Engine/DicePool.fs",
@@ -87,7 +50,7 @@
         "/home/omary/Dev/fornach/src/Fornach.Engine/WorldEvents.fs",
         "/home/omary/Dev/fornach/src/Fornach.Engine/Fornach.Engine.fsproj"
       ],
-      "requirementCount": 47,
+      "requirementCount": 57,
       "dependsOn": [],
       "calledBy": []
     },
@@ -97,6 +60,7 @@
       "sourceFiles": [
         "/home/omary/Dev/fornach/src/Fornach.Spatial/Direction.fs",
         "/home/omary/Dev/fornach/src/Fornach.Spatial/VisionCone.fs",
+        "/home/omary/Dev/fornach/src/Fornach.Spatial/Flanking.fs",
         "/home/omary/Dev/fornach/src/Fornach.Spatial/Point.fs",
         "/home/omary/Dev/fornach/src/Fornach.Spatial/Dijkstra.fs",
         "/home/omary/Dev/fornach/src/Fornach.Spatial/Fov.fs",
@@ -106,20 +70,20 @@
         "/home/omary/Dev/fornach/src/Fornach.Spatial/Line.fs",
         "/home/omary/Dev/fornach/src/Fornach.Spatial/Los.fs"
       ],
-      "requirementCount": 18,
+      "requirementCount": 20,
       "dependsOn": [],
       "calledBy": []
     },
     {
-      "domain": "fornach-story",
-      "specPath": "openspec/specs/fornach-story/spec.md",
+      "domain": "openwiki",
+      "specPath": "openspec/specs/openwiki/spec.md",
       "sourceFiles": [
-        "/home/omary/Dev/fornach/src/Fornach.Story/StoryTypes.fs",
-        "/home/omary/Dev/fornach/src/Fornach.Story/StoryRunner.fs",
-        "/home/omary/Dev/fornach/src/Fornach.Story/Bosses.fs",
-        "/home/omary/Dev/fornach/src/Fornach.Story/Fornach.Story.fsproj"
+        "/home/omary/Dev/fornach/openwiki/.page-manifest.json",
+        "/home/omary/Dev/fornach/openwiki/quickstart.md",
+        "/home/omary/Dev/fornach/openwiki/.last-update.json",
+        "/home/omary/Dev/fornach/openwiki/index.md"
       ],
-      "requirementCount": 18,
+      "requirementCount": 12,
       "dependsOn": [],
       "calledBy": []
     },
@@ -133,7 +97,15 @@
         "/home/omary/Dev/fornach/docs/openwiki-visualizer/client.js",
         "/home/omary/Dev/fornach/docs/openwiki-visualizer/styles.css"
       ],
-      "requirementCount": 49,
+      "requirementCount": 30,
+      "dependsOn": [],
+      "calledBy": []
+    },
+    {
+      "domain": "undomained",
+      "specPath": "openspec/specs/undomained/spec.md",
+      "sourceFiles": [],
+      "requirementCount": 2,
       "dependsOn": [],
       "calledBy": []
     }
