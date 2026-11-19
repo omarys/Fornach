@@ -257,9 +257,9 @@ type ProgressionProfile = {
     let estimatedPrimaryStat = 45 + (Math.Max(1, level) - 1) * 4
     ProgressionProfile.createWithStat cls level estimatedPrimaryStat
 
-  /// Calculates species familiarity experience points for an encounter. One per encounter survived
-  /// with the species: the damage curve (`speciesDamageFactor`) turns five encounters into full
-  /// familiarity, so the count itself is the progression.
+  /// Calculates species familiarity experience points for an encounter. One per encounter with the
+  /// species, won or lost: the damage curve (`speciesDamageFactor`) moves 1% per encounter across the
+  /// +/-25% span, so fifty encounters reach full familiarity and the count itself is the progression.
   static member SpeciesExperienceForEncounter (_priorEncounters: int) : int = 1
 
   /// Legacy helper for backwards compatibility

@@ -28,6 +28,7 @@
     <Compile Include="ShrineBlessingTests.fs" />
     <Compile Include="EnemyDensityTests.fs" />
     <Compile Include="ShrineBoonTests.fs" />
+    <Compile Include="FamiliarityTests.fs" />
     <Compile Include="SpatialAndRelicTests.fs" />
   </ItemGroup>
 

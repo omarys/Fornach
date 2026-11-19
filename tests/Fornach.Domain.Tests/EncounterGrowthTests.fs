@@ -4,7 +4,8 @@ open Fornach.Domain
 
 /// ADR 0009 (stress-growth rework): discipline is earned under pressure, not per encounter.
 /// `Combatant.growFromEncounter` records bestiary familiarity only (+1 per species per encounter,
-/// uncapped; the first five also scale damage 0.75 -> 1.25 in ActionResolver.speciesDamageFactor).
+/// uncapped; the curve below moves 1% per encounter across the +/-25% span, so fifty encounters
+/// reach full familiarity in ActionResolver.familiarityFactor).
 /// `Combatant.growFromStressedVictory` banks +5 on a victory that cost blood/morale/status,
 /// +1 more above half Recklessness. `Combatant.growFromDefeat` banks +10 on collapse or death.
 /// All four growth stats (Prowess/Poise or Acumen/Composure) rise together under stress.

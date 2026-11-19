@@ -147,21 +147,26 @@ module ActionResolver =
   /// (ADR 0009). The legacy percentage bonuses are retired.
   let masteryMultiplier (_attacker: Combatant) (_defender: Combatant) : float = 1.0
 
-  /// Species familiarity damage factor (ADR 0009, stress-growth rework): a player-style combatant
-  /// fights an unfamiliar species at a penalty that familiarity converts into an edge. Outgoing
-  /// damage scales 0.75 -> 1.25 over the first five encounters with the species; the defender's
-  /// knowledge runs the mirror on incoming damage (1.25 -> 0.75), so veterans genuinely know the
-  /// beast in both directions. Mobs keep no bestiary and fight at 1.0.
+  /// Species familiarity multiplier (ADR 0009): a player-style combatant fights an unfamiliar
+  /// species at -25% and a mastered one at +25%, gaining 1% per encounter with the species, so the
+  /// full span takes fifty encounters. Mobs keep no bestiary and always fight at 1.0. This single
+  /// curve drives outgoing damage, incoming damage (as its mirror) and the reactive riposte/disarm
+  /// chance, so familiarity cannot leak past +/-25% anywhere.
+  let familiarityFactor (c: Combatant) (foe: Combatant) : float =
+    if not c.PlayerStyle then 1.0
+    else
+      let prior =
+        c.Progression.BestiaryKnowledge
+        |> Map.tryFind (ProgressionProfile.NormalizeSpeciesName foe.Name)
+        |> Option.defaultValue 0
+
+      0.75 + 0.01 * float (Math.Min(prior, 50))
+
+  /// Species familiarity damage factor (ADR 0009, stress-growth rework): the attacker's edge
+  /// against the defender times the defender's own knowledge of the attacker (the mirror,
+  /// 1.25 -> 0.75), so veterans genuinely know the beast in both directions.
   let speciesDamageFactor (attacker: Combatant) (defender: Combatant) : float =
-    let familiarity (c: Combatant) (foe: Combatant) =
-      c.Progression.BestiaryKnowledge
-      |> Map.tryFind (ProgressionProfile.NormalizeSpeciesName foe.Name)
-      |> Option.defaultValue 0
-      |> fun prior -> Math.Min(prior, 5)
-    let factor (c: Combatant) (foe: Combatant) low high =
-      if not c.PlayerStyle then 1.0
-      else low + (high - low) * float (familiarity c foe) / 5.0
-    factor attacker defender 0.75 1.25 * factor defender attacker 1.25 0.75
+    familiarityFactor attacker defender * (2.0 - familiarityFactor defender attacker)
 
   // =========================================================================
   // 1b. Tempo ownership (Vor / Nach / Indes)
@@ -2142,14 +2147,23 @@ module ActionResolver =
     let defenderStacks = Combatant.stacksIn atk.Vector currentTarget
 
     if plane = Physical && defenderStacks > 0 then
-      let counterChance = Math.Min(70, defenderStacks * 14)
+      // Familiarity reaches the reactive defence on the same +/-25% curve it applies to damage: a
+      // veteran's counter lands more often and reaches the disarm threshold sooner, a first meeting
+      // fumbles both. Scaling before the 70% cap lets a familiar defender reach the ceiling at fewer
+      // stacks instead of inflating past it.
+      let defFamiliarity = familiarityFactor currentTarget currentActor
+      let counterChance = Math.Min(70, int (Math.Round(float (defenderStacks * 14) * defFamiliarity)))
       if roller 1 100 <= counterChance then
-        // Familiarity expresses through `speciesDamageFactor` only (ADR 0009); no additive Prowess here.
         let defProwess = currentTarget.GetStat Prowess
-        let atkPoise = if currentActor.IsHumanoid then currentActor.GetStat Poise else currentActor.GetStat Fortitude
-        let isDisarmPossible = currentActor.IsHumanoid && defProwess >= int (Math.Round(float atkPoise * 0.75))
+        let disarmReach = float defProwess * defFamiliarity
+        let atkPoise =
+          if currentActor.IsHumanoid then currentActor.GetStat Poise else currentActor.GetStat Fortitude
+        let isDisarmPossible = currentActor.IsHumanoid && disarmReach >= float atkPoise * 0.75
         let requiredStacksForDisarm =
-          Math.Min(Combatant.StackCap, Math.Max(2, int (Math.Ceiling((float atkPoise / Math.Max(1.0, float defProwess)) * 3.5))))
+          Math.Min(
+            Combatant.StackCap,
+            Math.Max(2, int (Math.Ceiling((float atkPoise / Math.Max(1.0, disarmReach)) * 3.5)))
+          )
 
         if isDisarmPossible && defenderStacks >= requiredStacksForDisarm then
           // Disarm counter: degrades attacker weapon, resets combo, spikes Frustration, defuses attack
@@ -2227,7 +2241,8 @@ module ActionResolver =
 
     // Passive Discipline Bonuses (Prowess to Offense, Poise to Defense) (ADR 0009)
     // Discipline advantage reflects out-reading / out-poising the opponent's martial discipline.
-    // Species familiarity no longer adds here - it expresses through `speciesDamageFactor` instead.
+    // Species familiarity no longer adds here - it expresses through `speciesDamageFactor` (damage)
+    // and `familiarityFactor` (reactive riposte/disarm) instead.
     let offDisciplineBonus, defDisciplineBonus =
       if plane = Physical then
         let atkProwess = if currentActor.IsHumanoid then currentActor.GetCombatStat Prowess else 0
@@ -2571,8 +2586,9 @@ module ActionResolver =
         let scaled =
           if baseRawDmg <= 0 then baseRawDmg
           else max 1 (int (Math.Round(float baseRawDmg * masteryMultiplier currentActor currentTarget)))
-        // Species familiarity curve (ADR 0009): -25% against a never-met species, +25% once known.
-        // The defender's knowledge mirrors it onto damage taken, so both directions move together.
+        // Species familiarity curve (ADR 0009): -25% against a never-met species, +25% once known,
+        // moving 1% per encounter. The defender's knowledge mirrors it onto damage taken, so both
+        // directions move together.
         let familiar =
           if scaled <= 0 then scaled
           else max 1 (int (Math.Round(float scaled * speciesDamageFactor currentActor currentTarget)))

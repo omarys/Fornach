@@ -67,15 +67,16 @@ module ProlongedBattleTests =
       let res = ActionResolver.resolve roller (StandardAttack (ForceStrike false)) attacker target
       target.Health.Current - res.Target.Health.Current
 
-    // Offense: five encounters against the species hit harder than none via Bestiary Prowess.
+    // Offense: the familiarity curve moves 1% per encounter, so 25 encounters (a 1.00 factor) hit
+    // harder than a first meeting (0.75).
     let plainHit = damageBetween (asPlayer 0) sprite
-    let masteredHit = damageBetween (asPlayer 5) sprite
+    let masteredHit = damageBetween (asPlayer 25) sprite
     Assert.True(masteredHit > plainHit, sprintf "mastered hit %d should exceed %d" masteredHit plainHit)
 
     // Defense: the same species hurts a player who has fought it less than one who has gained Poise.
     let attacker = { createFighter 120 50 50 50 50 50 with Name = species }
     let takenByPlain = damageBetween attacker (asPlayer 0)
-    let takenByMastered = damageBetween attacker (asPlayer 5)
+    let takenByMastered = damageBetween attacker (asPlayer 25)
     Assert.True(takenByMastered < takenByPlain, sprintf "mastered defence %d should undercut %d" takenByMastered takenByPlain)
 
   [<Fact>]
