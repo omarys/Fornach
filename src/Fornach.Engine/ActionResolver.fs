@@ -1804,11 +1804,9 @@ module ActionResolver =
       let atkReflex = currentActor.GetStat Reflex
       let agilityDelta = defFinesse - atkReflex
 
-      let defSpeciesBonus =
-        currentTarget.Progression.BestiaryKnowledge
-        |> Map.tryFind (ProgressionProfile.NormalizeSpeciesName currentActor.Name)
-        |> Option.defaultValue 0
-      let defProwess = currentTarget.GetStat Prowess + defSpeciesBonus
+      // Familiarity expresses through `speciesDamageFactor` only (ADR 0009): an uncapped additive
+      // Prowess bonus here would let a veteran walk past the +/-25% curve in every disarm threshold.
+      let defProwess = currentTarget.GetStat Prowess
       let atkPoise = currentActor.GetStat Poise
       let disciplineDelta = defProwess - atkPoise
 
@@ -2146,11 +2144,8 @@ module ActionResolver =
     if plane = Physical && defenderStacks > 0 then
       let counterChance = Math.Min(70, defenderStacks * 14)
       if roller 1 100 <= counterChance then
-        let defSpeciesBonus =
-          currentTarget.Progression.BestiaryKnowledge
-          |> Map.tryFind (ProgressionProfile.NormalizeSpeciesName currentActor.Name)
-          |> Option.defaultValue 0
-        let defProwess = currentTarget.GetStat Prowess + defSpeciesBonus
+        // Familiarity expresses through `speciesDamageFactor` only (ADR 0009); no additive Prowess here.
+        let defProwess = currentTarget.GetStat Prowess
         let atkPoise = if currentActor.IsHumanoid then currentActor.GetStat Poise else currentActor.GetStat Fortitude
         let isDisarmPossible = currentActor.IsHumanoid && defProwess >= int (Math.Round(float atkPoise * 0.75))
         let requiredStacksForDisarm =
