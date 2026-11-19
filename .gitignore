@@ -13,3 +13,4 @@ logs/
 
 # local NuGet feed produced by `dotnet pack`
 packages/
+.github/workflows
