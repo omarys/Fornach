@@ -315,7 +315,7 @@ module AI =
         let berserkPrep =
           if not (self.HasActivePreparation PreparationType.BerserkTincture) then
             self.Preparations
-            |> List.tryFind (fun slot -> slot.Type = PreparationType.BerserkTincture && slot.RemainingUses > 0)
+            |> List.tryFind (fun slot -> slot.Type = PreparationType.BerserkTincture && slot.Type.Stance = self.Stance && slot.RemainingUses > 0)
             |> Option.bind (fun slot ->
               if self.Health.Current > 30 && self.Meters.Recklessness.Value < 75 then
                 Some (DeployPreparation (PreparationType.BerserkTincture, None))
@@ -330,6 +330,7 @@ module AI =
             self.Preparations
             |> List.tryFind (fun slot ->
               slot.Category = CrowdControl
+              && slot.Type.Stance = self.Stance
               && slot.RemainingUses > 0
               && (match self.ActivePreparations |> List.tryFind (fun a -> a.Type = slot.Type) with
                   | Some active -> active.DurationTurns <= 1
@@ -346,6 +347,7 @@ module AI =
             self.Preparations
             |> List.tryFind (fun slot ->
               slot.RemainingUses > 0
+              && slot.Type.Stance = self.Stance
               && not (self.HasActivePreparation slot.Type)
               && (slot.Type = PreparationType.BerserkTincture || slot.Type = PreparationType.AegisOfRetribution))
             |> Option.bind (fun slot ->
@@ -357,6 +359,7 @@ module AI =
         self.Preparations
         |> List.tryFind (fun slot ->
           (slot.Category = SingleTargetDuel || slot.Type = PreparationType.AegisOfRetribution)
+          && slot.Type.Stance = self.Stance
           && slot.RemainingUses > 0
           && not (self.HasActivePreparation slot.Type))
         |> Option.bind (fun slot ->

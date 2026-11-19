@@ -289,8 +289,15 @@ module ProgressionTests =
     Assert.Equal(631, inq200.GetStat Poise)
 
   [<Fact>]
-  let ``sparing a beast still grows a stat past the class curve`` () =
-    let player = TierFactory.createClassLevel CharacterClass.Fighter 40
+  let ``sparing a beast records the species without growing a stat`` () =
+    // Stress-growth rework: the per-encounter +1 is gone; sparing teaches the bestiary (and steadies
+    // morale) but pays no discipline. Discipline now comes only from stressed victories and defeat.
+    // A full-morale, calm player shows the caps clamping (+20 morale caps at max), so bleed
+    // both first to prove the spare actually steadies.
+    let player =
+      { TierFactory.createClassLevel CharacterClass.Fighter 40 with
+          Morale = (TierFactory.createClassLevel CharacterClass.Fighter 40).Morale.ApplyDelta -30
+          Meters = { (TierFactory.createClassLevel CharacterClass.Fighter 40).Meters with Recklessness = Meter.Create 20 } }
     let state = TowerSession.initSession player 4242 1
 
     let enemy =
@@ -304,11 +311,11 @@ module ProgressionTests =
     let atCurve = state.Player.Stats.Get Prowess
     let spared = TowerSession.resolveBeastFlee enemy.Id true state
 
-    // Growth is unbounded: a spared beast pays a real point even at the curve, alongside the
-    // steadying morale and the familiarity.
     Assert.Equal((TierFactory.createClassLevel CharacterClass.Fighter 40).Stats.Get Prowess, atCurve)
-    Assert.Equal(atCurve + 1, spared.Player.Stats.Get Prowess)
+    Assert.Equal(atCurve, spared.Player.Stats.Get Prowess)
+    Assert.True(spared.Player.Morale.Current > player.Morale.Current, "sparing steadies morale")
+    Assert.True(spared.Player.Meters.Recklessness.Value = 0, "sparing clears Recklessness")
 
     let species = ProgressionProfile.NormalizeSpeciesName enemy.Combatant.Name
 
-    Assert.Equal(5, spared.Player.Progression.BestiaryKnowledge |> Map.tryFind species |> Option.defaultValue 0)
+    Assert.Equal(1, spared.Player.Progression.BestiaryKnowledge |> Map.tryFind species |> Option.defaultValue 0)

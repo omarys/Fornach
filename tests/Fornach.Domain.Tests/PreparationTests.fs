@@ -50,8 +50,9 @@ module PreparationTests =
     Assert.Equal(level, fighter.Progression.Level)
     Assert.Equal(200, fighter.Progression.PrimaryStat)
     Assert.Equal(2, ProgressionProfile.CalculateMaxPrepUses 200)
-    // The Fighter's kit carries 6 preparations, each slotted at the 2-use encounter cap
-    Assert.Equal(6, fighter.Preparations.Length)
+    // The Fighter's kit carries 5 preparations (the Parrying Buckler merged into Raise Shield),
+    // each slotted at the 2-use encounter cap
+    Assert.Equal(5, fighter.Preparations.Length)
 
     for slot in fighter.Preparations do
       Assert.Equal(2, slot.MaxUses)
@@ -59,7 +60,10 @@ module PreparationTests =
 
   [<Fact>]
   let ``Spending preparation decrements remaining charges and blocks deployment when exhausted`` () =
-    let fighter = createFighterWithClass CharacterClass.Fighter 1 50 50 50 50 100 100 50 50 50 50 50 50 // 2 uses
+    // Bastion Zone Control is a Discipline-grounded kit: the bearer must hold the stance to deploy.
+    let fighter =
+      createFighterWithClass CharacterClass.Fighter 1 50 50 50 50 100 100 50 50 50 50 50 50 // 2 uses
+      |> fun c -> { c with Stance = CombatStance.DisciplineStance }
     let dummy = createStandardFighter CharacterClass.Warrior 1
     let roller = fixedRoller 3
 
@@ -137,14 +141,14 @@ module PreparationTests =
   [<Fact>]
   let ``The core player classes are Fighter and Mage, each carrying its full preparation kit`` () =
     // Both player classes are playable, so neither may be classed as a generic NPC, and both carry
-    // preparations: the Fighter's 6 martial tools and the Mage's 7 arcane ones.
+    // preparations: the Fighter's 5 martial tools and the Mage's 7 arcane ones.
     Assert.Equal<CharacterClass list>([ Fighter; Mage ], CharacterClass.PlayerClasses)
 
     for cls in CharacterClass.PlayerClasses do
       Assert.False(cls.IsGeneric)
       Assert.True(cls.IsPlayerClass)
 
-    Assert.Equal(6, (PreparationType.ForClass CharacterClass.Fighter).Length)
+    Assert.Equal(5, (PreparationType.ForClass CharacterClass.Fighter).Length)
     Assert.Equal(7, (PreparationType.ForClass CharacterClass.Mage).Length)
 
     Assert.Equal(Vector.Power, CharacterClass.Mage.Vector)
@@ -241,29 +245,29 @@ module PreparationTests =
     Assert.True(res.Target.Meters.Confusion.Value >= 20, "Target must suffer confusion from Prismatic Flare glitter burst.")
 
   // =========================================================================
-  // 5. Tactical Timing & Indes Tests: ParryingBuckler
+  // 5. Tactical Timing & Indes Tests: the raised shield (Parrying Buckler merged into Raise Shield)
   // =========================================================================
 
   [<Fact>]
-  let ``ParryingBuckler reduces Indes threshold by 1, widening window to seize the Vor`` () =
+  let ``Raised shield plating reduces Indes threshold by 1, widening window to seize the Vor`` () =
     let standardJusticar = createStandardFighter CharacterClass.Warrior 1
     Assert.Equal(Indes.defaultThreshold, Indes.calculateThreshold standardJusticar)
     Assert.Equal(3, Indes.calculateThreshold standardJusticar)
 
-    let bucklerJusticar =
+    let shieldJusticar =
       standardJusticar
-      |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ParryingBuckler None 3)
+      |> fun c -> { c with Armor = c.Armor.BoostBy 36 }
 
-    Assert.Equal(2, Indes.calculateThreshold bucklerJusticar)
+    Assert.Equal(2, Indes.calculateThreshold shieldJusticar)
 
   [<Fact>]
-  let ``ParryingBuckler enables seizing the Vor at 2 net defense hits on a whiffed attack`` () =
+  let ``Raised shield plating enables seizing the Vor at 2 net defense hits on a whiffed attack`` () =
     // Attacker attacks, but defender defense hits exceed attack hits by 2.
-    // With Parrying Buckler, threshold is 2, so IndesSeized should trigger.
+    // With the shield up, threshold is 2, so IndesSeized should trigger.
     let attacker = createFighterWithClass CharacterClass.Warrior 1 20 20 20 20 20 20 10 10 10 10 10 10
     let defender =
       createFighterWithClass CharacterClass.Warrior 5 40 80 40 40 40 40 10 10 10 10 10 10
-      |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ParryingBuckler None 3)
+      |> fun c -> { c with Armor = c.Armor.BoostBy 36 }
 
     // Roller where defender rolls hits and attacker rolls whiffs
     // Roller returning 4 (hits on Fortitude for TN 4+)
@@ -274,7 +278,7 @@ module PreparationTests =
       res.Events
       |> List.tryPick (function CombatEvent.IndesSeized (_, _, thresh, margin) -> Some (thresh, margin) | _ -> None)
 
-    Assert.True(seizedEvt.IsSome, "IndesSeized event should be emitted when threshold is met with Parrying Buckler.")
+    Assert.True(seizedEvt.IsSome, "IndesSeized event should be emitted when threshold is met with the shield up.")
     let thresh, margin = seizedEvt.Value
     Assert.Equal(2, thresh)
     Assert.True(margin >= thresh)
@@ -299,11 +303,11 @@ module PreparationTests =
     // With both windup and recklessness: 3 - 1 - 1 = 1
     Assert.Equal(1, Indes.calculateThresholdWithAttacker defender (Some recklessAttacker) true)
 
-    // With Parrying Buckler + windup + recklessness: clamped at 1
-    let bucklerDefender =
+    // With the shield up + windup + recklessness: clamped at 1
+    let shieldDefender =
       defender
-      |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ParryingBuckler None 3)
-    Assert.Equal(1, Indes.calculateThresholdWithAttacker bucklerDefender (Some recklessAttacker) true)
+      |> fun c -> { c with Armor = c.Armor.BoostBy 36 }
+    Assert.Equal(1, Indes.calculateThresholdWithAttacker shieldDefender (Some recklessAttacker) true)
 
   [<Fact>]
   let ``Indes seizure updates defender to Vor and attacker to Nach with TempoShifted event`` () =
@@ -312,7 +316,7 @@ module PreparationTests =
       |> Combatant.seizeVor
     let defender =
       createFighterWithClass CharacterClass.Warrior 5 40 80 40 40 40 40 10 10 10 10 10 10
-      |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ParryingBuckler None 3)
+      |> fun c -> { c with Armor = c.Armor.BoostBy 36 }
       |> Combatant.yieldVor
 
     Assert.True(attacker.IsInVor)
@@ -408,7 +412,10 @@ module PreparationTests =
 
   [<Fact>]
   let ``SocraticDossier converts opponent Recklessness directly to unmitigated Morale damage`` () =
-    let strategist = createStandardFighter CharacterClass.Mage 5
+    // Socratic Dossier is a Discipline-grounded kit: the bearer must hold the stance to deploy.
+    let strategist =
+      createStandardFighter CharacterClass.Mage 5
+      |> fun c -> { c with Stance = CombatStance.DisciplineStance }
     let targetWithReck =
       createStandardFighter CharacterClass.Warrior 1
       |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness + 40 })
@@ -517,7 +524,10 @@ module PreparationTests =
 
   [<Fact>]
   let ``Duel: Veteran Mesmer deploys PrismaticFlare on Veteran Warrior, draining Morale on Recklessness gain`` () =
-    let mesmer = TierFactory.createClassTier CharacterClass.Mage Veteran
+    // Prismatic Flare is an Agility-grounded kit: the bearer must hold the stance to deploy.
+    let mesmer =
+      TierFactory.createClassTier CharacterClass.Mage Veteran
+      |> fun c -> { c with Stance = CombatStance.AgilityStance }
     let warrior = TierFactory.createClassTier CharacterClass.Warrior Veteran
     let roller = fixedRoller 6
 
@@ -538,13 +548,13 @@ module PreparationTests =
     Assert.True(attackRes.Target.Morale.Current < warriorFlared.Morale.Current)
 
   [<Fact>]
-  let ``Duel: Master Justicar with Parrying Buckler seizes Vor in Indes against Master Duelist`` () =
+  let ``Duel: Master Justicar behind a raised shield seizes Vor in Indes against Master Duelist`` () =
     let justicar =
       TierFactory.createClassTier CharacterClass.Warrior Master
-      |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ParryingBuckler None 3)
+      |> fun c -> { c with Armor = c.Armor.BoostBy 36 }
     let duelist = TierFactory.createClassTier CharacterClass.Rogue Master
 
-    // Parrying Buckler reduces Indes threshold from 3 to 2
+    // The raised shield reduces the Indes threshold from 3 to 2
     Assert.Equal(2, Indes.calculateThreshold justicar)
 
     // Roller where justicar's high defense hits generate margin of 2+ on whiff
@@ -617,7 +627,10 @@ module PreparationTests =
 
   [<Fact>]
   let ``Duel: GrandMaster Strategist converts GrandMaster Mage Recklessness to unmitigated Morale damage`` () =
-    let strategist = TierFactory.createClassTier CharacterClass.Mage GrandMaster
+    // Socratic Dossier is a Discipline-grounded kit: the bearer must hold the stance to deploy.
+    let strategist =
+      TierFactory.createClassTier CharacterClass.Mage GrandMaster
+      |> fun c -> { c with Stance = CombatStance.DisciplineStance }
     let mage =
       TierFactory.createClassTier CharacterClass.Mage GrandMaster
       |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness + 60 })
@@ -896,9 +909,16 @@ module PreparationTests =
 
   [<Fact>]
   let ``Caltrop Pouch deploys with 2 turns duration at Novice and scales with tier progression`` () =
-    let noviceFighter = TierFactory.createClassTier CharacterClass.Fighter Novice
-    let vetFighter = TierFactory.createClassTier CharacterClass.Fighter Veteran
-    let gmFighter = TierFactory.createClassTier CharacterClass.Fighter GrandMaster
+    // Caltrop Pouch is an Agility-grounded kit: the bearer must hold the stance to deploy.
+    let noviceFighter =
+      TierFactory.createClassTier CharacterClass.Fighter Novice
+      |> fun c -> { c with Stance = CombatStance.AgilityStance }
+    let vetFighter =
+      TierFactory.createClassTier CharacterClass.Fighter Veteran
+      |> fun c -> { c with Stance = CombatStance.AgilityStance }
+    let gmFighter =
+      TierFactory.createClassTier CharacterClass.Fighter GrandMaster
+      |> fun c -> { c with Stance = CombatStance.AgilityStance }
     let opponent = TierFactory.createClassTier CharacterClass.Warrior Novice
     let roller = fixedRoller 3
 
@@ -988,7 +1008,10 @@ module PreparationTests =
 
   [<Fact>]
   let ``AegisOfRetribution reduces incoming damage taken by 35% and reflects 50% back as retribution with Frustration`` () =
-    let abjurer = TierFactory.createClassTier CharacterClass.Mage Veteran
+    // Aegis of Retribution is a Discipline-grounded kit: the bearer must hold the stance to deploy.
+    let abjurer =
+      TierFactory.createClassTier CharacterClass.Mage Veteran
+      |> fun c -> { c with Stance = CombatStance.DisciplineStance }
     let ally = TierFactory.createClassTier CharacterClass.Warrior Veteran
     let attacker = TierFactory.createClassTier CharacterClass.Warrior Veteran
     let roller = fixedRoller 4
@@ -1058,3 +1081,22 @@ module PreparationTests =
 
     // Grandmaster Force (841 / 35 = 24) gives min(5, max(2, 24)) = 5 cleave targets
     Assert.True(cleaveHits.Length >= 4, sprintf "Grandmaster Fighter should cleave at least 4 adjacent targets (Actual: %d)" cleaveHits.Length)
+
+  [<Fact>]
+  let ``every preparation is grounded in a stance and the kits cover all three stances`` () =
+    // The available kit narrows to the active stance, so every preparation must name one, and both
+    // class kits must reach all three stances or a stance shift would strand the combatant with nothing.
+    let allPreps =
+      [ CharacterClass.Fighter; CharacterClass.Mage ]
+      |> List.collect PreparationType.ForClass
+
+    for p in allPreps do
+      Assert.True(
+        p.Stance = CombatStance.PowerStance
+        || p.Stance = CombatStance.AgilityStance
+        || p.Stance = CombatStance.DisciplineStance,
+        sprintf "%s must be grounded in a stance" p.Name)
+
+    for cls in [ CharacterClass.Fighter; CharacterClass.Mage ] do
+      let stances = PreparationType.ForClass cls |> List.map (fun p -> p.Stance) |> List.distinct
+      Assert.Equal(3, stances.Length)

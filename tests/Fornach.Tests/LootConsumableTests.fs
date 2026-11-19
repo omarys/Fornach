@@ -221,7 +221,7 @@ let ``an armor repair kit is the only way past the eighty percent repair cap`` (
     let p = delver ()
 
     { p with
-        Armor = { Current = 30; Max = 100 }
+        Armor = { Current = 30; Max = 100; Boost = 0 }
     }
 
   Assert.Equal(80, (TowerSession.restRepairArmor worn.Armor 1000).Current)

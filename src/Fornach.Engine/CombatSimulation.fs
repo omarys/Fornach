@@ -251,14 +251,17 @@ module CombatSimulation =
         let isMerciful = opponent.Meters.Recklessness.Value < 50
         let updatedOpponent =
           if isMerciful then
+            // Grow before the mercy reset: the stressed-recklessness bonus must read the live meter.
             opponent
+            |> Combatant.growFromEncounter [ beast ]
+            |> Combatant.growFromStressedVictory
             |> Combatant.updateMeters (fun m -> { m with Recklessness = Meter.Zero })
             |> (fun p -> { p with Morale = p.Morale.ApplyDelta 20 })
-            |> Combatant.growFromEncounter [ beast ]
           else
             opponent
             |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness + 15 })
             |> Combatant.growFromEncounter [ beast ]
+            |> Combatant.growFromStressedVictory
 
         if beastIsA then
           combB <- updatedOpponent
@@ -835,7 +838,10 @@ module CombatSimulation =
             morale.[floor] <- morale.[floor] + (float survivor.Morale.Current / float survivor.Morale.Maximum * 100.0)
 
             // The tower's own progression: growth from the pack, XP for the pack, stacks cleared on the stairs.
-            let grown = Combatant.growFromEncounter foes survivor
+            let grown =
+              survivor
+              |> Combatant.growFromEncounter foes
+              |> Combatant.growFromStressedVictory
             let xp = foes |> List.sumBy (fun f -> f.Level * 10 + 25)
             let levelled, _ = TowerSession.applyExperience grown xp
             player <- { Combatant.clearStacks levelled with Meters = StatusMeters.Zero }

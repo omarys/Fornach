@@ -215,7 +215,9 @@ type CombatEvent =
   | StaffSiphoned of casterId: CombatantId * targetId: CombatantId * fatigueRestored: int * recklessnessDrained: int * wardRestored: int
 
   /// Fighter braced behind their shield, fortifying armor soak and establishing bastion guard
-  | ShieldRaised of actorId: CombatantId * armorFortified: int * rampStacksGained: int
+  | ShieldRaised of actorId: CombatantId * armorBoosted: int * guardStacksGained: int
+  /// Defence turned a strike aside and hardened the guard: banked Inertia/Focus ramp Poise/Composure
+  | GuardSteeled of actorId: CombatantId * guardStacksGained: int
 
   /// Single-turn damage spike triggered a Pain Shock check against Poise (ADR 0009)
   | PainShockSuffered of targetId: CombatantId * damageTaken: int * damagePct: int * poise: int * resisted: bool

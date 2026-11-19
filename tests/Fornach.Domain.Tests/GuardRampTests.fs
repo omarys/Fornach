@@ -64,11 +64,16 @@ module GuardRampTests =
     Assert.Equal(3, guarded.Focus)
 
   [<Fact>]
-  let ``guard stacks sharpen Poise faster than Momentum does`` () =
+  let ``guard stacks sharpen Resolve/Fortitude, not Poise — discipline is earned`` () =
     let baseC = fighter () |> Combatant.yieldVor
     let withGuard = { baseC with Inertia = Combatant.StackCap; Focus = Combatant.StackCap }
     let withRamp = { baseC with Momentum = Combatant.StackCap }
-    Assert.True(withGuard.GetCombatStat StatId.Poise > withRamp.GetCombatStat StatId.Poise)
+    Assert.True(withGuard.GetCombatStat Resolve > withRamp.GetCombatStat Resolve, "Banked guard stacks ramp Resolve")
+    Assert.True(withGuard.GetCombatStat Fortitude > withRamp.GetCombatStat Fortitude, "Banked guard stacks ramp Fortitude")
+    Assert.True(
+      withGuard.GetCombatStat Poise = withRamp.GetCombatStat Poise,
+      "Poise is earned through stress growth, never meter-ramped"
+    )
 
   [<Fact>]
   let ``recovery wipes the guard meters and rest decays them`` () =

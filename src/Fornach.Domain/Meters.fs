@@ -53,3 +53,12 @@ type StatusMeters =
       CognitiveFatigue = Meter.Zero
       Confusion = Meter.Zero
       Provoke = Meter.Zero }
+  /// True when any status meter reads above zero - used to gate stress-based permanent growth,
+  /// so a flawless fight teaches nothing.
+  member this.HasAnyStatus =
+    this.Recklessness.Value > 0
+    || this.Exhaustion.Value > 0
+    || this.Frustration.Value > 0
+    || this.CognitiveFatigue.Value > 0
+    || this.Confusion.Value > 0
+    || this.Provoke.Value > 0

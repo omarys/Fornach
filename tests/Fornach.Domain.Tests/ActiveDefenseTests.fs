@@ -93,7 +93,7 @@ module ActiveDefenseTests =
     Assert.Equal(-15, bonus)
 
   [<Fact>]
-  let ``Unattacked FortitudeGuard repairs armor and bleeds recklessness`` () =
+  let ``Unattacked FortitudeGuard raises plating and bleeds recklessness`` () =
     let fighter =
       (TierFactory.createClassLevel CharacterClass.Fighter 1 |> player)
       |> fun c ->
@@ -108,8 +108,9 @@ module ActiveDefenseTests =
 
     let outcome = ActionResolver.resolveActiveDefense (FortitudeGuard true) fighter opponent
 
-    // Armor repaired
-    Assert.True(outcome.Actor.Armor.Current > 20, "Braced FortitudeGuard must repair armor")
+    // Armor raised as held plating; durability is repaired by kits and shrines, never mid-combat
+    Assert.Equal(30, outcome.Actor.Armor.Boost)
+    Assert.Equal(20, outcome.Actor.Armor.Current)
     // Recklessness bled
     Assert.True(outcome.Actor.Meters.Recklessness.Value < 40, "FortitudeGuard must bleed Recklessness")
     // Guard meters gained -- a brace hardens, it does not load the offense ramp

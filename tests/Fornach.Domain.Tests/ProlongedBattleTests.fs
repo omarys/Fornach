@@ -811,16 +811,18 @@ module ProlongedBattleTests =
         resAcumen.Actor.ArcaneWard resIntellect.Actor.ArcaneWard)
 
   [<Fact>]
-  let ``SteadyForm and CenterMind build a bounded ramp and never explode into dozens`` () =
+  let ``SteadyForm and CenterMind bank bounded guard stacks and never explode into dozens`` () =
     let roller = fixedRoller 1
     // Veteran fighter with Prowess 170 (like Stone Gargoyle)
     let gargoyleFighter = createFighter 180 220 230 240 170 200
     let opponent = createFighter 100 100 100 100 100 100
 
     let resSteady = ActionResolver.resolve roller (RecoveryAction SteadyForm) gargoyleFighter opponent
-    // The gain is clamped to 6 from 42, and the meters themselves cap at 5 — never 42 stacks!
-    Assert.Equal(Combatant.StackCap, resSteady.Actor.Flow)
-    Assert.Equal(Combatant.StackCap, resSteady.Actor.Momentum)
+    // The gain is clamped to 6 from 42, and the guard meters stay single digits — never 42 stacks!
+    Assert.Equal(6, resSteady.Actor.Inertia)
+    Assert.Equal(6, resSteady.Actor.Focus)
+    Assert.Equal(0, resSteady.Actor.Flow)
+    Assert.Equal(0, resSteady.Actor.Momentum)
 
     let stabilizedEvt =
       resSteady.Events
@@ -833,7 +835,8 @@ module ProlongedBattleTests =
     // CenterMind with Acumen 170
     let mentalFighter = createMage 100 100 100 100 170 140
     let resCenter = ActionResolver.resolve roller (RecoveryAction CenterMind) mentalFighter opponent
-    Assert.Equal(Combatant.StackCap, resCenter.Actor.Momentum)
+    Assert.Equal(6, resCenter.Actor.Focus)
+    Assert.Equal(0, resCenter.Actor.Momentum)
 
     // Combatant.addStacks is clamped at StackCap
     let flooded = resSteady.Actor |> Combatant.addStacks 100
@@ -1062,7 +1065,8 @@ module ProlongedBattleTests =
           Momentum = momentum }
 
     Assert.Equal(120, (armed 0 0).GetCombatStat Poise)
-    Assert.Equal(126, (armed 0 Combatant.StackCap).GetCombatStat Poise) // 1% Momentum per stack
+    // Poise is earned under stress, never meter-ramped: a full Momentum meter leaves it flat.
+    Assert.Equal(120, (armed 0 Combatant.StackCap).GetCombatStat Poise)
     Assert.Equal(80, (armed 0 0).GetCombatStat Reflex)
     Assert.Equal(104, (armed Combatant.StackCap 0).GetCombatStat Reflex) // 6% Flow per stack, 5 stacks
 
@@ -1078,14 +1082,17 @@ module ProlongedBattleTests =
     Assert.Equal(1.3, ratio Intuition Combatant.StackCap 0, 1)
     Assert.Equal(1.05, ratio Resolve 0 Combatant.StackCap, 1)
 
-    // A discipline strike reads Prowess, so Momentum moves its damage and Flow does not.
+    // A discipline strike reads Prowess, and discipline must be earned: no meter RAMPS the stat.
+    // Momentum still pays the meter cash-out (spentPerStack) on any strike — that is the resource's
+    // designed spend, not a stat ramp — while Flow touches neither.
     let target = createFighter 50 50 50 50 50 50
     let dmgZero, _ = damageTaken (armed 0 0) (ProwessStrike false) target
     let dmgMomentum, _ = damageTaken (armed 0 Combatant.StackCap) (ProwessStrike false) target
     let dmgFlow, _ = damageTaken (armed Combatant.StackCap 0) (ProwessStrike false) target
 
     Assert.Equal(dmgZero, dmgFlow)
-    Assert.True(dmgMomentum > dmgZero, sprintf "A full Momentum meter (%d) must outhit an empty one (%d)" dmgMomentum dmgZero)
+    Assert.True(dmgMomentum > dmgZero, sprintf "The meter cash-out (%d) must still pay out over an empty meter (%d)" dmgMomentum dmgZero)
+    Assert.Equal((armed 0 0).GetCombatStat Prowess, (armed 0 Combatant.StackCap).GetCombatStat Prowess)
 
   [<Fact>]
   let ``Calculated flaw strike pays 0.35 multiplier per stack and follows the spent amount`` () =

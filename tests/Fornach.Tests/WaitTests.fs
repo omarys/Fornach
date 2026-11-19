@@ -4,9 +4,10 @@ open Xunit
 open Fornach.Domain
 open Fornach.Engine
 
-/// A held round is the tower's one pass-turn: it buys the Steady Form recovery, hands the Vor to the engaged
-/// foe that does not already hold it, and leaves the combatant only the attack of opportunity a provoking foe
-/// grants. These tests pin each half of that bargain.
+/// A held round is the tower's one pass-turn: it buys the bearer's own defensive reset (Raise Shield for
+/// a fighter, Center Mind for a mage), hands the Vor to the engaged foe that does not already hold it,
+/// and leaves the combatant only the attack of opportunity a provoking foe grants. These tests pin each
+/// half of that bargain.
 module WaitTests =
 
   let private roller (seed: int) : DiceRoller =
@@ -38,30 +39,49 @@ module WaitTests =
     | _ -> false
 
   [<Fact>]
-  let ``a held round performs the Steady Form recovery`` () =
+  let ``a held round performs the bearer's own defensive reset`` () =
     let actor = strained (player ())
     let foe = foeOf actor
 
     let waited = ActionResolver.resolve (roller 17) Wait actor foe
-    let recovered = ActionResolver.resolve (roller 17) (RecoveryAction SteadyForm) actor foe
+    let shielded = ActionResolver.resolve (roller 17) (RecoveryAction RaiseShield) actor foe
 
-    // Same effect as the Steady Form reset: the held round carries the recovery, it does not replace it.
-    Assert.Equal(recovered.Actor.Meters, waited.Actor.Meters)
-    Assert.Equal(recovered.Actor.Morale, waited.Actor.Morale)
+    // Same effect as the Raise Shield reset: the fighter's hold is the shield up, not a fourth reset.
+    Assert.Equal(shielded.Actor.Armor, waited.Actor.Armor)
+    Assert.Equal(shielded.Actor.Meters, waited.Actor.Meters)
 
     Assert.True(
       waited.Actor.Meters.Exhaustion.Value < actor.Meters.Exhaustion.Value,
-      "Steady Form should bleed strain"
+      "Raise Shield should bleed strain"
     )
 
     Assert.True(
       waited.Actor.Meters.Recklessness.Value < actor.Meters.Recklessness.Value,
-      "Steady Form should bleed recklessness"
+      "Raise Shield should bleed recklessness"
     )
 
+    Assert.True(waited.Actor.Armor.Boost > 0, "the fighter's hold erects shield plating, not armor repair")
+    Assert.Equal(actor.Armor.Current, waited.Actor.Armor.Current)
+
     Assert.True(
-      waited.Actor.Morale.Current > actor.Morale.Current,
-      "Steady Form should restore Morale"
+      waited.Actor.Inertia > actor.Inertia,
+      "the hold should bank guard stacks (Inertia), not the ramp (Flow/Momentum)"
+    )
+    Assert.Equal(actor.Momentum, waited.Actor.Momentum)
+
+  [<Fact>]
+  let ``a held round performs the mage's Center Mind reset`` () =
+    let actor =
+      strained { TierFactory.createClassLevel CharacterClass.Mage 30 with PlayerStyle = true }
+    let foe = foeOf actor
+
+    let waited = ActionResolver.resolve (roller 17) Wait actor foe
+    let centered = ActionResolver.resolve (roller 17) (RecoveryAction CenterMind) actor foe
+
+    Assert.Equal(centered.Actor.ArcaneWard, waited.Actor.ArcaneWard)
+    Assert.True(
+      waited.Actor.Focus > actor.Focus,
+      "the mage's hold should bank guard stacks (Focus), not the ramp"
     )
 
   [<Fact>]
@@ -87,6 +107,21 @@ module WaitTests =
     Assert.True(res.Actor.IsInNach, "a held round gives up the initiative")
     Assert.True(res.Target.IsInVor, "the engaged foe takes the Vor that was ceded")
     Assert.Contains(res.Events, isTempoShift)
+
+  [<Fact>]
+  let ``shield plating is a one-round hold that comes down at the next commitment`` () =
+    let actor = strained (player ())
+    let foe = foeOf actor
+
+    let waited = ActionResolver.resolve (roller 17) Wait actor foe
+    Assert.True(waited.Actor.Armor.Boost > 0, "the hold erects shield plating")
+
+    // Plating is a held shield, not a permanent stat: the bearer's next intent (a strike here)
+    // fights unshielded, and only the foe's incoming blow meets the plating in between.
+    let struck =
+      ActionResolver.resolve (roller 17) (StandardAttack (ForceStrike false)) waited.Actor foe
+
+    Assert.True(struck.Actor.Armor.Boost = 0, "committing to a new intent takes the plating down")
 
   [<Fact>]
   let ``a foe already holding the Vor keeps it`` () =

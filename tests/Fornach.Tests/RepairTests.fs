@@ -11,7 +11,8 @@ let private pool current maximum : Pool =
 
 let private armor current maximum : ArmorIntegrity =
   { Current = current
-    Max = maximum }
+    Max = maximum
+    Boost = 0 }
 
 [<Fact>]
 let ``resting heals toward sixty percent of maximum and stops there`` () =
@@ -72,3 +73,32 @@ let ``waiting widens focus one step at a time and moving narrows it back at the 
   Assert.Equal(LocomotionState.Stationary 1, once)
   Assert.Equal(LocomotionState.Walking, TowerSession.focusOnMove once)
   Assert.Equal(LocomotionState.Walking, TowerSession.focusOnMove LocomotionState.Walking)
+
+[<Fact>]
+let ``shield plating eats shred before durability and repairs never touch it`` () =
+  let pristine = armor 100 100
+  let shielded = pristine.BoostBy 36
+
+  // The shield takes the beating first; the armor underneath is untouched until plating runs out.
+  let afterGlancing = shielded.Shred 20
+  Assert.Equal(16, afterGlancing.Boost)
+  Assert.Equal(100, afterGlancing.Current)
+
+  let afterCrushing = shielded.Shred 50
+  Assert.Equal(0, afterCrushing.Boost)
+  Assert.Equal(86, afterCrushing.Current)
+
+  // Repair restores durability only -- a kit never re-plates a held shield.
+  let fieldRepaired = (armor 20 100).BoostBy 36 |> fun a -> a.Repair 10
+  Assert.Equal(30, fieldRepaired.Current)
+  Assert.Equal(36, fieldRepaired.Boost)
+
+[<Fact>]
+let ``plating raises soak past pristine armor but never past three quarters`` () =
+  let pristine = armor 100 100
+  let shielded = pristine.BoostBy 36
+  let overplated = pristine.BoostBy 200
+
+  Assert.Equal(0.5, pristine.AbsorptionRatio, 3)
+  Assert.Equal(0.68, shielded.AbsorptionRatio, 3)
+  Assert.Equal(0.75, overplated.AbsorptionRatio, 3)

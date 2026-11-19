@@ -17,21 +17,24 @@ module Indes =
   /// Default baseline margin of net defense hits needed to seize the Vor from the Nach
   let defaultThreshold = 3
 
-  /// Calculates the Indes threshold for a combatant considering defender preparations, attacker overextension, and wind-up commitment.
+  /// Calculates the Indes threshold for a combatant considering shield plating, attacker overextension, and wind-up commitment.
   let calculateThresholdWithAttacker (defender: Combatant) (attackerOpt: Combatant option) (isWindup: bool) : int =
     let baseThresh = defaultThreshold
-    let bucklerMod =
-      if defender.HasActivePreparation PreparationType.ParryingBuckler then -1
+    // The raised shield doubles as the parry: while plating is up (Armor.Boost > 0) the Vor window widens
+    // by one -- this is the Parrying Buckler merged into Raise Shield, always on while the shield is held.
+    let shieldMod =
+      if defender.Armor.Boost > 0 then -1
       else 0
     let windupMod = if isWindup then -1 else 0
     let recklessnessMod =
       match attackerOpt with
       | Some atk when atk.Meters.Recklessness.Value >= 60 -> -1
       | _ -> 0
-    Math.Max(1, baseThresh + bucklerMod + windupMod + recklessnessMod)
+    Math.Max(1, baseThresh + shieldMod + windupMod + recklessnessMod)
 
   /// Calculates the baseline Indes threshold for a combatant.
-  /// A ParryingBuckler modifies Indes.calculateThreshold by -1, widening the window for combatants to seize the Vor.
+  /// A raised shield (plating held up by Raise Shield) modifies Indes.calculateThreshold by -1, widening
+  /// the window for combatants to seize the Vor.
   let calculateThreshold (combatant: Combatant) : int =
     calculateThresholdWithAttacker combatant None false
 

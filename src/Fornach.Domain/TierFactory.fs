@@ -364,7 +364,9 @@ module TierFactory =
             Maximum = newMoraleMax }
         Armor =
           { Current = scaledValue c.Armor.Current c.Armor.Max newArmorMax
-            Max = newArmorMax }
+            Max = newArmorMax
+            // Plating is in-combat shield boost; it never survives a level rescale.
+            Boost = 0 }
         Progression =
           { c.Progression with
               Level = level
@@ -437,7 +439,8 @@ module TierFactory =
           Morale = scalePool enemy.Morale
           Armor =
             { Current = max 1 (int (Math.Round(float enemy.Armor.Current * float armorMax / float (max 1 enemy.Armor.Max))))
-              Max = armorMax }
+              Max = armorMax
+              Boost = 0 }
           Progression =
             { enemy.Progression with
                 Level = targetLevel

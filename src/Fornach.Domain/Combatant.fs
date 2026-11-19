@@ -2,32 +2,48 @@ namespace Fornach.Domain
 
 open System
 
-/// Represents physical armor durability and passive damage absorption
+/// Represents physical armor durability, passive damage absorption, and temporary shield plating
 [<Struct>]
 type ArmorIntegrity =
   { Current: int
-    Max: int }
+    Max: int
+    /// Shield plating held up by Raise Shield: it counts toward soak and eats armor shred before real
+    /// durability, but it is not armor -- kits and shrines repair Current, never Boost, and it comes
+    /// down the moment its bearer commits to a new intent.
+    Boost: int }
 
   static member Create max =
     let m = Math.Max(0, max)
-    { Current = m; Max = m }
+    { Current = m; Max = m; Boost = 0 }
 
-  /// Reduces current armor durability, clamped between 0 and Max
+  /// Reduces armor durability, clamped between 0 and Max. Shield plating takes the beating first:
+  /// a blow against a raised shield chews Boost before it reaches the armor underneath.
   member this.Shred amount =
-    { Current = Math.Clamp(this.Current - amount, 0, this.Max)
-      Max = this.Max }
+    let boostHit = Math.Min(this.Boost, amount)
+    { Current = Math.Clamp(this.Current - (amount - boostHit), 0, this.Max)
+      Max = this.Max
+      Boost = this.Boost - boostHit }
 
-  /// Repairs current armor durability, clamped between 0 and Max
+  /// Repairs current armor durability, clamped between 0 and Max. Boost is untouched: plating is
+  /// never repaired, only re-erected by holding the shield up again.
   member this.Repair amount =
     { Current = Math.Clamp(this.Current + amount, 0, this.Max)
-      Max = this.Max }
+      Max = this.Max
+      Boost = this.Boost }
 
-  /// Passive mitigation ratio: pristine armor soaks up to 50% of raw physical hits
+  /// Adds temporary shield plating on top of whatever durability the armor already has.
+  member this.BoostBy amount =
+    { Current = this.Current
+      Max = this.Max
+      Boost = this.Boost + amount }
+
+  /// Passive mitigation ratio: pristine armor soaks up to 50% of raw physical hits. Plating held up
+  /// in front of it raises the ratio, capped at 75% -- a shield stops most of a blow, never all of it.
   member this.AbsorptionRatio =
     if this.Max = 0 then
       0.0
     else
-      float this.Current / float this.Max * 0.50
+      Math.Min(0.75, float (this.Current + this.Boost) / float this.Max * 0.50)
 
   member this.IsShredded = this.Current <= 0
 
@@ -272,10 +288,11 @@ type Combatant with
       else
         strainAdjusted
 
-    // Combat ramp: each meter sharpens the stats it feeds, across both planes, so a sustained fight
-    // compounds. Flow carries the Agility stats (Finesse/Reflex, Acuity/Intuition); Momentum carries
-    // Power and Discipline (Force/Fortitude/Intellect/Resolve, Prowess/Poise/Acumen/Composure), so a
-    // caster's stacks and guard are worth holding too.
+    // Combat ramp: each meter sharpens the physical stats it feeds, so a sustained fight compounds.
+    // Flow carries the Agility stats (Finesse/Reflex, Acuity/Intuition); Momentum carries the Power
+    // stats (Force/Intellect) and the guard meters buy defence (Fortitude/Resolve). Discipline
+    // (Prowess/Poise/Acumen/Composure) never ramps in combat - it is earned permanently through
+    // stress growth (`growFromStressedVictory` / `growFromDefeat`), not banked by standing in a stance.
     // Flow is deliberately the sharpest (6%/stack vs 1%) — it is the Agility glass cannon meter. At
     // 10% it was ~1.9x the Momentum meter once Finesse's 2.5x crit was counted in.
     let momentumRamp = 1.0 + 0.01 * float (Math.Clamp(this.Momentum, 0, Combatant.StackCap))
@@ -287,9 +304,10 @@ type Combatant with
     let ramp =
       match stat with
       | Finesse | Reflex | Acuity | Intuition -> 1.0 + 0.06 * float (Math.Clamp(this.Flow, 0, Combatant.StackCap))
-      | Fortitude | Poise -> momentumRamp * guardRamp this.Inertia
-      | Resolve | Composure -> momentumRamp * guardRamp this.Focus
-      | Force | Intellect | Prowess | Acumen -> momentumRamp
+      | Fortitude -> momentumRamp * guardRamp this.Inertia
+      | Resolve -> momentumRamp * guardRamp this.Focus
+      | Force | Intellect -> momentumRamp
+      | Prowess | Poise | Acumen | Composure -> 1.0
 
     if ramp = 1.0 then
       stanceAdjusted
@@ -503,13 +521,14 @@ type Combatant with
     | Vector.Power -> { c with Momentum = Math.Max(0, c.Momentum - count) }
     | Vector.Discipline -> { c with Momentum = Math.Max(0, c.Momentum - count) }
 
-  /// Permanent growth on a won or survived encounter (ADR 0009):
-  /// Global Prowess/Acumen grows by +1 per encounter, Poise/Composure grows by +1 per survived encounter,
-  /// mental defences gain +1, and species familiarity is recorded in ProgressionProfile.BestiaryKnowledge
-  /// (5 -> 3 -> 1 -> 1...).
+  /// Encounter bookkeeping (ADR 0009, stress-growth rework): records species familiarity in
+  /// ProgressionProfile.BestiaryKnowledge (+1 per encounter with the species) and keeps the
+  /// sharpness stipend on the perception stats. The flat discipline grant is gone -
+  /// Prowess/Poise/Acumen/Composure now only grow through `growFromStressedVictory` /
+  /// `growFromDefeat`.
   static member growFromEncounter (foes: Combatant list) (c: Combatant) =
     let mentalDefences =
-      [ StatId.Resolve, 1; StatId.Intuition, 1; StatId.Composure, 1 ]
+      [ StatId.Resolve, 1; StatId.Intuition, 1 ]
 
     let updatedProg =
       foes
@@ -517,17 +536,45 @@ type Combatant with
           let pNext, _ = p.RecordBestiaryEncounter foe.Name
           pNext) c.Progression
 
-    let prowessGain = 1
-    let poiseGain = 1
+    { c with
+        Stats = c.Stats.ApplyModifiers mentalDefences
+        Progression = updatedProg }
 
+  /// Stress-gated discipline growth (ADR 0009): +5 to the class discipline pair (Prowess/Poise
+  /// for martial classes, Acumen/Composure for mages) when the victory was paid for in blood,
+  /// morale or status, +1 more when it was won above half Recklessness. A flawless fight teaches
+  /// nothing. Surviving the encounter also clears the collapse status - the breakdown is over
+  /// when the fight is.
+  static member growFromStressedVictory (c: Combatant) =
+    let stressed =
+      c.Health.Current < c.Health.Maximum
+      || c.Morale.Current < c.Morale.Maximum
+      || c.Meters.HasAnyStatus
+
+    let gain =
+      (if stressed then 5 else 0)
+      + (if c.Meters.Recklessness.Value > 50 then 1 else 0)
+
+    let disciplinePair amount =
+      match c.Class with
+      | Mage -> [ StatId.Acumen, amount; StatId.Composure, amount ]
+      | _ -> [ StatId.Prowess, amount; StatId.Poise, amount ]
+
+    if gain = 0 then { c with Collapse = CollapseState.Stable }
+    else
+      { c with
+          Stats = c.Stats.ApplyModifiers (disciplinePair gain)
+          Collapse = CollapseState.Stable }
+
+  /// Defeat growth (ADR 0009): collapse or death teaches hardest - +10 to the class discipline
+  /// pair. The trauma reset that follows restores pools and clears collapse but keeps this
+  /// growth; the scars are the point.
+  static member growFromDefeat (c: Combatant) =
     let disciplinePair =
       match c.Class with
-      | Mage -> [ StatId.Acumen, prowessGain; StatId.Composure, poiseGain ]
-      | _ -> [ StatId.Prowess, prowessGain; StatId.Poise, poiseGain ]
-
-    { c with
-        Stats = c.Stats.ApplyModifiers(disciplinePair @ mentalDefences)
-        Progression = updatedProg }
+      | Mage -> [ StatId.Acumen, 10; StatId.Composure, 10 ]
+      | _ -> [ StatId.Prowess, 10; StatId.Poise, 10 ]
+    { c with Stats = c.Stats.ApplyModifiers disciplinePair }
 
   /// Awards milestone Poise bonus for defeating a Floor Boss / Guardian without collapsing (ADR 0009)
   static member grantBossPoise (c: Combatant) =

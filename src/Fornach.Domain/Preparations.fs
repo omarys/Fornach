@@ -38,8 +38,6 @@ type PreparationType =
   // --- Justicar (Discipline / Physical) ---
   /// Crowd: Plants polearm/shield; limits simultaneous attackers strictly to 3 (front 3 tiles)
   | BastionZoneControl
-  /// Duel: Dedicated off-hand reaction die pool, expands Indes trigger window by +1 hit
-  | ParryingBuckler
 
   // --- Abjurer (Discipline / Mental) ---
   /// Crowd/Buff: Runic sanctuary barrier applied to self or ally; reduces all damage taken by 35% and reflects 50% back to attackers as radiant retribution damage and +15 Frustration
@@ -63,7 +61,6 @@ type PreparationType =
     | SynapticBrand
     | ConcealedBlade
     | PrismaticFlare
-    | ParryingBuckler
     | SocraticDossier -> SingleTargetDuel
 
   /// Class association for this preparation
@@ -73,8 +70,7 @@ type PreparationType =
     | BerserkTincture
     | CaltropPouch
     | ConcealedBlade
-    | BastionZoneControl
-    | ParryingBuckler -> CharacterClass.Fighter
+    | BastionZoneControl -> CharacterClass.Fighter
     | DreadWarhorn
     | SynapticBrand
     | MirrorMirage
@@ -95,7 +91,6 @@ type PreparationType =
     | MirrorMirage -> "Mirror Mirage"
     | PrismaticFlare -> "Prismatic Flare"
     | BastionZoneControl -> "Bastion Zone Control"
-    | ParryingBuckler -> "Parrying Buckler"
     | AegisOfRetribution -> "Aegis of Retribution"
     | HeraldicTreatise -> "Heraldic Treatise"
     | SocraticDossier -> "Socratic Dossier"
@@ -112,7 +107,6 @@ type PreparationType =
     | MirrorMirage -> "Phantasmal decoy field; flankers hit illusions, building +20 Confusion and missing turn (duration scales with level/primary stat)."
     | PrismaticFlare -> "Blinding burst of prismatic fireworks; target suffers acute Morale shock and +20 Confusion per point of Recklessness gained (duration scales with level/primary stat)."
     | BastionZoneControl -> "Plants polearm/shield; limits simultaneous attackers strictly to 3 (front three tiles; duration scales with level/primary stat)."
-    | ParryingBuckler -> "Dedicated off-hand reaction shield; modifies Indes threshold by -1, widening Vor window (duration scales with level/primary stat)."
     | AegisOfRetribution -> "Runic sanctuary barrier applied to self or an ally: reduces incoming damage taken by 35% and reflects 50% back to attackers as radiant retribution damage and +15 Frustration (duration scales with level/primary stat)."
     | HeraldicTreatise -> "Pre-battle tactical notes; immediately grants +2 Combat Ramp across all foes."
     | SocraticDossier -> "Exposes contradictions; immediately converts opponent's Recklessness to unmitigated Morale damage."
@@ -129,7 +123,6 @@ type PreparationType =
     | ConcealedBlade
     | MirrorMirage
     | PrismaticFlare
-    | ParryingBuckler
     | AegisOfRetribution -> 3
     | DreadWarhorn
     | HeraldicTreatise
@@ -155,6 +148,23 @@ type PreparationType =
         let bonus = Math.Max((lvl - 1) / 20, Math.Max(0, (primaryStat - 40) / 80))
         Math.Max(this.BaseDuration, this.BaseDuration + bonus)
 
+  /// The stance this preparation is grounded in: it can only be readied while its stance is held, so
+  /// the available kit narrows to whatever the combatant is actually standing in right now.
+  member this.Stance : CombatStance =
+    match this with
+    | ShockwaveSlam
+    | BerserkTincture
+    | DreadWarhorn
+    | SynapticBrand -> CombatStance.PowerStance
+    | CaltropPouch
+    | ConcealedBlade
+    | MirrorMirage
+    | PrismaticFlare -> CombatStance.AgilityStance
+    | BastionZoneControl
+    | AegisOfRetribution
+    | HeraldicTreatise
+    | SocraticDossier -> CombatStance.DisciplineStance
+
   /// Retrieves the preparations belonging to a class: the Fighter carries the physical kit and the
   /// Mage the mental one. Generic NPC classes (Warrior, Rogue) possess none.
   static member ForClass (cls: CharacterClass) : PreparationType list =
@@ -164,8 +174,7 @@ type PreparationType =
         BerserkTincture
         CaltropPouch
         ConcealedBlade
-        BastionZoneControl
-        ParryingBuckler ]
+        BastionZoneControl ]
     | CharacterClass.Mage ->
       [ DreadWarhorn
         SynapticBrand
@@ -205,17 +214,26 @@ type ProgressionProfile = {
   /// Preparation capacity: strictly limited to 2 uses per encounter
   static member CalculateMaxPrepUses (_primaryStat: int) : int = 2
 
-  /// Normalizes an enemy display name into a canonical species name by stripping level prefixes (e.g. "Lv.1 Forest Wolf" -> "Forest Wolf").
+  /// Normalizes an enemy display name into a canonical species name by stripping level prefixes
+  /// (e.g. "Lv.1 Forest Wolf" -> "Forest Wolf") and tier titles ("Novice Warrior", "GrandMaster Warrior"
+  /// -> "Warrior"): a tier is a challenge band, not a species, so familiarity is one curve per base species.
   static member NormalizeSpeciesName (name: string) : string =
     if System.String.IsNullOrWhiteSpace(name) then ""
     else
-      let trimmed = name.Trim()
-      if trimmed.StartsWith("Lv.", StringComparison.OrdinalIgnoreCase) then
-        match trimmed.IndexOf(' ') with
-        | -1 -> trimmed
-        | idx -> trimmed.Substring(idx + 1).Trim()
-      else
-        trimmed
+      let afterFirstWord (s: string) =
+        match s.IndexOf(' ') with
+        | -1 -> s
+        | idx -> s.Substring(idx + 1).Trim()
+      let firstWord (s: string) =
+        match s.IndexOf(' ') with
+        | -1 -> s
+        | idx -> s.Substring(0, idx)
+      let tierTitles =
+        set [ "Novice"; "Veteran"; "Master"; "GrandMaster" ]
+      let mutable result = name.Trim()
+      if result.StartsWith("Lv.", StringComparison.OrdinalIgnoreCase) then result <- afterFirstWord result
+      if tierTitles.Contains(firstWord result) then result <- afterFirstWord result
+      result
 
   /// Creates a standard progression profile with replenished class preparations based on primary stat.
   /// Generic NPC classes do not receive preparation uses or slots.
@@ -239,13 +257,10 @@ type ProgressionProfile = {
     let estimatedPrimaryStat = 45 + (Math.Max(1, level) - 1) * 4
     ProgressionProfile.createWithStat cls level estimatedPrimaryStat
 
-  /// Calculates species familiarity bonus gain for an encounter based on prior encounters with this species
-  /// (5 -> 3 -> 1 -> 1 -> 1...).
-  static member SpeciesExperienceForEncounter (priorEncounters: int) : int =
-    match priorEncounters with
-    | 0 -> 5
-    | 1 -> 3
-    | _ -> 1
+  /// Calculates species familiarity experience points for an encounter. One per encounter survived
+  /// with the species: the damage curve (`speciesDamageFactor`) turns five encounters into full
+  /// familiarity, so the count itself is the progression.
+  static member SpeciesExperienceForEncounter (_priorEncounters: int) : int = 1
 
   /// Legacy helper for backwards compatibility
   static member ProwessGainForEncounter (priorEncounters: int) : int =

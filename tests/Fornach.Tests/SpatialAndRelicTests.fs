@@ -81,6 +81,38 @@ module SpatialAndRelicTests =
     Assert.True(hasRelicEvt, "RelicEffectTriggered event should be emitted")
 
   [<Fact>]
+  let ``successful defence banks guard stacks and steels Resolve/Fortitude — discipline is earned`` () =
+    // Any defence that stops the blow outright (guard-held whiff, won Indes counter, clean affinity
+    // counter) banks Inertia/Focus on the defender, ramping Resolve/Fortitude through the defence.
+    // Poise itself never ramps — it is earned through stressed victories and defeat (ADR 0009).
+    let lowRoller: DiceRoller = fun min _ -> min
+    let actor =
+      TierFactory.createClassLevel CharacterClass.Fighter 1
+      |> Combatant.seizeVor
+    let target =
+      { TierFactory.createClassLevel CharacterClass.Fighter 100 with
+          PlayerStyle = true }
+      |> Combatant.yieldVor
+
+    let res = ActionResolver.resolveExWithDefense lowRoller (StandardAttack (ForceStrike false)) None actor target 0
+
+    Assert.True(res.Contest.Value.IsWhiff, "Strike should whiff against level 100 opponent with minimum rolls")
+    Assert.True(res.Target.Inertia > target.Inertia && res.Target.Focus > target.Focus, "Defender should bank Inertia/Focus for turning the strike aside")
+    Assert.True(
+      res.Target.GetCombatStat Resolve > target.GetCombatStat Resolve
+        && res.Target.GetCombatStat Fortitude > target.GetCombatStat Fortitude,
+      "Banked guard stacks should ramp Resolve/Fortitude through the successful defence"
+    )
+    Assert.True(
+      res.Target.GetCombatStat Poise = target.GetCombatStat Poise,
+      "Poise is earned under stress, never meter-ramped"
+    )
+    let hasGuardSteeled =
+      res.Events
+      |> List.exists (function CombatEvent.GuardSteeled(defenderId, _) when defenderId = target.Id -> true | _ -> false)
+    Assert.True(hasGuardSteeled, "GuardSteeled event should be emitted for the defender")
+
+  [<Fact>]
   let ``resolveKnockbackHazard applies damage and events for lava, acid, deep current, and wall`` () =
     let emptyFloor: TowerFloor = {
       FloorNumber = 1

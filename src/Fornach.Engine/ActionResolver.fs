@@ -147,6 +147,22 @@ module ActionResolver =
   /// (ADR 0009). The legacy percentage bonuses are retired.
   let masteryMultiplier (_attacker: Combatant) (_defender: Combatant) : float = 1.0
 
+  /// Species familiarity damage factor (ADR 0009, stress-growth rework): a player-style combatant
+  /// fights an unfamiliar species at a penalty that familiarity converts into an edge. Outgoing
+  /// damage scales 0.75 -> 1.25 over the first five encounters with the species; the defender's
+  /// knowledge runs the mirror on incoming damage (1.25 -> 0.75), so veterans genuinely know the
+  /// beast in both directions. Mobs keep no bestiary and fight at 1.0.
+  let speciesDamageFactor (attacker: Combatant) (defender: Combatant) : float =
+    let familiarity (c: Combatant) (foe: Combatant) =
+      c.Progression.BestiaryKnowledge
+      |> Map.tryFind (ProgressionProfile.NormalizeSpeciesName foe.Name)
+      |> Option.defaultValue 0
+      |> fun prior -> Math.Min(prior, 5)
+    let factor (c: Combatant) (foe: Combatant) low high =
+      if not c.PlayerStyle then 1.0
+      else low + (high - low) * float (familiarity c foe) / 5.0
+    factor attacker defender 0.75 1.25 * factor defender attacker 1.25 0.75
+
   // =========================================================================
   // 1b. Tempo ownership (Vor / Nach / Indes)
   // =========================================================================
@@ -675,7 +691,7 @@ module ActionResolver =
               Confusion = m.Confusion - confusionDrain
               Provoke = m.Provoke - provokeDrain })
         |> fun a -> { a with Morale = a.Morale.ApplyDelta moraleRestore }
-        |> Combatant.addStacks rampGain
+        |> Combatant.addGuardStacks rampGain
         |> Combatant.stabilizeCollapse
 
       let collapseEvts =
@@ -702,12 +718,14 @@ module ActionResolver =
       let reckDrain = poise + 15
       let exhaustDrain = 12 + (poise / 5)
       let overwhelmDrain = 12 + (poise / 5)
-      let rampGain = 2
+      let guardGain = 2
       // A percentage of the pool, not flat points: 36% is what the old `25 + fortitude / 4` repaired
-      // on the level-1 armor pool, and it repairs the same proportion at every tier.
+      // on the level-1 armor pool. It is now paid as shield plating instead of durability -- armor is
+      // repaired by kits and at shrines; Raise Shield only holds a shield up in front of it. The guard
+      // stacks harden the hold: Inertia/Focus scale Fortitude/Resolve. Poise/Composure never ramp --
+      // discipline is earned through stressed growth, never banked in combat.
       let armorPct = Math.Clamp(25 + (fortitude / 4), 1, 100)
-      let armorRestore = StatBonus.percentOf resetActor.Armor.Max armorPct
-      let newArmor = { resetActor.Armor with Current = Math.Min(resetActor.Armor.Max, resetActor.Armor.Current + armorRestore) }
+      let armorBoost = StatBonus.percentOf resetActor.Armor.Max armorPct
       let updatedActor =
         resetActor
         |> Combatant.updateMeters (fun m ->
@@ -716,18 +734,18 @@ module ActionResolver =
               Exhaustion = m.Exhaustion - exhaustDrain
               Frustration = m.Frustration - overwhelmDrain
               })
-        |> Combatant.addStacks rampGain
+        |> Combatant.addGuardStacks guardGain
         |> Combatant.stabilizeCollapse
-      let updatedActorWithArmor = { updatedActor with Armor = newArmor }
+        |> fun a -> { a with Armor = a.Armor.BoostBy armorBoost }
 
       let collapseEvts =
-        if CollapseState.isCollapsed resetActor.Collapse && not (CollapseState.isCollapsed updatedActorWithArmor.Collapse) then
+        if CollapseState.isCollapsed resetActor.Collapse && not (CollapseState.isCollapsed updatedActor.Collapse) then
           [ CombatEvent.CollapseRecovered actor.Id ]
         else []
 
-      { Actor = updatedActorWithArmor
+      { Actor = updatedActor
         Target = target
-        Events = [ resetEvt; CombatEvent.ShieldRaised(actor.Id, armorRestore, rampGain) ] @ collapseEvts
+        Events = [ resetEvt; CombatEvent.ShieldRaised(actor.Id, armorBoost, guardGain) ] @ collapseEvts
         Contest = None }
 
     | CenterMind ->
@@ -751,7 +769,7 @@ module ActionResolver =
               CognitiveFatigue = m.CognitiveFatigue - fatigueDrain
               Provoke = m.Provoke - provokeDrain
               Frustration = m.Frustration - frustrationDrain })
-        |> Combatant.addStacks rampGain
+        |> Combatant.addGuardStacks rampGain
         |> Combatant.addWard wardRestore
         |> Combatant.stabilizeCollapse
 
@@ -824,10 +842,19 @@ module ActionResolver =
     (actor: Combatant)
     (target: Combatant)
     : ActionResult =
+    // The kit is grounded in the stance it is readied from: an off-stance deployment is rejected at
+    // the engine boundary, not just hidden by a menu, so the rule holds for AI actors and the balance
+    // harness alike. Charges are checked first: a kit with no charges left is the more fundamental
+    // rejection.
     if not (actor.Progression.HasRemainingUses prepType) then
       { Actor = actor
         Target = target
         Events = [ CombatEvent.ComboReset(actor.Id, sprintf "Cannot deploy %s: no preparation charges remaining!" prepType.Name) ]
+        Contest = None }
+    elif prepType.Stance <> actor.Stance then
+      { Actor = actor
+        Target = target
+        Events = [ CombatEvent.ComboReset(actor.Id, sprintf "Cannot deploy %s: the kit is grounded in a stance the bearer does not hold." prepType.Name) ]
         Contest = None }
     else
       let actorSpent = actor |> Combatant.spendPreparation prepType
@@ -932,15 +959,6 @@ module ActionResolver =
         let evts = [
           CombatEvent.BastionZoneErected(actor.Id)
           CombatEvent.PreparationDeployed(actor.Id, prepType, None, sprintf "Bastion Zone planted for %d turns: limits simultaneous attackers strictly to 3 (front three tiles)!" duration)
-        ]
-        { Actor = updatedActor; Target = target; Events = evts; Contest = None }
-
-      | PreparationType.ParryingBuckler ->
-        let updatedActor =
-          actorSpent
-          |> Combatant.addActivePreparation (ActivePreparation.create PreparationType.ParryingBuckler None duration)
-        let evts = [
-          CombatEvent.PreparationDeployed(actor.Id, prepType, None, sprintf "Parrying Buckler braced for %d turns: Indes threshold reduced by -1, widening the window to seize the Vor!" duration)
         ]
         { Actor = updatedActor; Target = target; Events = evts; Contest = None }
 
@@ -1349,11 +1367,7 @@ module ActionResolver =
         off, def, mult, disp, upd
 
       | ProwessStrike isInvitational ->
-        let speciesBonus =
-          currentActor.Progression.BestiaryKnowledge
-          |> Map.tryFind (ProgressionProfile.NormalizeSpeciesName currentTarget.Name)
-          |> Option.defaultValue 0
-        let off = offensiveAxis currentActor + speciesBonus
+        let off = offensiveAxis currentActor
         let def = currentTarget.GetGuard(plane, true)
         let mult = strikeMultiplier atk stackSpend currentActor.Stance
         let ratio = float off / Math.Max(1.0, float def)
@@ -1391,11 +1405,7 @@ module ActionResolver =
 
 
       | CalculatedFlawStrike ->
-        let speciesBonus =
-          currentActor.Progression.BestiaryKnowledge
-          |> Map.tryFind (ProgressionProfile.NormalizeSpeciesName currentTarget.Name)
-          |> Option.defaultValue 0
-        let off = offensiveAxis currentActor + speciesBonus
+        let off = offensiveAxis currentActor
         let def = currentTarget.GetGuard(plane, true)
         let disparity = Math.Max(0, off - def)
         let mult = strikeMultiplier atk stackSpend currentActor.Stance
@@ -1409,11 +1419,7 @@ module ActionResolver =
         off, def, mult, disp, upd
 
       | MasterfulDisarm _ ->
-        let speciesBonus =
-          currentActor.Progression.BestiaryKnowledge
-          |> Map.tryFind (ProgressionProfile.NormalizeSpeciesName currentTarget.Name)
-          |> Option.defaultValue 0
-        let off = currentActor.GetCombatStat Prowess + speciesBonus
+        let off = currentActor.GetCombatStat Prowess
         let def = currentTarget.GetGuard(plane, true)
         let disp = fun _ -> Some DisarmOrLimbDisable
 
@@ -2109,6 +2115,9 @@ module ActionResolver =
           attackDamageMitigation <- Math.Min(attackDamageMitigation, 0.70)
 
     if decoyIntercepted then
+      // The decoy absorbed the blow: a successful defence banks the guard (ADR 0008).
+      currentTarget <- currentTarget |> Combatant.addGuardStacks 1
+      events <- CombatEvent.GuardSteeled(currentTarget.Id, 1) :: events
       let yielder, taker, moved = resolveWhiffTempo currentActor currentTarget
       let interceptEvents =
         if moved then
@@ -2168,6 +2177,9 @@ module ActionResolver =
           events <- CombatEvent.RiposteExecuted(currentTarget.Id, currentActor.Id, riposteDmg) :: events
 
     if defenderDisarmedAttacker then
+      // Stripping the weapon from the attacker's hands is the sharpest defence of all: bank the guard.
+      currentTarget <- currentTarget |> Combatant.addGuardStacks 1
+      events <- CombatEvent.GuardSteeled(currentTarget.Id, 1) :: events
       let yielder, taker, moved = resolveWhiffTempo currentActor currentTarget
       let disarmTempoEvents =
         if moved then
@@ -2220,22 +2232,17 @@ module ActionResolver =
 
     // Passive Discipline Bonuses (Prowess to Offense, Poise to Defense) (ADR 0009)
     // Discipline advantage reflects out-reading / out-poising the opponent's martial discipline.
+    // Species familiarity no longer adds here - it expresses through `speciesDamageFactor` instead.
     let offDisciplineBonus, defDisciplineBonus =
-      let canonicalTarget = ProgressionProfile.NormalizeSpeciesName currentTarget.Name
-      let speciesBonus =
-        currentActor.Progression.BestiaryKnowledge
-        |> Map.tryFind canonicalTarget
-        |> Option.defaultValue 0
-
       if plane = Physical then
-        let atkProwess = (if currentActor.IsHumanoid then currentActor.GetCombatStat Prowess else 0) + speciesBonus
+        let atkProwess = if currentActor.IsHumanoid then currentActor.GetCombatStat Prowess else 0
         let defPoise = if currentTarget.IsHumanoid then currentTarget.GetCombatStat Poise else 0
         let disparity = atkProwess - defPoise
         let offBonus = if disparity > 0 then Math.Min(int (float offStat * 0.25), int (Math.Round(float disparity * 0.25))) else 0
         let defBonus = if priorDefenses = 0 && disparity < 0 then Math.Min(int (float defStat * 0.25), int (Math.Round(float (-disparity) * 0.25))) else 0
         offBonus, defBonus
       elif plane = Mental then
-        let atkAcumen = (if currentActor.IsHumanoid then currentActor.GetCombatStat Acumen else 0) + speciesBonus
+        let atkAcumen = if currentActor.IsHumanoid then currentActor.GetCombatStat Acumen else 0
         let defComposure = if currentTarget.IsHumanoid then currentTarget.GetCombatStat Composure else 0
         let disparity = atkAcumen - defComposure
         let offBonus = if disparity > 0 then Math.Min(int (float offStat * 0.25), int (Math.Round(float disparity * 0.25))) else 0
@@ -2316,6 +2323,12 @@ module ActionResolver =
       // bought no exchange, so the guard meters answer here too — never per swing, only per failure.
       if currentActor.IsInVor then
         currentActor <- currentActor |> Combatant.addGuardStacks 1
+      // Poise/Composure improve through the defence itself: the guard that turned the strike aside
+      // banks Inertia/Focus, so the longer a defence holds the sharper Poise/Composure ramp (2.5%/stack).
+      // Covers the guard-held whiff, the won Indes counter, and the clean affinity counter alike: any
+      // defence that stops the blow is a successful one.
+      currentTarget <- currentTarget |> Combatant.addGuardStacks 1
+      events <- CombatEvent.GuardSteeled(currentTarget.Id, 1) :: events
       // Whiffing inflicts status damage (exhaustion/frustration for physical, cognitive fatigue/confusion/frustration for mental)
       currentActor <-
         currentActor
@@ -2347,7 +2360,7 @@ module ActionResolver =
         CombatEvent.ComboReset(currentActor.Id, "Attack failed to penetrate defenses; combo momentum cleared.")
         :: events
 
-      // Evaluate Indes tempo seizure opportunity (enhanced by Parrying Buckler, windup commitment, and high recklessness)
+      // Evaluate Indes tempo seizure opportunity (enhanced by held shield plating, windup commitment, and high recklessness)
       if indesCounter = Some true then
         // The counter won the exchange. A strike stopped by a strike is the Indes made real: the blow never
         // lands, and the tempo changes hands without the attacker ever having been read.
@@ -2563,10 +2576,15 @@ module ActionResolver =
         let scaled =
           if baseRawDmg <= 0 then baseRawDmg
           else max 1 (int (Math.Round(float baseRawDmg * masteryMultiplier currentActor currentTarget)))
+        // Species familiarity curve (ADR 0009): -25% against a never-met species, +25% once known.
+        // The defender's knowledge mirrors it onto damage taken, so both directions move together.
+        let familiar =
+          if scaled <= 0 then scaled
+          else max 1 (int (Math.Round(float scaled * speciesDamageFactor currentActor currentTarget)))
         if currentTarget.HasActivePreparation PreparationType.AegisOfRetribution then
-          Math.Max(1, int (Math.Round(float scaled * 0.65)))
+          Math.Max(1, int (Math.Round(float familiar * 0.65)))
         else
-          scaled
+          familiar
 
       // Track Recklessness before updates for Neurotoxin check
       let reckBefore = currentTarget.Meters.Recklessness.Value
@@ -2993,15 +3011,18 @@ module ActionResolver =
     let benefitMsg, updatedActor =
       match defense with
       | FortitudeGuard isBraced ->
-        let armorRepaired = if isBraced then 30 else 20
+        // Bracing holds plating up in front of the armor (ADR 0007's rule): durability is repaired
+        // by kits and at shrines, never mid-combat. Same magnitudes as the old repair, paid as
+        // shield boost instead.
+        let armorPlated = if isBraced then 30 else 20
         let reckDrained = if isBraced then 15 else 10
         let a =
           { currentActor with
-              Armor = currentActor.Armor.Repair armorRepaired
+              Armor = currentActor.Armor.BoostBy armorPlated
               Stance = CombatStance.PowerStance }
           |> Combatant.addGuardStacks guardGain
           |> Combatant.updateMeters (fun m -> { m with Recklessness = m.Recklessness - reckDrained })
-        sprintf "Fortitude Guard repaired +%d Armor durability, bled -%d Recklessness, and braced for Power strike (+%d Inertia/Focus)." armorRepaired reckDrained guardGain, a
+        sprintf "Fortitude Guard raised +%d Armor plating, bled -%d Recklessness, and braced for Power strike (+%d Inertia/Focus)." armorPlated reckDrained guardGain, a
 
       | ReflexSlip isEvasive ->
         let overwheimVent = if isEvasive then 25 else 15
@@ -3076,6 +3097,11 @@ module ActionResolver =
       | Wait -> upkeepActor
       | _ -> Combatant.clearHeldRound upkeepActor
 
+    // Shield plating comes down the moment its bearer commits to a new intent: Raise Shield re-erects
+    // it as its own effect below, and every other intent fights unshielded. The same resolve pass clears
+    // the foe's plating when the foe acts, so the rule is symmetric for packs and bosses alike.
+    let upkeepActor = { upkeepActor with Armor = { upkeepActor.Armor with Boost = 0 } }
+
     if upkeepActor.Health.IsDepleted then
       { Actor = upkeepActor
         Target = target
@@ -3102,11 +3128,14 @@ module ActionResolver =
             recRes
         | ActiveDefense defense -> resolveActiveDefense defense upkeepActor target
         | Wait ->
-          // A held round buys the Steady Form recovery and pays for it with the initiative: the actor takes the
-          // recovery, hands the Vor to the engaged foe that does not already hold it, and throws no strike. It
-          // is deliberately not a fourth reset -- the recovery is the same effect `RecoveryAction SteadyForm`
-          // produces -- but the cession is unconditional, which is what makes it a pass rather than a posture.
-          let recRes = resolveRecovery SteadyForm upkeepActor target
+          // A held round buys the bearer's own defensive reset and pays for it with the initiative: the
+          // Fighter's hold is Raise Shield (plating held up in front of the armor), the Mage's is Center
+          // Mind (the ward re-erected), and both bank the guard meters that harden Fortitude/Resolve. It is
+          // deliberately not a fourth reset -- the recovery is the same effect the matching
+          // `RecoveryAction` produces -- but the cession is unconditional, which is what makes it a pass
+          // rather than a posture.
+          let heldReset = if upkeepActor.Plane = Physical then RaiseShield else CenterMind
+          let recRes = resolveRecovery heldReset upkeepActor target
           let actorYieldedSolely = recRes.Target.IsInNach
           let waitingActor = recRes.Actor |> Combatant.yieldVor |> Combatant.holdRound
           let cededTarget =

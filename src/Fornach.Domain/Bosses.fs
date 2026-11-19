@@ -523,78 +523,16 @@ module StoryBosses =
         StartingRecklessnessDelta = 0
         Triggers = [] }
 
+    // Only two player characters exist (ADR f1f14149): the caller chooses the combat PLANE,
+    // and the class is derived from the kit's stat distribution — physical leans Force/Prowess,
+    // mental leans Intellect/Acumen. "fighter"/"mage" remain as explicit aliases for tests.
     let cls, weapon, armorOpt =
       match className.ToLowerInvariant() with
-      | "fighter" ->
-        CharacterClass.Fighter, sword, Some shield
-      | "mage" ->
+      | "mage"
+      | "mental" ->
         CharacterClass.Mage, staff, Some robes
-      | "berserker" ->
-        CharacterClass.Warrior,
-        { Name = "Heavy Iron Greatsword"
-          Slot = EquipmentSlot.Weapon
-          Description = "A two-handed cleaver with brutal momentum and jagged edges."
-          StatPercentBonuses = [ StatId.Force, 56; StatId.Prowess, 22 ]
-          HealthBonus = 0
-          MoraleBonus = 0
-          StartingRecklessnessDelta = 10
-          Triggers = [] },
-        None
-      | "duelist" ->
-        CharacterClass.Rogue,
-        { Name = "Twin Stiletto & Rapier"
-          Slot = EquipmentSlot.Weapon
-          Description = "Finely balanced blades forged for fluid, relentless fencing cadences."
-          StatPercentBonuses = [ StatId.Finesse, 56; StatId.Reflex, 22 ]
-          HealthBonus = 0
-          MoraleBonus = 0
-          StartingRecklessnessDelta = 0
-          Triggers = [] },
-        None
-      | "warden" ->
-        CharacterClass.Warrior,
-        { Name = "Iron Arming Sword & Tower Buckler"
-          Slot = EquipmentSlot.Weapon
-          Description = "A notched steel blade paired with an iron-banded buckler for unyielding defense."
-          StatPercentBonuses = [ StatId.Poise, 44; StatId.Prowess, 33; StatId.Fortitude, 44 ]
-          HealthBonus = 200
-          MoraleBonus = 100
-          StartingRecklessnessDelta = -10
-          Triggers = [] },
-        None
-      | "mesmer" ->
-        CharacterClass.Mage,
-        { Name = "Silvered Hand Mirror"
-          Slot = EquipmentSlot.Weapon
-          Description = "A cracked silver mirror that folds light into phantasmal decoys and sensory static."
-          StatPercentBonuses = [ StatId.Acuity, 56; StatId.Intuition, 33 ]
-          HealthBonus = 200
-          MoraleBonus = 250
-          StartingRecklessnessDelta = 0
-          Triggers = [] },
-        None
-      | "abjurer" ->
-        CharacterClass.Mage,
-        { Name = "Dusty Tome"
-          Slot = EquipmentSlot.Weapon
-          Description = "A composure-woven grimoire of warding runes and abjuration barriers."
-          StatPercentBonuses = [ StatId.Acumen, 56; StatId.Composure, 33 ]
-          HealthBonus = 200
-          MoraleBonus = 250
-          StartingRecklessnessDelta = 0
-          Triggers = [] },
-        None
-      | "inquisitor" ->
-        CharacterClass.Mage,
-        { Name = "Carved Ash Staff"
-          Slot = EquipmentSlot.Weapon
-          Description = "A runic focus humming with psychic resonance and mental clarity."
-          StatPercentBonuses = [ StatId.Intellect, 56; StatId.Resolve, 33 ]
-          HealthBonus = 200
-          MoraleBonus = 250
-          StartingRecklessnessDelta = 0
-          Triggers = [] },
-        None
+      | "fighter"
+      | "physical"
       | _ ->
         CharacterClass.Fighter, sword, Some shield
 
