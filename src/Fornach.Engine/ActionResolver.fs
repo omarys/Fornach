@@ -763,7 +763,10 @@ module ActionResolver =
       let frustrationDrain = 15 + (composure / 4)
       let rampGain = Math.Clamp(Math.Max(1, acumen / 4), 1, 6)
       let profRatio = resetActor.GetArcaneProficiency Discipline
-      let wardRestore = int (float acumen * 0.40 * profRatio)
+      // A physical discipline has no aetheric form to restore: centring the mind vents the mental meters but
+      // raises no ward. Ungated, this paid Acumen-scaled ward to a Fighter the AI routed into CenterMind.
+      let wardRestore =
+        if resetActor.Plane = Mental then int (float acumen * 0.40 * profRatio) else 0
 
       let updatedActor =
         resetActor
@@ -1041,6 +1044,11 @@ module ActionResolver =
     // - Phantasmal Diffusion: Weaves 1 mirror clone per turn (up to 4)
     let formUpdated, formEvents =
       match baseUpdated.ComplexForm with
+      // A physical discipline cannot hold an aetheric form, so anything still attached there is stale state
+      // from a build that assigned forms without a plane gate. Charging its upkeep is what let a Fighter's
+      // invisible ward climb +15 on every action: drop the form rather than bill for it.
+      | _ when baseUpdated.Plane <> Mental ->
+        { baseUpdated with ComplexForm = None; MirrorClones = 0 }, []
       | Some ComplexForm.AegisLattice ->
         let wardGain = 15
         let updated = baseUpdated |> Combatant.addWard wardGain
@@ -3050,18 +3058,30 @@ module ActionResolver =
       | ResolveAnchor isIronWill ->
         let wardErected = if isIronWill then 30 else 20
         let fatigueVent = if isIronWill then 20 else 15
+        // An aetheric form belongs to a mental discipline. Assigning one regardless of plane left a Fighter
+        // carrying Aegis Lattice invisibly, and that form's +15/turn upkeep fed a ward they could not see or
+        // spend. A physical actor still vents its fatigue; it just has no form to anchor.
+        let holdsForm = currentActor.Plane = Mental
         let a =
-          { currentActor with ComplexForm = Some ComplexForm.AegisLattice; Stance = CombatStance.DisciplineStance }
+          { currentActor with
+              ComplexForm = (if holdsForm then Some ComplexForm.AegisLattice else None)
+              Stance = CombatStance.DisciplineStance }
           |> Combatant.addGuardStacks guardGain
-          |> Combatant.addWard wardErected
+          |> Combatant.addWard (if holdsForm then wardErected else 0)
           |> Combatant.updateMeters (fun m -> { m with CognitiveFatigue = m.CognitiveFatigue - fatigueVent })
-        sprintf "Resolve Anchor reinforced +%d Arcane Ward, cleared -%d Cognitive Fatigue (+%d Inertia/Focus)." wardErected fatigueVent guardGain, a
+
+        let wardNote = if holdsForm then sprintf "reinforced +%d Arcane Ward, " wardErected else ""
+        sprintf "Resolve Anchor %scleared -%d Cognitive Fatigue (+%d Inertia/Focus)." wardNote fatigueVent guardGain, a
 
       | IntuitionPerception isInsightful ->
         let confVent = if isInsightful then 25 else 20
         let provVent = if isInsightful then 20 else 15
+        // Same rule as Resolve Anchor: only a mental discipline weaves a Phantasmal Diffusion.
+        let holdsForm = currentActor.Plane = Mental
         let a =
-          { currentActor with ComplexForm = Some ComplexForm.PhantasmalDiffusion; Stance = CombatStance.AgilityStance }
+          { currentActor with
+              ComplexForm = (if holdsForm then Some ComplexForm.PhantasmalDiffusion else None)
+              Stance = CombatStance.AgilityStance }
           |> Combatant.addGuardStacks guardGain
           |> Combatant.updateMeters (fun m ->
             { m with

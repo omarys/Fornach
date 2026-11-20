@@ -341,3 +341,73 @@ module ActiveDefenseTests =
     // The gamble was made of the banked stacks, and they do not survive a counter that failed.
     Assert.Equal(0, countered.Target.Momentum)
     Assert.Equal(0, countered.Target.Flow)
+
+  // --- Plane containment: an aetheric form belongs to a mental discipline only ---------------------
+  //
+  // A Fighter that took a mental active defence used to be handed the form the defence sets. The form was
+  // invisible on the physical sheet (no Complex Form row is drawn for a physical combatant) and its
+  // +15/turn upkeep fed a ward that climbed on every action the player took.
+
+  [<Fact>]
+  let ``A physical Fighter taking Resolve Anchor holds no Aegis Lattice and raises no ward`` () =
+    let fighter = TierFactory.createClassLevel CharacterClass.Fighter 20 |> player
+    let enemy = TierFactory.createClassLevel CharacterClass.Warrior 1 |> player
+
+    let outcome = ActionResolver.resolveActiveDefense (ResolveAnchor true) fighter enemy
+
+    Assert.Equal(Plane.Physical, fighter.Plane)
+    Assert.Equal(None, outcome.Actor.ComplexForm)
+    Assert.Equal(0, outcome.Actor.ArcaneWard)
+
+  [<Fact>]
+  let ``A physical Fighter taking Intuition Perception weaves no clones`` () =
+    let fighter = TierFactory.createClassLevel CharacterClass.Fighter 20 |> player
+    let enemy = TierFactory.createClassLevel CharacterClass.Warrior 1 |> player
+
+    let outcome = ActionResolver.resolveActiveDefense (IntuitionPerception true) fighter enemy
+
+    Assert.Equal(None, outcome.Actor.ComplexForm)
+    Assert.Equal(0, outcome.Actor.MirrorClones)
+
+  [<Fact>]
+  let ``Turn upkeep charges a physical Fighter no ward even when a form is left on the sheet`` () =
+    // Stale state written by an older build: the sheet says Aegis Lattice, the plane says otherwise.
+    let stale =
+      { (TierFactory.createClassLevel CharacterClass.Fighter 20 |> player) with
+          ComplexForm = Some ComplexForm.AegisLattice
+          ArcaneWard = 20
+          MirrorClones = 4 }
+
+    let rec run (c: Combatant) n =
+      if n = 0 then c else run (fst (ActionResolver.applyTurnUpkeep c)) (n - 1)
+
+    let after = run stale 3
+
+    Assert.Equal(0, after.ArcaneWard - stale.ArcaneWard)
+    Assert.Equal(None, after.ComplexForm)
+    Assert.Equal(0, after.MirrorClones)
+
+  [<Fact>]
+  let ``A mental discipline still holds its form and pays its upkeep`` () =
+    // The gate must not break the case the form exists for.
+    let mage = TierFactory.createClassLevel CharacterClass.Mage 20 |> player
+    let enemy = TierFactory.createClassLevel CharacterClass.Warrior 1 |> player
+
+    let outcome = ActionResolver.resolveActiveDefense (ResolveAnchor true) mage enemy
+    Assert.Equal(Some ComplexForm.AegisLattice, outcome.Actor.ComplexForm)
+
+    let before = outcome.Actor.ArcaneWard
+    let after, _ = ActionResolver.applyTurnUpkeep outcome.Actor
+    Assert.Equal(before + 15, after.ArcaneWard)
+
+  [<Fact>]
+  let ``Active defence choice reads the actor's plane, not the opponent's`` () =
+    // A Fighter facing a mental foe must still answer with a physical defence.
+    let fighter = TierFactory.createClassLevel CharacterClass.Fighter 20 |> player
+    let mentalFoe = TierFactory.createClassLevel CharacterClass.Mage 20 |> player
+
+    let chosen = AI.chooseActiveDefense fighter mentalFoe
+
+    match chosen with
+    | FortitudeGuard _ | ReflexSlip _ -> ()
+    | ResolveAnchor _ | IntuitionPerception _ -> failwith "a physical Fighter was handed a mental defence"

@@ -242,8 +242,12 @@ module AI =
       | _ -> generic
 
   /// Selects the optimal active defense in the Nach based on telegraphed attack vector and discipline reading (ADR 0009)
+  ///
+  /// The plane is read off `self`, never the opponent: a discipline may only take the defences its own plane
+  /// fields. Keying on the opponent's plane handed mental defences to a Fighter facing a mental foe, and those
+  /// set an aetheric form on a character that cannot hold one.
   let chooseActiveDefense (self: Combatant) (opponent: Combatant) : DefenseClassification =
-    if opponent.Plane = Mental then
+    if self.Plane = Mental then
       let oppPower = opponent.GetCombatStat StatId.Intellect
       let oppAgility = opponent.GetCombatStat StatId.Acuity
       if self.IsHumanoid && self.GetStat StatId.Acumen >= opponent.GetStat StatId.Composure then
