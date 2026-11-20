@@ -14,3 +14,6 @@ logs/
 # local NuGet feed produced by `dotnet pack`
 packages/
 .github/workflows
+
+# Local stamp of the sources the current packages/ build came from (mise pack bumps on change)
+.last-pack.sha

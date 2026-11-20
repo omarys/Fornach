@@ -22,15 +22,25 @@ description = "Run the test suite"
 run = "dotnet test Fornach.slnx --nologo -v q"
 
 [tasks.pack]
-description = "Pack the engine into the local feed that games consume (packages/)"
+description = "Pack the engine into the local feed that games consume (packages/), bumping the patch version only when the sources changed since the last pack"
 run = """
 set -e
+# Content stamp: hash every source that feeds the packages. Re-packing under an
+# existing version is invisible to games (NuGet caches by version), so the patch
+# version only moves when the sources actually did.
+new_hash=$({ git ls-files --cached --others --exclude-standard src | grep -E '[.](fs|fsproj)$' | sort; echo Directory.Build.props; } | xargs -r sha256sum | sha256sum | cut -c1-16)
+old_hash=$(cat .last-pack.sha 2>/dev/null || true)
+version=$(grep -oP '(?<=<Version>)[^<]+' Directory.Build.props)
+if [ -n "$old_hash" ] && [ "$new_hash" != "$old_hash" ]; then
+  version=$(echo "$version" | awk -F. '{print $1"."$2"."$3+1}')
+  sed -i "s|<Version>[^<]*</Version>|<Version>$version</Version>|" Directory.Build.props
+  echo "engine sources changed since the last pack -- bumped the patch version to $version"
+fi
 dotnet pack src/Fornach.Spatial -c Release --nologo
 dotnet pack src/Fornach.Domain  -c Release --nologo
 dotnet pack src/Fornach.Engine  -c Release --nologo
-echo "packed Fornach $(grep -oP '(?<=<Version>)[^<]+' Directory.Build.props) into packages/"
-echo "Games pin this as FornachVersion. Re-packing under an existing version is"
-echo "invisible to them: NuGet caches by version, so bump <Version> first."
+printf '%s' "$new_hash" > .last-pack.sha
+echo "packed Fornach $version into packages/"
 """
 
 [tasks.version]
