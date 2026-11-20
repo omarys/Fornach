@@ -30,6 +30,7 @@
     <Compile Include="ShrineBoonTests.fs" />
     <Compile Include="FamiliarityTests.fs" />
     <Compile Include="SpatialAndRelicTests.fs" />
+    <Compile Include="AltarTollTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

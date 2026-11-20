@@ -11,7 +11,7 @@
     unpackable by default.
   -->
   <PropertyGroup>
-    <Version>0.1.15</Version>
+    <Version>0.1.16</Version>
     <Authors>Fornach</Authors>
     <Product>Fornach</Product>
     <PackageOutputPath>$(MSBuildThisFileDirectory)packages</PackageOutputPath>

@@ -130,7 +130,9 @@ module WorldEvents =
         Name = "Gale-Worn Monolith of the Abyss"
         Description = "A wind-carved spire poised above the roaring ocean spray."
         Cost = AltarCost.SacrificeHealth 20
-        Reward = AltarReward.VitalitySurge(35, 35)
+        // Resolve only, never flesh: it charges Health, so paying Health back would make the toll a
+        // formality that is most generous at the point of death (see `AltarReward.RefundsItsOwnToll`).
+        Reward = AltarReward.VitalitySurge(0, 35)
         IsUsed = false }
 
     | SunkenBoulevards ->

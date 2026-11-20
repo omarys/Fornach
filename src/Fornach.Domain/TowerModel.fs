@@ -145,6 +145,14 @@ type AltarCost =
     | SacrificeMorale amt -> sprintf "Sacrifice %d%% Morale" amt
     | ShredArmor amt -> sprintf "Shred %d%% Armor durability" amt
 
+  /// The pool this toll is taken from. Named so a reward can be held against it: an altar that charges
+  /// Health and then hands Health back has charged nothing at all.
+  member this.ChargedPool : string =
+    match this with
+    | SacrificeHealth _ -> "Health"
+    | SacrificeMorale _ -> "Morale"
+    | ShredArmor _ -> "Armor"
+
 /// Reward granted upon fulfilling an altar's sacrifice.
 type AltarReward =
   /// Authored form: a theme relic whose percentages land on one of the bearer's two class pairs,
@@ -180,9 +188,30 @@ type AltarReward =
         (names defences)
     | StatBuff (stats, bonus) ->
       sprintf "+%d %s" bonus (stats |> List.map (sprintf "%A") |> String.concat " and ")
-    | VitalitySurge (hpPct, morPct) -> sprintf "+%d%% HP and +%d%% Morale" hpPct morPct
+    | VitalitySurge (hpPct, morPct) ->
+      [ if hpPct > 0 then sprintf "+%d%% HP" hpPct
+        if morPct > 0 then sprintf "+%d%% Morale" morPct ]
+      |> String.concat " and "
     | KeyReward (_, keyName) -> sprintf "Keystone: %s" keyName
     | RelicReward item -> sprintf "Relic: %s" item.Name
+
+  /// The pools this reward pours back into. Authored relics hand out attribute percentages rather than
+  /// pools, so they list nothing here; only a surge or a pool bonus can feed a pool.
+  member this.RewardedPools : string list =
+    match this with
+    | VitalitySurge (hpPct, morPct) ->
+      [ if hpPct > 0 then "Health"
+        if morPct > 0 then "Morale" ]
+    | RelicReward item ->
+      [ if item.HealthBonus > 0 then "Health"
+        if item.MoraleBonus > 0 then "Morale" ]
+    | TemperedRelic _ | Tempered _ | StatBuff _ | KeyReward _ -> []
+
+  /// True when the altar hands back the very pool it charges. A toll refunded at the same counter is
+  /// not a bargain the player weighs, it is a button they always press — and one that heals most
+  /// generously in the moment the toll would have bitten hardest.
+  static member RefundsItsOwnToll (cost: AltarCost) (reward: AltarReward) : bool =
+    reward.RewardedPools |> List.contains cost.ChargedPool
 
   /// The three defensive attributes on the plane the bearer does not walk: a Fighter's
   /// enlightenment is mental, a Mage's is physical.
