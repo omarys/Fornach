@@ -638,13 +638,28 @@ module TowerSession =
 
   /// The level spread a floor is allowed to field, as `(mobCap, bossOffset)` measured from the player's
   /// level. The story's first floor is the tutorial: its mobs answer at the protagonist's own level,
-  /// because a level-1 protagonist has nothing to grow into yet and the intro has no way out. The
-  /// guardian keeps its `+10`, which is what makes it the strongest thing on the floor.
+  /// because a level-1 protagonist has nothing to grow into yet and the intro has no way out.
+  /// Story floors never field mobs more than two above the protagonist or a stage boss more than
+  /// three: the story's pressure comes from themes and unfamiliar species (ADR 0009), not raw
+  /// level gaps -- at +10 every class was one-rounded by the first aspect (difficulty telemetry),
+  /// and the +0..+4 mob spread made floors 4-5 a wall. The boss stays the strongest thing on the
+  /// floor at +3.
+  /// The third value is a roaming POOL pacing factor, story-only: at flat parity an optimal
+  /// protagonist cleared solo roaming duels in 1-2 rounds (difficulty telemetry) -- the story was a
+  /// mow-down between boss duels. 1.5 pools keeps roaming duels contested; the tutorial stays gentle
+  /// at 1.25 and the tower curve stays at 1.0.
   /// Exported because the minimap rewind re-seats pristine mobs and must land them on the same levels.
-  let floorScalingFor (isStory: bool) (floorNumber: int) : int * int =
-    if isStory && floorNumber <= 1 then 0, 10 else 2 + floorNumber / 2, 10
+  let floorScalingFor (isStory: bool) (floorNumber: int) : int * int * float =
+    if isStory then (if floorNumber <= 1 then 0, 3, 1.25 else 2, 3, 1.5)
+    else 2 + floorNumber / 2, 10, 1.0
 
-  let rescaleFloorEnemiesWith (depthCap: int) (bossOffset: int) (player: Combatant) (floor: TowerFloor) : TowerFloor =
+  let rescaleFloorEnemiesWith
+    (depthCap: int)
+    (bossOffset: int)
+    (roamingPoolFactor: float)
+    (player: Combatant)
+    (floor: TowerFloor)
+    : TowerFloor =
     let targetLevel (e: TowerEnemy) =
       if e.IsBoss then player.Level + bossOffset
       else
@@ -655,10 +670,20 @@ module TowerSession =
       if e.IsDefeated then e
       else
         let level = max 1 (targetLevel e)
+        let scaled = TierFactory.scaleCombatantToLevel level e.Combatant
+        // Pool pacing applies to roaming mobs only: bosses keep their authored duel budgets, because
+        // the aspect duels are tuned through Bosses.applyTuning, not by floor depth.
+        let paced =
+          if e.IsBoss || roamingPoolFactor = 1.0 then scaled
+          else
+            let pace (p: Pool) =
+              { Current = int (float p.Current * roamingPoolFactor)
+                Maximum = int (float p.Maximum * roamingPoolFactor) }
+
+            { scaled with Health = pace scaled.Health; Morale = pace scaled.Morale }
+
         { e with
-            Combatant =
-              { TierFactory.scaleCombatantToLevel level e.Combatant with
-                  Name = sprintf "Lv.%d %s" level e.Name } }
+            Combatant = { paced with Name = sprintf "Lv.%d %s" level e.Name } }
 
     { floor with
         InitialPlayerLevel = max 1 player.Level
@@ -679,12 +704,12 @@ module TowerSession =
   /// level 6 (--run-sim: 55% floor-1 clear, 33% by floor 3) with no room to grow into it.
   /// The tower curve; story floors go through `floorScalingFor` instead.
   let rescaleFloorEnemies (player: Combatant) (floor: TowerFloor) : TowerFloor =
-    let depthCap, bossOffset = floorScalingFor false floor.FloorNumber
-    rescaleFloorEnemiesWith depthCap bossOffset player floor
+    let depthCap, bossOffset, poolFactor = floorScalingFor false floor.FloorNumber
+    rescaleFloorEnemiesWith depthCap bossOffset poolFactor player floor
 
   /// Initializes a new Tower run session starting at a given floor with specified story mode
   let initSessionWithMode (player: Combatant) (seed: int) (startFloor: int) (isStory: bool) : TowerRunState =
-    let depthCap, bossOffset = floorScalingFor isStory startFloor
+    let depthCap, bossOffset, poolFactor = floorScalingFor isStory startFloor
 
     // `TowerRunState.Player` is the player by construction, so mark it here instead of trusting every
     // caller to. The interactive tower hands in an `Archetypes` factory result and those stay plain data
@@ -696,7 +721,7 @@ module TowerSession =
 
     let floor =
       TowerGenerator.generateFloorForPlane seed startFloor isStory player.Plane
-      |> rescaleFloorEnemiesWith depthCap bossOffset player
+      |> rescaleFloorEnemiesWith depthCap bossOffset poolFactor player
     let initial =
       { Player = player
         CurrentFloor = floor
@@ -725,11 +750,11 @@ module TowerSession =
   /// Advances to the next floor via the Stairway Door
   let ascendFloor (state: TowerRunState) : TowerRunState =
     let nextFloorNum = state.CurrentFloor.FloorNumber + 1
-    let depthCap, bossOffset = floorScalingFor state.IsStoryMode nextFloorNum
+    let depthCap, bossOffset, poolFactor = floorScalingFor state.IsStoryMode nextFloorNum
 
     let nextFloor =
       TowerGenerator.generateFloorForPlane state.Seed nextFloorNum state.IsStoryMode state.Player.Plane
-      |> rescaleFloorEnemiesWith depthCap bossOffset state.Player
+      |> rescaleFloorEnemiesWith depthCap bossOffset poolFactor state.Player
     let nextState =
       { state with
           Player = { Combatant.clearStacks state.Player with Meters = StatusMeters.Zero }

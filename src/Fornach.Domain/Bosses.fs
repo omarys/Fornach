@@ -406,11 +406,16 @@ module StoryBosses =
   let createAngerAspect () : Combatant =
     createAngerAspectRaw () |> applyTuning { PoolFactor = 2.0; PotencyFactor = 1.02 }
 
+  // Bargaining outlasted full-pools protagonists 9 fights in 10 (difficulty telemetry): its
+  // RestorePool triggers (+20 per hit landed, +15 per damage taken) win every trade, so the pool
+  // budget -- not the potency -- is the duel's difficulty dial.
   let createBargainingAspect () : Combatant =
-    createBargainingAspectRaw () |> applyTuning { PoolFactor = 3.0; PotencyFactor = 0.85 }
+    createBargainingAspectRaw () |> applyTuning { PoolFactor = 2.5; PotencyFactor = 0.85 }
 
+  // Depression ground protagonists down via the morale/futility condition track in 8 of 10 fresh-pools
+  // duels at Potency 0.55: the grind, not the damage, is the dial.
   let createDepressionAspect () : Combatant =
-    createDepressionAspectRaw () |> applyTuning { PoolFactor = 2.5; PotencyFactor = 0.55 }
+    createDepressionAspectRaw () |> applyTuning { PoolFactor = 2.0; PotencyFactor = 0.55 }
 
   let createAcceptanceAspect () : Combatant =
     createAcceptanceAspectRaw () |> applyTuning { PoolFactor = 1.5; PotencyFactor = 1.45 }
