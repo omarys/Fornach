@@ -664,37 +664,38 @@ type Combatant with
   static member addLimbDebuff penalty (c: Combatant) =
     { c with LimbDebuff = Math.Min(60, c.LimbDebuff + penalty) }
 
+  /// The status meter that has broken this combatant, in break priority order: Recklessness first, then
+  /// the physical meters, then the mental ones. Single source for both `evaluateCollapse` and the combat
+  /// log's death verdict, so a logged cause can never disagree with the collapse the engine applied.
+  static member collapseReasonOf(c: Combatant) : CollapseReason option =
+    let m = c.Meters
+    let recklessnessCap =
+      if c.HasActivePreparation PreparationType.BerserkTincture then
+        120
+      else
+        100
+    if m.Recklessness.Value >= recklessnessCap then
+      Some RecklessExposure
+    elif m.Exhaustion.Value >= 100 then
+      Some SomaticAnoxia
+    elif m.Frustration.Value >= 100 then
+      Some Exsanguination
+    elif m.CognitiveFatigue.Value >= 100 then
+      Some CatatonicStupor
+    elif m.Confusion.Value >= 100 then
+      Some ContradictionLock
+    elif m.Provoke.Value >= 100 then
+      Some HystericalMeltdown
+    else
+      None
+
   /// Evaluates all 7 status meters against the 100% threshold to determine Collapse states
   static member evaluateCollapse(c: Combatant) : Combatant =
     // If already collapsed, preserve existing collapse state
     match c.Collapse with
     | CollapseState.Collapsed _ -> c
     | CollapseState.Stable ->
-      let m = c.Meters
-
-      let reasonOpt =
-        // Shared Entropy Break (evaluated first)
-        let recklessnessCap =
-          if c.HasActivePreparation PreparationType.BerserkTincture then
-            120
-          else
-            100
-        if m.Recklessness.Value >= recklessnessCap then
-          Some RecklessExposure
-        // Physical Status Breaks
-        elif m.Exhaustion.Value >= 100 then
-          Some SomaticAnoxia
-        elif m.Frustration.Value >= 100 then
-          Some Exsanguination
-        // Mental Status Breaks
-        elif m.CognitiveFatigue.Value >= 100 then
-          Some CatatonicStupor
-        elif m.Confusion.Value >= 100 then
-          Some ContradictionLock
-        elif m.Provoke.Value >= 100 then
-          Some HystericalMeltdown
-        else
-          None
+      let reasonOpt = Combatant.collapseReasonOf c
 
       match reasonOpt with
       | Some reason ->

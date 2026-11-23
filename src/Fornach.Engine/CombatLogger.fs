@@ -155,15 +155,90 @@ module CombatLogger =
     sb.ToString().TrimEnd()
 
   /// Formats current vitals for quick state tracking
+  /// All seven condition tracks are printed, not just recklessness: a death to a meter the log never
+  /// showed was unreadable after the fact, and the tracks are what kill a fight that pools survive.
   let formatVitalsSnapshot (c: Combatant) : string =
-    sprintf "%s: HP %d/%d (%.1f%%) | Morale %d/%d (%.1f%%) | Armor %d/%d | Recklessness %d/%d | Bleed %d"
-      c.Name c.Health.Current c.Health.Maximum
+    sprintf
+      "%s: HP %d/%d (%.1f%%) | Morale %d/%d (%.1f%%) | Armor %d/%d%s | Bleed %d | Tracks: Reck %d | Exh %d | Frus %d | Cog %d | Conf %d | Prov %d"
+      c.Name
+      c.Health.Current
+      c.Health.Maximum
       (float c.Health.Current / Math.Max(1.0, float c.Health.Maximum) * 100.0)
-      c.Morale.Current c.Morale.Maximum
+      c.Morale.Current
+      c.Morale.Maximum
       (float c.Morale.Current / Math.Max(1.0, float c.Morale.Maximum) * 100.0)
-      c.Armor.Current c.Armor.Max
-      c.Meters.Recklessness.Value 100
+      c.Armor.Current
+      c.Armor.Max
+      (if c.Armor.Boost > 0 then sprintf " (+%d raised)" c.Armor.Boost else "")
       c.BleedStacks
+      c.Meters.Recklessness.Value
+      c.Meters.Exhaustion.Value
+      c.Meters.Frustration.Value
+      c.Meters.CognitiveFatigue.Value
+      c.Meters.Confusion.Value
+      c.Meters.Provoke.Value
+
+  /// Names the exact reason a combatant lost. A fight can end with both pools healthy -- a condition
+  /// track hit 100 and the next turn's execution finished it -- and "PLAYERDEFEATED" alone hides that.
+  /// The collapse verdict comes from the engine's own priority order, so the log cannot disagree with
+  /// the resolution that actually happened; the execution event, when present, is named separately
+  /// because it is the blow that took the last of the pool.
+  let formatDefeatVerdict (final: Combatant) (victor: Combatant) (session: CombatLogSession) : string =
+    let meterName reason =
+      match reason with
+      | RecklessExposure -> "Recklessness"
+      | SomaticAnoxia -> "Exhaustion"
+      | Exsanguination -> "Frustration"
+      | CatatonicStupor -> "Cognitive Fatigue"
+      | ContradictionLock -> "Confusion"
+      | HystericalMeltdown -> "Provoke"
+
+    let meterValue reason =
+      match reason with
+      | RecklessExposure -> final.Meters.Recklessness.Value
+      | SomaticAnoxia -> final.Meters.Exhaustion.Value
+      | Exsanguination -> final.Meters.Frustration.Value
+      | CatatonicStupor -> final.Meters.CognitiveFatigue.Value
+      | ContradictionLock -> final.Meters.Confusion.Value
+      | HystericalMeltdown -> final.Meters.Provoke.Value
+
+    let executedBy =
+      session.Turns
+      |> Seq.collect (fun t -> t.Events)
+      |> Seq.tryPick (function
+        | CombatEvent.Executed(actorId, targetId, plane) when targetId = final.Id ->
+          Some(sprintf "%s with a %A execution" victor.Name plane)
+        | _ -> None)
+
+    let collapseLine =
+      match final.Collapse with
+      | CollapseState.Collapsed reason ->
+        Some(
+          sprintf "  OUTCOME: %s collapsed -- %A, because %s reached %d/100. Every other pool was still standing."
+            final.Name reason (meterName reason) (meterValue reason)
+        )
+      | CollapseState.Stable ->
+        match Combatant.collapseReasonOf final with
+        | Some reason ->
+          Some(
+            sprintf "  OUTCOME: %s stands past the collapse threshold -- %A, %s at %d/100 -- but was resolved before the collapse was applied."
+              final.Name reason (meterName reason) (meterValue reason)
+          )
+        | None ->
+          if final.Health.IsDepleted then
+            Some(sprintf "  OUTCOME: %s was killed -- Health pool emptied (0/%d)." final.Name final.Health.Maximum)
+          elif final.Morale.IsDepleted then
+            Some(sprintf "  OUTCOME: %s broke -- Morale pool emptied (0/%d)." final.Name final.Morale.Maximum)
+          else
+            Some(
+              sprintf "  OUTCOME: %s lost the duel with every pool and condition track still standing (see the events above for the decisive rule)."
+                final.Name
+            )
+
+    let causeText = collapseLine |> Option.defaultValue "  OUTCOME: no verdict recorded."
+    match executedBy with
+    | Some by -> sprintf "%s\n  FINISHING BLOW: executed by %s." causeText by
+    | None -> causeText
 
   /// Initializes a new combat logging session
   let startSession (title: string) (encounterType: string) (player: Combatant) (opponent: Combatant) : CombatLogSession =
@@ -225,6 +300,8 @@ module CombatLogger =
     sb.AppendLine(sprintf "COMBAT RESOLUTION: %s" (outcome.ToUpperInvariant())) |> ignore
     let totalRounds = if session.Turns.Count = 0 then 0 else (session.Turns |> Seq.map (fun t -> t.Round) |> Seq.max)
     sb.AppendLine(sprintf "Total Rounds: %d | Total Actions Resolved: %d" totalRounds session.Turns.Count) |> ignore
+    if outcome.Contains("Defeated", StringComparison.OrdinalIgnoreCase) then
+      sb.AppendLine(formatDefeatVerdict finalPlayer finalOpponent session) |> ignore
     sb.AppendLine() |> ignore
     sb.AppendLine("FINAL VITALS:") |> ignore
     sb.AppendLine(sprintf "  %s" (formatVitalsSnapshot finalPlayer)) |> ignore
