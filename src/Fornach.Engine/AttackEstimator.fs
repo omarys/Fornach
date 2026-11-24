@@ -11,55 +11,11 @@ module AttackEstimator =
   /// counter cannot disagree about what a strike is rolled against.
   let statPair (attack: AttackClassification) : StatId * StatId list = attack.StatPair
 
-  /// The combatant a strike is actually contested as. `ActionResolver.applyFluidTransition` runs *before*
-  /// the contest, so a physical strike always lands in the stance its vector selects and a mental one in
-  /// the Complex Form its attack selects. Reading the actor's held stance instead understates every strike
-  /// that is not already in it (0.75x offensive) and credits the meter's ramp only to the stance already
-  /// held — which is exactly what made a Discipline build's Focus look worthless in the ranking.
-  /// ShieldBash is deliberately absent from the transition table and keeps the held stance.
-  let contestedAs (actor: Combatant) (attack: AttackClassification) : Combatant =
-    if
-      not actor.PlayerStyle
-      && not actor.Class.IsPlayerClass
-      && actor.MonsterFamily.IsNone
-    then
-      // Plain humanoid opposition never shifts discipline mid-fight (mirrors applyFluidTransition).
-      actor
-    elif actor.Plane = Physical then
-      match attack with
-      | ForceStrike _
-      | ForceInsightStrike
-      | TraumaAttack ForceGambit -> { actor with Stance = CombatStance.PowerStance }
-      | FinesseCadence _
-      | FinesseInsightStrike
-      | TraumaAttack FinesseGambit -> { actor with Stance = CombatStance.AgilityStance }
-      | ProwessStrike _
-      | CalculatedFlawStrike
-      | MasterfulDisarm _ -> { actor with Stance = CombatStance.DisciplineStance }
-      | _ -> actor
-    else
-      match attack with
-      | ArcaneCataclysm _
-      | AuthorityDecree _ ->
-        { actor with
-            ComplexForm = Some ComplexForm.ResonanceSpike
-            Stance = CombatStance.PowerStance }
-      | SynapticGlamour _
-      | MirrorIllusion _
-      | GuileDeception _
-      | TraumaAttack FinesseGambit ->
-        { actor with
-            ComplexForm = Some ComplexForm.PhantasmalDiffusion
-            Stance = CombatStance.AgilityStance }
-      | RunicWardTrap _
-      | DisorientingShockwave _
-      | StaffSiphon
-      | AcumenInterrogation _
-      | TraumaAttack (AcumenGambit | FortitudeGambit | ComposureGambit) ->
-        { actor with
-            ComplexForm = Some ComplexForm.AegisLattice
-            Stance = CombatStance.DisciplineStance }
-      | _ -> actor
+  /// The combatant a strike is actually contested as. `ActionResolver.applyFluidTransition` runs *after*
+  /// the contest resolves, so a strike always lands in the stance / Complex Form the actor currently holds
+  /// (no free pre-swing +25% bonus) and transitions afterwards for follow-up strikes.
+  let contestedAs (actor: Combatant) (_attack: AttackClassification) : Combatant =
+    actor
 
   /// The contest reads stance-adjusted stats, so the estimate must too: an actor standing in the wrong
   /// stance strikes at 0.75x, which a blanket "always in vector stance" bonus would miss entirely.

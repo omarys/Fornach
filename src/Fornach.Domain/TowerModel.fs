@@ -365,6 +365,42 @@ type TowerEntity =
       | MechanicalTrapGauntlet _ -> false
       | MemoryEchoFragment _ -> false
 
+/// Internal flat-array tile lookup cache keyed by the immutable `Tiles` map identity.
+/// Eliminates O(log N) `Map.tryFind` overhead during FOV, LOS, and A* without changing `TowerFloor`'s public record shape.
+module private TileGridCache =
+  open System.Runtime.CompilerServices
+
+  // Bit 0: present in Tiles map; Bit 1: IsWalkable; Bit 2: BlocksVision
+  type CachedGrid =
+    { Width: int
+      Height: int
+      Flags: byte[]
+      HasOutOfBounds: bool }
+
+  let private cache = ConditionalWeakTable<Map<Point, TowerTile>, CachedGrid>()
+
+  let get (width: int) (height: int) (tiles: Map<Point, TowerTile>) : CachedGrid =
+    let mutable existing = Unchecked.defaultof<CachedGrid>
+    if cache.TryGetValue(tiles, &existing) && existing.Width = width && existing.Height = height then
+      existing
+    else
+      let w = Math.Max(0, width)
+      let h = Math.Max(0, height)
+      let flags = Array.zeroCreate<byte> (w * h)
+      let mutable hasOob = false
+      for kv in tiles do
+        let p = kv.Key
+        if p.X >= 0 && p.X < w && p.Y >= 0 && p.Y < h then
+          let mutable f = 1uy
+          if kv.Value.IsWalkable then f <- f ||| 2uy
+          if kv.Value.BlocksVision then f <- f ||| 4uy
+          flags.[p.Y * w + p.X] <- f
+        else
+          hasOob <- true
+      let grid = { Width = w; Height = h; Flags = flags; HasOutOfBounds = hasOob }
+      cache.AddOrUpdate(tiles, grid)
+      grid
+
 /// Aggregate domain model representing a complete Tower floor
 type TowerFloor =
   { FloorNumber: int
@@ -385,20 +421,70 @@ type TowerFloor =
     /// and remain at this level even if the player levels up and dies during the run.
     InitialPlayerLevel: int }
 
+  /// O(1) flat-array check for whether a tile exists and is walkable
+  member this.IsWalkableTile (pt: Point) : bool =
+    let grid = TileGridCache.get this.Width this.Height this.Tiles
+    if pt.X >= 0 && pt.X < grid.Width && pt.Y >= 0 && pt.Y < grid.Height then
+      (grid.Flags.[pt.Y * grid.Width + pt.X] &&& 2uy) <> 0uy
+    elif grid.HasOutOfBounds then
+      match Map.tryFind pt this.Tiles with
+      | Some tile -> tile.IsWalkable
+      | None -> false
+    else
+      false
+
   /// Checks if a tile is valid and unobstructed for movement
   member this.CanMoveTo (pt: Point) : bool =
-    match Map.tryFind pt this.Tiles with
-    | Some tile when tile.IsWalkable ->
+    if this.IsWalkableTile pt then
       match Map.tryFind pt this.Entities with
       | Some entity when entity.BlocksMovement -> false
       | _ -> true
-    | _ -> false
+    else
+      false
 
-  /// Checks if a tile blocks line of sight
+  /// Checks if a tile blocks line of sight (O(1) flat-array lookup)
   member this.IsOpaque (pt: Point) : bool =
-    match Map.tryFind pt this.Tiles with
-    | Some tile -> tile.BlocksVision
-    | None -> true // Out of bounds is opaque
+    let grid = TileGridCache.get this.Width this.Height this.Tiles
+    if pt.X >= 0 && pt.X < grid.Width && pt.Y >= 0 && pt.Y < grid.Height then
+      let f = grid.Flags.[pt.Y * grid.Width + pt.X]
+      if f = 0uy then true // Missing tile is opaque
+      else (f &&& 4uy) <> 0uy
+    elif grid.HasOutOfBounds then
+      match Map.tryFind pt this.Tiles with
+      | Some tile -> tile.BlocksVision
+      | None -> true
+    else
+      true // Out of bounds is opaque
+
+  /// Returns a closure capturing the cached flat grid once, for tight FOV/LOS loops
+  member this.MakeOpaqueChecker () : Point -> bool =
+    let grid = TileGridCache.get this.Width this.Height this.Tiles
+    let tiles = this.Tiles
+    fun (pt: Point) ->
+      if pt.X >= 0 && pt.X < grid.Width && pt.Y >= 0 && pt.Y < grid.Height then
+        let f = grid.Flags.[pt.Y * grid.Width + pt.X]
+        if f = 0uy then true
+        else (f &&& 4uy) <> 0uy
+      elif grid.HasOutOfBounds then
+        match Map.tryFind pt tiles with
+        | Some tile -> tile.BlocksVision
+        | None -> true
+      else
+        true
+
+  /// Returns a closure capturing the cached flat grid once, for tight pathfinding loops
+  member this.MakeWalkableChecker () : Point -> bool =
+    let grid = TileGridCache.get this.Width this.Height this.Tiles
+    let tiles = this.Tiles
+    fun (pt: Point) ->
+      if pt.X >= 0 && pt.X < grid.Width && pt.Y >= 0 && pt.Y < grid.Height then
+        (grid.Flags.[pt.Y * grid.Width + pt.X] &&& 2uy) <> 0uy
+      elif grid.HasOutOfBounds then
+        match Map.tryFind pt tiles with
+        | Some tile -> tile.IsWalkable
+        | None -> false
+      else
+        false
 
   /// Unlocks the stairway portal if locked by key or quest
   member this.UnlockStairway () : TowerFloor =

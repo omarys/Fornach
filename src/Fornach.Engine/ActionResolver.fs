@@ -10,10 +10,10 @@ module ActionResolver =
   // =========================================================================
 
   /// What one cashed stack is worth on the special that spends it. Meters cap at five
-  /// (`Combatant.StackCap`), so a full pile pays 2.75x. That sits UNDER the tightest equal-tier
-  /// one-shot threshold measured in docs/agents/domain.md §1 Y (2.79x, GrandMaster), so a topped-out
-  /// meter is the biggest hit in the game without deleting an equal-tier opponent in one blow.
-  let spentPerStack = 0.35
+  /// (`Combatant.StackCap`), so a full pile pays 2.50x. With compressed species familiarity (0.85
+  /// floor) and ±5% class vector tilt, 0.30 keeps a topped-out meter as the biggest hit in the game
+  /// without deleting an equal-tier opponent in one blow.
+  let spentPerStack = 0.30
 
   /// Damage multiplier for a strike's own flag/stance shape. The ramp meters deliberately do not
   /// appear here: they sharpen the actor's stats instead (`Combatant.GetCombatStat`), so holding them
@@ -69,55 +69,74 @@ module ActionResolver =
 
   /// Scales only the pressure a resolution added: drains, pre-existing values and plating pass through.
   let private temperConditionDamage (before: Combatant) (after: Combatant) : Combatant =
-    let factor = poiseGuardFraction before
-
-    if factor >= 1.0 then
+    let bm = before.Meters
+    let am = after.Meters
+    if after.Armor.Current <= before.Armor.Current
+       && am.Recklessness.Value <= bm.Recklessness.Value
+       && am.Exhaustion.Value <= bm.Exhaustion.Value
+       && am.Frustration.Value <= bm.Frustration.Value
+       && am.CognitiveFatigue.Value <= bm.CognitiveFatigue.Value
+       && am.Confusion.Value <= bm.Confusion.Value
+       && am.Provoke.Value <= bm.Provoke.Value then
       after
     else
-      let scale (was: int) (now: int) =
-        if now <= was then now else was + int (Math.Round(float (now - was) * factor))
+      let factor = poiseGuardFraction before
 
-      let scaleMeter (was: Meter) (now: Meter) = Meter.Create(scale was.Value now.Value)
+      if factor >= 1.0 then
+        after
+      else
+        let scale (was: int) (now: int) =
+          if now <= was then now else was + int (Math.Round(float (now - was) * factor))
 
-      { after with
-          Armor = { after.Armor with Current = scale before.Armor.Current after.Armor.Current }
-          Meters =
-            { after.Meters with
-                Recklessness = scaleMeter before.Meters.Recklessness after.Meters.Recklessness
-                Exhaustion = scaleMeter before.Meters.Exhaustion after.Meters.Exhaustion
-                Frustration = scaleMeter before.Meters.Frustration after.Meters.Frustration
-                CognitiveFatigue = scaleMeter before.Meters.CognitiveFatigue after.Meters.CognitiveFatigue
-                Confusion = scaleMeter before.Meters.Confusion after.Meters.Confusion
-                Provoke = scaleMeter before.Meters.Provoke after.Meters.Provoke } }
+        let scaleMeter (was: Meter) (now: Meter) = Meter.Create(scale was.Value now.Value)
+
+        { after with
+            Armor = { after.Armor with Current = scale before.Armor.Current after.Armor.Current }
+            Meters =
+              { am with
+                  Recklessness = scaleMeter bm.Recklessness am.Recklessness
+                  Exhaustion = scaleMeter bm.Exhaustion am.Exhaustion
+                  Frustration = scaleMeter bm.Frustration am.Frustration
+                  CognitiveFatigue = scaleMeter bm.CognitiveFatigue am.CognitiveFatigue
+                  Confusion = scaleMeter bm.Confusion am.Confusion
+                  Provoke = scaleMeter bm.Provoke am.Provoke } }
 
   /// Dispatches active relic hooks across the actor and optional opponent
   let applyRelicHooks (trigger: RelicHookTrigger) (actor: Combatant) (targetOpt: Combatant option) : Combatant * Combatant option * CombatEvent list =
-    let mutable currentActor = actor
-    let mutable currentTarget = targetOpt
-    let mutable events = []
+    let targetHasRelics =
+      match targetOpt with
+      | Some target -> not target.RelicModifiers.IsEmpty
+      | None -> false
 
-    for relic in actor.RelicModifiers do
-      let updatedActor, updatedTarget, relicEvts = relic.Apply trigger currentActor currentTarget
-      currentActor <- updatedActor
-      currentTarget <- updatedTarget
-      events <- events @ relicEvts
+    if actor.RelicModifiers.IsEmpty && not targetHasRelics then
+      actor, targetOpt, []
+    else
+      let mutable currentActor = actor
+      let mutable currentTarget = targetOpt
+      let evts = ResizeArray<CombatEvent>()
 
-    match targetOpt with
-    | Some target ->
-      let oppTrigger =
-        match trigger with
-        | RelicHookTrigger.OnWhiff isAtk -> RelicHookTrigger.OnWhiff (not isAtk)
-        | other -> other
-      for relic in target.RelicModifiers do
-        let updatedOpp, updatedActor, relicEvts = relic.Apply oppTrigger (Option.defaultValue target currentTarget) (Some currentActor)
-        currentTarget <- Some updatedOpp
-        match updatedActor with
-        | Some a -> currentActor <- a
-        | None -> ()
-        events <- events @ relicEvts
-    | None -> ()
+      for relic in actor.RelicModifiers do
+        let updatedActor, updatedTarget, relicEvts = relic.Apply trigger currentActor currentTarget
+        currentActor <- updatedActor
+        currentTarget <- updatedTarget
+        evts.AddRange relicEvts
 
-    currentActor, currentTarget, events
+      match targetOpt with
+      | Some target when not target.RelicModifiers.IsEmpty ->
+        let oppTrigger =
+          match trigger with
+          | RelicHookTrigger.OnWhiff isAtk -> RelicHookTrigger.OnWhiff (not isAtk)
+          | other -> other
+        for relic in target.RelicModifiers do
+          let updatedOpp, updatedActor, relicEvts = relic.Apply oppTrigger (Option.defaultValue target currentTarget) (Some currentActor)
+          currentTarget <- Some updatedOpp
+          match updatedActor with
+          | Some a -> currentActor <- a
+          | None -> ()
+          evts.AddRange relicEvts
+      | _ -> ()
+
+      currentActor, currentTarget, (if evts.Count = 0 then [] else List.ofSeq evts)
 
   /// Mental strikes land through the defender's class grounding / resilience. Shared with the menu's
   /// estimate so ranking cannot drift from resolution.
@@ -187,20 +206,19 @@ module ActionResolver =
   /// (ADR 0009). The legacy percentage bonuses are retired.
   let masteryMultiplier (_attacker: Combatant) (_defender: Combatant) : float = 1.0
 
-  /// Species familiarity multiplier (ADR 0009): a player-style combatant fights an unfamiliar
-  /// species at -25% and a mastered one at +25%, gaining 1% per encounter with the species, so the
-  /// full span takes fifty encounters. Mobs keep no bestiary and always fight at 1.0. This single
-  /// curve drives outgoing damage, incoming damage (as its mirror) and the reactive riposte/disarm
-  /// chance, so familiarity cannot leak past +/-25% anywhere.
+  /// Species familiarity multiplier (ADR 0009, compressed progression): a player-style combatant fights
+  /// an unfamiliar species at -15% (0.85) and reaches parity at 3 encounters (1.00) and mastery (+20%,
+  /// 1.20) at 7 encounters (+5% per encounter). Mobs keep no bestiary and always fight at 1.0.
   let familiarityFactor (c: Combatant) (foe: Combatant) : float =
     if not c.PlayerStyle then 1.0
+    elif c.Progression.BestiaryKnowledge.IsEmpty then 0.85
     else
       let prior =
         c.Progression.BestiaryKnowledge
         |> Map.tryFind (ProgressionProfile.NormalizeSpeciesName foe.Name)
         |> Option.defaultValue 0
 
-      0.75 + 0.01 * float (Math.Min(prior, 50))
+      0.85 + 0.05 * float (Math.Min(prior, 7))
 
   /// Species familiarity damage factor (ADR 0009, stress-growth rework): the attacker's edge
   /// against the defender times the defender's own knowledge of the attacker (the mirror,
@@ -550,41 +568,44 @@ module ActionResolver =
       (owner, updatedOpponent, [ evt ])
 
   let private evaluateHooks (ctx: TriggerContext) (attacker: Combatant) (defender: Combatant) =
-    let mutable currentAttacker = attacker
-    let mutable currentDefender = defender
-    let mutable events = []
+    if attacker.EquippedItems.IsEmpty && (ctx.DamageDealt <= 0 || defender.EquippedItems.IsEmpty) then
+      attacker, defender, []
+    else
+      let mutable currentAttacker = attacker
+      let mutable currentDefender = defender
+      let evts = ResizeArray<CombatEvent>()
 
-    // Attacker Offensive Hooks: OnHitLanded and OnCriticalStrike
-    for item in currentAttacker.EquippedItems do
-      for trigger in item.Triggers do
-        let effects =
-          match trigger with
-          | OnHitLanded f when ctx.DamageDealt > 0 -> f ctx
-          | OnCriticalStrike f when ctx.IsCritical -> f ctx
-          | _ -> []
-
-        for eff in effects do
-          let a, d, evts = applyTriggerEffect eff item.Name currentAttacker currentDefender
-          currentAttacker <- a
-          currentDefender <- d
-          events <- events @ evts
-
-    // Defender Defensive Hooks: OnDamageReceived
-    if ctx.DamageDealt > 0 then
-      for item in currentDefender.EquippedItems do
+      // Attacker Offensive Hooks: OnHitLanded and OnCriticalStrike
+      for item in currentAttacker.EquippedItems do
         for trigger in item.Triggers do
           let effects =
             match trigger with
-            | OnDamageReceived f -> f ctx
+            | OnHitLanded f when ctx.DamageDealt > 0 -> f ctx
+            | OnCriticalStrike f when ctx.IsCritical -> f ctx
             | _ -> []
 
           for eff in effects do
-            let d, a, evts = applyTriggerEffect eff item.Name currentDefender currentAttacker
-            currentDefender <- d
+            let a, d, itemEvts = applyTriggerEffect eff item.Name currentAttacker currentDefender
             currentAttacker <- a
-            events <- events @ evts
+            currentDefender <- d
+            evts.AddRange itemEvts
 
-    currentAttacker, currentDefender, events
+      // Defender Defensive Hooks: OnDamageReceived
+      if ctx.DamageDealt > 0 then
+        for item in currentDefender.EquippedItems do
+          for trigger in item.Triggers do
+            let effects =
+              match trigger with
+              | OnDamageReceived f -> f ctx
+              | _ -> []
+
+            for eff in effects do
+              let d, a, itemEvts = applyTriggerEffect eff item.Name currentDefender currentAttacker
+              currentDefender <- d
+              currentAttacker <- a
+              evts.AddRange itemEvts
+
+      currentAttacker, currentDefender, (if evts.Count = 0 then [] else List.ofSeq evts)
 
   // =========================================================================
   // 3. Consecutive Passives (Sunder, Vital Opening, Study)
@@ -1106,7 +1127,10 @@ module ActionResolver =
       // from a build that assigned forms without a plane gate. Charging its upkeep is what let a Fighter's
       // invisible ward climb +15 on every action: drop the form rather than bill for it.
       | _ when baseUpdated.Plane <> Mental ->
-        { baseUpdated with ComplexForm = None; MirrorClones = 0 }, []
+        if baseUpdated.ComplexForm.IsSome || baseUpdated.MirrorClones <> 0 then
+          { baseUpdated with ComplexForm = None; MirrorClones = 0 }, []
+        else
+          baseUpdated, []
       | Some ComplexForm.AegisLattice ->
         let wardGain = 15
         let updated = baseUpdated |> Combatant.addWard wardGain
@@ -1245,9 +1269,8 @@ module ActionResolver =
       else
         actorToTransition, []
 
-    let transitionedActor, transitionEvents = applyFluidTransition currentActor
-    currentActor <- transitionedActor
-    events <- events @ transitionEvents
+    // Strikes resolve in the stance / Complex Form currently held (no free pre-swing +25%).
+    // `applyFluidTransition` runs after resolution so follow-up strikes on the new vector gain the stance bonus.
 
     // --- Step A: Identify Gambit Properties ---
     // Stacks cashed by this strike, read off the meter that gates its vector. Step A drains that
@@ -2450,8 +2473,15 @@ module ActionResolver =
       // Evaluate Indes tempo seizure opportunity (enhanced by held shield plating, windup commitment, and high recklessness)
       if indesCounter = Some true then
         // The counter won the exchange. A strike stopped by a strike is the Indes made real: the blow never
-        // lands, and the tempo changes hands without the attacker ever having been read.
-        let newVor, newNach = Combatant.seizeVor currentTarget, Combatant.yieldVor currentActor
+        // lands, tempo changes hands, and the clean counter vents strain.
+        let newVor =
+          currentTarget
+          |> Combatant.seizeVor
+          |> Combatant.updateMeters (fun m ->
+            { m with
+                Recklessness = m.Recklessness - 15
+                Frustration = m.Frustration - 15 })
+        let newNach = Combatant.yieldVor currentActor
 
         events <-
           CombatEvent.TempoShifted(
@@ -2467,7 +2497,12 @@ module ActionResolver =
           IndesResolver.resolveIndesOpportunityWithWindup currentTarget currentActor atk.IsHeavyWindup contest
 
         if seized then
-          currentTarget <- updatedDef
+          currentTarget <-
+            updatedDef
+            |> Combatant.updateMeters (fun m ->
+              { m with
+                  Recklessness = m.Recklessness - 15
+                  Frustration = m.Frustration - 15 })
           currentActor <- updatedAtk
           events <- events @ indesEvents
         elif isAffinityCounter && currentTarget.IsInNach then
@@ -2526,23 +2561,9 @@ module ActionResolver =
       // Landed Strike: Scaled Tiered NetHits Damage & Weapon Degradation Multiplier
       // A landed strike is the only thing that feeds the ramps. A spender drained its meter above, so
       // it lands back on 1 while everyone else is one stack stronger than before the swing.
+      // Full 5/5 stacks are held deliberately for explicit spenders (no involuntary auto-drain).
       currentActor <- currentActor |> Combatant.addStacks 1
-      // Passive Gambits at 5/5 Momentum or Flow + Prowess Advantage (ADR 0009):
-      let mutable passiveFinisherBonusDmg = 1.0
-      if plane = Physical && currentActor.IsHumanoid && currentActor.GetStat Prowess >= currentTarget.GetStat Poise then
-        if vector = Vector.Power && stacksAtStart >= 5 then
-          currentActor <- currentActor |> Combatant.drainStacks Vector.Power 5
-          passiveFinisherBonusDmg <- 1.50
-          events <- CombatEvent.DisciplineGambitExecuted(currentActor.Id, "Passive Finisher: Flaw Exploit", 5) :: events
-        elif vector = Vector.Agility && stacksAtStart >= 5 then
-          currentActor <- currentActor |> Combatant.drainStacks Vector.Agility 5
-          let degraded = WeaponCondition.degradation currentTarget.WeaponCondition
-          currentTarget <-
-            { currentTarget with
-                WeaponCondition = degraded
-                ComboTracker = currentTarget.ComboTracker.ResetCombo() }
-          events <- CombatEvent.DisciplineGambitExecuted(currentActor.Id, "Passive Finisher: Masterful Disarm", 5) :: events
-          events <- CombatEvent.WeaponDegraded(currentTarget.Id, degraded) :: events
+      let passiveFinisherBonusDmg = 1.0
 
       let baseDamage =
         if plane = Mental then
@@ -2768,13 +2789,26 @@ module ActionResolver =
             currentActor.Id,
             sprintf "Strike fully absorbed: the guard answered it (margin %d)." holdMargin)
           :: events
+      elif not isGambit && dmgEvt.Amount > 0 then
+        // Landing a clean non-gambit strike vents Recklessness and Frustration, rewarding active offense
+        // instead of forcing passive recovery loops.
+        currentActor <-
+          currentActor
+          |> Combatant.updateMeters (fun m ->
+            { m with
+                Recklessness = m.Recklessness - 12
+                Frustration = m.Frustration - 10 })
 
-      // Transient Pain Shock Check (ADR 0009):
-      // Single-turn physical HP damage >= 15% Max HP triggers a check against Poise (Fortitude fallback for non-humanoids)
+      // Transient Pain Shock Check:
+      // Single-turn physical HP damage >= 35% Max HP (or >= 20% when already strained) triggers a Poise check.
+      // Failing yields tempo (Vor -> Nach) and adds +10 Frustration/Exhaustion rather than skipping a full turn.
       if plane = Physical && dmgEvt.Amount > 0 then
         let maxHp = Math.Max(1, currentTarget.Health.Maximum)
         let dmgPct = int (Math.Round((float dmgEvt.Amount / float maxHp) * 100.0))
-        if dmgPct >= 15 then
+        let isStrained =
+          currentTarget.Meters.Exhaustion.Value >= 50
+          || currentTarget.Meters.Frustration.Value >= 50
+        if dmgPct >= 35 || (isStrained && dmgPct >= 20) then
           let effectivePoise =
             if currentTarget.IsHumanoid then currentTarget.GetStat StatId.Poise
             else currentTarget.GetStat StatId.Fortitude
@@ -2782,11 +2816,18 @@ module ActionResolver =
           let resisted = effectivePoise >= reqPoise
           events <- CombatEvent.PainShockSuffered(currentTarget.Id, dmgEvt.Amount, dmgPct, effectivePoise, resisted) :: events
           if not resisted then
+            let wasInVor = currentTarget.IsInVor
             currentTarget <-
               currentTarget
-              |> Combatant.stagger
-              |> Combatant.updateMeters (fun m -> { m with Frustration = m.Frustration + 25; Exhaustion = m.Exhaustion + 15 })
-            events <- CombatEvent.CombatantStaggered(currentTarget.Id, sprintf "Pain Shock failure (%d Poise vs %d required) — Staggered!" effectivePoise reqPoise) :: events
+              |> Combatant.yieldVor
+              |> Combatant.updateMeters (fun m -> { m with Frustration = m.Frustration + 10; Exhaustion = m.Exhaustion + 10 })
+            if wasInVor then
+              events <-
+                CombatEvent.TempoShifted(
+                  currentActor.Id,
+                  currentTarget.Id,
+                  sprintf "Pain Shock (%d Poise vs %d required) broke %s's tempo, yielding the Vor!" effectivePoise reqPoise currentTarget.Name
+                ) :: events
 
       // Defender Reactive Monster Traits: Acidic Blood & Molten Aura
       if plane = Physical && dmgEvt.Amount > 0 then
@@ -3086,7 +3127,8 @@ module ActionResolver =
   /// Resolves an active defense posture taken in the Nach when opponent did not attack (ADR 0009)
   let resolveActiveDefense (defense: DefenseClassification) (actor: Combatant) (target: Combatant) : ActionResult =
     let mutable currentActor = actor
-    let mutable events = [ CombatEvent.ActiveDefenseDeclared(actor.Id, sprintf "%A" defense) ]
+    let defenseName = defense.Name
+    let mutable events = [ CombatEvent.ActiveDefenseDeclared(actor.Id, defenseName) ]
 
     // A defended round pays one guard stack per foe faced: holding off a four-strong pack is worth four
     // times a duel, and the pack thinning out lowers every later gain. `EnemiesFaced` is stamped by the
@@ -3161,7 +3203,7 @@ module ActionResolver =
         sprintf "Intuition Perception dispelled -%d Confusion and calmed -%d Provoke, sharpening insight (+%d Inertia/Focus)." confVent provVent guardGain, a
 
     currentActor <- updatedActor
-    events <- events @ [ CombatEvent.UnattackedStanceBenefit(currentActor.Id, sprintf "%A" defense, benefitMsg) ]
+    events <- events @ [ CombatEvent.UnattackedStanceBenefit(currentActor.Id, defenseName, benefitMsg) ]
 
     // A defended round is a won exchange, so it seizes the Vor from the foe it answered. This used to
     // require `not target.IsInVor`, which meant a player pinned in the Nach by an ambusher could never
@@ -3202,7 +3244,11 @@ module ActionResolver =
     // Shield plating comes down the moment its bearer commits to a new intent: Raise Shield re-erects
     // it as its own effect below, and every other intent fights unshielded. The same resolve pass clears
     // the foe's plating when the foe acts, so the rule is symmetric for packs and bosses alike.
-    let upkeepActor = { upkeepActor with Armor = { upkeepActor.Armor with Boost = 0 } }
+    let upkeepActor =
+      if upkeepActor.Armor.Boost <> 0 then
+        { upkeepActor with Armor = { upkeepActor.Armor with Boost = 0 } }
+      else
+        upkeepActor
 
     if upkeepActor.Health.IsDepleted then
       { Actor = upkeepActor
@@ -3842,20 +3888,35 @@ module ActionResolver =
     : GroupActionResult =
     let result = resolveGroupTurnCore roller intent actor primaryTarget adjacentTargets
 
-    let wasStruck (before: Combatant) =
-      match result.SecondaryTargets |> List.tryFind (fun (after: Combatant) -> after.Id = before.Id) with
-      | Some after -> after.Health.Current < before.Health.Current || after.Morale.Current < before.Morale.Current
-      | None -> false
+    let mutable anyStruck = false
+    let secondaries =
+      if adjacentTargets.Length = result.SecondaryTargets.Length then
+        List.map2
+          (fun (before: Combatant) (after: Combatant) ->
+            if before.Id = after.Id && (after.Health.Current < before.Health.Current || after.Morale.Current < before.Morale.Current) then
+              anyStruck <- true
+              Combatant.yieldVor after
+            else
+              after)
+          adjacentTargets
+          result.SecondaryTargets
+      else
+        let knockedBack =
+          adjacentTargets
+          |> List.choose (fun before ->
+            match result.SecondaryTargets |> List.tryFind (fun after -> after.Id = before.Id) with
+            | Some after when after.Health.Current < before.Health.Current || after.Morale.Current < before.Morale.Current ->
+              Some before.Id
+            | _ -> None)
+          |> Set.ofList
+        if knockedBack.IsEmpty then result.SecondaryTargets
+        else
+          anyStruck <- true
+          result.SecondaryTargets
+          |> List.map (fun c -> if Set.contains c.Id knockedBack then Combatant.yieldVor c else c)
 
-    let knockedBack =
-      adjacentTargets |> List.filter wasStruck |> List.map (fun c -> c.Id) |> Set.ofList
-
-    if knockedBack.IsEmpty then result
+    if not anyStruck then result
     else
-      let secondaries =
-        result.SecondaryTargets
-        |> List.map (fun (c: Combatant) -> if Set.contains c.Id knockedBack then Combatant.yieldVor c else c)
-
       // The primary goes through `resolveEx`, so it can already claim the tempo; a chained or
       // cleaved secondary never could, which left the player unable to win the initiative back
       // from a pack except through whichever foe happened to be primary. A group strike that

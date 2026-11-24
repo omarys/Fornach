@@ -50,46 +50,8 @@ module DicePool =
     let greaterWorst, _ = hitBounds vector greaterStat lesserStat
     lesserBest < greaterWorst
 
-  /// Power Vector: TN 5+ (5 counts as 1 hit; 6 counts as 2 hits)
-  let private evaluatePower (dice: int list) : int list * int =
-    let hits =
-      dice
-      |> List.sumBy (fun roll ->
-        if roll = 6 then 2
-        elif roll = 5 then 1
-        else 0)
-
-    dice, hits
-
-  /// Agility Vector: TN 4+ (4, 5, 6 each count as 1 hit)
-  let private evaluateAgility (dice: int list) : int list * int =
-    let hits =
-      dice
-      |> List.sumBy (fun roll -> if roll >= 4 then 1 else 0)
-
-    dice, hits
-
-  /// Discipline Vector: TN 4+ (4, 5, 6 each count as 1 hit).
-  /// If studyStacks > 0, rerolls up to studyStacks dice that rolled 1.
-  let private evaluateDiscipline (roller: int -> int -> int) (studyStacks: int) (dice: int list) : int list * int =
-    let mutable rerollsLeft = Math.Max(0, studyStacks)
-
-    let finalDice =
-      dice
-      |> List.map (fun roll ->
-        if roll = 1 && rerollsLeft > 0 then
-          rerollsLeft <- rerollsLeft - 1
-          roller 1 6
-        else
-          roll)
-
-    let hits =
-      finalDice
-      |> List.sumBy (fun roll -> if roll >= 4 then 1 else 0)
-
-    finalDice, hits
-
-  /// Evaluates an individual participant's dice pool for a designated Vector
+  /// Evaluates an individual participant's dice pool for a designated Vector.
+  /// Preserves exact RNG draw order: initial poolSize rolls first, then Discipline rerolls in index order.
   let evaluatePool
     (roller: int -> int -> int)
     (vector: Vector)
@@ -97,24 +59,45 @@ module DicePool =
     (studyStacks: int)
     (poolSize: int)
     : DicePoolResult =
-    let rawRolls = List.init poolSize (fun _ -> roller 1 6)
+    let rolls = Array.zeroCreate<int> poolSize
+    for i = 0 to poolSize - 1 do
+      rolls.[i] <- roller 1 6
 
-    let finalRolls, rolledHits =
-      match vector with
-      | Power -> evaluatePower rawRolls
-      | Agility -> evaluateAgility rawRolls
-      | Discipline -> evaluateDiscipline roller studyStacks rawRolls
+    let mutable rolledHits = 0
+    let mutable onesCount = 0
+
+    match vector with
+    | Power ->
+      for i = 0 to poolSize - 1 do
+        let r = rolls.[i]
+        if r = 6 then rolledHits <- rolledHits + 2
+        elif r = 5 then rolledHits <- rolledHits + 1
+        elif r = 1 then onesCount <- onesCount + 1
+    | Agility ->
+      for i = 0 to poolSize - 1 do
+        let r = rolls.[i]
+        if r >= 4 then rolledHits <- rolledHits + 1
+        elif r = 1 then onesCount <- onesCount + 1
+    | Discipline ->
+      let mutable rerollsLeft = Math.Max(0, studyStacks)
+      for i = 0 to poolSize - 1 do
+        let mutable r = rolls.[i]
+        if r = 1 && rerollsLeft > 0 then
+          rerollsLeft <- rerollsLeft - 1
+          r <- roller 1 6
+          rolls.[i] <- r
+        if r >= 4 then rolledHits <- rolledHits + 1
+        elif r = 1 then onesCount <- onesCount + 1
 
     let floorHits = computeFloorHits statValue
     let totalHits = floorHits + rolledHits
-    let onesCount = finalRolls |> List.filter (fun r -> r = 1) |> List.length
-    let isGlitch = onesCount > (finalRolls.Length / 2)
+    let isGlitch = onesCount > (poolSize / 2)
 
     { StatValue = statValue
       FloorHits = floorHits
       RolledHits = rolledHits
       TotalHits = totalHits
-      RawRolls = finalRolls
+      RawRolls = Array.toList rolls
       IsGlitch = isGlitch }
 
   /// Computes compounding successive defense penalty based on stat disparity.

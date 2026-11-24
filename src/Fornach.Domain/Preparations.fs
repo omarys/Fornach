@@ -224,15 +224,20 @@ type ProgressionProfile = {
         match s.IndexOf(' ') with
         | -1 -> s
         | idx -> s.Substring(idx + 1).Trim()
-      let firstWord (s: string) =
-        match s.IndexOf(' ') with
-        | -1 -> s
-        | idx -> s.Substring(0, idx)
-      let tierTitles =
-        set [ "Novice"; "Veteran"; "Master"; "GrandMaster" ]
+      let isTierTitle (s: string) =
+        let spaceIdx = s.IndexOf(' ')
+        let len = if spaceIdx = -1 then s.Length else spaceIdx
+        if len = 6 then
+          s.StartsWith("Novice", StringComparison.Ordinal) || s.StartsWith("Master", StringComparison.Ordinal)
+        elif len = 7 then
+          s.StartsWith("Veteran", StringComparison.Ordinal)
+        elif len = 11 then
+          s.StartsWith("GrandMaster", StringComparison.Ordinal)
+        else
+          false
       let mutable result = name.Trim()
       if result.StartsWith("Lv.", StringComparison.OrdinalIgnoreCase) then result <- afterFirstWord result
-      if tierTitles.Contains(firstWord result) then result <- afterFirstWord result
+      if isTierTitle result then result <- afterFirstWord result
       result
 
   /// Creates a standard progression profile with replenished class preparations based on primary stat.

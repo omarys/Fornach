@@ -8,24 +8,29 @@ module Dijkstra =
   /// Returns a Map<Point, int> where the integer represents step distance from the nearest goal.
   let compute (isPassable: Point -> bool) (goals: Point list) (maxDistance: int) : Map<Point, int> =
     let distances = Dictionary<Point, int>()
-    let queue = Queue<Point * int>()
+    let queue = Queue<struct(Point * int)>()
 
-    // Initialize all valid goal tiles with distance 0
+    // Initialize all unique valid goal tiles with distance 0
     for goal in goals do
-      if isPassable goal then
-        distances.[goal] <- 0
-        queue.Enqueue(goal, 0)
+      if isPassable goal && distances.TryAdd(goal, 0) then
+        queue.Enqueue(struct(goal, 0))
+
+    let offsets = Point.allNeighborOffsets
 
     // Breadth-first flood fill
     while queue.Count > 0 do
-      let current, dist = queue.Dequeue()
+      let struct(current, dist) = queue.Dequeue()
 
       if dist < maxDistance then
-        for neighbor in Point.allNeighbors current do
-          if isPassable neighbor && not (distances.ContainsKey neighbor) then
-            let nextDist = dist + 1
+        let nextDist = dist + 1
+
+        for i = 0 to offsets.Length - 1 do
+          let struct(dx, dy) = offsets.[i]
+          let neighbor = { X = current.X + dx; Y = current.Y + dy }
+
+          if not (distances.ContainsKey neighbor) && isPassable neighbor then
             distances.[neighbor] <- nextDist
-            queue.Enqueue(neighbor, nextDist)
+            queue.Enqueue(struct(neighbor, nextDist))
 
     // Convert to immutable F# Map
     distances |> Seq.map (fun kvp -> kvp.Key, kvp.Value) |> Map.ofSeq
@@ -33,33 +38,49 @@ module Dijkstra =
   /// Given a Dijkstra map and a current position, returns the neighboring tile
   /// that moves closer to the goal (lowest distance).
   let nextStepTowards (map: Map<Point, int>) (current: Point) : Point option =
-    let neighbors = Point.allNeighbors current
+    let offsets = Point.allNeighborOffsets
+    let mutable found = false
+    let mutable bestNeighbor = current
+    let mutable bestDist = System.Int32.MaxValue
 
-    let validSteps =
-      neighbors
-      |> List.choose (fun n -> map.TryFind n |> Option.map (fun dist -> n, dist))
+    for i = 0 to offsets.Length - 1 do
+      let struct(dx, dy) = offsets.[i]
+      let neighbor = { X = current.X + dx; Y = current.Y + dy }
 
-    match validSteps with
-    | [] -> None
-    | steps ->
+      match map.TryFind neighbor with
+      | Some dist when not found || dist < bestDist ->
+        found <- true
+        bestNeighbor <- neighbor
+        bestDist <- dist
+      | _ -> ()
+
+    if not found then
+      None
+    else
       let currentDist = map.TryFind current |> Option.defaultValue System.Int32.MaxValue
-      // Find neighbor with minimum distance strictly lower than current
-      let bestNeighbor, bestDist = steps |> List.minBy snd
       if bestDist < currentDist then Some bestNeighbor else None
 
   /// Given a Dijkstra map and a current position, returns the neighboring tile
   /// that flees away from the goal (highest distance).
   let nextStepAway (map: Map<Point, int>) (current: Point) : Point option =
-    let neighbors = Point.allNeighbors current
+    let offsets = Point.allNeighborOffsets
+    let mutable found = false
+    let mutable bestNeighbor = current
+    let mutable bestDist = System.Int32.MinValue
 
-    let validSteps =
-      neighbors
-      |> List.choose (fun n -> map.TryFind n |> Option.map (fun dist -> n, dist))
+    for i = 0 to offsets.Length - 1 do
+      let struct(dx, dy) = offsets.[i]
+      let neighbor = { X = current.X + dx; Y = current.Y + dy }
 
-    match validSteps with
-    | [] -> None
-    | steps ->
+      match map.TryFind neighbor with
+      | Some dist when not found || dist > bestDist ->
+        found <- true
+        bestNeighbor <- neighbor
+        bestDist <- dist
+      | _ -> ()
+
+    if not found then
+      None
+    else
       let currentDist = map.TryFind current |> Option.defaultValue 0
-      // Find neighbor with maximum distance strictly greater than current
-      let bestNeighbor, bestDist = steps |> List.maxBy snd
       if bestDist > currentDist then Some bestNeighbor else None

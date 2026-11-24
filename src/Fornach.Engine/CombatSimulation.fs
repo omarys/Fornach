@@ -165,6 +165,10 @@ module CombatSimulation =
     let mutable condition = Stalemate
     let mutable whiffs = 0
     let mutable crits = 0
+    let mutable prevDefA : DefenseChoice option = None
+    let mutable prevDefB : DefenseChoice option = None
+    let mutable shieldTurtlesA = 0
+    let mutable shieldTurtlesB = 0
 
     let executeTurn (actorIsA: bool) =
       let actor, target = if actorIsA then combA, combB else combB, combA
@@ -172,18 +176,25 @@ module CombatSimulation =
         let recovered = actor |> Combatant.clearStagger
         if actorIsA then combA <- recovered else combB <- recovered
       else
-        let intent = AI.chooseIntentUsing policies actor target
+        let baseIntent = AI.chooseIntentUsing policies actor target
         let defOpt =
           if target.IsHumanoid && target.IsInNach then
             Some(Guard(AI.chooseActiveDefense target actor))
           else None
+        let prevTargetDef, targetTurtles =
+          if actorIsA then prevDefB, shieldTurtlesB else prevDefA, shieldTurtlesA
+        let intent = AI.adaptIntentToRepetition actor baseIntent prevTargetDef defOpt targetTurtles
         let res = ActionResolver.resolveExWithDefense roller intent defOpt actor target 0
         if actorIsA then
           combA <- res.Actor
           combB <- res.Target
+          prevDefB <- defOpt
+          shieldTurtlesA <- match intent with RecoveryAction RaiseShield | Wait -> shieldTurtlesA + 1 | _ -> 0
         else
           combB <- res.Actor
           combA <- res.Target
+          prevDefA <- defOpt
+          shieldTurtlesB <- match intent with RecoveryAction RaiseShield | Wait -> shieldTurtlesB + 1 | _ -> 0
 
         match res.Contest with
         | Some c ->
@@ -325,21 +336,41 @@ module CombatSimulation =
               WinnerName = revRes.WinnerName
               WinnerIsA = revRes.WinnerIsA |> Option.map not })
 
-    let totalWinsA = results |> List.filter (fun r -> r.WinnerIsA = Some true) |> List.length
-    let totalWinsB = results |> List.filter (fun r -> r.WinnerIsA = Some false) |> List.length
-    let totalStalemates = results |> List.filter (fun r -> r.WinnerIsA.IsNone) |> List.length
+    let mutable totalWinsA = 0
+    let mutable totalWinsB = 0
+    let mutable totalStalemates = 0
+    let mutable resolvedCount = 0
+    let mutable resolvedSum = 0
+    let mutable minRounds = Int32.MaxValue
+    let mutable maxRounds = 0
+    let mutable healthKills = 0
+    let mutable moraleKills = 0
+    let mutable executions = 0
+    let mutable totalWhiffs = 0
+    let mutable totalCrits = 0
 
-    let resolvedRounds = results |> List.filter (fun r -> r.Condition <> Stalemate) |> List.map (fun r -> r.Rounds)
-    let avgRounds = if resolvedRounds.IsEmpty then 0.0 else resolvedRounds |> List.averageBy float
-    let minRounds = if resolvedRounds.IsEmpty then 0 else List.min resolvedRounds
-    let maxRounds = if resolvedRounds.IsEmpty then 0 else List.max resolvedRounds
+    for r in results do
+      match r.WinnerIsA with
+      | Some true -> totalWinsA <- totalWinsA + 1
+      | Some false -> totalWinsB <- totalWinsB + 1
+      | None -> totalStalemates <- totalStalemates + 1
+      match r.Condition with
+      | Stalemate -> ()
+      | cond ->
+        resolvedCount <- resolvedCount + 1
+        resolvedSum <- resolvedSum + r.Rounds
+        if r.Rounds < minRounds then minRounds <- r.Rounds
+        if r.Rounds > maxRounds then maxRounds <- r.Rounds
+        match cond with
+        | HealthDepleted -> healthKills <- healthKills + 1
+        | MoraleDepleted -> moraleKills <- moraleKills + 1
+        | ExecutionFinisher _ -> executions <- executions + 1
+        | _ -> ()
+      totalWhiffs <- totalWhiffs + r.TotalWhiffs
+      totalCrits <- totalCrits + r.TotalCrits
 
-    let healthKills = results |> List.filter (fun r -> r.Condition = HealthDepleted) |> List.length
-    let moraleKills = results |> List.filter (fun r -> r.Condition = MoraleDepleted) |> List.length
-    let executions = results |> List.filter (fun r -> match r.Condition with ExecutionFinisher _ -> true | _ -> false) |> List.length
-
-    let totalWhiffs = results |> List.sumBy (fun r -> r.TotalWhiffs)
-    let totalCrits = results |> List.sumBy (fun r -> r.TotalCrits)
+    let avgRounds = if resolvedCount = 0 then 0.0 else float resolvedSum / float resolvedCount
+    let minRounds = if resolvedCount = 0 then 0 else minRounds
 
     { ArchetypeNameA = sampleA.Name
       ArchetypeNameB = sampleB.Name
@@ -383,6 +414,8 @@ module CombatSimulation =
     let mutable totalCleaves = 0
     let mutable totalChains = 0
     let mutable tempoShifts = 0
+    let mutable prevSoloDefense : DefenseChoice option = None
+    let mutable soloShieldTurtles = 0
 
     while winnerIsSolo.IsNone && round <= maxRounds do
       // Who holds the Vor decides which side resolves first. A living pack member in the Vor while the
@@ -402,33 +435,36 @@ module CombatSimulation =
           let target = policy.ChooseTarget solo mob
           let adjacentTargets = mob |> List.filter (fun m -> m.Id <> target.Id)
           let intentSolo = policy.ChooseIntent solo target mob.Length
+          soloShieldTurtles <- match intentSolo with RecoveryAction RaiseShield | Wait -> soloShieldTurtles + 1 | _ -> 0
           let groupRes = ActionResolver.resolveGroupTurn roller intentSolo solo target adjacentTargets
           solo <- groupRes.Actor
 
-          let cleaveHits = groupRes.Events |> List.filter (function CombatEvent.CleaveExecuted _ -> true | _ -> false) |> List.length
-          let chainHits = groupRes.Events |> List.filter (function CombatEvent.StrikeChained _ -> true | _ -> false) |> List.length
-          let tempoHits = groupRes.Events |> List.filter (function CombatEvent.TempoShifted (_, _, _) -> true | _ -> false) |> List.length
-          totalCleaves <- totalCleaves + cleaveHits
-          totalChains <- totalChains + chainHits
-          tempoShifts <- tempoShifts + tempoHits
-
-          let executedIds =
-            groupRes.Events
-            |> List.choose (function CombatEvent.Executed (_, tid, _) -> Some tid | _ -> None)
-            |> Set.ofList
+          let mutable executedIds = Set.empty
+          for evt in groupRes.Events do
+            match evt with
+            | CombatEvent.CleaveExecuted _ -> totalCleaves <- totalCleaves + 1
+            | CombatEvent.StrikeChained _ -> totalChains <- totalChains + 1
+            | CombatEvent.TempoShifted (_, _, _) -> tempoShifts <- tempoShifts + 1
+            | CombatEvent.Executed (_, tid, _) -> executedIds <- Set.add tid executedIds
+            | _ -> ()
 
           let allResolved = groupRes.PrimaryTarget :: groupRes.SecondaryTargets
 
           // Update mob with resolved targets, apply turn upkeep, and filter out defeated
           mob <-
             allResolved
-            |> List.map (fun m ->
+            |> List.choose (fun m ->
               let up, _ = ActionResolver.applyTurnUpkeep m
-              up)
-            |> List.filter (fun m ->
-              not (Set.contains m.Id executedIds)
-              && not m.Health.IsDepleted
-              && not m.Morale.IsDepleted)
+              if (executedIds.IsEmpty || not (Set.contains up.Id executedIds))
+                 && not up.Health.IsDepleted
+                 && not up.Morale.IsDepleted then
+                Some up
+              else
+                None)
+
+          if mob.IsEmpty && not executedIds.IsEmpty && winnerIsSolo.IsNone then
+            winnerIsSolo <- Some true
+            condition <- ExecutionFinisher solo.Plane
 
           // Enraged Berserker Frenzy Attack: Berserk Tincture unleashes an immediate savage follow-up swing!
           if solo.HasActivePreparation PreparationType.BerserkTincture && not mob.IsEmpty && not solo.Health.IsDepleted && not solo.Morale.IsDepleted then
@@ -438,27 +474,26 @@ module CombatSimulation =
             let frenzyRes = ActionResolver.resolveGroupTurn roller frenzyIntent solo frenzyTarget frenzyAdjacent
             solo <- frenzyRes.Actor
 
-            let frenzyCleaves = frenzyRes.Events |> List.filter (function CombatEvent.CleaveExecuted _ -> true | _ -> false) |> List.length
-            let frenzyTempoHits = frenzyRes.Events |> List.filter (function CombatEvent.TempoShifted (_, _, _) -> true | _ -> false) |> List.length
-            totalCleaves <- totalCleaves + frenzyCleaves
-            tempoShifts <- tempoShifts + frenzyTempoHits
-
-            let frenzyExecutedIds =
-              frenzyRes.Events
-              |> List.choose (function CombatEvent.Executed (_, tid, _) -> Some tid | _ -> None)
-              |> Set.ofList
+            let mutable frenzyExecutedIds = Set.empty
+            for evt in frenzyRes.Events do
+              match evt with
+              | CombatEvent.CleaveExecuted _ -> totalCleaves <- totalCleaves + 1
+              | CombatEvent.TempoShifted (_, _, _) -> tempoShifts <- tempoShifts + 1
+              | CombatEvent.Executed (_, tid, _) -> frenzyExecutedIds <- Set.add tid frenzyExecutedIds
+              | _ -> ()
 
             let allFrenzyResolved = frenzyRes.PrimaryTarget :: frenzyRes.SecondaryTargets
 
             mob <-
               allFrenzyResolved
-              |> List.map (fun m ->
+              |> List.choose (fun m ->
                 let up, _ = ActionResolver.applyTurnUpkeep m
-                up)
-              |> List.filter (fun m ->
-                not (Set.contains m.Id frenzyExecutedIds)
-                && not m.Health.IsDepleted
-                && not m.Morale.IsDepleted)
+                if (frenzyExecutedIds.IsEmpty || not (Set.contains up.Id frenzyExecutedIds))
+                   && not up.Health.IsDepleted
+                   && not up.Morale.IsDepleted then
+                  Some up
+                else
+                  None)
 
 
       // Phase 2: Swarm Turn (All surviving mob members attack Solo concurrently)
@@ -466,8 +501,9 @@ module CombatSimulation =
         // Poise sets the frontage: how many bodies can reach the solo at once, from eight down to one.
         // When BastionZoneControl is active, only the 3 frontline tiles in front of the Warden can swing.
         // Each clone that vanishes/shatters blocks that tile space until the end of the round!
+        let mobArr = ResizeArray<Combatant>(mob)
         let initialMaxSwings =
-          let frontage = Math.Min(solo.Frontage, mob.Length)
+          let frontage = Math.Min(solo.Frontage, mobArr.Count)
           if solo.HasActivePreparation PreparationType.BastionZoneControl then Math.Min(3, frontage)
           else frontage
 
@@ -476,33 +512,38 @@ module CombatSimulation =
         let mutable mobIdx = 0
         let mutable swingsCount = 0
 
-        while mobIdx < mob.Length && swingsCount < availableSwings && winnerIsSolo.IsNone do
-          let attacker = mob.[mobIdx]
-          let intentMob = AI.chooseIntentUsing policies attacker solo
+        let mutable roundSoloDefense : DefenseChoice option = None
+        while mobIdx < mobArr.Count && swingsCount < availableSwings && winnerIsSolo.IsNone do
+          let attacker = mobArr.[mobIdx]
+          let baseIntentMob = AI.chooseIntentUsing policies attacker solo
           let defOpt = if priorDefenses = 0 && solo.IsHumanoid then Some(Guard(policy.ChooseDefense solo attacker)) else None
+          if priorDefenses = 0 then roundSoloDefense <- defOpt
+          let intentMob = AI.adaptIntentToRepetition attacker baseIntentMob prevSoloDefense defOpt soloShieldTurtles
           let mobRes = ActionResolver.resolveExWithDefense roller intentMob defOpt attacker solo priorDefenses
           let newAttacker = mobRes.Actor
           solo <- mobRes.Target
           swingsCount <- swingsCount + 1
 
+          let mutable cloneShattered = false
+          let mutable soloExecuted = false
+          for evt in mobRes.Events do
+            match evt with
+            | CombatEvent.MirrorCloneShattered _
+            | CombatEvent.MirrorMirageDeceived _ -> cloneShattered <- true
+            | CombatEvent.AttackOfOpportunityTriggered _ -> totalAoOs <- totalAoOs + 1
+            | CombatEvent.TempoShifted (_, _, _) -> tempoShifts <- tempoShifts + 1
+            | CombatEvent.Executed _ -> soloExecuted <- true
+            | _ -> ()
+
           // If a mirror clone was shattered/deceived, that tile is blocked by the dissipating phantasm for the rest of the round!
-          let cloneShattered =
-            mobRes.Events
-            |> List.exists (function CombatEvent.MirrorCloneShattered _ | CombatEvent.MirrorMirageDeceived _ -> true | _ -> false)
           if cloneShattered then
             availableSwings <- Math.Max(0, availableSwings - 1)
-
-          let aooHits = mobRes.Events |> List.filter (function CombatEvent.AttackOfOpportunityTriggered _ -> true | _ -> false) |> List.length
-          let tempoHits = mobRes.Events |> List.filter (function CombatEvent.TempoShifted (_, _, _) -> true | _ -> false) |> List.length
-          totalAoOs <- totalAoOs + aooHits
-          tempoShifts <- tempoShifts + tempoHits
 
           match mobRes.Contest with
           | Some c ->
             if c.IsCritical then mobCrits <- mobCrits + 1
           | None -> ()
 
-          let soloExecuted = mobRes.Events |> List.exists (function CombatEvent.Executed _ -> true | _ -> false)
           if soloExecuted then
             let plane = match intentMob with ExecuteStrike p -> p | _ -> Physical
             winnerIsSolo <- Some false
@@ -520,12 +561,15 @@ module CombatSimulation =
             if solo.Class = CharacterClass.Fighter then
               // Reading the School: neutralizing a student of this martial school feeds the ramp
               solo <- solo |> Combatant.addStacks 1
-            mob <- mob |> List.filter (fun m -> m.Id <> newAttacker.Id)
+            mobArr.RemoveAt(mobIdx)
           else
-            mob <- mob |> List.mapi (fun i m -> if i = mobIdx then newAttacker else m)
+            mobArr.[mobIdx] <- newAttacker
             priorDefenses <- priorDefenses + 1
             peakPenalty <- Math.Max(peakPenalty, priorDefenses)
             mobIdx <- mobIdx + 1
+
+        prevSoloDefense <- roundSoloDefense
+        mob <- List.ofSeq mobArr
 
 
       // Phase 3: Solo Upkeep at end of round
@@ -646,31 +690,70 @@ module CombatSimulation =
     (iterations: int)
     (results: GroupSingleResult list)
     : GroupSimulationSummary =
-    let soloWins = results |> List.filter (fun r -> r.SoloWon) |> List.length
-    let mobWins = results |> List.filter (fun r -> not r.SoloWon && r.Condition <> Stalemate) |> List.length
-    let stalemates = results |> List.filter (fun r -> r.Condition = Stalemate) |> List.length
+    let mutable soloWins = 0
+    let mutable mobWins = 0
+    let mutable stalemates = 0
+    let mutable resolvedCount = 0
+    let mutable resolvedSum = 0
+    let mutable minRounds = Int32.MaxValue
+    let mutable maxRounds = 0
+    let mutable elimSum = 0.0
+    let mutable peakPenSum = 0.0
+    let mutable aooSum = 0.0
+    let mutable cleaveSum = 0.0
+    let mutable chainSum = 0.0
+    let mutable tempoSum = 0.0
+    let mutable soloHpSum = 0.0
+    let mutable healthKills = 0
+    let mutable moraleKills = 0
+    let mutable executions = 0
+    let elimCounts = Array.zeroCreate<int> (mobCount + 1)
+    let mutable totalCount = 0
+
+    for r in results do
+      totalCount <- totalCount + 1
+      if r.SoloWon then
+        soloWins <- soloWins + 1
+        soloHpSum <- soloHpSum + r.SoloRemainingHPPct
+      elif r.Condition <> Stalemate then
+        mobWins <- mobWins + 1
+      if r.Condition = Stalemate then
+        stalemates <- stalemates + 1
+      else
+        resolvedCount <- resolvedCount + 1
+        resolvedSum <- resolvedSum + r.Rounds
+        if r.Rounds < minRounds then minRounds <- r.Rounds
+        if r.Rounds > maxRounds then maxRounds <- r.Rounds
+        match r.Condition with
+        | HealthDepleted -> healthKills <- healthKills + 1
+        | MoraleDepleted -> moraleKills <- moraleKills + 1
+        | ExecutionFinisher _ -> executions <- executions + 1
+        | _ -> ()
+      elimSum <- elimSum + float r.OpponentsEliminated
+      peakPenSum <- peakPenSum + float r.PeakEncirclementPenalty
+      aooSum <- aooSum + float r.TotalAoOsTriggered
+      cleaveSum <- cleaveSum + float r.TotalCleaves
+      chainSum <- chainSum + float r.TotalChains
+      tempoSum <- tempoSum + float r.TotalTempoShifts
+      if r.OpponentsEliminated >= 0 && r.OpponentsEliminated <= mobCount then
+        elimCounts.[r.OpponentsEliminated] <- elimCounts.[r.OpponentsEliminated] + 1
+
+    let denom = float (max 1 totalCount)
     let soloWinRate = (float soloWins / float iterations) * 100.0
-    let resolvedRounds = results |> List.filter (fun r -> r.Condition <> Stalemate) |> List.map (fun r -> r.Rounds)
-    let avgRounds = if resolvedRounds.IsEmpty then 0.0 else resolvedRounds |> List.averageBy float
-    let minRounds = if resolvedRounds.IsEmpty then 0 else List.min resolvedRounds
-    let maxRounds = if resolvedRounds.IsEmpty then 0 else List.max resolvedRounds
-    let avgElim = results |> List.averageBy (fun r -> float r.OpponentsEliminated)
-    let avgPeakPen = results |> List.averageBy (fun r -> float r.PeakEncirclementPenalty)
-    let avgAoO = results |> List.averageBy (fun r -> float r.TotalAoOsTriggered)
-    let avgCleaves = results |> List.averageBy (fun r -> float r.TotalCleaves)
-    let avgChains = results |> List.averageBy (fun r -> float r.TotalChains)
-    let avgTempoShifts = results |> List.averageBy (fun r -> float r.TotalTempoShifts)
-    let winningResults = results |> List.filter (fun r -> r.SoloWon)
-    let avgSoloHP = if winningResults.IsEmpty then 0.0 else winningResults |> List.averageBy (fun r -> float r.SoloRemainingHPPct)
+    let avgRounds = if resolvedCount = 0 then 0.0 else float resolvedSum / float resolvedCount
+    let minRounds = if resolvedCount = 0 then 0 else minRounds
+    let avgElim = elimSum / denom
+    let avgPeakPen = peakPenSum / denom
+    let avgAoO = aooSum / denom
+    let avgCleaves = cleaveSum / denom
+    let avgChains = chainSum / denom
+    let avgTempoShifts = tempoSum / denom
+    let avgSoloHP = if soloWins = 0 then 0.0 else soloHpSum / float soloWins
     let elimDist =
-      [ 0 .. mobCount ]
-      |> List.map (fun k ->
-        let count = results |> List.filter (fun r -> r.OpponentsEliminated = k) |> List.length
-        let pct = (float count / float iterations) * 100.0
-        (k, count, pct))
-    let healthKills = results |> List.filter (fun r -> r.Condition = HealthDepleted) |> List.length
-    let moraleKills = results |> List.filter (fun r -> r.Condition = MoraleDepleted) |> List.length
-    let executions = results |> List.filter (fun r -> match r.Condition with ExecutionFinisher _ -> true | _ -> false) |> List.length
+      [ for k in 0 .. mobCount ->
+          let count = elimCounts.[k]
+          let pct = (float count / float iterations) * 100.0
+          (k, count, pct) ]
     { SoloArchetypeName = soloName
       MobArchetypeName = mobName
       MobCount = mobCount
@@ -838,10 +921,14 @@ module CombatSimulation =
             morale.[floor] <- morale.[floor] + (float survivor.Morale.Current / float survivor.Morale.Maximum * 100.0)
 
             // The tower's own progression: growth from the pack, XP for the pack, stacks cleared on the stairs.
+            let cleanMastery =
+              match result.Condition with
+              | ExecutionFinisher _ | CollapseDecisive _ -> true
+              | _ -> false
             let grown =
               survivor
               |> Combatant.growFromEncounter foes
-              |> Combatant.growFromStressedVictory
+              |> Combatant.growFromVictory cleanMastery
             // Same exchange rate the game pays, so the sweep measures the progression the player gets.
             let xp = foes |> List.sumBy (fun f -> TowerSession.experienceForKill f.Level)
             let levelled, _ = TowerSession.applyExperience grown xp

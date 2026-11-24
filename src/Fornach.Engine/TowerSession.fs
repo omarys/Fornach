@@ -97,7 +97,7 @@ module TowerSession =
         state.Locomotion
         EnvironmentalFactors.Default
 
-    let visibleTiles = Fov.compute state.CurrentFloor.IsOpaque cone
+    let visibleTiles = Fov.compute (state.CurrentFloor.MakeOpaqueChecker()) cone
     let updatedExplored = Set.union state.CurrentFloor.Explored visibleTiles
 
     // Remember every foe the player has actually had in view; unseen foes are what an ambush is made of.
@@ -423,44 +423,55 @@ module TowerSession =
 
   /// Living enemies within the aggro radius that have an unobstructed line of sight to the player
   let enemiesAggroed (state: TowerRunState) : TowerEnemy list =
-    state.CurrentFloor.Entities
-    |> Map.toList
-    |> List.choose (fun (pt, ent) ->
-      match ent with
-      | EntityEnemy e when not e.IsDefeated -> Some(pt, e)
-      | _ -> None)
-    |> List.filter (fun (pt, _) ->
-      Distance.chebyshev pt state.PlayerPosition <= aggroRadius
-      && Los.check state.CurrentFloor.IsOpaque pt state.PlayerPosition)
-    |> List.map (fun (_, e) -> engagedAtPlayerLevel state e)
+    let isOpaque = state.CurrentFloor.MakeOpaqueChecker()
+    let playerPos = state.PlayerPosition
+    let results = ResizeArray<TowerEnemy>()
+    for kv in state.CurrentFloor.Entities do
+      match kv.Value with
+      | EntityEnemy e when not e.IsDefeated ->
+        let pt = kv.Key
+        if Distance.chebyshev pt playerPos <= aggroRadius && Los.check isOpaque pt playerPos then
+          results.Add(engagedAtPlayerLevel state e)
+      | _ -> ()
+    List.ofSeq results
 
   /// Living enemies adjacent (Chebyshev distance 1) to the player
   let adjacentEnemies (state: TowerRunState) : TowerEnemy list =
-    state.CurrentFloor.Entities
-    |> Map.toList
-    |> List.choose (fun (pt, ent) ->
-      match ent with
-      | EntityEnemy e when not e.IsDefeated && Distance.chebyshev pt state.PlayerPosition = 1 -> Some(engagedAtPlayerLevel state e)
-      | _ -> None)
+    let playerPos = state.PlayerPosition
+    let results = ResizeArray<TowerEnemy>()
+    for kv in state.CurrentFloor.Entities do
+      match kv.Value with
+      | EntityEnemy e when not e.IsDefeated && Distance.chebyshev kv.Key playerPos = 1 ->
+        results.Add(engagedAtPlayerLevel state e)
+      | _ -> ()
+    List.ofSeq results
 
   /// True when at least one neighbouring tile is walkable and free of blocking entities,
   /// i.e. the player is not completely encircled and may disengage
   let canEscape (state: TowerRunState) : bool =
+    let isWalkable = state.CurrentFloor.MakeWalkableChecker()
     Point.allNeighbors state.PlayerPosition
     |> List.exists (fun p ->
-      let walkable =
-        match Map.tryFind p state.CurrentFloor.Tiles with
-        | Some t -> t.IsWalkable
-        | None -> false
-      let blocked =
-        match Map.tryFind p state.CurrentFloor.Entities with
-        | Some ent -> ent.BlocksMovement
-        | None -> false
-      walkable && not blocked)
+      isWalkable p
+      && (match Map.tryFind p state.CurrentFloor.Entities with
+          | Some ent -> not ent.BlocksMovement
+          | None -> true))
 
   /// True when no enemy is adjacent or actively pursuing the player, so out-of-combat recovery is allowed
   let isSafe (state: TowerRunState) : bool =
-    (adjacentEnemies state).IsEmpty && (enemiesAggroed state).IsEmpty
+    let isOpaque = state.CurrentFloor.MakeOpaqueChecker()
+    let playerPos = state.PlayerPosition
+    let mutable unsafe = false
+    use enumerator = (state.CurrentFloor.Entities :> System.Collections.Generic.IEnumerable<_>).GetEnumerator()
+    while not unsafe && enumerator.MoveNext() do
+      let kv = enumerator.Current
+      match kv.Value with
+      | EntityEnemy e when not e.IsDefeated ->
+        let d = Distance.chebyshev kv.Key playerPos
+        if d = 1 || (d <= aggroRadius && Los.check isOpaque kv.Key playerPos) then
+          unsafe <- true
+      | _ -> ()
+    not unsafe
 
   /// Snapshot a combatant's armor and weapon condition before a fight so the wear taken during
   /// it can be discarded when combat ends: armor penetration and weapon damage are combat debuffs.
@@ -471,15 +482,24 @@ module TowerSession =
   let restoreCombatCondition (armor: ArmorIntegrity) (weapon: WeaponCondition) (c: Combatant) : Combatant =
     { c with Armor = armor; WeaponCondition = weapon }
 
+  /// Writes an enemy record back into the current floor's entity map at a known point
+  let private updateEnemyAt (pt: Point) (enemy: TowerEnemy) (state: TowerRunState) : TowerRunState =
+    { state with
+        CurrentFloor =
+          { state.CurrentFloor with
+              Entities = Map.add pt (EntityEnemy enemy) state.CurrentFloor.Entities } }
+
   /// Writes an enemy record back into the current floor's entity map by Id
   let updateEnemy (enemy: TowerEnemy) (state: TowerRunState) : TowerRunState =
-    let updatedEntities =
-      state.CurrentFloor.Entities
-      |> Map.map (fun _ ent ->
-        match ent with
-        | EntityEnemy e when e.Id = enemy.Id -> EntityEnemy enemy
-        | other -> other)
-    { state with CurrentFloor = { state.CurrentFloor with Entities = updatedEntities } }
+    let mutable foundPt : Point option = None
+    use enumerator = (state.CurrentFloor.Entities :> System.Collections.Generic.IEnumerable<_>).GetEnumerator()
+    while foundPt.IsNone && enumerator.MoveNext() do
+      match enumerator.Current.Value with
+      | EntityEnemy e when e.Id = enemy.Id -> foundPt <- Some enumerator.Current.Key
+      | _ -> ()
+    match foundPt with
+    | Some pt -> updateEnemyAt pt enemy state
+    | None -> state
 
   /// A pursuer's tiles per turn relative to the player, from the Finesse gap: at parity the chase
   /// keeps its historical one tile per turn, a nimbler player outpaces it, a slower one is run down.
@@ -490,33 +510,49 @@ module TowerSession =
   /// while a long spell with nowhere to step still cannot buy more than that.
   let private maxChaseCharge = 2.0
 
+  /// Bounded A* node expansion budget for enemy pursuit within aggroRadius (8 tiles).
+  let private pursuitMaxNodes = 256
+
   /// The enemy phase of a turn: aggroed living enemies pursue the player at the pace their Finesse
   /// gap buys in deterministic order (nearest first, ties by Id), then any enemies adjacent to the
   /// player raise a group engagement. Bosses and defeated enemies never move; enemies never stack
   /// or step onto the player's tile.
   let stepEnemies (state: TowerRunState) : TowerRunState * TowerEvent list =
+    let isOpaque = state.CurrentFloor.MakeOpaqueChecker()
+    let isWalkable = state.CurrentFloor.MakeWalkableChecker()
+    let playerPos = state.PlayerPosition
+
     let orderedAggro =
-      state.CurrentFloor.Entities
-      |> Map.toList
-      |> List.choose (fun (pt, ent) ->
-        match ent with
-        | EntityEnemy e when not e.IsDefeated -> Some(pt, e)
-        | _ -> None)
-      |> List.filter (fun (pt, _) ->
-        Distance.chebyshev pt state.PlayerPosition <= aggroRadius
-        && Los.check state.CurrentFloor.IsOpaque pt state.PlayerPosition)
-      |> List.sortBy (fun (pt, e) -> Distance.chebyshev pt state.PlayerPosition, e.Id)
+      let candidates = ResizeArray<Point * TowerEnemy>()
+      for kv in state.CurrentFloor.Entities do
+        match kv.Value with
+        | EntityEnemy e when not e.IsDefeated ->
+          let pt = kv.Key
+          if Distance.chebyshev pt playerPos <= aggroRadius && Los.check isOpaque pt playerPos then
+            candidates.Add(pt, e)
+        | _ -> ()
+      candidates.Sort(fun (p1, e1) (p2, e2) ->
+        let c = compare (Distance.chebyshev p1 playerPos) (Distance.chebyshev p2 playerPos)
+        if c <> 0 then c else compare e1.Id e2.Id)
+      candidates
 
     let playerFinesse = state.Player.Stats.Get StatId.Finesse
 
     let mutable workingState = state
 
-    for (_, enemy) in orderedAggro do
-      // Re-read the enemy's position: an earlier move this phase may have overwritten it.
+    for (origPt, enemy) in orderedAggro do
+      // Verify the enemy's position directly at origPt first; fall back to scan only if overwritten.
       let currentPt =
-        workingState.CurrentFloor.Entities
-        |> Map.toList
-        |> List.tryPick (fun (p, ent) -> match ent with EntityEnemy e when e.Id = enemy.Id -> Some p | _ -> None)
+        match Map.tryFind origPt workingState.CurrentFloor.Entities with
+        | Some (EntityEnemy e) when e.Id = enemy.Id -> Some origPt
+        | _ ->
+          let mutable found = None
+          use enumerator = (workingState.CurrentFloor.Entities :> System.Collections.Generic.IEnumerable<_>).GetEnumerator()
+          while found.IsNone && enumerator.MoveNext() do
+            match enumerator.Current.Value with
+            | EntityEnemy e when e.Id = enemy.Id -> found <- Some enumerator.Current.Key
+            | _ -> ()
+          found
 
       match currentPt with
       | Some pt ->
@@ -526,12 +562,14 @@ module TowerSession =
         let mutable blocked = false
 
         if enemy.Id.StartsWith("boss_") then
-          RuntimeLog.write (sprintf "enemy %s: holds at %A (boss)" enemy.Id pt)
+          if RuntimeLog.enabled then
+            RuntimeLog.write (sprintf "enemy %s: holds at %A (boss)" enemy.Id pt)
         elif Distance.chebyshev pt workingState.PlayerPosition = 1 then
           // Pinned against the player it is already engaged: the chase is over, so the charge it
           // arrived with is spent rather than banked for a burst the moment the player breaks away.
-          workingState <- updateEnemy { enemy with ChaseCharge = 0.0 } workingState
-          RuntimeLog.write (sprintf "enemy %s: holds at %A (adjacent)" enemy.Id pt)
+          workingState <- updateEnemyAt pt { enemy with ChaseCharge = 0.0 } workingState
+          if RuntimeLog.enabled then
+            RuntimeLog.write (sprintf "enemy %s: holds at %A (adjacent)" enemy.Id pt)
         else
           // Spend the banked charge one tile at a time. Two steps is the most a turn can hold, so a
           // pace above 1.0 buys real ground instead of being flattened to one tile by the bank cap.
@@ -541,38 +579,40 @@ module TowerSession =
                 && stepsLeft > 0
                 && charge >= 1.0
                 && Distance.chebyshev here workingState.PlayerPosition > 1 do
+            let entities = workingState.CurrentFloor.Entities
             let isPassable (p: Point) =
               p = workingState.PlayerPosition
-              || ((match Map.tryFind p workingState.CurrentFloor.Tiles with
-                   | Some t -> t.IsWalkable
-                   | None -> false)
-                  && (match Map.tryFind p workingState.CurrentFloor.Entities with
+              || (isWalkable p
+                  && (match Map.tryFind p entities with
                       | Some ent -> not ent.BlocksMovement
                       | None -> true))
 
-            match Pathfinding.aStar isPassable here workingState.PlayerPosition with
+            match Pathfinding.aStarBounded pursuitMaxNodes isPassable here workingState.PlayerPosition with
             | Some (_ :: step :: _) when
-                (match Map.tryFind step workingState.CurrentFloor.Entities with
+                (match Map.tryFind step entities with
                  | Some ent -> not ent.BlocksMovement
                  | None -> true) ->
               let moved = { enemy with ChaseCharge = charge - 1.0 }
-              let vacated = { workingState.CurrentFloor with Entities = Map.remove here workingState.CurrentFloor.Entities }
+              let vacated = { workingState.CurrentFloor with Entities = Map.remove here entities }
               workingState <- { workingState with CurrentFloor = { vacated with Entities = Map.add step (EntityEnemy moved) vacated.Entities } }
-              RuntimeLog.write (sprintf "enemy %s: %A -> %A (pursuit)" enemy.Id here step)
+              if RuntimeLog.enabled then
+                RuntimeLog.write (sprintf "enemy %s: %A -> %A (pursuit)" enemy.Id here step)
               charge <- charge - 1.0
               stepsLeft <- stepsLeft - 1
               here <- step
             | _ ->
               blocked <- true
-              RuntimeLog.write (sprintf "enemy %s: holds at %A (no path)" enemy.Id here)
+              if RuntimeLog.enabled then
+                RuntimeLog.write (sprintf "enemy %s: holds at %A (no path)" enemy.Id here)
 
           if here = pt then
             // Nowhere to step: keep what it has banked for the turn the way clears.
-            workingState <- updateEnemy { enemy with ChaseCharge = charge } workingState
-            if not blocked then
+            workingState <- updateEnemyAt pt { enemy with ChaseCharge = charge } workingState
+            if not blocked && RuntimeLog.enabled then
               RuntimeLog.write (sprintf "enemy %s: holds at %A (charging %.2f)" enemy.Id pt charge)
       | None ->
-        RuntimeLog.write (sprintf "enemy %s: position not found" enemy.Id)
+        if RuntimeLog.enabled then
+          RuntimeLog.write (sprintf "enemy %s: position not found" enemy.Id)
 
     let adjacent = adjacentEnemies workingState
 
@@ -840,11 +880,12 @@ module TowerSession =
             (sprintf "Ascended to Floor %d: %s!" nextFloorNum nextFloor.Theme.Name)
             :: (List.rev boonLines @ state.MessageLog) }
 
-    RuntimeLog.section (sprintf "FLOOR %d" nextFloorNum)
-    RuntimeLog.write (
-      sprintf "floor transition: %d -> %d (seed=%d theme=%s size=%dx%d spawn=%A)"
-        state.CurrentFloor.FloorNumber nextFloorNum state.Seed nextFloor.Theme.Name
-        nextFloor.Width nextFloor.Height nextFloor.SpawnLocation)
+    if RuntimeLog.enabled then
+      RuntimeLog.section (sprintf "FLOOR %d" nextFloorNum)
+      RuntimeLog.write (
+        sprintf "floor transition: %d -> %d (seed=%d theme=%s size=%dx%d spawn=%A)"
+          state.CurrentFloor.FloorNumber nextFloorNum state.Seed nextFloor.Theme.Name
+          nextFloor.Width nextFloor.Height nextFloor.SpawnLocation)
 
     updateFov nextState
 
@@ -1512,7 +1553,7 @@ module TowerSession =
 
       let rankLine =
         if currentTier <> previousTier then
-          sprintf " You have attained the rank of %s!" (currentTier.ToString())
+          sprintf " You have attained the rank of %s!" currentTier.Name
         else
           ""
 
@@ -1536,6 +1577,31 @@ module TowerSession =
     elif recklessness >= 50 then 1.5, Some "🔥 Fever Pitch (+50% XP bonus!)"
     elif recklessness >= 25 then 1.25, Some "⚡ Aggressive Drive (+25% XP bonus!)"
     else 1.0, None
+
+  /// True when a combat event stream ended via a clean mastery finisher (Collapse Execution or Indes Seizure).
+  let isCleanMasteryVictory (events: CombatEvent list) : bool =
+    events
+    |> List.exists (function
+      | CombatEvent.Executed _ -> true
+      | CombatEvent.TempoShifted (_, _, reason) when reason.Contains("seized the Indes") -> true
+      | _ -> false)
+
+  /// Applies post-victory discipline growth (stressed +5/+6, or clean Collapse Execution / Indes Seizure +3).
+  let applyVictoryGrowth (cleanMasteryVictory: bool) (player: Combatant) : Combatant =
+    Combatant.growFromVictory cleanMasteryVictory player
+
+  /// Chooses an enemy's tactical intent while adapting/feinting against repeated player defenses
+  /// or consecutive Raise Shield / Wait turtling.
+  let chooseAdaptedEnemyIntent
+    (policies: AI.PolicyTable)
+    (enemy: Combatant)
+    (player: Combatant)
+    (prevPlayerDefense: DefenseChoice option)
+    (currentPlayerDefense: DefenseChoice option)
+    (consecutiveShieldTurtles: int)
+    : ActionIntent =
+    let baseIntent = AI.chooseIntentUsing policies enemy player
+    AI.adaptIntentToRepetition enemy baseIntent prevPlayerDefense currentPlayerDefense consecutiveShieldTurtles
 
   /// Marks a defeated enemy on the floor and awards its dropped key, souls, and alchemical trophies
   let resolveEnemyDefeat (enemyId: string) (state: TowerRunState) : TowerRunState =
@@ -1664,6 +1730,13 @@ module TowerSession =
         Consumables = newConsumables
         UnidentifiedConsumables = newUnidentified
         MessageLog = xpMessages @ logMessages }
+
+  /// Marks a defeated enemy on the floor and applies post-victory discipline growth,
+  /// awarding clean mastery growth (+3 Prowess/Poise) when the fight ended via Collapse Execution or Indes Seizure.
+  let resolveEnemyDefeatWithEvents (enemyId: string) (victoryEvents: CombatEvent list) (state: TowerRunState) : TowerRunState =
+    let afterDefeat = resolveEnemyDefeat enemyId state
+    let cleanMastery = isCleanMasteryVictory victoryEvents
+    { afterDefeat with Player = Combatant.growFromVictory cleanMastery afterDefeat.Player }
 
   /// Resolves the fleeing behavior of a critically wounded lone beast (ADR 0009)
   let resolveBeastFlee (enemyId: string) (isSpared: bool) (state: TowerRunState) : TowerRunState =

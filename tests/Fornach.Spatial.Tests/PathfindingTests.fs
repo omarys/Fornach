@@ -60,3 +60,31 @@ let ``Pathfinding still cuts diagonally toward a diagonal goal`` () =
   let goal = { X = 3; Y = 3 }
   let path = (Pathfinding.aStar (fun _ -> true) start goal).Value
   Assert.Equal<Point list>([ { X = 0; Y = 0 }; { X = 1; Y = 1 }; { X = 2; Y = 2 }; { X = 3; Y = 3 } ], path)
+
+[<Fact>]
+let ``aStarBounded finds path within node budget`` () =
+  let start = { X = 0; Y = 0 }
+  let goal = { X = 4; Y = 0 }
+  let result = Pathfinding.aStarBounded 32 (fun _ -> true) start goal
+  Assert.True(result.IsSome)
+  Assert.Equal(start, result.Value.Head)
+  Assert.Equal(goal, List.last result.Value)
+
+[<Fact>]
+let ``aStarBounded returns None when blocked goal exceeds node budget`` () =
+  let start = { X = 0; Y = 0 }
+  let goal = { X = 5; Y = 0 }
+  // Goal itself is passable, but surrounded on all 8 sides so it is unreachable
+  let isPassable p =
+    p = goal || abs (p.X - goal.X) > 1 || abs (p.Y - goal.Y) > 1
+
+  let mutable visits = 0
+
+  let trackedIsPassable p =
+    visits <- visits + 1
+    isPassable p
+
+  let result = Pathfinding.aStarBounded 25 trackedIsPassable start goal
+  Assert.True(result.IsNone)
+  // Bounded search must stop well short of flooding an unbounded grid (25 nodes * 8 neighbors + 1 goal check)
+  Assert.True(visits <= 25 * 8 + 1)

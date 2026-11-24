@@ -76,14 +76,14 @@ module StudyStackSpendTests =
     Assert.Equal(0, Combatant.stacksIn Vector.Discipline overDrained)
 
   [<Fact>]
-  let ``a cash-out pays 1.0 + 0.35n and nothing extra on an empty meter`` () =
+  let ``a cash-out pays 1.0 + 0.30n and nothing extra on an empty meter`` () =
     let mult stacks = ActionResolver.strikeMultiplier CalculatedFlawStrike stacks CombatStance.PowerStance
     Assert.Equal(1.0, mult 0, 6)
-    Assert.Equal(1.35, mult 1, 6)
-    Assert.Equal(1.7, mult 2, 6)
+    Assert.Equal(1.30, mult 1, 6)
+    Assert.Equal(1.60, mult 2, 6)
 
-    // Five is the ceiling the meters clamp to, so 2.75x is the most a swing can cash for.
-    Assert.Equal(2.75, mult Combatant.StackCap, 6)
+    // Five is the ceiling the meters clamp to, so 2.50x is the most a swing can cash for.
+    Assert.Equal(2.50, mult Combatant.StackCap, 6)
 
   [<Fact>]
   let ``resolving a special cashes the whole meter and leaves the swing's own stack behind`` () =

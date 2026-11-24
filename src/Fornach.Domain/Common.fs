@@ -17,7 +17,7 @@ type CombatantId =
 
   static member New() =
     let n = System.Threading.Interlocked.Increment(&CombatantIdSource.next)
-    CombatantId(Guid(n, 0s, 0s, Array.zeroCreate 8))
+    CombatantId(Guid(n, 0s, 0s, 0uy, 0uy, 0uy, 0uy, 0uy, 0uy, 0uy, 0uy))
 
   static member OfGuid(g: Guid) = CombatantId g
 
@@ -29,10 +29,21 @@ type Plane =
   | Physical
   | Mental
 
+  member this.Name : string =
+    match this with
+    | Physical -> "Physical"
+    | Mental -> "Mental"
+
 type Vector =
   | Power
   | Agility
   | Discipline
+
+  member this.Name : string =
+    match this with
+    | Power -> "Power"
+    | Agility -> "Agility"
+    | Discipline -> "Discipline"
 
 [<RequireQualifiedAccess>]
 type CombatMode =
@@ -40,11 +51,23 @@ type CombatMode =
   | Social
   | Arcane
 
+  member this.Name : string =
+    match this with
+    | Physical -> "Physical"
+    | Social -> "Social"
+    | Arcane -> "Arcane"
+
 [<RequireQualifiedAccess>]
 type CombatStance =
   | PowerStance
   | AgilityStance
   | DisciplineStance
+
+  member this.Name : string =
+    match this with
+    | PowerStance -> "PowerStance"
+    | AgilityStance -> "AgilityStance"
+    | DisciplineStance -> "DisciplineStance"
 
 [<RequireQualifiedAccess>]
 type ComplexForm =

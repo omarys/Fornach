@@ -125,3 +125,15 @@ module EncounterGrowthTests =
     let before = unharmed CharacterClass.Fighter
     let bossCleared = Combatant.grantBossPoise before
     Assert.Equal(statOf StatId.Poise before + 3, statOf StatId.Poise bossCleared)
+
+  [<Fact>]
+  let ``clean mastery victory via Execution or Indes earns +3 Prowess and Poise even at full vitality`` () =
+    let before = unharmed CharacterClass.Fighter
+    let masteryGrown = Combatant.growFromVictory true before
+    Assert.Equal(statOf StatId.Prowess before + 3, statOf StatId.Prowess masteryGrown)
+    Assert.Equal(statOf StatId.Poise before + 3, statOf StatId.Poise masteryGrown)
+    // Stressed victory still pays +5 even when cleanMasteryVictory is true
+    let stressedBefore = bloodied CharacterClass.Fighter
+    let stressedMastery = Combatant.growFromVictory true stressedBefore
+    Assert.Equal(statOf StatId.Prowess stressedBefore + 5, statOf StatId.Prowess stressedMastery)
+    Assert.Equal(statOf StatId.Poise stressedBefore + 5, statOf StatId.Poise stressedMastery)

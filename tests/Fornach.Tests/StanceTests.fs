@@ -65,77 +65,75 @@ module StanceTests =
   [<Fact>]
   let ``Fighter has normalized physical stats and stance bonus creates primary vs off-stat ratios`` () =
     let fighter = TierFactory.createClassLevel CharacterClass.Fighter 200 // GrandMaster tier
-    Assert.Equal(841, fighter.GetStat Force)
-    Assert.Equal(841, fighter.GetStat Fortitude)
-    Assert.Equal(841, fighter.GetStat Finesse)
-    Assert.Equal(841, fighter.GetStat Reflex)
+    // Budget-neutral ±5% vector asymmetry around prim=841: Power pair 883, Agility pair 799, Discipline pair 841
+    Assert.Equal(883, fighter.GetStat Force)
+    Assert.Equal(883, fighter.GetStat Fortitude)
+    Assert.Equal(799, fighter.GetStat Finesse)
+    Assert.Equal(799, fighter.GetStat Reflex)
     Assert.Equal(841, fighter.GetStat Prowess)
     Assert.Equal(841, fighter.GetStat Poise)
 
-    // In PowerStance: Force gets +25% (1051), Fortitude gets +25% (1051)
-    // Finesse (off-vector offense) drops to 75% (631), Prowess drops to 75% (631)
-    // Reflex & Poise (defenses) keep their guard at 841
-    Assert.Equal(1051, fighter.GetCombatStat Force)
-    Assert.Equal(1051, fighter.GetCombatStat Fortitude)
-    Assert.Equal(631, fighter.GetCombatStat Finesse)
-    Assert.Equal(841, fighter.GetCombatStat Reflex)
+    // In PowerStance: Force/Fortitude get +25% (1104), off-vector offense drops to 75% (599 / 631),
+    // Reflex & Poise (defenses) keep their base guard (799 / 841)
+    Assert.Equal(1104, fighter.GetCombatStat Force)
+    Assert.Equal(1104, fighter.GetCombatStat Fortitude)
+    Assert.Equal(599, fighter.GetCombatStat Finesse)
+    Assert.Equal(799, fighter.GetCombatStat Reflex)
     Assert.Equal(631, fighter.GetCombatStat Prowess)
     Assert.Equal(841, fighter.GetCombatStat Poise)
 
     // Shift to AgilityStance:
     let agilityFighter = { fighter with Stance = CombatStance.AgilityStance }
-    Assert.Equal(631, agilityFighter.GetCombatStat Force)
-    Assert.Equal(841, agilityFighter.GetCombatStat Fortitude)
-    Assert.Equal(1051, agilityFighter.GetCombatStat Finesse)
-    Assert.Equal(1051, agilityFighter.GetCombatStat Reflex)
+    Assert.Equal(662, agilityFighter.GetCombatStat Force)
+    Assert.Equal(883, agilityFighter.GetCombatStat Fortitude)
+    Assert.Equal(999, agilityFighter.GetCombatStat Finesse)
+    Assert.Equal(999, agilityFighter.GetCombatStat Reflex)
     Assert.Equal(631, agilityFighter.GetCombatStat Prowess)
     Assert.Equal(841, agilityFighter.GetCombatStat Poise)
 
     // Shift to DisciplineStance:
     let disciplineFighter = { fighter with Stance = CombatStance.DisciplineStance }
-    Assert.Equal(631, disciplineFighter.GetCombatStat Force)
-    Assert.Equal(841, disciplineFighter.GetCombatStat Fortitude)
-    Assert.Equal(631, disciplineFighter.GetCombatStat Finesse)
-    Assert.Equal(841, disciplineFighter.GetCombatStat Reflex)
+    Assert.Equal(662, disciplineFighter.GetCombatStat Force)
+    Assert.Equal(883, disciplineFighter.GetCombatStat Fortitude)
+    Assert.Equal(599, disciplineFighter.GetCombatStat Finesse)
+    Assert.Equal(799, disciplineFighter.GetCombatStat Reflex)
     Assert.Equal(1051, disciplineFighter.GetCombatStat Prowess)
     Assert.Equal(1051, disciplineFighter.GetCombatStat Poise)
 
   [<Fact>]
   let ``Mage has normalized mental stats and complex form bonus creates primary vs off-stat ratios`` () =
     let mage = TierFactory.createClassLevel CharacterClass.Mage 200 // GrandMaster tier
-    Assert.Equal(841, mage.GetStat Intellect)
-    Assert.Equal(841, mage.GetStat Resolve)
-    Assert.Equal(841, mage.GetStat Acuity)
-    Assert.Equal(841, mage.GetStat Intuition)
+    // Budget-neutral ±5% vector asymmetry around prim=841: Power pair 883, Agility pair 799, Discipline pair 841
+    Assert.Equal(883, mage.GetStat Intellect)
+    Assert.Equal(883, mage.GetStat Resolve)
+    Assert.Equal(799, mage.GetStat Acuity)
+    Assert.Equal(799, mage.GetStat Intuition)
     Assert.Equal(841, mage.GetStat Prowess)
     Assert.Equal(841, mage.GetStat Poise) // own primary; spell armour only covers Fortitude/Reflex
 
     // Default form is ResonanceSpike (Power):
     Assert.Equal(Some ComplexForm.ResonanceSpike, mage.ComplexForm)
-    // Intellect and Resolve get +25% (1051)
-    // Acuity and Prowess (off-vector offense) drop to 75% (631)
-    // Intuition and Poise (defences) keep their guard at 841
-    Assert.Equal(1051, mage.GetCombatStat Intellect)
-    Assert.Equal(1051, mage.GetCombatStat Resolve)
-    Assert.Equal(631, mage.GetCombatStat Acuity)
-    Assert.Equal(841, mage.GetCombatStat Intuition)
+    Assert.Equal(1104, mage.GetCombatStat Intellect)
+    Assert.Equal(1104, mage.GetCombatStat Resolve)
+    Assert.Equal(599, mage.GetCombatStat Acuity)
+    Assert.Equal(799, mage.GetCombatStat Intuition)
     Assert.Equal(631, mage.GetCombatStat Prowess)
     Assert.Equal(841, mage.GetCombatStat Poise)
 
     // Thread PhantasmalDiffusion (Agility):
     let diffMage = { mage with ComplexForm = Some ComplexForm.PhantasmalDiffusion }
-    Assert.Equal(631, diffMage.GetCombatStat Intellect)
-    Assert.Equal(841, diffMage.GetCombatStat Resolve)
-    Assert.Equal(1051, diffMage.GetCombatStat Acuity)
-    Assert.Equal(1051, diffMage.GetCombatStat Intuition)
+    Assert.Equal(662, diffMage.GetCombatStat Intellect)
+    Assert.Equal(883, diffMage.GetCombatStat Resolve)
+    Assert.Equal(999, diffMage.GetCombatStat Acuity)
+    Assert.Equal(999, diffMage.GetCombatStat Intuition)
     Assert.Equal(631, diffMage.GetCombatStat Prowess)
     Assert.Equal(841, diffMage.GetCombatStat Poise)
 
     // Thread AegisLattice (Discipline):
     let latticeMage = { mage with ComplexForm = Some ComplexForm.AegisLattice }
-    Assert.Equal(631, latticeMage.GetCombatStat Intellect)
-    Assert.Equal(841, latticeMage.GetCombatStat Resolve)
-    Assert.Equal(631, latticeMage.GetCombatStat Acuity)
-    Assert.Equal(841, latticeMage.GetCombatStat Intuition)
+    Assert.Equal(662, latticeMage.GetCombatStat Intellect)
+    Assert.Equal(883, latticeMage.GetCombatStat Resolve)
+    Assert.Equal(599, latticeMage.GetCombatStat Acuity)
+    Assert.Equal(799, latticeMage.GetCombatStat Intuition)
     Assert.Equal(1051, latticeMage.GetCombatStat Prowess)
     Assert.Equal(1051, latticeMage.GetCombatStat Poise) // Discipline vector: 841 x1.25

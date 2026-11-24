@@ -9,17 +9,32 @@ module Los =
     if start = target then
       true
     else
-      let line = Line.bresenham start target
+      let dx = abs (target.X - start.X)
+      let dy = -abs (target.Y - start.Y)
+      let sx = if start.X < target.X then 1 else -1
+      let sy = if start.Y < target.Y then 1 else -1
 
-      // Drop the start tile (actor's own tile) and target tile (the destination)
-      // Intermediate tiles must all be non-opaque (transparent)
-      match line with
-      | []
-      | [ _ ] -> true // No intermediate tiles to check
-      | _ :: rest ->
-        let intermediateTiles =
-          // Exclude the last tile (the target)
-          rest |> List.take (rest.Length - 1)
+      let mutable x = start.X
+      let mutable y = start.Y
+      let mutable err = dx + dy
+      let mutable clear = true
+      let mutable finished = false
 
-        // Line of sight exists if NONE of the intermediate tiles block vision
-        intermediateTiles |> List.forall (fun pt -> not (isOpaque pt))
+      while not finished do
+        let e2 = 2 * err
+
+        if e2 >= dy then
+          err <- err + dy
+          x <- x + sx
+
+        if e2 <= dx then
+          err <- err + dx
+          y <- y + sy
+
+        if x = target.X && y = target.Y then
+          finished <- true
+        elif isOpaque { X = x; Y = y } then
+          clear <- false
+          finished <- true
+
+      clear

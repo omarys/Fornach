@@ -6,13 +6,18 @@ open Fornach.Engine
 
 [<Fact>]
 let ``a physical duelist with tied attributes strikes instead of shuffling stances`` () =
-  // Every class tier is authored with Force = Finesse = Prowess, which made the old stance ladder
-  // self-contradictory: in Power stance the Finesse test matched, in Agility the Force test
-  // matched, so the combatant shifted between them forever and dealt zero damage all duel.
-  let fighter =
+  // When Force = Finesse = Prowess, the combatant must strike instead of shifting stances forever.
+  let baseFighter =
     { TierFactory.createClassTier CharacterClass.Fighter CombatTier.Master with
         PlayerStyle = true
         Preparations = [] }
+  let tied = baseFighter.GetStat Prowess
+  let fighter =
+    { baseFighter with
+        Stats =
+          baseFighter.Stats
+            .Modify(Force, tied - baseFighter.GetStat Force)
+            .Modify(Finesse, tied - baseFighter.GetStat Finesse) }
 
   let mage = { TierFactory.createClassTier CharacterClass.Mage CombatTier.Master with PlayerStyle = true }
 
@@ -126,13 +131,14 @@ let ``past the shield-hold band the shield is raised to shed Recklessness`` () =
 [<Fact>]
 let ``the gamble is withheld when even the cheapest spike would reach the crit cap`` () =
   // The budget is the projected meter plus a safety band for what a foe adds on top, not the current
-  // meter, and the spike differs by strike: the cheapest physical gamble fits one point under the
-  // banded line and stops fitting at it.
+  // meter, and the spike differs by strike: in AgilityStance, the cheapest physical gamble
+  // (FinesseCadence) fits one point under the banded line and stops fitting at it.
   let cheap = ActionResolver.gambitReckSpike (FinesseCadence true)
   let line = AI.critCap - AI.recklessnessHeadroom
   let foe = durableFoe ()
-  let atCap = withRecklessness (line - cheap) (player ())
-  let below = withRecklessness (line - cheap - 1) (player ())
+  let agilePlayer = { player () with Stance = CombatStance.AgilityStance }
+  let atCap = withRecklessness (line - cheap) agilePlayer
+  let below = withRecklessness (line - cheap - 1) agilePlayer
   Assert.True(gambitFlag (chosenAttack below foe))
   Assert.False(gambitFlag (chosenAttack atCap foe))
 
@@ -342,3 +348,81 @@ let ``only a stressed victory grows the pair, and a monster cannot grow what it 
   let fedHound = Combatant.growFromStressedVictory { hound with Health = hound.Health.ApplyDelta -50 }
   Assert.Equal(0, fedHound.GetStat StatId.Prowess)
   Assert.Equal(0, fedHound.GetStat StatId.Poise)
+
+// --- Stance-respecting AttackEstimator, stack spenders, recovery threshold, humanoid AI, adaptation ---
+
+[<Fact>]
+let ``AttackEstimator evaluates strikes in the actor's currently held stance`` () =
+  let p = { player () with Stance = CombatStance.PowerStance }
+  let contested = AttackEstimator.contestedAs p (FinesseCadence false)
+  Assert.Equal(CombatStance.PowerStance, contested.Stance)
+
+[<Fact>]
+let ``AI chooses a stack spender when holding three or more stacks against a durable foe`` () =
+  let stacked = { player () with Momentum = 4; Flow = 4 }
+  match chosenAttack stacked (durableFoe ()) with
+  | ForceInsightStrike | FinesseInsightStrike | CalculatedFlawStrike | MasterfulDisarm _ -> ()
+  | other -> failwithf "expected a stack spender at 4 stacks, got %A" other
+
+[<Fact>]
+let ``AI presses through Recklessness 45 and recovers at 55`` () =
+  let pressing = withRecklessness 45 (player ())
+  match AI.chooseIntent pressing (durableFoe ()) with
+  | ActionIntent.StandardAttack _ -> ()
+  | other -> failwithf "expected attack at Recklessness 45, got %A" other
+
+  let strained = withRecklessness 55 (player ())
+  match AI.chooseIntent strained (durableFoe ()) with
+  | ActionIntent.RecoveryAction _ -> ()
+  | other -> failwithf "expected recovery at Recklessness 55, got %A" other
+
+[<Fact>]
+let ``a mental combatant under severe physical Exhaustion recovers with SteadyForm instead of looping CenterMind`` () =
+  let baseMage =
+    { TierFactory.createClassTier CharacterClass.Mage CombatTier.Master with
+        PlayerStyle = true
+        Preparations = [] }
+  let exhaustedMage =
+    { baseMage with
+        Meters = { baseMage.Meters with Exhaustion = Meter.Create 65 } }
+  match AI.chooseIntent exhaustedMage (durableFoe ()) with
+  | ActionIntent.RecoveryAction DefensiveReset.SteadyForm -> ()
+  | other -> failwithf "expected SteadyForm to drain Exhaustion on a Mental combatant, got %A" other
+
+[<Fact>]
+let ``Veteran humanoid opposition uses gambits at low Recklessness and ShieldBash vs reckless foes`` () =
+  let veteran =
+    { TierFactory.createClassTier CharacterClass.Fighter CombatTier.Veteran with
+        PlayerStyle = false
+        MonsterFamily = None
+        Preparations = [] }
+  let calmTarget = durableFoe ()
+  match AI.chooseIntent veteran calmTarget with
+  | ActionIntent.StandardAttack atk -> Assert.True(gambitFlag atk)
+  | other -> failwithf "expected gambit strike from Veteran humanoid, got %A" other
+
+  let recklessTarget = withRecklessness 50 (durableFoe ())
+  match AI.chooseIntent veteran recklessTarget with
+  | ActionIntent.StandardAttack (ShieldBash _) -> ()
+  | other -> failwithf "expected ShieldBash against reckless target, got %A" other
+
+[<Fact>]
+let ``adaptIntentToRepetition feints repeated active guards and bashes consecutive RaiseShield turtles`` () =
+  let enemy =
+    { TierFactory.createClassTier CharacterClass.Fighter CombatTier.Veteran with
+        PlayerStyle = false
+        MonsterFamily = None }
+  let guard = Some(Guard(FortitudeGuard false))
+  let feinted = AI.adaptIntentToRepetition enemy (StandardAttack(ForceStrike false)) guard guard 0
+  Assert.Equal(StandardAttack(FinesseCadence false), feinted)
+
+  let bashed = AI.adaptIntentToRepetition enemy (StandardAttack(ForceStrike false)) None None 2
+  Assert.Equal(StandardAttack(ShieldBash false), bashed)
+
+[<Fact>]
+let ``TowerSession.isCleanMasteryVictory detects Collapse Execution and Indes Seizure`` () =
+  let actorId = CombatantId.New()
+  let targetId = CombatantId.New()
+  Assert.True(TowerSession.isCleanMasteryVictory [ CombatEvent.Executed(actorId, targetId, Plane.Physical) ])
+  Assert.True(TowerSession.isCleanMasteryVictory [ CombatEvent.TempoShifted(actorId, targetId, "Counter seized the Indes!") ])
+  Assert.False(TowerSession.isCleanMasteryVictory [])

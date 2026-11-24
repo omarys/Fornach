@@ -33,9 +33,9 @@ module CombatLogger =
   /// Formats attributes and vital statistics of a combatant into a readable block
   let formatCombatantSummary (prefix: string) (c: Combatant) : string =
     let sb = StringBuilder()
-    let planeStr = sprintf "%A" c.Plane
-    let stanceStr = sprintf "%A" c.Stance
-    let familyStr = c.MonsterFamily |> Option.map (fun f -> sprintf "%A" f) |> Option.defaultValue c.Class.Name
+    let planeStr = c.Plane.Name
+    let stanceStr = c.Stance.Name
+    let familyStr = c.MonsterFamily |> Option.map (fun f -> f.Name) |> Option.defaultValue c.Class.Name
     let absPct = c.Armor.AbsorptionRatio * 100.0
 
     sb.AppendLine(sprintf "%s: %s | %s (Level %d)" prefix c.Name familyStr c.Level) |> ignore
@@ -52,7 +52,7 @@ module CombatLogger =
       let items = c.EquippedItems |> List.map (fun i -> i.Name) |> String.concat ", "
       sb.AppendLine(sprintf "  Equipped Gear: %s" items) |> ignore
     if not c.MonsterTraits.IsEmpty then
-      let traits = c.MonsterTraits |> List.map (fun t -> sprintf "%A" t) |> String.concat ", "
+      let traits = c.MonsterTraits |> List.map (fun t -> t.Name) |> String.concat ", "
       sb.AppendLine(sprintf "  Monster Traits: %s" traits) |> ignore
     if c.BleedStacks > 0 || c.LimbDebuff > 0 || c.ArcaneWard > 0 || c.MirrorClones > 0 then
       sb.AppendLine(sprintf "  Debuffs/Wards: Bleed=%d, LimbDebuff=%d, ArcaneWard=%d, MirrorClones=%d"
@@ -65,7 +65,7 @@ module CombatLogger =
     | CombatEvent.DamageApplied d ->
       let crit = if d.IsCritical then " [CRITICAL]" else ""
       let comp = if d.IsArmorCompromised then " [ARMOR COMPROMISED]" else ""
-      sprintf "Damage Dealt: %d %A%s%s" d.Amount d.Plane crit comp
+      sprintf "Damage Dealt: %d %s%s%s" d.Amount d.Plane.Name crit comp
     | CombatEvent.DisparityTriggered (_, _, outcome) ->
       sprintf "Stat Disparity: %A" outcome
     | CombatEvent.TempoShifted (_, _, reason) ->
@@ -93,13 +93,13 @@ module CombatLogger =
     | CombatEvent.CollapseTriggered (_, reason) ->
       sprintf "THRESHOLD COLLAPSE: %A" reason
     | CombatEvent.Executed (_, _, plane) ->
-      sprintf "EXECUTED: Fatal strike delivered (%A)" plane
+      sprintf "EXECUTED: Fatal strike delivered (%s)" plane.Name
     | CombatEvent.EquipmentProcTriggered (name, _, desc) ->
       sprintf "Equipment Proc [%s]: %s" name desc
     | CombatEvent.WeaponDegraded (_, cond) ->
-      sprintf "Weapon Degraded: %A" cond
+      sprintf "Weapon Degraded: %s" (WeaponCondition.displayName cond)
     | CombatEvent.StanceShifted (_, oldS, newS) ->
-      sprintf "Stance Shifted: %A -> %A" oldS newS
+      sprintf "Stance Shifted: %s -> %s" oldS.Name newS.Name
     | CombatEvent.RiposteExecuted (_, _, dmg) ->
       sprintf "Riposte Counter: %d damage" dmg
     | CombatEvent.DisarmExecuted (_, _, reason) ->
@@ -257,9 +257,35 @@ module CombatLogger =
       Turns = ResizeArray<CombatTurnRecord>()
       LogDirectory = defaultLogDir }
 
-  /// Generates the full formatted string representation of the combat session
-  let formatSession (session: CombatLogSession) (outcome: string) (finalPlayer: Combatant) (finalOpponent: Combatant) : string =
-    let sb = StringBuilder()
+  type private CachedBody =
+    { Buffer: StringBuilder
+      mutable FormattedTurns: int
+      mutable LastRound: int
+      mutable MaxRound: int
+      mutable Monotonic: bool }
+
+  let private bodyCache = System.Runtime.CompilerServices.ConditionalWeakTable<CombatLogSession, CachedBody>()
+
+  let private appendTurn (sb: StringBuilder) (turn: CombatTurnRecord) : unit =
+    sb.AppendLine(sprintf "[Turn %d] %s executes %s against %s" turn.TurnNumber turn.ActorName turn.ActionName turn.TargetName) |> ignore
+    match turn.Contest with
+    | Some contest ->
+      sb.AppendLine("  Contest Resolution:") |> ignore
+      sb.AppendLine(formatContestDetails turn.ActionName turn.ActorName contest) |> ignore
+    | None ->
+      sb.AppendLine(sprintf "  Action: %s (No opposed contest required)" turn.ActionName) |> ignore
+
+    if not turn.Events.IsEmpty then
+      sb.AppendLine("  Events Emitted:") |> ignore
+      for evt in turn.Events do
+        sb.AppendLine(sprintf "    • %s" (formatCombatEvent evt)) |> ignore
+
+    sb.AppendLine("  Post-Turn Vitals:") |> ignore
+    sb.AppendLine(sprintf "    %s" turn.ActorVitalsAfter) |> ignore
+    sb.AppendLine(sprintf "    %s" turn.TargetVitalsAfter) |> ignore
+    sb.AppendLine() |> ignore
+
+  let private appendHeader (sb: StringBuilder) (session: CombatLogSession) : unit =
     sb.AppendLine("================================================================================") |> ignore
     sb.AppendLine("FORNACH COMBAT LOG - TACTICAL DUEL RECORD") |> ignore
     sb.AppendLine(sprintf "Session: %s" session.Title) |> ignore
@@ -272,33 +298,64 @@ module CombatLogger =
     sb.AppendLine("================================================================================") |> ignore
     sb.AppendLine() |> ignore
 
-    let rounds = session.Turns |> Seq.groupBy (fun t -> t.Round) |> Seq.sortBy fst
-    for (roundNum, turns) in rounds do
-      sb.AppendLine("--------------------------------------------------------------------------------") |> ignore
-      sb.AppendLine(sprintf "ROUND %d" roundNum) |> ignore
-      sb.AppendLine("--------------------------------------------------------------------------------") |> ignore
-      for turn in turns do
-        sb.AppendLine(sprintf "[Turn %d] %s executes %s against %s" turn.TurnNumber turn.ActorName turn.ActionName turn.TargetName) |> ignore
-        match turn.Contest with
-        | Some contest ->
-          sb.AppendLine("  Contest Resolution:") |> ignore
-          sb.AppendLine(formatContestDetails turn.ActionName turn.ActorName contest) |> ignore
-        | None ->
-          sb.AppendLine(sprintf "  Action: %s (No opposed contest required)" turn.ActionName) |> ignore
+  let private getOrUpdateBody (session: CombatLogSession) : CachedBody =
+    let mutable cached = Unchecked.defaultof<CachedBody>
+    if not (bodyCache.TryGetValue(session, &cached)) then
+      let sb = StringBuilder(2048)
+      appendHeader sb session
+      cached <- { Buffer = sb; FormattedTurns = 0; LastRound = Int32.MinValue; MaxRound = 0; Monotonic = true }
+      bodyCache.AddOrUpdate(session, cached)
 
-        if not turn.Events.IsEmpty then
-          sb.AppendLine("  Events Emitted:") |> ignore
-          for evt in turn.Events do
-            sb.AppendLine(sprintf "    • %s" (formatCombatEvent evt)) |> ignore
+    if session.Turns.Count < cached.FormattedTurns then
+      cached.Buffer.Clear() |> ignore
+      appendHeader cached.Buffer session
+      cached.FormattedTurns <- 0
+      cached.LastRound <- Int32.MinValue
+      cached.MaxRound <- 0
+      cached.Monotonic <- true
 
-        sb.AppendLine("  Post-Turn Vitals:") |> ignore
-        sb.AppendLine(sprintf "    %s" turn.ActorVitalsAfter) |> ignore
-        sb.AppendLine(sprintf "    %s" turn.TargetVitalsAfter) |> ignore
-        sb.AppendLine() |> ignore
+    while cached.Monotonic && cached.FormattedTurns < session.Turns.Count do
+      let turn = session.Turns.[cached.FormattedTurns]
+      if turn.Round < cached.LastRound then
+        cached.Monotonic <- false
+      else
+        if turn.Round <> cached.LastRound then
+          cached.Buffer.AppendLine("--------------------------------------------------------------------------------") |> ignore
+          cached.Buffer.AppendLine(sprintf "ROUND %d" turn.Round) |> ignore
+          cached.Buffer.AppendLine("--------------------------------------------------------------------------------") |> ignore
+          cached.LastRound <- turn.Round
+        if turn.Round > cached.MaxRound then cached.MaxRound <- turn.Round
+        appendTurn cached.Buffer turn
+        cached.FormattedTurns <- cached.FormattedTurns + 1
+
+    cached
+
+  /// Generates the full formatted string representation of the combat session
+  let formatSession (session: CombatLogSession) (outcome: string) (finalPlayer: Combatant) (finalOpponent: Combatant) : string =
+    let cached = getOrUpdateBody session
+    let sb =
+      if cached.Monotonic then
+        let copy = StringBuilder(cached.Buffer.Length + 512)
+        copy.Append(cached.Buffer) |> ignore
+        copy
+      else
+        let full = StringBuilder()
+        appendHeader full session
+        let rounds = session.Turns |> Seq.groupBy (fun t -> t.Round) |> Seq.sortBy fst
+        for (roundNum, turns) in rounds do
+          full.AppendLine("--------------------------------------------------------------------------------") |> ignore
+          full.AppendLine(sprintf "ROUND %d" roundNum) |> ignore
+          full.AppendLine("--------------------------------------------------------------------------------") |> ignore
+          for turn in turns do
+            appendTurn full turn
+        full
 
     sb.AppendLine("================================================================================") |> ignore
     sb.AppendLine(sprintf "COMBAT RESOLUTION: %s" (outcome.ToUpperInvariant())) |> ignore
-    let totalRounds = if session.Turns.Count = 0 then 0 else (session.Turns |> Seq.map (fun t -> t.Round) |> Seq.max)
+    let totalRounds =
+      if session.Turns.Count = 0 then 0
+      elif cached.Monotonic then cached.MaxRound
+      else (session.Turns |> Seq.map (fun t -> t.Round) |> Seq.max)
     sb.AppendLine(sprintf "Total Rounds: %d | Total Actions Resolved: %d" totalRounds session.Turns.Count) |> ignore
     if outcome.Contains("Defeated", StringComparison.OrdinalIgnoreCase) then
       sb.AppendLine(formatDefeatVerdict finalPlayer finalOpponent session) |> ignore

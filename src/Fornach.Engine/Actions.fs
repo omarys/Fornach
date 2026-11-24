@@ -32,6 +32,11 @@ type TraumaGambit =
   /// name for it (`Display.gambitDisplayName`) so neither vocabulary has to know the other.
   member this.Label : string = sprintf "Trauma Gambit: %s" this.Name
 
+module private StatPairs =
+  let powerDef = [ Fortitude; Resolve ]
+  let agilityDef = [ Reflex; Intuition ]
+  let disciplineDef = [ Poise; Poise ]
+
 /// Classifies offensive actions across Physical, Social, and Arcane disciplines
 type AttackClassification =
   // -------------------------------------------------------------------------
@@ -184,26 +189,26 @@ type AttackClassification =
     match this with
     | ForceStrike _
     | ForceInsightStrike
-    | TraumaAttack ForceGambit -> Force, [ Fortitude; Resolve ]
+    | TraumaAttack ForceGambit -> Force, StatPairs.powerDef
     | FinesseCadence _
     | FinesseInsightStrike
-    | TraumaAttack FinesseGambit -> Finesse, [ Reflex; Intuition ]
+    | TraumaAttack FinesseGambit -> Finesse, StatPairs.agilityDef
     | ProwessStrike _
     | ShieldBash _
     | CalculatedFlawStrike
-    | MasterfulDisarm _ -> Prowess, [ Poise; Poise ]
+    | MasterfulDisarm _ -> Prowess, StatPairs.disciplineDef
     | AuthorityDecree _
-    | ArcaneCataclysm _ -> Intellect, [ Fortitude; Resolve ]
+    | ArcaneCataclysm _ -> Intellect, StatPairs.powerDef
     | GuileDeception _
     | SynapticGlamour _
-    | MirrorIllusion _ -> Acuity, [ Reflex; Intuition ]
+    | MirrorIllusion _ -> Acuity, StatPairs.agilityDef
     | AcumenInterrogation _
     | RunicWardTrap _
     | DisorientingShockwave _
     | StaffSiphon
-    | TraumaAttack AcumenGambit -> Prowess, [ Poise; Poise ]
-    | TraumaAttack FortitudeGambit -> Fortitude, [ Poise; Poise ]
-    | TraumaAttack ComposureGambit -> Poise, [ Fortitude; Resolve ]
+    | TraumaAttack AcumenGambit -> Prowess, StatPairs.disciplineDef
+    | TraumaAttack FortitudeGambit -> Fortitude, StatPairs.disciplineDef
+    | TraumaAttack ComposureGambit -> Poise, StatPairs.powerDef
 
 /// Classifies active defensive counters in the Nach across Physical and Mental planes (ADR 0009)
 type DefenseClassification =
@@ -232,6 +237,18 @@ type DefenseClassification =
     | ReflexSlip _ -> StatId.Reflex
     | ResolveAnchor _ -> StatId.Resolve
     | IntuitionPerception _ -> StatId.Intuition
+
+  /// Hand-written name matching `%A` formatting without reflective structured-formatting overhead (ADR 0005).
+  member this.Name : string =
+    match this with
+    | FortitudeGuard true -> "FortitudeGuard true"
+    | FortitudeGuard false -> "FortitudeGuard false"
+    | ReflexSlip true -> "ReflexSlip true"
+    | ReflexSlip false -> "ReflexSlip false"
+    | ResolveAnchor true -> "ResolveAnchor true"
+    | ResolveAnchor false -> "ResolveAnchor false"
+    | IntuitionPerception true -> "IntuitionPerception true"
+    | IntuitionPerception false -> "IntuitionPerception false"
 
 /// What a defender commits to when a strike comes in: a guard posture, or a counter-attack thrown into
 /// the attacker's tempo (ADR 0006, Indes).

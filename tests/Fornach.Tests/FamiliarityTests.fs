@@ -19,16 +19,16 @@ module FamiliarityTests =
   let private mob () = Bestiary.createMonster Bestiary.blightSprite
 
   [<Fact>]
-  let ``familiarity climbs 1% per encounter from -25% to a +25% cap at fifty encounters`` () =
+  let ``familiarity climbs 5% per encounter from -15% to a +20% cap at seven encounters`` () =
     let p = player ()
     let beast = mob ()
 
-    Assert.Equal(0.75, ActionResolver.familiarityFactor (known 0 beast.Name p) beast, 4)
-    Assert.Equal(0.76, ActionResolver.familiarityFactor (known 1 beast.Name p) beast, 4)
-    Assert.Equal(1.00, ActionResolver.familiarityFactor (known 25 beast.Name p) beast, 4)
-    Assert.Equal(1.25, ActionResolver.familiarityFactor (known 50 beast.Name p) beast, 4)
-    // The cap holds: a hundred encounters teach no more than fifty.
-    Assert.Equal(1.25, ActionResolver.familiarityFactor (known 100 beast.Name p) beast, 4)
+    Assert.Equal(0.85, ActionResolver.familiarityFactor (known 0 beast.Name p) beast, 4)
+    Assert.Equal(0.90, ActionResolver.familiarityFactor (known 1 beast.Name p) beast, 4)
+    Assert.Equal(1.00, ActionResolver.familiarityFactor (known 3 beast.Name p) beast, 4)
+    Assert.Equal(1.20, ActionResolver.familiarityFactor (known 7 beast.Name p) beast, 4)
+    // The cap holds: a hundred encounters teach no more than seven.
+    Assert.Equal(1.20, ActionResolver.familiarityFactor (known 100 beast.Name p) beast, 4)
 
   [<Fact>]
   let ``mobs keep no bestiary and always fight at 1.0`` () =
@@ -39,19 +39,19 @@ module FamiliarityTests =
   let ``familiarity runs the mirror on damage dealt and taken`` () =
     let beast = mob ()
     let stranger = known 0 beast.Name (player ())
-    let veteran = known 50 beast.Name (player ())
+    let veteran = known 7 beast.Name (player ())
 
-    // Outgoing: -25% on a first meeting, +25% once mastered. Incoming mirrors it.
-    Assert.Equal(0.75, ActionResolver.speciesDamageFactor stranger beast, 4)
-    Assert.Equal(1.25, ActionResolver.speciesDamageFactor beast stranger, 4)
-    Assert.Equal(1.25, ActionResolver.speciesDamageFactor veteran beast, 4)
-    Assert.Equal(0.75, ActionResolver.speciesDamageFactor beast veteran, 4)
+    // Outgoing: -15% on a first meeting, +20% once mastered. Incoming mirrors it.
+    Assert.Equal(0.85, ActionResolver.speciesDamageFactor stranger beast, 4)
+    Assert.Equal(1.15, ActionResolver.speciesDamageFactor beast stranger, 4)
+    Assert.Equal(1.20, ActionResolver.speciesDamageFactor veteran beast, 4)
+    Assert.Equal(0.80, ActionResolver.speciesDamageFactor beast veteran, 4)
 
   [<Fact>]
   let ``familiarity scales the riposte chance so a veteran counters where a stranger does not`` () =
-    // Five Power stacks reach the 70% ceiling: a stranger fumbles it down to 52%, a veteran holds it.
-    // A flat roll of 60 therefore lands the counter only for the combatant who knows the species.
-    let roller: DiceRoller = fun _ _ -> 60
+    // Five Power stacks reach the 70% ceiling: a stranger fumbles it down to 60%, a veteran holds 70%.
+    // A flat roll of 65 therefore lands the counter only for the combatant who knows the species.
+    let roller: DiceRoller = fun _ _ -> 65
     let attacker = TierFactory.createClassTier CharacterClass.Warrior CombatTier.Novice
     let engaged (defender: Combatant) =
       { defender with Momentum = Combatant.StackCap }
@@ -68,4 +68,4 @@ module FamiliarityTests =
           | _ -> false)
 
     Assert.False(countered (known 0 attacker.Name (player ())), "a first meeting should not counter")
-    Assert.True(countered (known 50 attacker.Name (player ())), "a mastered species should counter")
+    Assert.True(countered (known 7 attacker.Name (player ())), "a mastered species should counter")

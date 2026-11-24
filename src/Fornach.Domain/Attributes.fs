@@ -45,10 +45,21 @@ type StatDescriptor =
     SocialAliases: string list }
 
 module Attributes =
-  let descriptorOf =
-    function
-    // Physical
-    | Force ->
+  let inline statIndex stat =
+    match stat with
+    | Force -> 0
+    | Fortitude -> 1
+    | Finesse -> 2
+    | Reflex -> 3
+    | Prowess -> 4
+    | Poise -> 5
+    | Intellect -> 6
+    | Resolve -> 7
+    | Acuity -> 8
+    | Intuition -> 9
+
+  let private descriptors : StatDescriptor[] =
+    [|
       { Id = Force
         Plane = Physical
         Vector = Power
@@ -56,7 +67,6 @@ module Attributes =
         CanonicalName = "Force"
         SocialName = "Force"
         SocialAliases = [] }
-    | Fortitude ->
       { Id = Fortitude
         Plane = Physical
         Vector = Power
@@ -64,7 +74,6 @@ module Attributes =
         CanonicalName = "Fortitude"
         SocialName = "Fortitude"
         SocialAliases = [] }
-    | Finesse ->
       { Id = Finesse
         Plane = Physical
         Vector = Agility
@@ -72,7 +81,6 @@ module Attributes =
         CanonicalName = "Finesse"
         SocialName = "Finesse"
         SocialAliases = [] }
-    | Reflex ->
       { Id = Reflex
         Plane = Physical
         Vector = Agility
@@ -80,7 +88,6 @@ module Attributes =
         CanonicalName = "Reflex"
         SocialName = "Reflex"
         SocialAliases = [] }
-    | Prowess ->
       { Id = Prowess
         Plane = Physical
         Vector = Discipline
@@ -88,7 +95,6 @@ module Attributes =
         CanonicalName = "Prowess"
         SocialName = "Prowess"
         SocialAliases = [] }
-    | Poise ->
       { Id = Poise
         Plane = Physical
         Vector = Discipline
@@ -96,8 +102,7 @@ module Attributes =
         CanonicalName = "Poise"
         SocialName = "Poise"
         SocialAliases = [] }
-    // Mental (mapped to Social context: Presence/Command, Will/Defiance, Guile/Charm, Insight/Scrutiny, Leverage/Wit, Poise/Poise)
-    | Intellect ->
+      // Mental (mapped to Social context: Presence/Command, Will/Defiance, Guile/Charm, Insight/Scrutiny, Leverage/Wit, Poise/Poise)
       { Id = Intellect
         Plane = Mental
         Vector = Power
@@ -105,7 +110,6 @@ module Attributes =
         CanonicalName = "Intellect"
         SocialName = "Presence / Command"
         SocialAliases = [ "Presence"; "Command" ] }
-    | Resolve ->
       { Id = Resolve
         Plane = Mental
         Vector = Power
@@ -113,7 +117,6 @@ module Attributes =
         CanonicalName = "Resolve"
         SocialName = "Will / Defiance"
         SocialAliases = [ "Will"; "Defiance" ] }
-    | Acuity ->
       { Id = Acuity
         Plane = Mental
         Vector = Agility
@@ -121,7 +124,6 @@ module Attributes =
         CanonicalName = "Acuity"
         SocialName = "Guile / Charm"
         SocialAliases = [ "Guile"; "Charm" ] }
-    | Intuition ->
       { Id = Intuition
         Plane = Mental
         Vector = Agility
@@ -129,6 +131,9 @@ module Attributes =
         CanonicalName = "Intuition"
         SocialName = "Insight / Scrutiny"
         SocialAliases = [ "Insight"; "Scrutiny" ] }
+    |]
+
+  let descriptorOf stat : StatDescriptor = descriptors[statIndex stat]
 
   let all =
     [ Force
@@ -190,19 +195,6 @@ module Attributes =
     | Resolve -> Fortitude
     | Acuity -> Finesse
     | Intuition -> Reflex
-
-  let inline statIndex stat =
-    match stat with
-    | Force -> 0
-    | Fortitude -> 1
-    | Finesse -> 2
-    | Reflex -> 3
-    | Prowess -> 4
-    | Poise -> 5
-    | Intellect -> 6
-    | Resolve -> 7
-    | Acuity -> 8
-    | Intuition -> 9
 
 [<CustomEquality; NoComparison>]
 type StatBlock =

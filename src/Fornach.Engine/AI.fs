@@ -62,15 +62,20 @@ module AI =
       || self.Meters.Provoke.Value >= 65
 
     let otherPressure =
-      [ self.Meters.Exhaustion
-        self.Meters.Frustration
-        self.Meters.CognitiveFatigue
-        self.Meters.Confusion
-        self.Meters.Provoke ]
-      |> List.exists (fun meter -> meter.Value >= steadyFormAt)
+      self.Meters.Exhaustion.Value >= steadyFormAt
+      || self.Meters.Frustration.Value >= steadyFormAt
+      || self.Meters.CognitiveFatigue.Value >= steadyFormAt
+      || self.Meters.Confusion.Value >= steadyFormAt
+      || self.Meters.Provoke.Value >= steadyFormAt
 
     if self.Plane <> Physical then
-      RecoveryAction CenterMind
+      // CenterMind drains mental meters and Recklessness, but not Exhaustion. A mental actor
+      // tripping the recovery gate on physical Exhaustion must take SteadyForm, or the lockout
+      // repeats every turn until somatic collapse.
+      if self.Meters.Exhaustion.Value >= 65 then
+        RecoveryAction SteadyForm
+      else
+        RecoveryAction CenterMind
     elif mentalPressure then
       // Steady Form cannot drain the three mental meters, and they are what tripped the gate: a
       // physical actor under mental pressure must centre, or the lockout repeats every turn.
@@ -122,34 +127,77 @@ module AI =
     if not self.PlayerStyle then
       None
     else
-      let damage (attack: AttackClassification) = AttackEstimator.estimate self opponent attack
-
-      let margin (attack: AttackClassification) = AttackEstimator.contestMargin self opponent attack
-
-      let spike (attack: AttackClassification) = ActionResolver.gambitReckSpike attack
-
-      let affordable (attack: AttackClassification) =
-        self.Meters.Recklessness.Value + spike attack + recklessnessHeadroom < critCap
-
       match basicAttacks self with
       | [] -> None
       | basics ->
-        let candidates =
-          basics
-          |> List.collect (fun attack -> [ attack; asGambit attack ])
-          |> List.filter affordable
+        let reck = self.Meters.Recklessness.Value
+        let oppHp = float opponent.Health.Current
+        let mutable lethalPick : AttackClassification option = None
+        let mutable hasBest = false
+        let mutable bestAttack = Unchecked.defaultof<AttackClassification>
+        let mutable bestNegMargin = 0.0
+        let mutable bestNegDmg = 0.0
+        let mutable bestSpike = 0
 
-        let lethal plain = spike plain = 0 && damage plain >= float opponent.Health.Current
+        let consider (attack: AttackClassification) =
+          let s = ActionResolver.gambitReckSpike attack
+          if reck + s + recklessnessHeadroom < critCap then
+            let d = AttackEstimator.estimate self opponent attack
+            if lethalPick.IsNone && s = 0 && d >= oppHp then
+              lethalPick <- Some attack
+            elif lethalPick.IsNone then
+              let negM = -float (AttackEstimator.contestMargin self opponent attack)
+              let negD = -d
+              if not hasBest
+                 || negM < bestNegMargin
+                 || (negM = bestNegMargin && (negD < bestNegDmg || (negD = bestNegDmg && s < bestSpike))) then
+                hasBest <- true
+                bestAttack <- attack
+                bestNegMargin <- negM
+                bestNegDmg <- negD
+                bestSpike <- s
 
-        let pick =
-          match candidates |> List.tryFind lethal with
-          | Some plainKill -> plainKill
-          | None ->
-            candidates
-            |> List.sortBy (fun attack -> -float (margin attack), -damage attack, spike attack)
-            |> List.head
+        for attack in basics do
+          if lethalPick.IsNone then
+            consider attack
+          if lethalPick.IsNone then
+            consider (asGambit attack)
 
-        Some(StandardAttack pick)
+        // First-class Stack Spenders & ShieldBash (Physical plane):
+        // Considered after basic strikes so a lethal plain strike still saves stacks/Recklessness,
+        // while spenders (>= 3 stacks, 0 Recklessness spike) and ShieldBash (against high-Recklessness,
+        // Discipline-guarding, or combo-ramping foes) compete directly on margin and expected damage.
+        if self.Plane = Physical && lethalPick.IsNone then
+          if Combatant.stacksIn Vector.Power self >= 3 && ForceInsightStrike.IsAllowedFor self then
+            consider ForceInsightStrike
+          if lethalPick.IsNone && Combatant.stacksIn Vector.Agility self >= 3 && FinesseInsightStrike.IsAllowedFor self then
+            consider FinesseInsightStrike
+          if lethalPick.IsNone && Combatant.stacksIn Vector.Discipline self >= 3 && CalculatedFlawStrike.IsAllowedFor self then
+            consider CalculatedFlawStrike
+          if lethalPick.IsNone && opponent.WeaponCondition <> WeaponCondition.Broken then
+            let off = self.GetStat Prowess
+            let def = opponent.GetGuard(Plane.Physical, false)
+            let isPossible = off >= int (Math.Round(float def * 0.75))
+            let required = Math.Max(3, int (Math.Ceiling((float def / Math.Max(1.0, float off)) * 3.5)))
+            if isPossible && required <= Combatant.StackCap && Combatant.stacksIn Vector.Discipline self >= required then
+              let disarm = MasterfulDisarm required
+              if disarm.IsAllowedFor self then
+                consider disarm
+
+          let bashWarranted =
+            opponent.Meters.Recklessness.Value >= 40
+            || opponent.Stance = CombatStance.DisciplineStance
+            || opponent.ComboTracker.ConsecutiveHits >= 2
+          if lethalPick.IsNone && bashWarranted && (ShieldBash false).IsAllowedFor self then
+            consider (ShieldBash false)
+            if lethalPick.IsNone then
+              consider (ShieldBash true)
+
+        match lethalPick with
+        | Some plainKill -> Some(StandardAttack plainKill)
+        | None ->
+          if hasBest then Some(StandardAttack bestAttack)
+          else failwith "The input sequence was empty."
 
   /// Selects an offensive action intent for a combatant with no registered policy: species instinct
   /// first, then the discipline that suits the plane it actually resolves on.
@@ -186,9 +234,6 @@ module AI =
           StandardAttack (if self.Plane = Mental then SynapticGlamour isGambit else ForceStrike isGambit)
 
       match self.MonsterFamily with
-      | Some MonsterFamily.Construct when self.Stance <> CombatStance.PowerStance && self.Meters.Recklessness.Value < 35 ->
-        // Constructs hold immovable bastion discipline, and set their feet before they swing
-        ShiftStance CombatStance.PowerStance
       | Some MonsterFamily.Beast ->
         // Beasts strike ferally, exploiting bleeding prey or lunging with agile cadences
         commit (if opponent.BleedStacks > 0 || finesse >= force then
@@ -196,23 +241,34 @@ module AI =
                 else
                   ForceStrike isGambit)
       | Some MonsterFamily.Construct ->
-        // ...then smash with calculated stone blows
-        commit (ForceStrike isGambit)
+        // Constructs crush reckless or combo-ramping foes with heavy shield slams, otherwise stone blows
+        if self.Plane = Physical && (opponent.Meters.Recklessness.Value >= 45 || opponent.ComboTracker.ConsecutiveHits >= 2) && (ShieldBash isGambit).IsAllowedFor self then
+          StandardAttack (ShieldBash isGambit)
+        else
+          commit (ForceStrike isGambit)
       | Some MonsterFamily.UndeadWraith ->
-        // Wraiths bypass physical armor entirely, singing sorrowful glamours that erode Morale
-        commit (SynapticGlamour isGambit)
+        // Wraiths weave mirror decoys at Veteran+ tier when exposed, otherwise erode Morale with glamours
+        if self.Plane = Mental && self.MirrorClones = 0 && ProgressionScale.levelToTier self.Level <> CombatTier.Novice && (MirrorIllusion false).IsAllowedFor self then
+          StandardAttack (MirrorIllusion false)
+        else
+          commit (SynapticGlamour isGambit)
       | Some MonsterFamily.Aberration ->
-        // Aberrations warp focus with psychic cataclysms or erratic pulses
-        commit (if intellect >= acuity then ArcaneCataclysm isGambit else SynapticGlamour isGambit)
+        // Aberrations disrupt combo momentum with shockwaves, or warp focus with cataclysms and glamours
+        if self.Plane = Mental && opponent.ComboTracker.ConsecutiveHits >= 2 && (DisorientingShockwave isGambit).IsAllowedFor self then
+          StandardAttack (DisorientingShockwave isGambit)
+        else
+          commit (if intellect >= acuity then ArcaneCataclysm isGambit else SynapticGlamour isGambit)
       | Some MonsterFamily.GriefManifestation ->
-        // A grief manifestation argues and overwhelms, but it is nobody's student: it has no Prowess, so
-        // the Discipline-vector interrogation is not a blow it can throw. It leans on the Power vector
-        // instead, which is where its authored Intellect sits.
-        commit (ArcaneCataclysm isGambit)
+        // Manifestations have no Prowess, so they lean on Power/Agility vectors and disrupt combo surges
+        if self.Plane = Mental && acuity > intellect then
+          commit (SynapticGlamour isGambit)
+        else
+          commit (ArcaneCataclysm isGambit)
       | _ -> commit (ForceStrike isGambit)
     elif self.Plane = Physical then
       // Tactical Stance & Attack Evaluation (ADR 0009):
-      // When outnumbered (surroundingOpponents >= 2) and Prowess is viable, shift to Discipline Stance for bastion stabilization.
+      // When outnumbered (surroundingOpponents >= 2) and Prowess is viable, shift to Discipline Stance for immediate bastion stabilization.
+      // In 1-on-1 exchanges, attacks fluidly transition stance after the swing, so no standalone ShiftStance turn is wasted.
       let wantsDiscipline =
         opponent.Plane = Physical
         && surroundingOpponents >= 2
@@ -222,57 +278,29 @@ module AI =
 
       if wantsDiscipline && self.Stance <> CombatStance.DisciplineStance then
         ShiftStance CombatStance.DisciplineStance
+      elif force >= finesse then
+        StandardAttack (ForceStrike isGambit)
       else
-        let preferredStance =
-          if wantsDiscipline then CombatStance.DisciplineStance
-          elif force >= finesse then CombatStance.PowerStance
-          else CombatStance.AgilityStance
-
-        if self.Stance <> preferredStance && self.Meters.Recklessness.Value < 30 then
-          ShiftStance preferredStance
-        elif force >= finesse then
-          StandardAttack (ForceStrike isGambit)
-        else
-          StandardAttack (FinesseCadence isGambit)
+        StandardAttack (FinesseCadence isGambit)
     else
-      // Mental discipline (combat AI strictly utilizes Arcane/mental attacks; social verbal sparring is reserved for social encounters)
-      let preferredForm =
-        if intellect >= acuity && intellect >= acumen then ComplexForm.ResonanceSpike
-        elif acuity >= acumen then ComplexForm.PhantasmalDiffusion
-        else ComplexForm.AegisLattice
-
-      // If actor is in ResonanceSpike but Recklessness or Cognitive Fatigue is high (>= 60), switch to AegisLattice to stabilize!
-      let formToThread =
-        if self.ComplexForm = Some ComplexForm.ResonanceSpike && (self.Meters.Recklessness.Value >= 60 || self.Meters.CognitiveFatigue.Value >= 65) then
-          Some ComplexForm.AegisLattice
-        elif self.ComplexForm.IsNone then
-          Some preferredForm
-        elif self.ComplexForm <> Some preferredForm && self.Meters.Recklessness.Value < 30 then
-          Some preferredForm
+      // Mental discipline: attacks fluidly thread their Complex Form after the strike, so no standalone ThreadComplexForm turn is wasted.
+      if intellect >= acuity && intellect >= acumen then
+        let isSafeForOverchannel = isGambit && self.ComplexForm <> Some ComplexForm.AegisLattice
+        StandardAttack (ArcaneCataclysm isSafeForOverchannel)
+      elif acuity >= acumen then
+        // Guile/Trickery specialist: if without clones and not passively generating them, conjure mirror decoys first!
+        if self.MirrorClones = 0 && self.ComplexForm <> Some ComplexForm.PhantasmalDiffusion then
+          StandardAttack (MirrorIllusion isGambit)
         else
-          None
-
-      match formToThread with
-      | Some form when self.ComplexForm <> Some form ->
-        ThreadComplexForm form
-      | _ ->
-        if intellect >= acuity && intellect >= acumen then
-          let isSafeForOverchannel = isGambit && self.ComplexForm <> Some ComplexForm.AegisLattice
-          StandardAttack (ArcaneCataclysm isSafeForOverchannel)
-        elif acuity >= acumen then
-          // Guile/Trickery specialist: if without clones and not passively generating them, conjure mirror decoys first!
-          if self.MirrorClones = 0 && self.ComplexForm <> Some ComplexForm.PhantasmalDiffusion then
-            StandardAttack (MirrorIllusion isGambit)
-          else
-            StandardAttack (SynapticGlamour isGambit)
+          StandardAttack (SynapticGlamour isGambit)
+      else
+        // Defensive/CC specialist: if mobbed or opponent has combo momentum, disorient them! If ward low, erect ward!
+        if surroundingOpponents >= 2 || opponent.ComboTracker.ConsecutiveHits >= 2 then
+          StandardAttack (DisorientingShockwave isGambit)
+        elif self.ArcaneWard < 25 then
+          StandardAttack (RunicWardTrap isGambit)
         else
-          // Defensive/CC specialist: if mobbed or opponent has combo momentum, disorient them! If ward low, erect ward!
-          if surroundingOpponents >= 2 || opponent.ComboTracker.ConsecutiveHits >= 2 then
-            StandardAttack (DisorientingShockwave isGambit)
-          elif self.ArcaneWard < 25 then
-            StandardAttack (RunicWardTrap isGambit)
-          else
-            StandardAttack (DisorientingShockwave isGambit)
+          StandardAttack (DisorientingShockwave isGambit)
 
   /// Selects an offensive action intent, deferring to the ruleset's registered policy for this combatant
   /// when there is one and falling back to the engine's generic discipline when there is not.
@@ -332,12 +360,16 @@ module AI =
     (surroundingOpponents: int)
     : ActionIntent =
     let policy = policyFor policies self
-    // Where this combatant breaks off to recover. The generic 40 is the engine's; a ruleset that wants a
-    // combatant to hold the line longer raises it rather than teaching the engine about that combatant.
+    // Where this combatant breaks off to recover. In 1-on-1 duels, 55 sits close to shieldHoldAt (60)
+    // so combatants press through active exchanges instead of dropping into recovery loops every 3 rounds.
+    // In multi-opponent swarms (surroundingOpponents >= 2), cleaves and chains add substantial per-target
+    // Recklessness spikes in a single turn, so hold extra headroom (40) to avoid spiking straight into
+    // RecklessExposure collapse. A registered Policy still overrides either default.
+    let defaultRecoveryAt = if surroundingOpponents >= 2 then 40 else 55
     let recoveryAt =
       policy
       |> Option.map (fun registered -> registered.RecoveryThreshold)
-      |> Option.defaultValue 40
+      |> Option.defaultValue defaultRecoveryAt
 
     if self.Meters.Recklessness.Value >= 75
        || self.Meters.Exhaustion.Value >= 75
@@ -346,21 +378,54 @@ module AI =
        || self.Meters.Confusion.Value >= 75
        || self.Meters.Provoke.Value >= 75 then
       chooseRecovery self
-    elif not self.PlayerStyle && self.MonsterFamily.IsNone then
-      // Plain humanoid opposition swings exactly one basic strike of its primary vector: no
-      // preparations, no stance or Complex Form transitions, no finishers, no varied attack types.
-      // Discipline is the player's edge, so nothing here is chosen on the mob's behalf. Authored
-      // monsters keep their species instinct profiles.
-      if self.Plane = Mental then
-        let intellect = self.GetStat Intellect
-        let acuity = self.GetStat Acuity
-        if intellect >= acuity then StandardAttack (ArcaneCataclysm false)
-        else StandardAttack (SynapticGlamour false)
+    elif not self.PlayerStyle && self.MonsterFamily.IsNone && policy.IsNone then
+      let tier = ProgressionScale.levelToTier self.Level
+      if tier = CombatTier.Novice then
+        // Early-game Novice humanoid opposition keeps a straightforward basic strike for pacing.
+        if self.Plane = Mental then
+          let intellect = self.GetStat Intellect
+          let acuity = self.GetStat Acuity
+          if intellect >= acuity then StandardAttack (ArcaneCataclysm false)
+          else StandardAttack (SynapticGlamour false)
+        else
+          let force = self.GetStat Force
+          let finesse = self.GetStat Finesse
+          if force >= finesse then StandardAttack (ForceStrike false)
+          else StandardAttack (FinesseCadence false)
       else
-        let force = self.GetStat Force
-        let finesse = self.GetStat Finesse
-        if force >= finesse then StandardAttack (ForceStrike false)
-        else StandardAttack (FinesseCadence false)
+        // Veteran+ humanoid opposition fights with real tactical discipline: executes collapsed foes,
+        // recovers when strained, uses ShieldBash against reckless foes, and commits to gambits when
+        // Recklessness < 25 (active guards in the Nach are handled via `chooseActiveDefense`).
+        if opponent.IsExecuteEligible then
+          ExecuteStrike (chooseExecutePlane self)
+        elif self.Meters.Recklessness.Value >= recoveryAt
+             || self.Meters.Exhaustion.Value >= 65
+             || self.Meters.Frustration.Value >= 65
+             || self.Meters.CognitiveFatigue.Value >= 65
+             || self.Meters.Confusion.Value >= 65
+             || self.Meters.Provoke.Value >= 65 then
+          chooseRecovery self
+        else
+          let gambitCap = if surroundingOpponents >= 2 then 10 else 25
+          let isGambit = self.Meters.Recklessness.Value < gambitCap
+          if self.Plane = Mental then
+            let intellect = self.GetStat Intellect
+            let acuity = self.GetStat Acuity
+            if opponent.ComboTracker.ConsecutiveHits >= 2 && (DisorientingShockwave isGambit).IsAllowedFor self then
+              StandardAttack (DisorientingShockwave isGambit)
+            elif intellect >= acuity then
+              StandardAttack (ArcaneCataclysm isGambit)
+            else
+              StandardAttack (SynapticGlamour isGambit)
+          else
+            let force = self.GetStat Force
+            let finesse = self.GetStat Finesse
+            if surroundingOpponents <= 1 && opponent.Meters.Recklessness.Value >= 45 && (ShieldBash isGambit).IsAllowedFor self then
+              StandardAttack (ShieldBash isGambit)
+            elif force >= finesse then
+              StandardAttack (ForceStrike isGambit)
+            else
+              StandardAttack (FinesseCadence isGambit)
     else
 
     // 0. Tactical Preparations Deployment
@@ -538,4 +603,36 @@ module AI =
     | StandardAttack (FinesseCadence isHeavy), ReflexSlip _ ->
       // Telegraphed an Agility blow, but if player slips/dodges, convert to crushing ForceStrike
       StandardAttack (ForceStrike isHeavy)
+    | StandardAttack (ArcaneCataclysm isHeavy), ResolveAnchor _ ->
+      // Telegraphed a Mental Power spell, but if player anchors Resolve, convert to Synaptic Glamour
+      StandardAttack (SynapticGlamour isHeavy)
+    | StandardAttack (SynapticGlamour isHeavy), IntuitionPerception _ ->
+      // Telegraphed a Mental Agility glamour, but if player reads with Intuition, convert to Arcane Cataclysm
+      StandardAttack (ArcaneCataclysm isHeavy)
     | other, _ -> other
+
+  /// Adapts an enemy's chosen intent when the opponent repeats the same active guard
+  /// (via `adaptToDefensiveRepetition` + `feintConvertVector`) or turtles behind
+  /// consecutive `RaiseShield` / `Wait` actions, breaking infinite defensive counter loops.
+  let adaptIntentToRepetition
+    (enemy: Combatant)
+    (intent: ActionIntent)
+    (prevDefense: DefenseChoice option)
+    (currentDefense: DefenseChoice option)
+    (consecutiveShieldTurtles: int)
+    : ActionIntent =
+    if adaptToDefensiveRepetition enemy prevDefense currentDefense then
+      match currentDefense with
+      | Some (Guard d) -> feintConvertVector intent d
+      | _ -> intent
+    elif consecutiveShieldTurtles >= 2 && (enemy.Level >= 2 || enemy.IsHumanoid) then
+      match intent with
+      | StandardAttack (ForceStrike isHeavy) when enemy.Plane = Physical ->
+        if (ShieldBash isHeavy).IsAllowedFor enemy then StandardAttack (ShieldBash isHeavy)
+        else StandardAttack (FinesseCadence isHeavy)
+      | StandardAttack (FinesseCadence isHeavy) when enemy.Plane = Physical ->
+        if (ShieldBash isHeavy).IsAllowedFor enemy then StandardAttack (ShieldBash isHeavy)
+        else intent
+      | other -> other
+    else
+      intent

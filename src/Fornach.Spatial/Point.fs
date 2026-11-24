@@ -30,6 +30,17 @@ module Point =
       { X = p.X; Y = p.Y + 1 } // South
       { X = p.X - 1; Y = p.Y } ] // West
 
+  /// Zero-allocation offset table matching `allNeighbors` order exactly.
+  let internal allNeighborOffsets : struct(int * int)[] =
+    [| struct(-1, -1)
+       struct(0, -1)
+       struct(1, -1)
+       struct(-1, 0)
+       struct(1, 0)
+       struct(-1, 1)
+       struct(0, 1)
+       struct(1, 1) |]
+
   /// Returns all 8 surrounding neighbors (cardinals + diagonals)
   let allNeighbors (p: Point) =
     [ { X = p.X - 1; Y = p.Y - 1 }

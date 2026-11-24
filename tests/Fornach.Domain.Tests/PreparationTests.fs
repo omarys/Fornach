@@ -524,10 +524,13 @@ module PreparationTests =
 
   [<Fact>]
   let ``Duel: Veteran Mesmer deploys PrismaticFlare on Veteran Warrior, draining Morale on Recklessness gain`` () =
-    // Prismatic Flare is an Agility-grounded kit: the bearer must hold the stance to deploy.
+    // Prismatic Flare is an Agility-grounded kit: the bearer must hold the Agility stance/form to deploy and cast in-form.
     let mesmer =
       TierFactory.createClassTier CharacterClass.Mage Veteran
-      |> fun c -> { c with Stance = CombatStance.AgilityStance }
+      |> fun c ->
+        { c with
+            Stance = CombatStance.AgilityStance
+            ComplexForm = Some ComplexForm.PhantasmalDiffusion }
     let warrior = TierFactory.createClassTier CharacterClass.Warrior Veteran
     let roller = fixedRoller 6
 

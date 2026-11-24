@@ -15,6 +15,19 @@ module Pathfinding =
 
   let private sqrt2 = System.Math.Sqrt 2.0
 
+  // Zero-allocation 8-way neighbor offsets paired with exact step costs (matching Point.allNeighbors order).
+  // Diagonal steps cost sqrt(2) and cardinal steps 1.0, so a straight line is genuinely cheaper than a
+  // diagonal staircase: mobs close in straight when they can instead of sidestepping arbitrarily.
+  let private neighborSteps : struct(int * int * float)[] =
+    [| struct(-1, -1, sqrt2)
+       struct(0, -1, 1.0)
+       struct(1, -1, sqrt2)
+       struct(-1, 0, 1.0)
+       struct(1, 0, 1.0)
+       struct(-1, 1, sqrt2)
+       struct(0, 1, 1.0)
+       struct(1, 1, sqrt2) |]
+
   /// Octile distance: the true 8-way travel distance when cardinal steps cost 1 and
   /// diagonal steps cost sqrt(2). Admissible and consistent, so A* stays optimal.
   let private octile (a: Point) (b: Point) =
@@ -22,64 +35,57 @@ module Pathfinding =
     let dy = abs (b.Y - a.Y)
     float (max dx dy) + (sqrt2 - 1.0) * float (min dx dy)
 
+  /// Finds the shortest 8-directional path from `start` to `goal` using A*, expanding at most
+  /// `maxNodes` distinct tiles before giving up and returning `None`.
+  /// `isPassable` returns true if a point can be walked through (not a wall or obstacle).
+  let aStarBounded (maxNodes: int) (isPassable: Point -> bool) (start: Point) (goal: Point) : Point list option =
+    if start = goal then
+      Some [ start ]
+    elif maxNodes <= 0 || not (isPassable goal) then
+      None
+    else
+      let initialCap = min maxNodes 256
+      // Priority queue storing struct(Point * gScore) prioritized by lowest fScore (lazy deletion)
+      let openSet = PriorityQueue<struct(Point * float), float>(initialCap)
+      let cameFrom = Dictionary<Point, Point>(initialCap)
+      let gScore = Dictionary<Point, float>(initialCap)
+
+      gScore.[start] <- 0.0
+      openSet.Enqueue(struct(start, 0.0), octile start goal)
+
+      let mutable expanded = 0
+      let mutable foundPath : Point list option = None
+
+      while openSet.Count > 0 && foundPath.IsNone && expanded < maxNodes do
+        let struct(current, poppedG) = openSet.Dequeue()
+
+        // Skip stale entries superseded by a strictly cheaper path
+        if poppedG <= gScore.[current] then
+          if current = goal then
+            foundPath <- Some(reconstructPath cameFrom current)
+          else
+            expanded <- expanded + 1
+
+            for i = 0 to neighborSteps.Length - 1 do
+              let struct(dx, dy, stepCost) = neighborSteps.[i]
+              let neighbor = { X = current.X + dx; Y = current.Y + dy }
+
+              if isPassable neighbor then
+                let tentativeG = poppedG + stepCost
+
+                let mutable knownG = 0.0
+                let hasG = gScore.TryGetValue(neighbor, &knownG)
+
+                if not hasG || tentativeG < knownG then
+                  cameFrom.[neighbor] <- current
+                  gScore.[neighbor] <- tentativeG
+                  let f = tentativeG + octile neighbor goal
+                  openSet.Enqueue(struct(neighbor, tentativeG), f)
+
+      foundPath
+
   /// Finds the shortest 8-directional path from `start` to `goal` using A*.
   /// `isPassable` returns true if a point can be walked through (not a wall or obstacle).
   /// Returns Some(points from start to goal) or None if unreachable.
   let aStar (isPassable: Point -> bool) (start: Point) (goal: Point) : Point list option =
-    if start = goal then
-      Some [ start ]
-    elif not (isPassable goal) then
-      // If goal is not passable, no path exists.
-      None
-    else
-      // Priority queue prioritizing lowest fScore
-      let openSet = PriorityQueue<Point, float>()
-      let cameFrom = Dictionary<Point, Point>()
-      let gScore = Dictionary<Point, float>()
-
-      gScore.[start] <- 0.0
-      openSet.Enqueue(start, octile start goal)
-
-      let inOpenSet = HashSet<Point>()
-      inOpenSet.Add(start) |> ignore
-
-      let rec search () : Point list option =
-        if openSet.Count = 0 then
-          None // Exhausted all reachable tiles without reaching goal
-        else
-          let current = openSet.Dequeue()
-          inOpenSet.Remove(current) |> ignore
-
-          if current = goal then
-            Some(reconstructPath cameFrom current)
-          else
-            let currentG = gScore.[current]
-            let neighbors = Point.allNeighbors current
-
-            for neighbor in neighbors do
-              // Only consider neighbor if it's walkable or the goal itself
-              if isPassable neighbor then
-                // Diagonal steps cost sqrt(2) and cardinal steps 1.0, so a straight line
-                // is genuinely cheaper than a diagonal staircase: mobs close in straight
-                // when they can instead of sidestepping arbitrarily.
-                let diagonal = neighbor.X <> current.X && neighbor.Y <> current.Y
-                let tentativeG = currentG + (if diagonal then sqrt2 else 1.0)
-
-                let knownG =
-                  match gScore.TryGetValue(neighbor) with
-                  | true, g -> g
-                  | false, _ -> System.Double.PositiveInfinity
-
-                if tentativeG < knownG then
-                  cameFrom.[neighbor] <- current
-                  gScore.[neighbor] <- tentativeG
-                  let f = tentativeG + octile neighbor goal
-
-                  if not (inOpenSet.Contains(neighbor)) then
-                    openSet.Enqueue(neighbor, f)
-                    inOpenSet.Add(neighbor) |> ignore
-
-            search ()
-
-      // Kick off the search (aligned with let rec search)
-      search ()
+    aStarBounded System.Int32.MaxValue isPassable start goal

@@ -17,6 +17,16 @@ type CombatTier =
   /// The first level a Master cannot beat in any vector
   | GrandMaster
 
+  /// Display name for this tier (ADR 0005).
+  /// Hand-written deliberately: the compiler-generated union ToString() goes
+  /// through reflective structured formatting (~40 us / 15 KB per call).
+  member this.Name : string =
+    match this with
+    | Novice -> "Novice"
+    | Veteran -> "Veteran"
+    | Master -> "Master"
+    | GrandMaster -> "GrandMaster"
+
 module ProgressionScale =
 
   // The tier boundaries live at the bottom of this module: they are read off `physicalStatsForLevel`, so
@@ -211,16 +221,15 @@ module TierFactory =
         let prim, sec, tert, min, offDef, offOff = ProgressionScale.physicalStatsForLevel level
         match cls with
         | CharacterClass.Fighter ->
-          // Own plane on the primary tier; off plane growing but a step behind — offence at half the primary,
-          // defence on `offDef` (0.75). Both planes keep growing, so a Fighter never carries a frozen block
-          // into a fight and never stops improving against a mind.
-          //
-          // Prowess/Poise is one pair serving both planes, so it is stated once, at the class's own tier:
-          // a Fighter's discipline is its edge and holds up against a war of words as well as a blade.
+          // Own plane on the primary tier with subtle vector asymmetry (Power-tilted vanguard, budget-neutral):
+          // Force/Fortitude +5%, Finesse/Reflex -5%, Prowess/Poise at baseline primary.
+          // Off plane keeps growing a step behind so a Fighter never carries a frozen block.
           let halfPrim = prim / 2
+          let powerTilt = int (Math.Round(float prim * 1.05))
+          let agilityTilt = int (Math.Round(float prim * 0.95))
 
-          [ Force, prim; Fortitude, prim
-            Finesse, prim; Reflex, prim
+          [ Force, powerTilt; Fortitude, powerTilt
+            Finesse, agilityTilt; Reflex, agilityTilt
             Prowess, prim; Poise, prim
             Intellect, halfPrim; Resolve, offDef
             Acuity, halfPrim; Intuition, offDef ]
@@ -265,9 +274,12 @@ module TierFactory =
         let mentalStats =
           match cls with
           | CharacterClass.Mage ->
-            // Normalized mental stats: every mental attribute on the primary tier, guard pair included.
-            [ Intellect, prim; Resolve, prim
-              Acuity, prim; Intuition, prim
+            // Mental stats with subtle vector asymmetry (Power-tilted arcanist, budget-neutral):
+            // Intellect/Resolve +5%, Acuity/Intuition -5%, Prowess/Poise at baseline primary.
+            let powerTilt = int (Math.Round(float prim * 1.05))
+            let agilityTilt = int (Math.Round(float prim * 0.95))
+            [ Intellect, powerTilt; Resolve, powerTilt
+              Acuity, agilityTilt; Intuition, agilityTilt
               Prowess, prim; Poise, prim ]
           | _ ->
             [ Intellect, prim; Resolve, prim
@@ -305,7 +317,7 @@ module TierFactory =
   let createClassTier (cls: CharacterClass) (tier: CombatTier) : Combatant =
     let level = ProgressionScale.tierToLevel tier
     let fighter = createClassLevel cls level
-    let tierName = sprintf "%s %s" (tier.ToString()) cls.Name
+    let tierName = sprintf "%s %s" tier.Name cls.Name
     let mobStance =
       match cls with
       | CharacterClass.Fighter
@@ -325,11 +337,9 @@ module TierFactory =
     let growth (oldValue: int) (newValue: int) = newValue - oldValue
 
     let scaledStats =
-      Attributes.all
-      |> List.fold
-        (fun (stats: StatBlock) stat ->
-          stats.Modify(stat, growth (previousTemplate.Stats.Get stat) (template.Stats.Get stat)))
-        c.Stats
+      c.Stats.ApplyModifiers(
+        Attributes.all
+        |> Seq.map (fun stat -> stat, growth (previousTemplate.Stats.Get stat) (template.Stats.Get stat)))
 
     let newHealthMax = c.Health.Maximum + growth previousTemplate.Health.Maximum template.Health.Maximum
     let newMoraleMax = c.Morale.Maximum + growth previousTemplate.Morale.Maximum template.Morale.Maximum
@@ -404,12 +414,11 @@ module TierFactory =
       let scaleStat (v: int) = max 1 (int (Math.Round(float v * statFactor)))
 
       let scaledStats =
-        Attributes.all
-        |> List.fold
-          (fun (stats: StatBlock) stat ->
+        enemy.Stats.ApplyModifiers(
+          Attributes.all
+          |> Seq.map (fun stat ->
             let current = enemy.Stats.Get stat
-            stats.Modify(stat, scaleStat current - current))
-          enemy.Stats
+            stat, scaleStat current - current))
 
       let scalePool (p: Pool) =
         let maximum = scale p.Maximum

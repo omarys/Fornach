@@ -463,7 +463,8 @@ type Combatant with
   static member holdRound (c: Combatant) = { c with HeldRound = true }
 
   /// Clears the held round once the combatant acts again, so the credit cannot outlive the round it was spent in
-  static member clearHeldRound (c: Combatant) = { c with HeldRound = false }
+  static member clearHeldRound (c: Combatant) =
+    if c.HeldRound then { c with HeldRound = false } else c
 
   /// Pure helper to update status meters.
   static member updateMeters (updater: StatusMeters -> StatusMeters) (c: Combatant) =
@@ -544,30 +545,33 @@ type Combatant with
         Stats = c.Stats.ApplyModifiers mentalDefences
         Progression = updatedProg }
 
-  /// Stress-gated discipline growth (ADR 0009): +5 to the class discipline pair (Prowess/Poise
-  /// for martial classes, Prowess/Poise for mages) when the victory was paid for in blood,
-  /// morale or status, +1 more when it was won above half Recklessness. A flawless fight teaches
-  /// nothing. Surviving the encounter also clears the collapse status - the breakdown is over
-  /// when the fight is.
-  static member growFromStressedVictory (c: Combatant) =
+  /// Victory discipline growth (ADR 0009 + clean mastery reward):
+  /// - Stressed victory (blood, morale, or status): +5 to Prowess/Poise (+1 more above half Recklessness).
+  /// - Clean mastery victory (Collapse Execution or Indes Seizure even at 100% HP/Morale): +3 to Prowess/Poise.
+  /// - Flawless non-mastery victory: +0 (still clears Collapse).
+  static member growFromVictory (cleanMasteryVictory: bool) (c: Combatant) : Combatant =
     let stressed =
       c.Health.Current < c.Health.Maximum
       || c.Morale.Current < c.Morale.Maximum
       || c.Meters.HasAnyStatus
 
     let gain =
-      (if stressed then 5 else 0)
-      + (if c.Meters.Recklessness.Value > 50 then 1 else 0)
-
-    // One discipline pair for every class: Prowess and Poise are the shared axis now, so a Mage and a
-    // Fighter grow the same two stats out of a stressed victory.
-    let disciplinePair amount = [ StatId.Prowess, amount; StatId.Poise, amount ]
+      if stressed then
+        5 + (if c.Meters.Recklessness.Value > 50 then 1 else 0)
+      elif cleanMasteryVictory then
+        3
+      else
+        0
 
     if gain = 0 then { c with Collapse = CollapseState.Stable }
     else
       { c with
-          Stats = c.Stats.ApplyModifiers (disciplinePair gain)
+          Stats = c.Stats.ApplyModifiers [ StatId.Prowess, gain; StatId.Poise, gain ]
           Collapse = CollapseState.Stable }
+
+  /// Stress-gated discipline growth (ADR 0009): delegates to `growFromVictory false`.
+  static member growFromStressedVictory (c: Combatant) =
+    Combatant.growFromVictory false c
 
   /// Defeat growth (ADR 0009): collapse or death teaches hardest - +10 to the class discipline
   /// pair. The trauma reset that follows restores pools and clears collapse but keeps this
@@ -599,7 +603,8 @@ type Combatant with
 
   /// Removes an active preparation by type
   static member removeActivePreparation (prepType: PreparationType) (c: Combatant) =
-    { c with ActivePreparations = c.ActivePreparations |> List.filter (fun a -> a.Type <> prepType) }
+    if c.ActivePreparations.IsEmpty then c
+    else { c with ActivePreparations = c.ActivePreparations |> List.filter (fun a -> a.Type <> prepType) }
 
   /// Spends 1 use of a tactical preparation from the combatant's progression profile
   static member spendPreparation (prepType: PreparationType) (c: Combatant) : Combatant =
@@ -610,12 +615,14 @@ type Combatant with
 
   /// Ticks down turn durations on active preparations, removing expired ones
   static member decrementActivePreparations (c: Combatant) : Combatant =
-    let updated =
-      c.ActivePreparations
-      |> List.choose (fun a ->
-        if a.DurationTurns <= 1 then None
-        else Some (a.DecrementTurn()))
-    { c with ActivePreparations = updated }
+    if c.ActivePreparations.IsEmpty then c
+    else
+      let updated =
+        c.ActivePreparations
+        |> List.choose (fun a ->
+          if a.DurationTurns <= 1 then None
+          else Some (a.DecrementTurn()))
+      { c with ActivePreparations = updated }
 
   /// Shifts active tactical stance
   static member setStance stance (c: Combatant) =

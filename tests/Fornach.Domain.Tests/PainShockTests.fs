@@ -42,10 +42,10 @@ module PainShockTests =
     Assert.Equal(normalPoise, frustrated.GetCombatStat StatId.Poise)
 
   [<Fact>]
-  let ``Single-turn damage under 15 percent does not trigger Pain Shock`` () =
+  let ``Single-turn damage under 35 percent when unstrained does not trigger Pain Shock`` () =
     let roller = fixedRoller 5
     let attacker = TierFactory.createClassLevel CharacterClass.Warrior 1
-    // Target with huge health pool so 100 damage is < 15%
+    // Target with huge health pool so 100 damage is < 35%
     let target = Combatant.create (CombatantId.New()) "Titan" 10000 1000 attacker.Stats
     let action = StandardAttack (ForceStrike false)
 
@@ -53,15 +53,15 @@ module PainShockTests =
     let hasPainShock =
       outcome.Events
       |> List.exists (function CombatEvent.PainShockSuffered _ -> true | _ -> false)
-    Assert.False(hasPainShock, "Damage under 15% Max HP must not trigger Pain Shock")
+    Assert.False(hasPainShock, "Damage under 35% Max HP (when unstrained) must not trigger Pain Shock")
     Assert.False(outcome.Target.IsStaggered, "Target should not be staggered")
 
   [<Fact>]
-  let ``Single-turn damage exceeding 15 percent triggers Pain Shock and staggers on failed Poise test`` () =
+  let ``Single-turn damage exceeding 35 percent triggers Pain Shock and yields Vor on failed Poise test`` () =
     let roller = fixedRoller 100 // High roll to guarantee damage
-    // High-tier attacker vs fragile target with 0 Poise
+    // High-tier attacker vs fragile target with low Poise holding the Vor
     let attacker = TierFactory.createClassTier CharacterClass.Warrior CombatTier.GrandMaster
-    let fragileTarget = TierFactory.createClassLevel CharacterClass.Rogue 1
+    let fragileTarget = TierFactory.createClassLevel CharacterClass.Rogue 1 |> Combatant.seizeVor
     let action = StandardAttack (ForceStrike false)
 
     let outcome = ActionResolver.resolveEx roller action attacker fragileTarget 0
@@ -71,12 +71,13 @@ module PainShockTests =
 
     Assert.True(painShockEvent.IsSome, "Heavy damage should emit PainShockSuffered")
     let _, pct, _, resisted = painShockEvent.Value
-    Assert.True(pct >= 15, sprintf "Damage percentage should be >= 15%% (Actual: %d%%)" pct)
+    Assert.True(pct >= 35, sprintf "Damage percentage should be >= 35%% (Actual: %d%%)" pct)
     if not resisted then
-      Assert.True(outcome.Target.IsStaggered, "Target should be staggered upon failing Pain Shock check")
-      // Poise guards the condition tracks, so the surge is the tempered share rather than the raw 25/15.
-      let frustration = ActionResolver.temperConditionAmount fragileTarget 25
-      let exhaustion = ActionResolver.temperConditionAmount fragileTarget 15
+      Assert.False(outcome.Target.IsStaggered, "Pain Shock failure should yield tempo rather than skipping a full turn")
+      Assert.True(outcome.Target.IsInNach, "Target should yield the Vor upon failing Pain Shock check")
+      // Poise guards the condition tracks, so the surge is the tempered share rather than the raw 10/10.
+      let frustration = ActionResolver.temperConditionAmount fragileTarget 10
+      let exhaustion = ActionResolver.temperConditionAmount fragileTarget 10
       Assert.True(outcome.Target.Meters.Frustration.Value >= frustration, "Frustration should surge on Pain Shock failure, less whatever Poise holds")
       Assert.True(outcome.Target.Meters.Exhaustion.Value >= exhaustion, "Exhaustion should surge on Pain Shock failure, less whatever Poise holds")
 
