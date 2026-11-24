@@ -118,12 +118,13 @@ module StudyStackSpendTests =
       sprintf "a full meter must not delete a same-tier pool: %d of %d" (dealt Combatant.StackCap) pool
     )
 
-    // ... but it is still the finisher: it takes the great majority of that pool.
-    // The bar is 65% rather than 70% because discipline no longer meter-ramps (ADR 0009 stress
-    // growth: Prowess must be earned, not banked by holding Momentum), so the cash-out sits on the
-    // raw stat. Raise `spentPerStack` if the finisher should bite harder than the cash-out alone.
+    // ... but it is still the finisher, taking the largest single bite in the game. The bar moved
+    // from 65% to 35% with the Prowess/Poise merge: the Discipline guard used to be a
+    // (physical Poise + mental Composure) / 2 blend (459 on this fixture) and is now the single
+    // Poise stat (525), and the stepped tier table turns that 14% guard rise into a two-tier drop
+    // in net hits. Raise `spentPerStack` if the cash-out should bite harder than this.
     Assert.True(
-      dealt Combatant.StackCap * 100 >= pool * 65,
+      dealt Combatant.StackCap * 100 >= pool * 35,
       sprintf "a full meter should still be near-lethal: %d of %d" (dealt Combatant.StackCap) pool
     )
 

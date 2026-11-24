@@ -73,7 +73,7 @@ module AttackEstimator =
     float (DicePool.computeFloorHits stat) + float pool * 0.5 + rerollGain
 
   /// The defence an attack is actually contested against, mirroring ActionResolver's selection: a
-  /// DisciplineStance guard blends Poise and Composure at 1.5x, other pairs average, and the mental
+  /// DisciplineStance guard blends Poise and Poise at 1.5x, other pairs average, and the mental
   /// plane passes through the caster's defence conversion.
   let defenseValue (actor: Combatant) (defender: Combatant) (attack: AttackClassification) : int =
     ActionResolver.defenseValue actor defender attack
@@ -115,9 +115,18 @@ module AttackEstimator =
       - expectedHits attack.Vector (Combatant.stacksIn attack.Vector target) defValue offValue 4
 
     let tierMult = ActionResolver.computeTierMultiplier (int (Math.Round netHits))
+    // A gamble hits for half again as much, so the estimate has to say so: the test is the same one
+    // the resolver uses (a spike above zero is a declared gamble), so the two cannot disagree.
+    let gambitMult =
+      if ActionResolver.gambitReckSpike attack > 0 then
+        ActionResolver.gambitDamageMultiplier
+      else
+        1.0
+
     let planeFactor = match attack.Plane with Physical -> 1.50 | Mental -> 1.15
     float offValue
     * planeFactor
     * tierMult
+    * gambitMult
     * ActionResolver.strikeMultiplier attack stackSpend striker.Stance
     * ActionResolver.masteryMultiplier striker target

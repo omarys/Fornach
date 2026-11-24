@@ -1,6 +1,6 @@
 /// Shrines, altars, traders and vault relics may only hand out the four blessing pairs:
 /// Force/Fortitude or Finesse/Reflex to a Fighter, Intellect/Resolve or Acuity/Intuition to a Mage.
-/// Prowess, Poise and Acumen are earned exclusively through encounter growth and levelling, so no
+/// Prowess, Poise and Prowess are earned exclusively through encounter growth and levelling, so no
 /// piece of found or bought gear may carry them. This walks every generator rather than listing the
 /// offenders, so a new reward cannot quietly reintroduce one.
 module Fornach.Tests.ShrineBlessingTests
@@ -10,7 +10,7 @@ open Fornach.Domain
 open Fornach.Engine
 
 /// The stats no blessing, relic, ware or chest may grant.
-let private reservedForGrowth = set [ StatId.Prowess; StatId.Poise; StatId.Acumen ]
+let private reservedForGrowth = set [ StatId.Prowess; StatId.Poise; StatId.Prowess ]
 
 let private themes =
   [ FloorTheme.QuarryPlazas
@@ -41,7 +41,7 @@ let private grantedItems (theme: FloorTheme) (floorNum: int) (plane: Plane) : (s
   |> List.concat
 
 [<Fact>]
-let ``no blessing, ware or relic grants Prowess, Poise or Acumen`` () =
+let ``no blessing, ware or relic grants Prowess, Poise or Prowess`` () =
   for theme in themes do
     for floorNum in [ 1; 5; 12; 40 ] do
       for plane in [ Plane.Physical; Plane.Mental ] do

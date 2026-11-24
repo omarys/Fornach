@@ -842,7 +842,8 @@ module CombatSimulation =
               survivor
               |> Combatant.growFromEncounter foes
               |> Combatant.growFromStressedVictory
-            let xp = foes |> List.sumBy (fun f -> f.Level * 10 + 25)
+            // Same exchange rate the game pays, so the sweep measures the progression the player gets.
+            let xp = foes |> List.sumBy (fun f -> TowerSession.experienceForKill f.Level)
             let levelled, _ = TowerSession.applyExperience grown xp
             player <- { Combatant.clearStacks levelled with Meters = StatusMeters.Zero }
             floor <- floor + 1

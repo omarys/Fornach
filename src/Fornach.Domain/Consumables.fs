@@ -28,6 +28,19 @@ type ConsumableKind =
     | WeaponMaterial -> "Works a permanent +8 into the class's offensive stat."
     | MentalMaterial -> "Works a permanent +8 into the class's mental offensive stat."
 
+  /// The same item under the bearer's own vocabulary: a mental discipline does not hone an edge, it
+  /// re-centres corrupted mana the way a shrine's meditation does. Same stone, same work.
+  member this.NameFor (plane: Plane) : string =
+    match this, plane with
+    | GrindingStone, Mental -> "Mana Stone"
+    | _ -> this.Name
+
+  member this.DescriptionFor (plane: Plane) : string =
+    match this, plane with
+    | GrindingStone, Mental ->
+      "Re-centres corrupted mana back to full integrity — a shrine's meditation, carried in the hand."
+    | _ -> this.Description
+
   /// The loot category a kill must be in to drop this kind.
   member this.DropCategory : LootCategory =
     match this with
@@ -101,7 +114,9 @@ module Consumables =
   /// unidentified kind is concealed — its real name and description must not leak before a shrine
   /// reveals it; the kind is still returned so the caller knows which row was picked. `byName` sorts
   /// alphabetically; otherwise bag order is kept, which is newest-first (see `add`).
-  let describe
+  /// `describe` under the bearer's own vocabulary: a mage's grinding stone is a mana stone.
+  let describeFor
+    (plane: Plane)
     (unidentified: Set<ConsumableKind>)
     (byName: bool)
     (bag: (ConsumableKind * int) list)
@@ -112,9 +127,16 @@ module Consumables =
         if unidentified.Contains kind then
           kind, "Unidentified", "A shrine can reveal what this is.", count
         else
-          kind, kind.Name, kind.Description, count)
+          kind, kind.NameFor plane, kind.DescriptionFor plane, count)
 
     if byName then rows |> List.sortBy (fun (_, name, _, _) -> name) else rows
+
+  let describe
+    (unidentified: Set<ConsumableKind>)
+    (byName: bool)
+    (bag: (ConsumableKind * int) list)
+    : (ConsumableKind * string * string * int) list =
+    describeFor Physical unidentified byName bag
 
   let count (kind: ConsumableKind) (bag: (ConsumableKind * int) list) : int =
     bag |> List.sumBy (fun (k, n) -> if k = kind then n else 0)

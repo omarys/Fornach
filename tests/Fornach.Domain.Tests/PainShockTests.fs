@@ -74,8 +74,11 @@ module PainShockTests =
     Assert.True(pct >= 15, sprintf "Damage percentage should be >= 15%% (Actual: %d%%)" pct)
     if not resisted then
       Assert.True(outcome.Target.IsStaggered, "Target should be staggered upon failing Pain Shock check")
-      Assert.True(outcome.Target.Meters.Frustration.Value >= 25, "Frustration should surge +25 on Pain Shock failure")
-      Assert.True(outcome.Target.Meters.Exhaustion.Value >= 15, "Exhaustion should surge +15 on Pain Shock failure")
+      // Poise guards the condition tracks, so the surge is the tempered share rather than the raw 25/15.
+      let frustration = ActionResolver.temperConditionAmount fragileTarget 25
+      let exhaustion = ActionResolver.temperConditionAmount fragileTarget 15
+      Assert.True(outcome.Target.Meters.Frustration.Value >= frustration, "Frustration should surge on Pain Shock failure, less whatever Poise holds")
+      Assert.True(outcome.Target.Meters.Exhaustion.Value >= exhaustion, "Exhaustion should surge on Pain Shock failure, less whatever Poise holds")
 
   [<Fact>]
   let ``Staggered combatant recovers on turn clear`` () =

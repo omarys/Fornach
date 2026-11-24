@@ -2,7 +2,7 @@ namespace Fornach.Domain
 
 open System
 
-/// Insight tier achieved by an observer analyzing a target combatant based on Acumen vs Composure
+/// Insight tier achieved by an observer analyzing a target combatant based on Prowess vs Poise
 type TacticalInsightLevel =
   /// Target's composure or discipline conceals precise attributes (Ratio < 0.40)
   | Obscured
@@ -13,7 +13,7 @@ type TacticalInsightLevel =
   /// Observer penetrates all defenses, identifying primary stat, highest offense, and defensive opening (Ratio >= 1.15)
   | Penetrating
 
-/// Structured tactical deduction resulting from comparing observer Acumen to target Composure
+/// Structured tactical deduction resulting from comparing observer Prowess to target Poise
 type TacticalAssessment =
   { ObserverId: CombatantId
     TargetId: CombatantId
@@ -43,10 +43,15 @@ module TacticalAssessment =
     sprintf "%s %s" vectorName orientName
 
   /// Calculates effective scrutiny for an observer:
-  /// Acumen is primary (100%), Intuition provides perceptual scrutiny (+25%), and built-up Momentum
+  /// Intellect is primary (100%), Intuition provides perceptual scrutiny (+25%), and built-up Momentum
   /// provides tactical familiarity (+15 each) — the Discipline ramp is the reading-the-enemy meter.
+  ///
+  /// The read is a mental contest, not a discipline one: since Prowess/Poise merged into a single pair
+  /// serving both planes, measuring scrutiny against the target's masking would compare one stat with
+  /// itself and every observer became Penetrating. Intellect-vs-Resolve keeps the ladder discriminating
+  /// and lands on the same numbers the old Acumen/Composure pair produced for both classes.
   let calculateEffectiveScrutiny (observer: Combatant) : int =
-    let acumen = observer.GetStat StatId.Acumen
+    let acumen = observer.GetStat StatId.Intellect
     let intuition = observer.GetStat StatId.Intuition
     let studyBonus = observer.Momentum * 15
     Math.Max(1, acumen + (intuition / 4) + studyBonus)
@@ -62,7 +67,7 @@ module TacticalAssessment =
 
   /// Calculates effective concealing composure for a target
   let calculateEffectiveMasking (target: Combatant) : int =
-    Math.Max(1, target.GetStat StatId.Composure)
+    Math.Max(1, target.GetStat StatId.Resolve)
 
   /// Identifies the primary (best) stat, highest offense, highest defense, and weakest defense on a combatant's plane
   let analyzeTargetStats (target: Combatant) : (StatId * int) * (StatId * int) * (StatId * int) * (StatId * int) =
@@ -72,7 +77,7 @@ module TacticalAssessment =
         if target.IsHumanoid then [ StatId.Force; StatId.Fortitude; StatId.Finesse; StatId.Reflex; StatId.Prowess; StatId.Poise ]
         else [ StatId.Force; StatId.Fortitude; StatId.Finesse; StatId.Reflex ]
       | Mental ->
-        if target.IsHumanoid then [ StatId.Intellect; StatId.Resolve; StatId.Acuity; StatId.Intuition; StatId.Acumen; StatId.Composure ]
+        if target.IsHumanoid then [ StatId.Intellect; StatId.Resolve; StatId.Acuity; StatId.Intuition; StatId.Prowess; StatId.Poise ]
         else [ StatId.Intellect; StatId.Resolve; StatId.Acuity; StatId.Intuition ]
 
     let statsWithValues =
@@ -109,7 +114,7 @@ module TacticalAssessment =
   let generateAdvice (bestStat: StatId * int) (weakestDef: StatId * int) (insight: TacticalInsightLevel) : string =
     match insight with
     | Obscured ->
-      "Target maintains stoic composure. Use Discipline strikes to build Momentum (+15 Acumen) to decipher their form."
+      "Target maintains stoic composure. Use Discipline strikes to build Momentum (+15 Prowess) to decipher their form."
     | Discerning ->
       let (bestS, _) = bestStat
       match bestS with
@@ -130,7 +135,7 @@ module TacticalAssessment =
         | StatId.Poise -> sprintf "Exploit lower Poise (%d) with Discipline pressure (Stance Pressure / Flaw Strike)." weakDefVal
         | StatId.Resolve -> sprintf "Exploit lower Resolve (%d) with Power trauma (Elemental Blast / Mind Fracture)." weakDefVal
         | StatId.Intuition -> sprintf "Exploit lower Intuition (%d) with Agility glamour (Neural Static)." weakDefVal
-        | StatId.Composure -> sprintf "Exploit lower Composure (%d) with Acumen interrogation." weakDefVal
+        | StatId.Poise -> sprintf "Exploit lower Poise (%d) with Prowess interrogation." weakDefVal
         | _ -> "Target their defensive opening."
       sprintf "Primary threat: %A (%d). %s" bestS bestVal counterAdvice
 
@@ -149,7 +154,7 @@ module TacticalAssessment =
         | StatId.Prowess -> "Disciplined martial reach threatens reactive counter-strikes."
         | StatId.Intellect -> "Arcane mind-shocks bypass armor to strike morale directly."
         | StatId.Acuity -> "Sensory glamour and deceptive static threaten confusion."
-        | StatId.Acumen -> "Tactical interrogation threatens posture and frustration."
+        | StatId.Prowess -> "Tactical interrogation threatens posture and frustration."
         | _ -> "Formidable offensive striking capability."
       Some (sprintf "⚠ THREAT DETECTED: Favors %A (~%d-%d) — %s" stat approxLow approxHigh hint)
     | Keen | Penetrating ->
@@ -166,8 +171,8 @@ module TacticalAssessment =
           sprintf "Dread Intellect (%d) — Psionic mind-shocks completely bypass physical Armor to damage Morale directly! Raise Arcane Wards or eliminate swiftly!" value
         | StatId.Acuity ->
           sprintf "Sensory Acuity (%d) — Blinding phantasms and neural static provoke acute Confusion and mirror illusions. Maintain steady breathing!" value
-        | StatId.Acumen ->
-          sprintf "Dialectical Acumen (%d) — Interrogative pressure and runic wardcraft destabilize combat tempo and spike Frustration. Break their guard decisively!" value
+        | StatId.Prowess ->
+          sprintf "Dialectical Prowess (%d) — Interrogative pressure and runic wardcraft destabilize combat tempo and spike Frustration. Break their guard decisively!" value
         | _ ->
           sprintf "Formidable %A (%d) — Prepare for heavy offensive pressure." stat value
       Some (sprintf "%s: %s" prefix warning)
@@ -209,7 +214,7 @@ module TacticalAssessment =
       | Obscured ->
         let desc = Attributes.descriptorOf bestStat
         "GUARDED POSTURE",
-        sprintf "Favors %A-leaning posture (Exact stat masked by Composure)" desc.Vector,
+        sprintf "Favors %A-leaning posture (Exact stat masked by Poise)" desc.Vector,
         None
 
     let threatWarn = generateThreatWarning bestOff insightLevel
@@ -236,6 +241,6 @@ module TacticalAssessment =
 [<AutoOpen>]
 module CombatantTacticalExtensions =
   type Combatant with
-    /// Evaluates this combatant's tactical assessment of an opponent based on Acumen vs Composure
+    /// Evaluates this combatant's tactical assessment of an opponent based on Prowess vs Poise
     member this.AssessTarget(target: Combatant) : TacticalAssessment =
       TacticalAssessment.assess this target

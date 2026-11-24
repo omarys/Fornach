@@ -25,15 +25,15 @@ type StatId =
   | Fortitude // Power Defense
   | Finesse // Agility Offense
   | Reflex // Agility Defense
-  | Prowess // Discipline Offense
-  | Poise // Discipline Defense
+  // Discipline Axis -- one pair for both planes: a Fighter's reach and a Mage's command are the same
+  // trained control, and a Fighter's guard against pressure is a Mage's guard against a war of words.
+  | Prowess // Discipline Offense (physical and mental)
+  | Poise // Discipline Defense (physical and mental)
   // Mental Axis
   | Intellect // Power Offense
   | Resolve // Power Defense
   | Acuity // Agility Offense
   | Intuition // Agility Defense
-  | Acumen // Discipline Offense
-  | Composure // Discipline Defense
 
 type StatDescriptor =
   { Id: StatId
@@ -96,7 +96,7 @@ module Attributes =
         CanonicalName = "Poise"
         SocialName = "Poise"
         SocialAliases = [] }
-    // Mental (mapped to Social context: Presence/Command, Will/Defiance, Guile/Charm, Insight/Scrutiny, Leverage/Wit, Poise/Composure)
+    // Mental (mapped to Social context: Presence/Command, Will/Defiance, Guile/Charm, Insight/Scrutiny, Leverage/Wit, Poise/Poise)
     | Intellect ->
       { Id = Intellect
         Plane = Mental
@@ -129,22 +129,6 @@ module Attributes =
         CanonicalName = "Intuition"
         SocialName = "Insight / Scrutiny"
         SocialAliases = [ "Insight"; "Scrutiny" ] }
-    | Acumen ->
-      { Id = Acumen
-        Plane = Mental
-        Vector = Discipline
-        Orientation = Offense
-        CanonicalName = "Acumen"
-        SocialName = "Leverage / Wit"
-        SocialAliases = [ "Leverage"; "Wit" ] }
-    | Composure ->
-      { Id = Composure
-        Plane = Mental
-        Vector = Discipline
-        Orientation = Defense
-        CanonicalName = "Composure"
-        SocialName = "Poise / Composure"
-        SocialAliases = [ "Poise"; "Composure" ] }
 
   let all =
     [ Force
@@ -156,9 +140,7 @@ module Attributes =
       Intellect
       Resolve
       Acuity
-      Intuition
-      Acumen
-      Composure ]
+      Intuition ]
 
   let byPlane plane =
     all |> List.filter (fun s -> (descriptorOf s).Plane = plane)
@@ -174,16 +156,27 @@ module Attributes =
     | CombatMode.Physical
     | CombatMode.Arcane -> (descriptorOf stat).CanonicalName
 
+  /// Names retired by the Prowess/Poise merge. A save or a fixture written before the merge still
+  /// parses, and lands on the stat that absorbed it rather than defaulting to 10.
+  let private retiredNames =
+    [ "acumen", Prowess
+      "leverage", Prowess
+      "wit", Prowess
+      "composure", Poise ]
+
   let tryParse (s: string) : StatId option =
     let clean = s.Trim().ToLowerInvariant()
 
-    all
-    |> List.tryFind (fun stat ->
-      let desc = descriptorOf stat
+    match retiredNames |> List.tryFind (fun (name, _) -> name = clean) with
+    | Some(_, stat) -> Some stat
+    | None ->
+      all
+      |> List.tryFind (fun stat ->
+        let desc = descriptorOf stat
 
-      desc.CanonicalName.ToLowerInvariant() = clean
-      || desc.SocialName.ToLowerInvariant() = clean
-      || (desc.SocialAliases |> List.exists (fun a -> a.ToLowerInvariant() = clean)))
+        desc.CanonicalName.ToLowerInvariant() = clean
+        || desc.SocialName.ToLowerInvariant() = clean
+        || (desc.SocialAliases |> List.exists (fun a -> a.ToLowerInvariant() = clean)))
 
   let counterparts =
     function
@@ -191,14 +184,12 @@ module Attributes =
     | Fortitude -> Resolve
     | Finesse -> Acuity
     | Reflex -> Intuition
-    | Prowess -> Acumen
-    | Poise -> Composure
+    | Prowess -> Prowess
+    | Poise -> Poise
     | Intellect -> Force
     | Resolve -> Fortitude
     | Acuity -> Finesse
     | Intuition -> Reflex
-    | Acumen -> Prowess
-    | Composure -> Poise
 
   let inline statIndex stat =
     match stat with
@@ -212,8 +203,6 @@ module Attributes =
     | Resolve -> 7
     | Acuity -> 8
     | Intuition -> 9
-    | Acumen -> 10
-    | Composure -> 11
 
 [<CustomEquality; NoComparison>]
 type StatBlock =

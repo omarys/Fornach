@@ -106,9 +106,6 @@ type CombatEvent =
   /// Fluid martial cadence chained from target to target in Discipline Stance without reckless exposure
   | StrikeChained of attackerId: CombatantId * chainedTargetId: CombatantId * chainStep: int * chainDamage: int
 
-  /// Caster struggled with an off-specialization spell, incurring Cognitive Fatigue strain
-  | ArcaneStrainIncurred of casterId: CombatantId * spellName: string * strain: int * proficiencyPct: int
-
   /// Guile illusionist conjured mirror clones/decoys to misdirect incoming strikes
   | MirrorClonesConjured of casterId: CombatantId * countAdded: int * totalClones: int
 
@@ -216,7 +213,7 @@ type CombatEvent =
 
   /// Fighter braced behind their shield, fortifying armor soak and establishing bastion guard
   | ShieldRaised of actorId: CombatantId * armorBoosted: int * guardStacksGained: int
-  /// Defence turned a strike aside and hardened the guard: banked Inertia/Focus ramp Poise/Composure
+  /// Defence turned a strike aside and hardened the guard: banked Inertia/Focus ramp Poise/Poise
   | GuardSteeled of actorId: CombatantId * guardStacksGained: int
 
   /// Single-turn damage spike triggered a Pain Shock check against Poise (ADR 0009)

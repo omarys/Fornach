@@ -17,8 +17,8 @@ let private stats force guard =
       StatId.Resolve, guard
       StatId.Acuity, 40
       StatId.Intuition, 40
-      StatId.Acumen, 40
-      StatId.Composure, guard ]
+      StatId.Prowess, 40
+      StatId.Poise, guard ]
 
 let private fighter name health = Combatant.create (CombatantId.New()) name health health (stats 100 45)
 
@@ -68,7 +68,8 @@ let private stateWith (player: Combatant) (entities: Map<Point, TowerEntity>) : 
     UnidentifiedConsumables = Set.empty
     DiscoveredEchoes = Set.empty
     IsStoryMode = false
-    SafeStepsSinceHone = 0 }
+    SafeStepsSinceHone = 0
+    AltarDebt = None }
 
 let private steps n state = [ 1 .. n ] |> List.fold (fun s _ -> TowerSession.honeOnSafeStep s) state
 

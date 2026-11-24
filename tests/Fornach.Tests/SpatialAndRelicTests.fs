@@ -230,7 +230,7 @@ module SpatialAndRelicTests =
 
     let afterCalm = TowerSession.resolveEnemyDefeat enemy.Id stateCalm
     let calmXp = afterCalm.Player.Progression.CurrentXP
-    let baseXp = enemy.Combatant.Level * 10 + 25
+    let baseXp = TowerSession.experienceForKill enemy.Combatant.Level
     Assert.Equal(baseXp, calmXp)
 
     // Player with 80% Recklessness (Razor's Edge)

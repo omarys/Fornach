@@ -12,11 +12,11 @@ type TraumaGambit =
   | FinesseGambit
   /// Power/Physical, Force vs. Fortitude and Resolve. Smashes through the target's armour and inflicts Frustration
   | ForceGambit
-  /// Discipline/Mental, Acumen vs. Poise and Composure. A predatory transaction stealing Morale to restore vitality, provoking
+  /// Discipline/Mental, Prowess vs. Poise and Poise. A predatory transaction stealing Morale to restore vitality, provoking
   | AcumenGambit
-  /// Discipline/Mental, Fortitude vs. Poise and Composure. Drags the spirit under; deep Cognitive Fatigue and Exhaustion
+  /// Discipline/Mental, Fortitude vs. Poise and Poise. Drags the spirit under; deep Cognitive Fatigue and Exhaustion
   | FortitudeGambit
-  /// Discipline/Mental, Composure vs. Fortitude and Resolve. Surrenders hostility, calming Recklessness to 0 and restoring Morale
+  /// Discipline/Mental, Poise vs. Fortitude and Resolve. Surrenders hostility, calming Recklessness to 0 and restoring Morale
   | ComposureGambit
 
   /// The stat this press is rolled on, as the engine calls it.
@@ -24,9 +24,9 @@ type TraumaGambit =
     match this with
     | FinesseGambit -> "Finesse"
     | ForceGambit -> "Force"
-    | AcumenGambit -> "Acumen"
+    | AcumenGambit -> "Prowess"
     | FortitudeGambit -> "Fortitude"
-    | ComposureGambit -> "Composure"
+    | ComposureGambit -> "Poise"
 
   /// The name this press carries in a combat event. Deliberately mechanical: the CLI renders the story's
   /// name for it (`Display.gambitDisplayName`) so neither vocabulary has to know the other.
@@ -61,7 +61,7 @@ type AttackClassification =
   | AuthorityDecree of isImperiousDemand: bool
   /// Agility (Guile/Acuity vs. Intuition): Rhetorical misdirection, bluffs, and gaslighting causing Confusion
   | GuileDeception of isConfidenceTrap: bool
-  /// Social Discipline (Leverage/Acumen vs. Composure): Procedural traps, hypocrisy exposure, and mockery causing Provoke
+  /// Social Discipline (Leverage/Prowess vs. Poise): Procedural traps, hypocrisy exposure, and mockery causing Provoke
   | AcumenInterrogation of isSocraticCheckmate: bool
 
   // -------------------------------------------------------------------------
@@ -73,11 +73,11 @@ type AttackClassification =
   | SynapticGlamour of isMindFracture: bool
   /// Agility (Acuity vs. Intuition): Mirror illusions and decoy trickery creating clone decoys and misdirection
   | MirrorIllusion of isDecoySwarm: bool
-  /// Arcane Discipline (Acumen vs. Composure): Reactive abjuration wards and runic glyphs inflicting Provoke and stance traps
+  /// Arcane Discipline (Prowess vs. Poise): Reactive abjuration wards and runic glyphs inflicting Provoke and stance traps
   | RunicWardTrap of isAnomalousGlyph: bool
-  /// Arcane Discipline (Acumen vs. Composure): Disorienting shockwave that disrupts enemy balance and stance tempo
+  /// Arcane Discipline (Prowess vs. Poise): Disorienting shockwave that disrupts enemy balance and stance tempo
   | DisorientingShockwave of isStaggeringPulse: bool
-  /// Arcane Discipline (Acumen vs. Composure): Channeled staff strike eroding Morale and siphoning cognitive clarity (-20 Fatigue, -15 Recklessness, +15 Ward)
+  /// Arcane Discipline (Prowess vs. Poise): Channeled staff strike eroding Morale and siphoning cognitive clarity (-20 Fatigue, -15 Recklessness, +15 Ward)
   | StaffSiphon
 
   // -------------------------------------------------------------------------
@@ -191,7 +191,7 @@ type AttackClassification =
     | ProwessStrike _
     | ShieldBash _
     | CalculatedFlawStrike
-    | MasterfulDisarm _ -> Prowess, [ Poise; Composure ]
+    | MasterfulDisarm _ -> Prowess, [ Poise; Poise ]
     | AuthorityDecree _
     | ArcaneCataclysm _ -> Intellect, [ Fortitude; Resolve ]
     | GuileDeception _
@@ -201,9 +201,9 @@ type AttackClassification =
     | RunicWardTrap _
     | DisorientingShockwave _
     | StaffSiphon
-    | TraumaAttack AcumenGambit -> Acumen, [ Poise; Composure ]
-    | TraumaAttack FortitudeGambit -> Fortitude, [ Poise; Composure ]
-    | TraumaAttack ComposureGambit -> Composure, [ Fortitude; Resolve ]
+    | TraumaAttack AcumenGambit -> Prowess, [ Poise; Poise ]
+    | TraumaAttack FortitudeGambit -> Fortitude, [ Poise; Poise ]
+    | TraumaAttack ComposureGambit -> Poise, [ Fortitude; Resolve ]
 
 /// Classifies active defensive counters in the Nach across Physical and Mental planes (ADR 0009)
 type DefenseClassification =
@@ -245,11 +245,11 @@ type DefenseChoice =
 
 /// Defensive recoveries used to bleed accumulated Recklessness and re-center posture
 type DefensiveReset =
-  /// Universal reset: bleeds all seven strain meters (Poise + Composure), restores Morale, and banks Combat Ramp
+  /// Universal reset: bleeds all seven strain meters (Poise + Poise), restores Morale, and banks Combat Ramp
   | SteadyForm
   /// Fighter shield posture: uses Poise to bleed Recklessness, restores Armor Integrity (+20), and gains 2 Combat Ramp
   | RaiseShield
-  /// Mental/Social reset: uses Composure to bleed Recklessness, clears mental strain, and generates Insight
+  /// Mental/Social reset: uses Poise to bleed Recklessness, clears mental strain, and generates Insight
   | CenterMind
 
 /// Top-level intent dispatched to the resolution engine each turn

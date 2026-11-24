@@ -64,7 +64,8 @@ let private makeState (playerFinesse: int) (playerPos: Point) (entities: Map<Poi
     UnidentifiedConsumables = Set.empty
     DiscoveredEchoes = Set.empty
     IsStoryMode = false
-    SafeStepsSinceHone = 0 }
+    SafeStepsSinceHone = 0
+    AltarDebt = None }
 
 let private positionOf (enemyId: string) (state: TowerRunState) : Point =
   state.CurrentFloor.Entities

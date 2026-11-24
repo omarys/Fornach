@@ -95,7 +95,7 @@ type Combatant =
     /// attributes (Fortitude/Poise) at a steeper rate than Momentum does.
     Inertia: int
     /// Guard ramp: rises only on an action taken from the Nach, and sharpens the mental defensive
-    /// attributes (Resolve/Composure) at a steeper rate than Momentum does.
+    /// attributes (Resolve/Poise) at a steeper rate than Momentum does.
     Focus: int
     Armor: ArmorIntegrity
     WeaponCondition: WeaponCondition
@@ -181,7 +181,7 @@ type Combatant with
   /// Respects character class plane, or detects dominance for untyped combatants.
   member this.Plane : Plane =
     let physTotal = this.Stats.Get Force + this.Stats.Get Finesse + this.Stats.Get Prowess
-    let mentTotal = this.Stats.Get Intellect + this.Stats.Get Acuity + this.Stats.Get Acumen
+    let mentTotal = this.Stats.Get Intellect + this.Stats.Get Acuity + this.Stats.Get Prowess
     if this.Class = CharacterClass.Warrior && mentTotal > physTotal then
       Plane.Mental
     else
@@ -221,9 +221,16 @@ type Combatant with
     |> List.exists (fun a -> a.Type = prepType && a.TargetId = Some targetId && not a.IsExpired)
 
   /// Retrieves an effective stat value factoring in limb debuffs and collapse penalties.
-  /// Non-humanoids have 0 Prowess and Poise (ADR 0009).
+  ///
+  /// Prowess and Poise are the trained discipline pair, and only a trained combatant has it. The player
+  /// classes carry it, and so does any humanoid opposition authored without a `MonsterFamily` — a Knight
+  /// or a Wizard is a `Combatant` with no family, so it reads the pair like the player does. Beasts,
+  /// constructs, wraiths, aberrations and grief manifestations do not: their sheet may still carry values
+  /// where Acumen/Composure used to sit, and those are ignored. The player is also the only combatant that
+  /// *grows* the pair, out of a stressed victory or a defeat (`growFromStressedVictory`, `growFromDefeat`).
   member this.GetStat(stat: StatId) =
-    if not this.IsHumanoid && (stat = Prowess || stat = Poise) then 0
+    if not this.IsHumanoid && (stat = Prowess || stat = Poise) then
+      0
     else
       let rawVal = this.Stats.Get stat
       let penalized =
@@ -231,6 +238,7 @@ type Combatant with
           Math.Max(1, rawVal - this.LimbDebuff)
         else
           rawVal
+
       int (Math.Round(float penalized * this.EffectiveDefenseMultiplier))
 
   /// Retrieves a stance-adjusted stat for opposed combat resolution: adopting a stance boosts
@@ -241,7 +249,7 @@ type Combatant with
     let baseValue = this.GetStat stat
 
     let isDefenseStat =
-      stat = Fortitude || stat = Reflex || stat = Resolve || stat = Intuition || stat = Poise || stat = Composure
+      stat = Fortitude || stat = Reflex || stat = Resolve || stat = Intuition || stat = Poise || stat = Poise
 
     // Strain debuffs at >= 75 (ADR 0009):
     let baseAdjusted =
@@ -277,8 +285,17 @@ type Combatant with
 
     let descriptor = Attributes.descriptorOf stat
 
+    // Prowess and Poise are the shared discipline pair: they belong to whichever plane their bearer
+    // fights on, so the stance read is against the bearer's own plane rather than the descriptor's.
+    // Without this a Mage would take no stance multiplier on the one stat both classes train.
+    let statPlane =
+      if descriptor.Vector = Vector.Discipline then
+        this.Plane
+      else
+        descriptor.Plane
+
     let stanceAdjusted =
-      if descriptor.Plane <> this.Plane then
+      if statPlane <> this.Plane then
         strainAdjusted
       elif descriptor.Vector = stanceVector then
         Math.Max(1, int (Math.Round(float strainAdjusted * 1.25)))
@@ -291,7 +308,7 @@ type Combatant with
     // Combat ramp: each meter sharpens the physical stats it feeds, so a sustained fight compounds.
     // Flow carries the Agility stats (Finesse/Reflex, Acuity/Intuition); Momentum carries the Power
     // stats (Force/Intellect) and the guard meters buy defence (Fortitude/Resolve). Discipline
-    // (Prowess/Poise/Acumen/Composure) never ramps in combat - it is earned permanently through
+    // (Prowess/Poise/Prowess/Poise) never ramps in combat - it is earned permanently through
     // stress growth (`growFromStressedVictory` / `growFromDefeat`), not banked by standing in a stance.
     // Flow is deliberately the sharpest (6%/stack vs 1%) — it is the Agility glass cannon meter. At
     // 10% it was ~1.9x the Momentum meter once Finesse's 2.5x crit was counted in.
@@ -307,16 +324,16 @@ type Combatant with
       | Fortitude -> momentumRamp * guardRamp this.Inertia
       | Resolve -> momentumRamp * guardRamp this.Focus
       | Force | Intellect -> momentumRamp
-      | Prowess | Poise | Acumen | Composure -> 1.0
+      | Prowess | Poise | Prowess | Poise -> 1.0
 
     if ramp = 1.0 then
       stanceAdjusted
     else
       Math.Max(1, int (Math.Round(float stanceAdjusted * ramp)))
 
-  /// Guard every defence contest rolls against: the Poise/Composure blend, replaced while the defender
+  /// Guard every defence contest rolls against: the Poise/Poise blend, replaced while the defender
   /// holds DisciplineStance by a pure Poise anchor (1.5x against physical attacks, 1.0x against mental
-  /// ones) that drops Composure. Non-humanoids use Fortitude fallback (ADR 0009).
+  /// ones) that drops Poise. Non-humanoids use Fortitude fallback (ADR 0009).
   member this.GetGuard(plane: Plane, useCombatStats: bool) : int =
     if not this.IsHumanoid then
       let stat = if useCombatStats then this.GetCombatStat else this.GetStat
@@ -326,29 +343,16 @@ type Combatant with
       int (Math.Round(float (this.GetStat Poise) * stanceGuard))
     else
       let stat = if useCombatStats then this.GetCombatStat else this.GetStat
-      (stat Poise + stat Composure) / 2
+      stat Poise
 
   /// Dominant arcane vector focus based on mental attribute allocation
   member this.ArcaneFocus : Vector =
     let i = this.GetStat Intellect
     let a = this.GetStat Acuity
-    let m = this.GetStat Acumen
+    let m = this.GetStat Prowess
     if i >= a && i >= m then Power
     elif a >= i && a >= m then Agility
     else Discipline
-
-  /// Arcane proficiency ratio for a given vector relative to the combatant's highest mental stat (20% - 100%)
-  member this.GetArcaneProficiency(vector: Vector) : float =
-    let i = float (this.GetStat Intellect)
-    let a = float (this.GetStat Acuity)
-    let m = float (this.GetStat Acumen)
-    let maxMental = Math.Max(1.0, Math.Max(i, Math.Max(a, m)))
-    let statVal =
-      match vector with
-      | Power -> i
-      | Agility -> a
-      | Discipline -> m
-    Math.Clamp(statVal / maxMental, 0.20, 1.0)
 
   /// Factory for creating a base combatant with default baseline pools, meters, and generic Warrior class profile
   static member create id name maxHealth maxMorale stats =
@@ -524,7 +528,7 @@ type Combatant with
   /// Encounter bookkeeping (ADR 0009, stress-growth rework): records species familiarity in
   /// ProgressionProfile.BestiaryKnowledge (+1 per encounter with the species) and keeps the
   /// sharpness stipend on the perception stats. The flat discipline grant is gone -
-  /// Prowess/Poise/Acumen/Composure now only grow through `growFromStressedVictory` /
+  /// Prowess/Poise/Prowess/Poise now only grow through `growFromStressedVictory` /
   /// `growFromDefeat`.
   static member growFromEncounter (foes: Combatant list) (c: Combatant) =
     let mentalDefences =
@@ -541,7 +545,7 @@ type Combatant with
         Progression = updatedProg }
 
   /// Stress-gated discipline growth (ADR 0009): +5 to the class discipline pair (Prowess/Poise
-  /// for martial classes, Acumen/Composure for mages) when the victory was paid for in blood,
+  /// for martial classes, Prowess/Poise for mages) when the victory was paid for in blood,
   /// morale or status, +1 more when it was won above half Recklessness. A flawless fight teaches
   /// nothing. Surviving the encounter also clears the collapse status - the breakdown is over
   /// when the fight is.
@@ -555,10 +559,9 @@ type Combatant with
       (if stressed then 5 else 0)
       + (if c.Meters.Recklessness.Value > 50 then 1 else 0)
 
-    let disciplinePair amount =
-      match c.Class with
-      | Mage -> [ StatId.Acumen, amount; StatId.Composure, amount ]
-      | _ -> [ StatId.Prowess, amount; StatId.Poise, amount ]
+    // One discipline pair for every class: Prowess and Poise are the shared axis now, so a Mage and a
+    // Fighter grow the same two stats out of a stressed victory.
+    let disciplinePair amount = [ StatId.Prowess, amount; StatId.Poise, amount ]
 
     if gain = 0 then { c with Collapse = CollapseState.Stable }
     else
@@ -570,15 +573,12 @@ type Combatant with
   /// pair. The trauma reset that follows restores pools and clears collapse but keeps this
   /// growth; the scars are the point.
   static member growFromDefeat (c: Combatant) =
-    let disciplinePair =
-      match c.Class with
-      | Mage -> [ StatId.Acumen, 10; StatId.Composure, 10 ]
-      | _ -> [ StatId.Prowess, 10; StatId.Poise, 10 ]
+    let disciplinePair = [ StatId.Prowess, 10; StatId.Poise, 10 ]
     { c with Stats = c.Stats.ApplyModifiers disciplinePair }
 
   /// Awards milestone Poise bonus for defeating a Floor Boss / Guardian without collapsing (ADR 0009)
   static member grantBossPoise (c: Combatant) =
-    let bonus = match c.Class with Mage -> [ StatId.Composure, 3 ] | _ -> [ StatId.Poise, 3 ]
+    let bonus = [ StatId.Poise, 3 ]
     { c with Stats = c.Stats.ApplyModifiers bonus }
 
   /// Modifies active Arcane Ward barrier absorption pool
@@ -635,7 +635,7 @@ type Combatant with
     | Physical, CombatStance.DisciplineStance -> Prowess, Poise
     | Mental, CombatStance.PowerStance -> Intellect, Resolve
     | Mental, CombatStance.AgilityStance -> Acuity, Intuition
-    | Mental, CombatStance.DisciplineStance -> Acumen, Composure
+    | Mental, CombatStance.DisciplineStance -> Prowess, Poise
 
   /// Permanently folds an item's bonuses into a combatant: stat percentages, the flat health and morale
   /// the item grants, and its opening Recklessness. Story pickups use this so a pickup is reflected without

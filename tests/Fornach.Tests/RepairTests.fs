@@ -102,3 +102,20 @@ let ``plating raises soak past pristine armor but never past three quarters`` ()
   Assert.Equal(0.5, pristine.AbsorptionRatio, 3)
   Assert.Equal(0.68, shielded.AbsorptionRatio, 3)
   Assert.Equal(0.75, overplated.AbsorptionRatio, 3)
+
+// --- one wear ladder, two vocabularies: a blade is honed, mana is re-centred -----------------------
+
+[<Fact>]
+let ``mana integrity reads the same wear in its own words`` () =
+  Assert.Equal("Pristine", WeaponCondition.displayNameFor Physical WeaponCondition.Pristine)
+  Assert.Equal("Broken", WeaponCondition.displayNameFor Physical WeaponCondition.Broken)
+  Assert.Equal("Centered", WeaponCondition.displayNameFor Mental WeaponCondition.Pristine)
+  Assert.Equal("Corrupted", WeaponCondition.displayNameFor Mental WeaponCondition.Broken)
+
+[<Fact>]
+let ``a mana stone is a grinding stone under the mental vocabulary`` () =
+  Assert.Equal("Grinding Stone", ConsumableKind.GrindingStone.NameFor Physical)
+  Assert.Equal("Mana Stone", ConsumableKind.GrindingStone.NameFor Mental)
+  // Every other kind reads the same either way: only the honing stone is class-flavoured.
+  Assert.Equal("Ration", ConsumableKind.Ration.NameFor Mental)
+  Assert.Equal(WeaponCondition.Pristine, (Consumables.apply ConsumableKind.GrindingStone { TierFactory.createClassLevel CharacterClass.Mage 1 with WeaponCondition = WeaponCondition.Broken }).WeaponCondition)

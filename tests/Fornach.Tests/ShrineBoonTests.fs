@@ -7,19 +7,7 @@ open Fornach.Domain
 open Fornach.Spatial
 open Fornach.Engine
 
-let private allStats =
-  [ Force
-    Fortitude
-    Finesse
-    Reflex
-    Prowess
-    Poise
-    Intellect
-    Resolve
-    Acuity
-    Intuition
-    Acumen
-    Composure ]
+let private allStats = Attributes.all
 
 let private physical = set [ Force; Fortitude; Finesse; Reflex ]
 let private mental = set [ Intellect; Resolve; Acuity; Intuition ]
@@ -132,16 +120,17 @@ let ``every themed altar resolves onto the bearer's own plane, one per pair`` ()
         match altar.Reward.ResolvedFor plane with
         | Tempered (relic, defences, temper) ->
           // The relic vaults the altar's own pair, on the bearer's plane; the enlightenment lands on
-          // the other plane's three defences, which the bearer cannot reach through their own pair.
+          // the other plane's defences. Poise is the shared discipline guard now, so it belongs to
+          // neither plane's off-plane list.
           let first, second = StatBoon.pairOf plane boon
           Assert.Equal<StatId list>([ first; second ], relic.StatPercentBonuses |> List.map fst)
           Assert.True(relic.StatPercentBonuses |> List.forall (fun (_, pct) -> pct > 0))
 
           let expectedDefences =
             if plane = Physical then
-              [ Resolve; Intuition; Composure ]
+              [ Resolve; Intuition ]
             else
-              [ Fortitude; Reflex; Poise ]
+              [ Fortitude; Reflex ]
 
           Assert.Equal<StatId list>(expectedDefences, defences)
           Assert.Equal(5, temper)
@@ -176,7 +165,7 @@ let ``a fighter's two altars sharpen the two physical pairs and temper every men
     let after = apply boon
     let first, second = StatBoon.pairOf Physical boon
     let pair = set [ first; second ]
-    let mentalDefences = set [ Resolve; Intuition; Composure ]
+    let mentalDefences = set [ Resolve; Intuition ]
 
     for stat in allStats do
       let before = baseline.Stats.Get stat
@@ -216,7 +205,7 @@ let ``every stage fields one altar of each pair`` () =
           match a.Reward.ResolvedFor Physical with
           | Tempered (relic, defences, temper) ->
             Assert.Equal(5, temper)
-            Assert.Equal<StatId list>([ Resolve; Intuition; Composure ], defences)
+            Assert.Equal<StatId list>([ Resolve; Intuition ], defences)
             Some(relic.StatPercentBonuses |> List.map fst |> Set.ofList)
           | _ -> None)
 

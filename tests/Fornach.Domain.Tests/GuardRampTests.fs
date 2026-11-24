@@ -23,7 +23,7 @@ module GuardRampTests =
           Prowess, 50; Poise, poise
           Intellect, 50; Resolve, poise
           Acuity, 50; Intuition, 50
-          Acumen, 50; Composure, poise
+          Prowess, 50; Poise, poise
         ]
       Combatant.create (CombatantId.New()) "Mirrored" 9000 9000 stats
       |> fun c -> { c with PlayerStyle = true }

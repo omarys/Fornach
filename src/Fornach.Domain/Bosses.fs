@@ -3,6 +3,12 @@ namespace Fornach.Domain
 open System
 
 module StoryBosses =
+  // NOTE (Prowess/Poise merge): the mental discipline pair folded into the physical one, so an authored
+  // stat block that used to state Prowess/Poise for the physical plane and again for the mental plane now
+  // states the same stat twice. Nothing here reads it: every creature in this file is a non-humanoid, and
+  // `Combatant.GetStat` returns 0 for Prowess/Poise on a combatant with a `MonsterFamily`. Only the player
+  // and humanoid opposition (a Knight, a Wizard — no family) carry the trained pair. The lines were left as
+  // authored rather than de-duplicated because they are now inert.
   /// Creates the manifestation of Guilt and Hesitation encountered in the quarry pit.
   /// Folds a boss's kit the way the player's kit is folded. Bosses used to assign `EquippedItems`
   /// directly, which skipped `HealthBonus`, `MoraleBonus` and `StatPercentBonuses` outright - only the
@@ -58,8 +64,8 @@ module StoryBosses =
           StatId.Resolve, 200 // Stubborn psychological weight
           StatId.Acuity, 75
           StatId.Intuition, 110
-          StatId.Acumen, 105
-          StatId.Composure, 150 ]
+          StatId.Prowess, 105
+          StatId.Poise, 150 ]
 
     let id = CombatantId.New()
     let guilt =
@@ -112,8 +118,8 @@ module StoryBosses =
           StatId.Resolve, 180
           StatId.Acuity, 210
           StatId.Intuition, 210
-          StatId.Acumen, 170
-          StatId.Composure, 155 ]
+          StatId.Prowess, 170
+          StatId.Poise, 155 ]
 
     let id = CombatantId.New()
     let denial =
@@ -176,8 +182,8 @@ module StoryBosses =
           StatId.Resolve, 210
           StatId.Acuity, 80
           StatId.Intuition, 90
-          StatId.Acumen, 100
-          StatId.Composure, 0 ] // Consumed by blind rage
+          StatId.Prowess, 100
+          StatId.Poise, 0 ] // Consumed by blind rage
 
     let id = CombatantId.New()
     let anger =
@@ -229,8 +235,8 @@ module StoryBosses =
           StatId.Resolve, 240
           StatId.Acuity, 250
           StatId.Intuition, 240
-          StatId.Acumen, 200 // Transactional, looking for any trade
-          StatId.Composure, 170 ]
+          StatId.Prowess, 200 // Transactional, looking for any trade
+          StatId.Poise, 170 ]
 
     let id = CombatantId.New()
     let bargaining =
@@ -243,7 +249,7 @@ module StoryBosses =
       { Name = "Gale-Wind Rapier"
         Slot = EquipmentSlot.Weapon
         Description = "A needle-thin blade whistling with ocean gale gusts."
-        StatPercentBonuses = [ StatId.Finesse, 56; StatId.Acumen, 44 ]
+        StatPercentBonuses = [ StatId.Finesse, 56; StatId.Prowess, 44 ]
         HealthBonus = 0
         MoraleBonus = 0
         StartingRecklessnessDelta = 0
@@ -253,7 +259,7 @@ module StoryBosses =
       { Name = "Scales of Unequal Trade"
         Slot = EquipmentSlot.Armor
         Description = "A cloak lined with weighing scales, balancing life for time."
-        StatPercentBonuses = [ StatId.Acumen, 67 ]
+        StatPercentBonuses = [ StatId.Prowess, 67 ]
         HealthBonus = 300
         MoraleBonus = 400
         StartingRecklessnessDelta = 0
@@ -281,8 +287,8 @@ module StoryBosses =
           StatId.Resolve, 320 // Impenetrable numbness
           StatId.Acuity, 100
           StatId.Intuition, 130
-          StatId.Acumen, 90
-          StatId.Composure, 140 ] // Cold, still waters
+          StatId.Prowess, 90
+          StatId.Poise, 140 ] // Cold, still waters
 
     let id = CombatantId.New()
     let depression =
@@ -305,7 +311,7 @@ module StoryBosses =
       { Name = "Shroud of Still Waters"
         Slot = EquipmentSlot.Armor
         Description = "Heavy waterlogged burial shroud radiating numbing chill."
-        StatPercentBonuses = [ StatId.Fortitude, 89; StatId.Composure, 78 ]
+        StatPercentBonuses = [ StatId.Fortitude, 89; StatId.Poise, 78 ]
         HealthBonus = 600
         MoraleBonus = 400
         StartingRecklessnessDelta = 0
@@ -334,8 +340,8 @@ module StoryBosses =
           StatId.Resolve, 310
           StatId.Acuity, 230
           StatId.Intuition, 300
-          StatId.Acumen, 230
-          StatId.Composure, 300 ] // Peaceful harmony
+          StatId.Prowess, 230
+          StatId.Poise, 300 ] // Peaceful harmony
 
     let id = CombatantId.New()
     let acceptance =
@@ -348,7 +354,7 @@ module StoryBosses =
       { Name = "Unfinished Crossing Staff"
         Slot = EquipmentSlot.Weapon
         Description = "A walking staff carved from birch, smooth to the touch."
-        StatPercentBonuses = [ StatId.Poise, 67; StatId.Composure, 67 ]
+        StatPercentBonuses = [ StatId.Poise, 67; StatId.Poise, 67 ]
         HealthBonus = 0
         MoraleBonus = 0
         StartingRecklessnessDelta = 0
@@ -361,7 +367,7 @@ module StoryBosses =
       { Name = "Linen of White Lilies"
         Slot = EquipmentSlot.Armor
         Description = "Clean, unblemished robes fragrant with meadow blossoms."
-        StatPercentBonuses = [ StatId.Composure, 67 ]
+        StatPercentBonuses = [ StatId.Poise, 67 ]
         HealthBonus = 400
         MoraleBonus = 400
         StartingRecklessnessDelta = 0
@@ -508,7 +514,7 @@ module StoryBosses =
       { Name = "Carved Ash Staff"
         Slot = EquipmentSlot.Weapon
         Description = "A runic focus staff humming with psychic resonance, phantasmal channels, and warding lattices."
-        StatPercentBonuses = [ StatId.Intellect, 56; StatId.Acuity, 44; StatId.Acumen, 44 ]
+        StatPercentBonuses = [ StatId.Intellect, 56; StatId.Acuity, 44; StatId.Prowess, 44 ]
         // A caster's kit carries its stat percentage on the mental plane, which is no help at all against
         // the prologue's physical damage, and its health pool is the smaller one (600 against 750). Health
         // on the kit is what closes that: with the robes a Mage enters at 900 against a Fighter's 950, and
@@ -522,7 +528,7 @@ module StoryBosses =
       { Name = "Weaver's Runic Robes"
         Slot = EquipmentSlot.Armor
         Description = "Enchanted silk robes woven with protective abjuration glyphs."
-        StatPercentBonuses = [ StatId.Resolve, 44; StatId.Intuition, 33; StatId.Composure, 44 ]
+        StatPercentBonuses = [ StatId.Resolve, 44; StatId.Intuition, 33; StatId.Poise, 44 ]
         HealthBonus = 200
         MoraleBonus = 300
         StartingRecklessnessDelta = 0
@@ -530,7 +536,7 @@ module StoryBosses =
 
     // Only two player characters exist (ADR f1f14149): the caller chooses the combat PLANE,
     // and the class is derived from the kit's stat distribution — physical leans Force/Prowess,
-    // mental leans Intellect/Acumen. "fighter"/"mage" remain as explicit aliases for tests.
+    // mental leans Intellect/Prowess. "fighter"/"mage" remain as explicit aliases for tests.
     let cls, weapon, armorOpt =
       match className.ToLowerInvariant() with
       | "mage"

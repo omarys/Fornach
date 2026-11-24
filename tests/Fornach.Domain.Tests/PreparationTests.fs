@@ -19,7 +19,7 @@ module PreparationTests =
         Prowess, prowess; Poise, poise
         Intellect, intellect; Resolve, resolve
         Acuity, acuity; Intuition, intuition
-        Acumen, acumen; Composure, composure
+        Prowess, acumen; Poise, composure
       ]
     Combatant.createWithClass id "TestFighter" 2000 2000 stats charClass level
     |> fun c -> { c with PlayerStyle = true }
@@ -859,13 +859,16 @@ module PreparationTests =
         primaryNovice
         flankers
 
-    // Primary target should have gained Cognitive Fatigue
-    Assert.True(groupRes.PrimaryTarget.Meters.CognitiveFatigue.Value >= 25)
+    // Primary target should have gained Cognitive Fatigue, tempered by whatever Poise it holds
+    Assert.True(groupRes.PrimaryTarget.Meters.CognitiveFatigue.Value >= ActionResolver.temperConditionAmount primaryNovice 25)
 
-    // All 4 secondary flankers must have gained +25 Cognitive Fatigue
+    // All 4 secondary flankers take the same hit through the same guard
     Assert.Equal(4, groupRes.SecondaryTargets.Length)
     for sec in groupRes.SecondaryTargets do
-      Assert.True(sec.Meters.CognitiveFatigue.Value >= 25, "Each flanker should suffer +25 Cognitive Fatigue from Dread Warhorn.")
+      Assert.True(
+        sec.Meters.CognitiveFatigue.Value >= ActionResolver.temperConditionAmount primaryNovice 25,
+        "Each flanker should suffer Cognitive Fatigue from Dread Warhorn, less whatever Poise holds"
+      )
 
   [<Fact>]
   let ``1vsN: GrandMaster Strategist with Heraldic Treatise tops out the ramp across a swarm of 5 Novice Warriors`` () =
@@ -983,7 +986,7 @@ module PreparationTests =
     Assert.True(resMesmer.Target.Meters.Recklessness.Value >= 40,
       sprintf "Mesmer should inflict heavy Recklessness with GrandMaster disparity (Actual: %d)" resMesmer.Target.Meters.Recklessness.Value)
 
-    // Strategist Acumen Interrogation
+    // Strategist Prowess Interrogation
     let resStrat = ActionResolver.resolve roller (StandardAttack (AcumenInterrogation false)) strategist noviceWarrior
     Assert.True(resStrat.Target.Meters.Recklessness.Value >= 50,
       sprintf "Strategist should inflict massive Recklessness with GrandMaster disparity (Actual: %d)" resStrat.Target.Meters.Recklessness.Value)

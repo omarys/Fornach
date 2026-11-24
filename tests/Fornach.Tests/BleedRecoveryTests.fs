@@ -16,8 +16,8 @@ let private stats =
       StatId.Resolve, 45
       StatId.Acuity, 40
       StatId.Intuition, 40
-      StatId.Acumen, 40
-      StatId.Composure, 45 ]
+      StatId.Prowess, 40
+      StatId.Poise, 45 ]
 
 /// A wounded delver: half Health, half Morale, half armor, and a wound still bleeding.
 let private wounded (bleedStacks: int) =

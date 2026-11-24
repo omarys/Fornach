@@ -24,6 +24,16 @@ type TowerEvent =
   | AmbushTriggered of ambush: AmbushData * spawnedEnemies: TowerEnemy list
   | GroupCombatTriggered of enemies: TowerEnemy list
 
+/// What a sacrificial altar leaves behind: the boon was bought on credit, and the body pays the interest.
+/// The bonus is the altar's own (it is applied to `Stats` when the pact is struck, and the exact point
+/// deltas are mirrored here so it can be taken back cleanly), and every step the pools bleed.
+type AltarDebt =
+  { /// Per-stat points the altar granted, mirrored so the boon can be lifted without guessing.
+    StatDeltas: (StatId * int) list
+    /// Percent of the maximum pool drained on every step taken while the pact holds.
+    HealthDrainPct: int
+    MoraleDrainPct: int }
+
 /// The running aggregate state of an active Tower dungeon ascent
 type TowerRunState =
   { Player: Combatant
@@ -45,7 +55,10 @@ type TowerRunState =
     DiscoveredEchoes: Set<string>
     IsStoryMode: bool
     /// Safe steps taken since the last hone; travel hones a weapon every fourth step.
-    SafeStepsSinceHone: int }
+    SafeStepsSinceHone: int
+    /// The open altar pact, if one was struck on this floor. It expires on the stairs and a shrine
+    /// lifts it early; until then it bleeds the pools every step.
+    AltarDebt: AltarDebt option }
 
 module TowerSession =
 
@@ -265,6 +278,55 @@ module TowerSession =
   /// A shrine's blessing, in order: the full repair, then every carried kind is revealed, then every
   /// carried rare material is worked into the player and spent. Repeat visits are harmless: the pack
   /// is already revealed and the materials are already gone. Returns the lines the caller chronicles.
+  /// Percent of the maximum pool a held altar pact bleeds per step. One percent of each pool, so a floor of
+  /// forty steps costs about two fifths of both: enough that a pact has to be spent on the floor it was
+  /// struck on, survivable for a delver who watches their pools, and cleanable at a shrine.
+  let altarDebtDrainPct = 1
+
+  /// Takes the altar's boon back off the sheet. The deltas are the ones the pact actually granted, so
+  /// nothing else the floor handed over is touched; a negative delta cannot eat into a stat raised since,
+  /// which is why they are subtracted rather than re-applied as percentages.
+  let private liftAltarBoon (state: TowerRunState) : TowerRunState * string list =
+    match state.AltarDebt with
+    | None -> state, []
+    | Some debt ->
+      let stats =
+        debt.StatDeltas
+        |> List.fold (fun (block: StatBlock) (stat, delta) -> block.Modify(stat, -delta)) state.Player.Stats
+
+      { state with
+          Player = { state.Player with Stats = stats }
+          AltarDebt = None },
+      [ "The altar's gift fades with the floor, and its debt with it." ]
+
+  /// A shrine is a place to be made clean: it lifts the altar's pact early, boon and toll together.
+  let cleanseAltarDebt (state: TowerRunState) : TowerRunState * string list =
+    match state.AltarDebt with
+    | None -> state, []
+    | Some _ ->
+      let lifted, _ = liftAltarBoon state
+      lifted, [ "The shrine cleanses the altar's pact: its gift and its debt are both gone." ]
+
+  /// The altar's toll, paid on every step taken while the pact holds. Never lethal: both pools stop at 1,
+  /// so a pact can empty a delver down to the last point but cannot be the thing that kills them.
+  let private altarToll (state: TowerRunState) : TowerRunState * string list =
+    match state.AltarDebt with
+    | None -> state, []
+    | Some debt ->
+      let bleed (pool: Pool) (pct: int) =
+        if pct <= 0 then pool
+        else
+          let drain = max 1 (int (Math.Round(float pool.Maximum * float pct / 100.0, MidpointRounding.AwayFromZero)))
+          { pool with Current = max 1 (pool.Current - drain) }
+
+      let player =
+        { state.Player with
+            Health = bleed state.Player.Health debt.HealthDrainPct
+            Morale = bleed state.Player.Morale debt.MoraleDrainPct }
+
+      { state with Player = player },
+      [ sprintf "The altar's pact bleeds you (-%d%% Health, -%d%% Morale this step)." debt.HealthDrainPct debt.MoraleDrainPct ]
+
   let shrineBlessing (shrine: TowerShrine) (pt: Point) (state: TowerRunState) : TowerRunState * string list =
     let repaired =
       { Combatant.clearStacks state.Player with
@@ -334,12 +396,16 @@ module TowerSession =
     let blessedShrine = { shrine with IsBlessed = true }
     let blessedEntities = Map.add pt (EntityShrine blessedShrine) state.CurrentFloor.Entities
 
-    { state with
-        Player = blessedPlayer
-        CurrentFloor = { state.CurrentFloor with Entities = blessedEntities }
-        Consumables = bag
-        UnidentifiedConsumables = Set.empty },
-    summary @ boonLine
+    let blessed =
+      { state with
+          Player = blessedPlayer
+          CurrentFloor = { state.CurrentFloor with Entities = blessedEntities }
+          Consumables = bag
+          UnidentifiedConsumables = Set.empty }
+
+    let cleansed, cleanseLines = cleanseAltarDebt blessed
+
+    cleansed, summary @ boonLine @ cleanseLines
 
   /// Foes scale to the player the moment they engage, so a guardian authored for tower floor 6
   /// (level 185) is not fielded against a level-40 player. The authored state is untouched;
@@ -649,9 +715,13 @@ module TowerSession =
   /// mow-down between boss duels. 1.5 pools keeps roaming duels contested; the tutorial stays gentle
   /// at 1.25 and the tower curve stays at 1.0.
   /// Exported because the minimap rewind re-seats pristine mobs and must land them on the same levels.
+  /// `(depthCap, bossOffset, roamingPoolFactor)`. Depth is how far above the protagonist a roaming mob may
+  /// sit, and it stays small: the player's level is meant to lead the floor, not chase it. Bosses sit a
+  /// couple of levels up for the duel, not ten — a guardian ten levels above made the fight about the
+  /// level gap rather than the read.
   let floorScalingFor (isStory: bool) (floorNumber: int) : int * int * float =
-    if isStory then (if floorNumber <= 1 then 0, 3, 1.25 else 2, 3, 1.5)
-    else 2 + floorNumber / 2, 10, 1.0
+    if isStory then (if floorNumber <= 1 then 0, 2, 1.25 else 1, 2, 1.5)
+    else 1 + floorNumber / 3, 4, 1.0
 
   let rescaleFloorEnemiesWith
     (depthCap: int)
@@ -739,7 +809,8 @@ module TowerSession =
         UnidentifiedConsumables = Set.empty
         DiscoveredEchoes = Set.empty
         IsStoryMode = isStory
-        SafeStepsSinceHone = 0 }
+        SafeStepsSinceHone = 0
+        AltarDebt = None }
 
     updateFov initial
 
@@ -749,6 +820,9 @@ module TowerSession =
 
   /// Advances to the next floor via the Stairway Door
   let ascendFloor (state: TowerRunState) : TowerRunState =
+    // A pact struck on this floor does not survive the stairs: floor-scoped boons are the whole point of
+    // pricing an altar as a debt rather than a permanent upgrade.
+    let state, boonLines = liftAltarBoon state
     let nextFloorNum = state.CurrentFloor.FloorNumber + 1
     let depthCap, bossOffset, poolFactor = floorScalingFor state.IsStoryMode nextFloorNum
 
@@ -762,7 +836,9 @@ module TowerSession =
           PlayerPosition = nextFloor.SpawnLocation
           Facing = Some Direction.North
           Locomotion = entryLocomotion
-          MessageLog = sprintf "Ascended to Floor %d: %s!" nextFloorNum nextFloor.Theme.Name :: state.MessageLog }
+          MessageLog =
+            (sprintf "Ascended to Floor %d: %s!" nextFloorNum nextFloor.Theme.Name)
+            :: (List.rev boonLines @ state.MessageLog) }
 
     RuntimeLog.section (sprintf "FLOOR %d" nextFloorNum)
     RuntimeLog.write (
@@ -772,8 +848,7 @@ module TowerSession =
 
     updateFov nextState
 
-  /// Resolves a single turn of player movement or interaction
-  let stepPlayer (dir: Direction) (state: TowerRunState) : TowerRunState * TowerEvent list =
+  let private stepPlayerCore (dir: Direction) (state: TowerRunState) : TowerRunState * TowerEvent list =
     let targetPt = state.PlayerPosition + Direction.toDelta dir
     let mutable events = []
     let mutable nextState =
@@ -1144,6 +1219,18 @@ module TowerSession =
           let movedState = { nextState with PlayerPosition = targetPt }
           updateFov movedState, events
 
+  /// Resolves a single turn of player movement or interaction. The altar's toll is paid on top of whatever
+  /// the step itself did, so an open pact bleeds the delver on every tile they cross.
+  let stepPlayer (dir: Direction) (state: TowerRunState) : TowerRunState * TowerEvent list =
+    let stepped, events = stepPlayerCore dir state
+
+    // Only a step that actually moved the delver pays the toll: walking into a wall is free.
+    if stepped.PlayerPosition = state.PlayerPosition then
+      stepped, events
+    else
+      let tolled, tollLines = altarToll stepped
+      { tolled with MessageLog = tollLines @ tolled.MessageLog }, events
+
   /// Resolves environmental hazard consequences when a combatant is knocked back.
   /// Computes the destination tile displaced 1 step away from the attacker's position,
   /// checks the tile on the floor, and applies hazard or wall collision effects.
@@ -1268,6 +1355,22 @@ module TowerSession =
         newItems <- grantedItems
         rewardedPlayer <- grantedPlayer
 
+      // The boon is bought on credit: mirror the points it actually granted, so the stair can take them
+      // back exactly, and set the toll the floor charges every step for holding them.
+      let statDeltas =
+        state.Player.Stats.All
+        |> Seq.choose (fun (stat, before) ->
+          let after = rewardedPlayer.Stats.Get stat
+          if after = before then None else Some(stat, after - before))
+        |> List.ofSeq
+
+      let debt =
+        { StatDeltas = statDeltas
+          HealthDrainPct = altarDebtDrainPct
+          MoraleDrainPct = altarDebtDrainPct }
+
+      rewardedPlayer <- { rewardedPlayer with Stats = rewardedPlayer.Stats }
+
       let updatedAltar = { altar with IsUsed = true }
       let updatedEntities = Map.add altarPt (EntityEncounter (SacrificialAltar updatedAltar)) state.CurrentFloor.Entities
       let updatedFloor = { state.CurrentFloor with Entities = updatedEntities }
@@ -1278,7 +1381,13 @@ module TowerSession =
              CurrentFloor = updatedFloor
              CollectedKeys = newKeys
              InventoryItems = newItems
-             MessageLog = logMsg :: state.MessageLog }
+             AltarDebt = Some debt
+             MessageLog =
+               (sprintf
+                 "The pact bleeds you: -%d%% Health and -%d%% Morale every step, and the gift itself ends at the stairs."
+                 debt.HealthDrainPct
+                 debt.MoraleDrainPct)
+               :: (logMsg :: state.MessageLog) }
     | Some (EntityEncounter (SacrificialAltar _)) ->
       Error "This altar has already been used."
     | _ ->
@@ -1412,6 +1521,16 @@ module TowerSession =
           profile.Level previousLevel rankLine ]
 
   /// Computes the experience multiplier and bonus designation based on a combatant's current Recklessness
+  /// Experience one kill pays, off the foe's level. A level costs `100 * level`, so paying roughly a third
+  /// of a level per kill keeps a floor's worth of fighting worth two to three levels however deep the run
+  /// is: the rate scales with the curve instead of against it, which a flat figure cannot do.
+  let experienceForKill (foeLevel: int) : int = max 1 foeLevel * 32
+
+  /// A stage guardian is a duel, not a mob, so it pays several kills' worth — but no longer a scripted
+  /// top-up to a target level. The ladder is walked by fighting; a boss that teleported the protagonist to
+  /// the next tier's landing made every floor's own XP irrelevant.
+  let guardianExperienceMultiplier = 4
+
   let recklessnessXpBonus (recklessness: int) : float * string option =
     if recklessness >= 75 then 2.0, Some "★ RAZOR'S EDGE (+100% XP bonus!)"
     elif recklessness >= 50 then 1.5, Some "🔥 Fever Pitch (+50% XP bonus!)"
@@ -1442,44 +1561,20 @@ module TowerSession =
 
     match defeatedEnemyOpt with
     | Some e ->
-      let baseXp = e.Combatant.Level * 10 + 25
+      // A keystone guardian is a duel worth several kills; an ordinary mob is worth one. Neither is a
+      // scripted top-up: the protagonist's level comes from the fighting, at the same exchange rate,
+      // wherever it happens.
+      let baseXp =
+        let kill = experienceForKill e.Combatant.Level
+        if e.DropsKeyId.IsSome then kill * guardianExperienceMultiplier else kill
+
       let recklessMult, recklessLabelOpt = recklessnessXpBonus state.Player.Meters.Recklessness.Value
-      let scaledBaseXp = int (Math.Round(float baseXp * recklessMult))
+      newXp <- int (Math.Round(float baseXp * recklessMult))
 
       match recklessLabelOpt with
       | Some label ->
         logMessages <- sprintf "Fervor Reward: %s" label :: logMessages
       | None -> ()
-
-      // The stage guardian carries the keystone; beating it opens the gate and hands the protagonist
-      // the strength the next biome assumes. Ordinary kills keep the normal per-kill value, except
-      // on the tutorial floor, where every kill accelerates leveling.
-      //
-      // The top-up is measured from the level the PREVIOUS stage handed over, so optional kills are
-      // never swallowed: a player who clears every fight arrives at the gate carrying that many levels
-      // of lead, and keeps it for the rest of the ascent.
-      let stageEntryLevel =
-        let floorNum = state.CurrentFloor.FloorNumber
-        if floorNum <= 1 then 1 else ProgressionScale.storyGuardianLevel (floorNum - 1)
-      let carriedLead =
-        // Capped at three levels: the tutorial pays 100x the normal per-kill XP, so an uncapped lead
-        // would hand a completionist twenty levels by stage two and flatten the rest of the ascent.
-        min 3 (max 0 (state.Player.Level - stageEntryLevel))
-      let storyGateLevel =
-        if state.IsStoryMode && state.CurrentFloor.FloorNumber <= 7 && e.DropsKeyId.IsSome then
-          Some (ProgressionScale.storyGuardianLevel state.CurrentFloor.FloorNumber + carriedLead)
-        else
-          None
-
-      match storyGateLevel with
-      | Some targetLevel ->
-        let profile = state.Player.Progression
-        let mutable needed = -profile.CurrentXP
-        for lvl in profile.Level .. targetLevel - 1 do
-          needed <- needed + ProgressionProfile.ExperienceForNextLevel lvl
-        newXp <- scaledBaseXp + max 0 needed
-      | None ->
-        newXp <- scaledBaseXp
       // Look up monster loot in Bestiary
       let monsterTemplateOpt =
         Bestiary.allMonsters

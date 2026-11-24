@@ -71,7 +71,8 @@ let private makeState (tiles: Map<Point, TowerTile>) (playerPos: Point) (entitie
     UnidentifiedConsumables = Set.empty
     DiscoveredEchoes = Set.empty
     IsStoryMode = false
-    SafeStepsSinceHone = 0 }
+    SafeStepsSinceHone = 0
+    AltarDebt = None }
 
 /// The enemies a fight would start with: the engine raises GroupCombatTriggered with exactly the
 /// participants it hands to the duel, so the event is the list to measure.

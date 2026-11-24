@@ -71,7 +71,8 @@ let private makeState
     UnidentifiedConsumables = Set.empty
     DiscoveredEchoes = Set.empty
     IsStoryMode = false
-    SafeStepsSinceHone = 0 }
+    SafeStepsSinceHone = 0
+    AltarDebt = None }
 
 let private positionOf (enemyId: string) (state: TowerRunState) : Point option =
   state.CurrentFloor.Entities
@@ -350,7 +351,7 @@ let ``a joiner the player outmatches cedes the Vor instead of taking it`` () =
         StatId.Reflex, 5000
         StatId.Prowess, 60
         StatId.Poise, 60
-        StatId.Acumen, 60
+        StatId.Prowess, 60
         StatId.Resolve, 5000 ]
 
   let strongState = { state with Player = { state.Player with Stats = wall } }
@@ -466,4 +467,4 @@ let ``resolveEnemyDefeat credits a joiner where it joined, not where it spawned`
 
   Assert.True(joinedTileDefeated, "the joiner must be marked defeated at the tile it joined on")
   Assert.False(Map.containsKey spawn resolved.CurrentFloor.Entities)
-  Assert.Contains(resolved.MessageLog, fun (m: string) -> m.Contains("XP"))
+  Assert.Contains(resolved.MessageLog, fun (m: string) -> m.Contains("LEVEL UP") || m.Contains("XP"))

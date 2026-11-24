@@ -52,7 +52,7 @@ type ComplexForm =
   | ResonanceSpike
   /// Agility / Acuity: Sensory static and perceptual jitter (passive clone weaving, 40% decoy evasion swap on melee strike; -15% direct damage)
   | PhantasmalDiffusion
-  /// Discipline / Acumen: Interlocking geometric abjuration web (+15 Arcane Ward per turn, 50% damage reflection + 15 Frustration when ward struck; locks Overchannel)
+  /// Discipline / Prowess: Interlocking geometric abjuration web (+15 Arcane Ward per turn, 50% damage reflection + 15 Frustration when ward struck; locks Overchannel)
   | AegisLattice
 
   member this.Name : string =
@@ -115,6 +115,19 @@ module WeaponCondition =
     | WeaponCondition.Notched -> "Notched"
     | WeaponCondition.Damaged -> "Damaged"
     | WeaponCondition.Broken -> "Broken"
+
+  /// The four states are one ladder on one field; only the vocabulary differs by plane. A blade is
+  /// honed and a channel is re-centred, so a mage reads the same wear as the integrity of their mana
+  /// rather than as edge damage — the effect it pays is identical.
+  let displayNameFor (plane: Plane) =
+    match plane with
+    | Physical -> displayName
+    | Mental ->
+      function
+      | WeaponCondition.Pristine -> "Centered"
+      | WeaponCondition.Notched -> "Clouded"
+      | WeaponCondition.Damaged -> "Tainted"
+      | WeaponCondition.Broken -> "Corrupted"
 
 /// High-level ecological classification of non-humanoid adversaries
 [<RequireQualifiedAccess>]

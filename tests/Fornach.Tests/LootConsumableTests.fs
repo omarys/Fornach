@@ -19,8 +19,8 @@ let private stats =
       StatId.Resolve, 60
       StatId.Acuity, 50
       StatId.Intuition, 50
-      StatId.Acumen, 50
-      StatId.Composure, 60
+      StatId.Prowess, 50
+      StatId.Poise, 60
     ]
 
 /// A Warrior delver with 200-point pools: the class the plain drop paths assume.

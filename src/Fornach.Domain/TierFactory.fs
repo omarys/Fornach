@@ -215,41 +215,35 @@ module TierFactory =
           // defence on `offDef` (0.75). Both planes keep growing, so a Fighter never carries a frozen block
           // into a fight and never stops improving against a mind.
           //
-          // `GetGuard` is (Poise + Composure) / 2 and ignores the plane, so the two stats it blends must sit
-          // at the same tier on both classes or the guard favours a plane: the Fighter's Poise is its
-          // physical own plane and its Composure the mental `offDef`, the Mage's Poise is its physical
-          // `offDef` and its Composure the mental own plane. Both then read (prim + offDef) / 2.
+          // Prowess/Poise is one pair serving both planes, so it is stated once, at the class's own tier:
+          // a Fighter's discipline is its edge and holds up against a war of words as well as a blade.
           let halfPrim = prim / 2
 
           [ Force, prim; Fortitude, prim
             Finesse, prim; Reflex, prim
             Prowess, prim; Poise, prim
             Intellect, halfPrim; Resolve, offDef
-            Acuity, halfPrim; Intuition, offDef
-            Acumen, halfPrim; Composure, offDef ]
+            Acuity, halfPrim; Intuition, offDef ]
         | CharacterClass.Rogue ->
           // Generic Agility NPC
           [ Finesse, prim; Reflex, prim
             Prowess, sec; Poise, sec
             Force, sec; Fortitude, sec
             Intellect, min; Resolve, offDef
-            Acuity, offOff; Intuition, offDef
-            Acumen, min; Composure, offDef ]
+            Acuity, offOff; Intuition, offDef ]
         | CharacterClass.Warrior ->
           // Generic Power NPC
           [ Force, prim; Fortitude, prim
             Prowess, sec; Poise, sec
             Finesse, sec; Reflex, sec
             Intellect, min; Resolve, offDef
-            Acuity, min; Intuition, offDef
-            Acumen, offOff; Composure, offDef ]
+            Acuity, min; Intuition, offDef ]
         | _ ->
           [ Force, prim; Fortitude, prim
             Finesse, sec; Reflex, sec
             Prowess, sec; Poise, sec
             Intellect, min; Resolve, min
-            Acuity, min; Intuition, min
-            Acumen, min; Composure, min ]
+            Acuity, min; Intuition, min ]
       else
         // A Mage's own six mental stats sit on the primary tier and its six physical stats a step behind —
         // offence at half the primary, defence on `offDef` — the mirror of a Fighter, whose physical block
@@ -264,7 +258,7 @@ module TierFactory =
         // every GrandMaster Fighter strike aside and the ward underneath was never reached. Capped at `prim`
         // the share closes the gap instead of walling it off.
         // The guard stat takes no share: Poise is already the physical `offDef`, the same tier a Fighter's
-        // Composure holds, so the guard pair stays plane-neutral.
+        // Poise holds, so the guard pair stays plane-neutral.
         let armorShare = int (Math.Round(float prim * spellArmorPct))
         let physicalDefence = min prim (offDef + armorShare)
 
@@ -274,24 +268,23 @@ module TierFactory =
             // Normalized mental stats: every mental attribute on the primary tier, guard pair included.
             [ Intellect, prim; Resolve, prim
               Acuity, prim; Intuition, prim
-              Acumen, prim; Composure, prim ]
+              Prowess, prim; Poise, prim ]
           | _ ->
             [ Intellect, prim; Resolve, prim
               Acuity, halfPrim; Intuition, sec
-              Acumen, halfPrim; Composure, sec ]
+              Prowess, sec; Poise, sec ]
 
         // Mirror of the Fighter's off-plane block: physical offence at half the primary, physical defence on
-        // `offDef` plus the spell-armour share.
+        // `offDef` plus the spell-armour share. Prowess/Poise is already stated above, at the class's own
+        // tier: the shared discipline pair is never re-stated for the other plane.
         let physicalStats =
           match cls with
           | CharacterClass.Mage ->
             [ Force, halfPrim; Fortitude, physicalDefence
-              Finesse, halfPrim; Reflex, physicalDefence
-              Prowess, halfPrim; Poise, sec ]
+              Finesse, halfPrim; Reflex, physicalDefence ]
           | _ ->
             [ Force, prim; Fortitude, prim
-              Finesse, halfPrim; Reflex, physicalDefence
-              Prowess, halfPrim; Poise, sec ]
+              Finesse, halfPrim; Reflex, physicalDefence ]
 
         mentalStats @ physicalStats
 

@@ -7,13 +7,15 @@ module AttributeMappingTests =
 
   [<Fact>]
   let ``Mental stats map to expected social names`` () =
+    // Prowess and Poise are shared by both planes, so they carry their canonical names in either
+    // context rather than a mental alias: the merge retired Acumen and Composure.
     let expectedMappings =
       [ Intellect, "Presence / Command"
         Resolve, "Will / Defiance"
         Acuity, "Guile / Charm"
         Intuition, "Insight / Scrutiny"
-        Acumen, "Leverage / Wit"
-        Composure, "Poise / Composure" ]
+        Prowess, "Prowess"
+        Poise, "Poise" ]
 
     for (stat, expectedName) in expectedMappings do
       let actual = Attributes.socialNameOf stat
@@ -51,11 +53,13 @@ module AttributeMappingTests =
         "Charm", Acuity
         "Insight", Intuition
         "Scrutiny", Intuition
-        "Leverage", Acumen
-        "Wit", Acumen
-        "Poise / Composure", Composure
-        "Poise", Poise // note: Poise is physical stat canonical name, and alias on Composure; canonical Poise matches first
-        "Composure", Composure ]
+        // Retired names land on the stat that absorbed them rather than defaulting.
+        "Leverage", Prowess
+        "Wit", Prowess
+        "Acumen", Prowess
+        "Composure", Poise
+        "Prowess", Prowess
+        "Poise", Poise ]
 
     for (input, expectedStat) in testCases do
       let result = Attributes.tryParse input

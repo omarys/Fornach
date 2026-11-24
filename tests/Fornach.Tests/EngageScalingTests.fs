@@ -75,7 +75,7 @@ let ``striking shifts the actor into its vector stance so the bonus lands automa
   Assert.Equal(CombatStance.AgilityStance, result.Actor.Stance)
 
 [<Fact>]
-let ``floor entry places mobs within five levels of the player and the boss ten above`` () =
+let ``floor entry keeps mobs within a couple of levels of the player and the boss four above`` () =
   let player = playerAt 20
   let floor = TowerSession.rescaleFloorEnemies player (TowerGenerator.generateFloorWithMode 7 5 true)
 
@@ -92,13 +92,15 @@ let ``floor entry places mobs within five levels of the player and the boss ten 
   let bosses = enemies |> List.filter (fun e -> e.IsBoss)
   Assert.NotEmpty(mobs)
 
+  // The tower curve: `1 + floor/3` levels of depth (2 at floor 5) and a boss 4 above.
   for mob in mobs do
-    Assert.InRange(mob.Combatant.Level, 20, 25)
+    Assert.InRange(mob.Combatant.Level, 20, 22)
 
-  // Floor 5 carries the stage guardian, which is the boss of the floor.
+  // Floor 5 carries the stage guardian, which is the boss of the floor: four levels above the player, not
+  // ten, so the duel is about the read rather than a level gap.
   Assert.NotEmpty(bosses)
   for boss in bosses do
-    Assert.Equal(30, boss.Combatant.Level)
+    Assert.Equal(24, boss.Combatant.Level)
 
 [<Fact>]
 let ``lifting a mob follows the level curve instead of the raw level ratio`` () =

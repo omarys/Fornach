@@ -70,7 +70,8 @@ let private makeState (tiles: Map<Point, TowerTile>) (playerPos: Point) (entitie
     UnidentifiedConsumables = Set.empty
     DiscoveredEchoes = Set.empty
     IsStoryMode = false
-    SafeStepsSinceHone = 0 }
+    SafeStepsSinceHone = 0
+    AltarDebt = None }
 
 let private foeAt (id: string) (pt: Point) : Map<Point, TowerEntity> =
   Map.ofList [ pt, EntityEnemy(makeEnemy id) ]

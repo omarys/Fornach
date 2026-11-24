@@ -46,8 +46,8 @@ module CombatLogger =
       c.Armor.Current c.Armor.Max absPct) |> ignore
     sb.AppendLine(sprintf "  Attributes: Force=%d, Fortitude=%d, Finesse=%d, Reflex=%d, Prowess=%d, Poise=%d"
       (c.GetStat Force) (c.GetStat Fortitude) (c.GetStat Finesse) (c.GetStat Reflex) (c.GetStat Prowess) (c.GetStat Poise)) |> ignore
-    sb.AppendLine(sprintf "              Intellect=%d, Resolve=%d, Acuity=%d, Intuition=%d, Acumen=%d, Composure=%d"
-      (c.GetStat Intellect) (c.GetStat Resolve) (c.GetStat Acuity) (c.GetStat Intuition) (c.GetStat Acumen) (c.GetStat Composure)) |> ignore
+    sb.AppendLine(sprintf "              Intellect=%d, Resolve=%d, Acuity=%d, Intuition=%d, Prowess=%d, Poise=%d"
+      (c.GetStat Intellect) (c.GetStat Resolve) (c.GetStat Acuity) (c.GetStat Intuition) (c.GetStat Prowess) (c.GetStat Poise)) |> ignore
     if not c.EquippedItems.IsEmpty then
       let items = c.EquippedItems |> List.map (fun i -> i.Name) |> String.concat ", "
       sb.AppendLine(sprintf "  Equipped Gear: %s" items) |> ignore

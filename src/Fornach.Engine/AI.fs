@@ -24,7 +24,32 @@ module AI =
   let private chooseExecutePlane (actor: Combatant) : Plane =
     actor.Plane
 
-  /// Evaluates an actor's specialization and chooses the optimal defensive reset
+  /// Points held back from the crit cap when budgeting a gamble. The budget only sees the spike the
+  /// actor is about to pay; a foe's own gambits, a tincture and the environment all add on top, so a
+  /// press that lands exactly on the cap is one point of bad luck from fighting with every defence
+  /// quartered. Measured: a prologue caster pressing to the line died with its Morale untouched.
+  let recklessnessHeadroom = 10
+
+  /// The Recklessness past which the crit cap opens: every incoming hit lands as a crit and a quarter
+  /// of the actor's defence goes with it (ADR 0009), so a recommendation that would spend its actor
+  /// past this line is recommending the exposure the meter exists to threaten.
+  let critCap = 75
+
+  /// A player past this much Recklessness is one clean hit from the crit cap, so the recommendation
+  /// sheds instead of pressing: the shield hold bleeds the meter hardest and raises the plating that
+  /// answers the exposure.
+  let shieldHoldAt = 60
+
+  /// The shield hold is the Recklessness shed alone: it bleeds Recklessness hardest, but leaves
+  /// Frustration, Confusion, Cognitive Fatigue and Provoke untouched and restores no Morale. A
+  /// combatant shedding the wrong meter stalls at the recovery gate forever, so any other meter this
+  /// high routes to Steady Form, which bleeds every one of them.
+  let steadyFormAt = 50
+
+  /// Evaluates an actor's specialization and chooses the optimal defensive reset. A physical combatant
+  /// that has spent the Recklessness budget into the shield-hold band sheds with the shield: it bleeds
+  /// the meter hardest and raises the plating that answers the crit cap, where Steady Form bleeds every
+  /// meter a little and answers nothing.
   let private chooseRecovery (self: Combatant) : ActionIntent =
     // SteadyForm drains Recklessness, Exhaustion, Frustration and Frustration, but not
     // CognitiveFatigue, Confusion or Provoke. Those three also trip the recovery gate, so routing
@@ -36,21 +61,26 @@ module AI =
       || self.Meters.Confusion.Value >= 65
       || self.Meters.Provoke.Value >= 65
 
-    if self.Plane = Physical && not mentalPressure then
-      RecoveryAction SteadyForm
-    else
-      RecoveryAction CenterMind
+    let otherPressure =
+      [ self.Meters.Exhaustion
+        self.Meters.Frustration
+        self.Meters.CognitiveFatigue
+        self.Meters.Confusion
+        self.Meters.Provoke ]
+      |> List.exists (fun meter -> meter.Value >= steadyFormAt)
 
-  /// The Recklessness a voluntary gamble may leave us at. Recklessness 75 penalises every defence stat and
-  /// 100 forces a `RecklessExposure` collapse, so half the meter is the most a gamble may spend without
-  /// buying the exposure the meter exists to threaten.
-  let gambleCeiling = 50
+    if self.Plane <> Physical then
+      RecoveryAction CenterMind
+    elif mentalPressure then
+      // Steady Form cannot drain the three mental meters, and they are what tripped the gate: a
+      // physical actor under mental pressure must centre, or the lockout repeats every turn.
+      RecoveryAction CenterMind
+    elif self.Meters.Recklessness.Value > shieldHoldAt && not otherPressure then
+      RecoveryAction RaiseShield
+    else
+      RecoveryAction SteadyForm
 
   /// A foe is dangerous when the exchange outlasts a burst. The estimator already predicts damage per
-  /// round, so danger is expected rounds-to-kill: three rounds is the boundary between a foe that dies to
-  /// the opener and one that is still standing when our own pool runs dry.
-  let dangerousRounds = 3.0
-
   /// The basic strikes this combatant's plane may legally throw, through the resolver's own gate: a
   /// refused attack is not downgraded, it costs the whole turn, so it is never a candidate.
   ///
@@ -78,28 +108,48 @@ module AI =
     | AcumenInterrogation _ -> AcumenInterrogation true
     | other -> other
 
-  /// The player's own attack: the estimator's best basic strike against a foe a burst will finish, and the
-  /// gambit form of that same strike against one that will still be standing -- while the Recklessness
-  /// budget allows the gamble. Opposition keeps the generic discipline; this keys on `PlayerStyle`, the
-  /// flag the ramp, the estimator and the mental-defence relief already read.
+  /// The player's own attack: the hardest-hitting action the Recklessness budget can pay for, chosen
+  /// from the strike that actually wins its bind. Every legal basic strike is considered in both its
+  /// plain and its gambit form, the forms whose spike would land the actor on the crit cap are dropped,
+  /// and what remains is ranked the way the menu ranks it — contest margin first, then expected damage.
+  /// Ranking on damage alone threw a strike the guard outclasses (measured: a Disciplined foe took a
+  /// -254-margin Interrogation while a +114 Cataclysm sat unthrown), so the margin leads and damage
+  /// breaks ties. A plain strike that already finishes the foe wins outright, because Recklessness
+  /// spent on a corpse is exposure for nothing, and equal damage resolves to the cheaper action.
+  /// Opposition keeps the generic discipline; this keys on `PlayerStyle`, the flag the ramp, the
+  /// estimator and the mental-defence relief already read.
   let chooseEstimatedAttack (self: Combatant) (opponent: Combatant) : ActionIntent option =
     if not self.PlayerStyle then
       None
     else
+      let damage (attack: AttackClassification) = AttackEstimator.estimate self opponent attack
+
+      let margin (attack: AttackClassification) = AttackEstimator.contestMargin self opponent attack
+
+      let spike (attack: AttackClassification) = ActionResolver.gambitReckSpike attack
+
+      let affordable (attack: AttackClassification) =
+        self.Meters.Recklessness.Value + spike attack + recklessnessHeadroom < critCap
+
       match basicAttacks self with
       | [] -> None
       | basics ->
-        let best =
+        let candidates =
           basics
-          |> List.maxBy (fun attack -> AttackEstimator.estimate self opponent attack)
+          |> List.collect (fun attack -> [ attack; asGambit attack ])
+          |> List.filter affordable
 
-        let roundsToKill =
-          float opponent.Health.Current / Math.Max(1.0, AttackEstimator.estimate self opponent best)
+        let lethal plain = spike plain = 0 && damage plain >= float opponent.Health.Current
 
-        let wantsGamble =
-          roundsToKill > dangerousRounds && self.Meters.Recklessness.Value < gambleCeiling
+        let pick =
+          match candidates |> List.tryFind lethal with
+          | Some plainKill -> plainKill
+          | None ->
+            candidates
+            |> List.sortBy (fun attack -> -float (margin attack), -damage attack, spike attack)
+            |> List.head
 
-        Some(StandardAttack(if wantsGamble then asGambit best else best))
+        Some(StandardAttack pick)
 
   /// Selects an offensive action intent for a combatant with no registered policy: species instinct
   /// first, then the discipline that suits the plane it actually resolves on.
@@ -109,7 +159,7 @@ module AI =
     let prowess = self.GetStat Prowess
     let intellect = self.GetStat Intellect
     let acuity = self.GetStat Acuity
-    let acumen = self.GetStat Acumen
+    let acumen = self.GetStat Prowess
 
     // Risk threshold for gambits: only fire when reckless entropy is low
     let isGambit = self.Meters.Recklessness.Value < 25
@@ -155,8 +205,10 @@ module AI =
         // Aberrations warp focus with psychic cataclysms or erratic pulses
         commit (if intellect >= acuity then ArcaneCataclysm isGambit else SynapticGlamour isGambit)
       | Some MonsterFamily.GriefManifestation ->
-        // Grief manifestations strike with dialectical acumen interrogations
-        commit (AcumenInterrogation isGambit)
+        // A grief manifestation argues and overwhelms, but it is nobody's student: it has no Prowess, so
+        // the Discipline-vector interrogation is not a blow it can throw. It leans on the Power vector
+        // instead, which is where its authored Intellect sits.
+        commit (ArcaneCataclysm isGambit)
       | _ -> commit (ForceStrike isGambit)
     elif self.Plane = Physical then
       // Tactical Stance & Attack Evaluation (ADR 0009):
@@ -250,7 +302,7 @@ module AI =
     if self.Plane = Mental then
       let oppPower = opponent.GetCombatStat StatId.Intellect
       let oppAgility = opponent.GetCombatStat StatId.Acuity
-      if self.IsHumanoid && self.GetStat StatId.Acumen >= opponent.GetStat StatId.Composure then
+      if self.IsHumanoid && self.GetStat StatId.Prowess >= opponent.GetStat StatId.Poise then
         if oppPower >= oppAgility then ResolveAnchor false
         else IntuitionPerception false
       else

@@ -17,7 +17,7 @@ module ProlongedBattleTests =
       Prowess, prowess; Poise, poise
       Intellect, force; Resolve, fort
       Acuity, finesse; Intuition, reflex
-      Acumen, prowess; Composure, poise
+      Prowess, prowess; Poise, poise
     ]
 
   let createFighter force fort finesse reflex prowess poise =
@@ -661,7 +661,7 @@ module ProlongedBattleTests =
         Prowess, 20; Poise, 20
         Intellect, intellect; Resolve, resolve
         Acuity, acuity; Intuition, intuition
-        Acumen, acumen; Composure, composure
+        Prowess, acumen; Poise, composure
       ]
     Combatant.create id "TestMage" 2000 2000 stats
     |> fun c -> { c with PlayerStyle = true }
@@ -689,23 +689,22 @@ module ProlongedBattleTests =
     Assert.True(groupRes.SecondaryTargets.[1].Morale.Current < secB.Morale.Current)
 
   [<Fact>]
-  let ``Off-specialization arcane spellcasting incurs Cognitive Fatigue strain and scales down potency`` () =
-    let roller = fixedRoller 6
-    // Intellect specialist (Intellect 150, Acuity 30 -> 20% proficiency in Guile/Illusion)
-    let intellectMage = createMage 150 100 30 30 30 30
+  let ``growing one mental stat no longer taxes the other schools`` () =
+    // An off-school ratio against whichever stat happens to be highest punished a caster for
+    // specialising: the staff sharpens Intellect 56% against Acuity/Prowess 44%, both materials sharpen
+    // Intellect, and stressed victories sharpen Prowess — so a developing mage lost potency in the
+    // schools they actually cast. Potency now depends only on the school's own stat.
     let target = createMage 30 30 30 30 30 30
+    let flat = createMage 30 30 30 30 30 30
+    let lopsided = createMage 150 30 30 30 30 30
 
-    // Casting off-school spell: MirrorIllusion (Agility vector)
-    let resOff = ActionResolver.resolve roller (StandardAttack (MirrorIllusion false)) intellectMage target
+    for ata in [ SynapticGlamour false; MirrorIllusion false; AcumenInterrogation false ] do
+      let flatHit = AttackEstimator.estimate flat target ata
+      let lopsidedHit = AttackEstimator.estimate lopsided target ata
+      Assert.Equal(flatHit, lopsidedHit, 3)
 
-    // Should incur ArcaneStrainIncurred event
-    let strainEvt =
-      resOff.Events
-      |> List.tryFind (function CombatEvent.ArcaneStrainIncurred _ -> true | _ -> false)
-    Assert.True(strainEvt.IsSome, "Off-school spell cast should incur ArcaneStrainIncurred event")
-
-    // Caster incurs Cognitive Fatigue from mental strain
-    Assert.True(resOff.Actor.Meters.CognitiveFatigue.Value > 0, "Actor should suffer Cognitive Fatigue from off-school strain")
+    // The Intellect school is the one that should move, and it moves up.
+    Assert.True(AttackEstimator.estimate lopsided target (ArcaneCataclysm false) > AttackEstimator.estimate flat target (ArcaneCataclysm false))
 
   [<Fact>]
   let ``Agility / Acuity magic user weaves Mirror Clones that intercept and defuse incoming attacks`` () =
@@ -739,7 +738,7 @@ module ProlongedBattleTests =
     Assert.Equal(0, resDefend.Actor.ComboTracker.ConsecutiveHits)
 
   [<Fact>]
-  let ``Discipline / Acumen magic user erects Arcane Ward that absorbs incoming damage and restores via CenterMind`` () =
+  let ``Discipline / Prowess magic user erects Arcane Ward that absorbs incoming damage and restores via CenterMind`` () =
     let roller = fixedRoller 6
     let acumenMage = createMage 40 40 40 40 150 100
     let target = createMage 30 30 30 30 30 30
@@ -764,13 +763,13 @@ module ProlongedBattleTests =
     Assert.True(resHit.Target.ArcaneWard < initialWard, "Arcane Ward should be reduced by absorbed damage")
     Assert.Equal(initialHealth, resHit.Target.Health.Current)
 
-    // 3. CenterMind restores Arcane Ward scaled by Acumen
+    // 3. CenterMind restores Arcane Ward scaled by Prowess
     let depletedMage = { resHit.Target with ArcaneWard = 0 }
     let resRecovery = ActionResolver.resolve roller (RecoveryAction CenterMind) depletedMage target
     Assert.True(resRecovery.Actor.ArcaneWard > 0, "CenterMind should restore Arcane Ward for Discipline mage")
 
   [<Fact>]
-  let ``Discipline / Acumen Disorienting Shockwave resets opponent combo tempo and pulses in group turn`` () =
+  let ``Discipline / Prowess Disorienting Shockwave resets opponent combo tempo and pulses in group turn`` () =
     let roller = fixedRoller 6
     let acumenMage = createMage 40 40 40 40 150 100
     let primaryEnemy =
@@ -806,9 +805,9 @@ module ProlongedBattleTests =
     let resIntellect = ActionResolver.resolve roller (StandardAttack (RunicWardTrap false)) intellectSpecialist target
     let resAcumen = ActionResolver.resolve roller (StandardAttack (RunicWardTrap false)) acumenSpecialist target
 
-    // Acumen specialist erects a significantly stronger ward due to higher specialization ratio
+    // Prowess specialist erects a significantly stronger ward due to higher specialization ratio
     Assert.True(resAcumen.Actor.ArcaneWard > resIntellect.Actor.ArcaneWard,
-      sprintf "Acumen specialist ward (%d) should be stronger than off-specialist ward (%d)"
+      sprintf "Prowess specialist ward (%d) should be stronger than off-specialist ward (%d)"
         resAcumen.Actor.ArcaneWard resIntellect.Actor.ArcaneWard)
 
   [<Fact>]
@@ -833,7 +832,7 @@ module ProlongedBattleTests =
     Assert.True(stabilizedEvt.IsSome)
     Assert.Equal(6, stabilizedEvt.Value)
 
-    // CenterMind with Acumen 170
+    // CenterMind with Prowess 170
     let mentalFighter = createMage 100 100 100 100 170 140
     let resCenter = ActionResolver.resolve roller (RecoveryAction CenterMind) mentalFighter opponent
     Assert.Equal(6, resCenter.Actor.Focus)
@@ -1117,10 +1116,12 @@ module ProlongedBattleTests =
 
   [<Fact>]
   let ``Discipline stance guard anchors on Poise alone`` () =
+    // Poise is one stat for both planes, so the guard reads the same number whatever plane the
+    // contest is on; a Discipline stance then sharpens the physical guard by half again.
     let stats =
       StatBlock.Create [
-        Force, 50; Fortitude, 50; Finesse, 50; Reflex, 50; Prowess, 50; Poise, 100
-        Intellect, 50; Resolve, 50; Acuity, 50; Intuition, 50; Acumen, 50; Composure, 300
+        Force, 50; Fortitude, 50; Finesse, 50; Reflex, 50; Prowess, 50; Poise, 200
+        Intellect, 50; Resolve, 50; Acuity, 50; Intuition, 50
       ]
     let defender = Combatant.create (CombatantId.New()) "Guard" 2000 2000 stats
 
@@ -1128,30 +1129,30 @@ module ProlongedBattleTests =
     Assert.Equal(200, defender.GetGuard(Plane.Mental, true))
 
     let disciplined = { defender with Stance = CombatStance.DisciplineStance }
-    Assert.Equal(150, disciplined.GetGuard(Plane.Physical, true))
-    Assert.Equal(100, disciplined.GetGuard(Plane.Mental, true))
+    Assert.Equal(300, disciplined.GetGuard(Plane.Physical, true))
+    Assert.Equal(200, disciplined.GetGuard(Plane.Mental, true))
 
   [<Fact>]
-  let ``Discipline stance guard ignores Composure at every defence contest`` () =
+  let ``Discipline stance guard reads the one shared Poise`` () =
     let attacker = createFighter 50 50 50 50 400 50
 
-    let guardStats composure =
+    let guardStats poise =
       StatBlock.Create [
-        Force, 50; Fortitude, 50; Finesse, 50; Reflex, 50; Prowess, 50; Poise, 100
-        Intellect, 50; Resolve, 50; Acuity, 50; Intuition, 50; Acumen, 50; Composure, composure
+        Force, 50; Fortitude, 50; Finesse, 50; Reflex, 50; Prowess, 50; Poise, poise
+        Intellect, 50; Resolve, 50; Acuity, 50; Intuition, 50
       ]
 
-    let guardFighter composure stance =
-      { Combatant.create (CombatantId.New()) "Guard" 2000 2000 (guardStats composure) with Stance = stance }
+    let guardFighter poise stance =
+      { Combatant.create (CombatantId.New()) "Guard" 2000 2000 (guardStats poise) with Stance = stance }
 
-    // Anchored on Poise alone: Composure no longer pads a DisciplineStance guard
+    // Anchored on Poise alone, and Poise is now the only guard stat on either plane
     let dmgLow, _ = damageTaken attacker (ProwessStrike false) (guardFighter 100 CombatStance.DisciplineStance)
     let dmgHigh, _ = damageTaken attacker (ProwessStrike false) (guardFighter 400 CombatStance.DisciplineStance)
-    Assert.Equal(dmgLow, dmgHigh)
+    Assert.NotEqual(dmgLow, dmgHigh)
 
-    // Outside the stance the Poise/Composure blend still guards
+    // Outside the stance plain Poise still guards
     let dmgBlendLow, _ = damageTaken attacker (ProwessStrike false) (guardFighter 100 CombatStance.PowerStance)
     let dmgBlendHigh, _ = damageTaken attacker (ProwessStrike false) (guardFighter 400 CombatStance.PowerStance)
     Assert.True(
       dmgBlendHigh < dmgBlendLow,
-      sprintf "Composure must keep padding the out-of-stance guard: %d vs %d" dmgBlendHigh dmgBlendLow)
+      sprintf "Poise must keep padding the out-of-stance guard: %d vs %d" dmgBlendHigh dmgBlendLow)

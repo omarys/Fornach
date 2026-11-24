@@ -22,8 +22,8 @@ module StanceGrowthTests =
       Resolve, fortitude
       Acuity, finesse
       Intuition, reflex
-      Acumen, prowess
-      Composure, poise
+      Prowess, prowess
+      Poise, poise
     ]
 
   let private fighter (force, fortitude, finesse, reflex, prowess, poise) (stance: CombatStance) =
@@ -46,7 +46,7 @@ module StanceGrowthTests =
     Assert.Equal(Plane.Mental, mental.Plane)
     Assert.Equal((Intellect, Resolve), { mental with Stance = CombatStance.PowerStance }.StanceAttributes)
     Assert.Equal((Acuity, Intuition), { mental with Stance = CombatStance.AgilityStance }.StanceAttributes)
-    Assert.Equal((Acumen, Composure), { mental with Stance = CombatStance.DisciplineStance }.StanceAttributes)
+    Assert.Equal((Prowess, Poise), { mental with Stance = CombatStance.DisciplineStance }.StanceAttributes)
 
   [<Fact>]
   let ``no exchange moves a permanent attribute on either side`` () =

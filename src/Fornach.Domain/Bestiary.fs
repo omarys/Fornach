@@ -99,6 +99,12 @@ type MonsterTemplate =
         MonsterTraits = this.Traits }
 
 module Bestiary =
+  // NOTE (Prowess/Poise merge): the mental discipline pair folded into the physical one, so an authored
+  // stat block that used to state Prowess/Poise for the physical plane and again for the mental plane now
+  // states the same stat twice. Nothing here reads it: every creature in this file is a non-humanoid, and
+  // `Combatant.GetStat` returns 0 for Prowess/Poise on a combatant with a `MonsterFamily`. Only the player
+  // and humanoid opposition (a Knight, a Wizard — no family) carry the trained pair. The lines were left as
+  // authored rather than de-duplicated because they are now inert.
 
   // ---------------------------------------------------------------------------
   // 1. Alchemical Trophies Catalog
@@ -248,7 +254,7 @@ module Bestiary =
       Stats = [
         Force, 105; Fortitude, 95; Finesse, 80; Reflex, 75
         Prowess, 70; Poise, 70; Intellect, 35; Resolve, 60
-        Acuity, 45; Intuition, 55; Acumen, 40; Composure, 50 ]
+        Acuity, 45; Intuition, 55; Prowess, 40; Poise, 50 ]
       PreferredStance = CombatStance.PowerStance
       PreferredComplexForm = None
       Traits = [ PackTactics 2; MoltenAura 8 ]
@@ -271,7 +277,7 @@ module Bestiary =
       Stats = [
         Force, 180; Fortitude, 220; Finesse, 230; Reflex, 240
         Prowess, 170; Poise, 200; Intellect, 60; Resolve, 160
-        Acuity, 80; Intuition, 140; Acumen, 70; Composure, 150 ]
+        Acuity, 80; Intuition, 140; Prowess, 70; Poise, 150 ]
       PreferredStance = CombatStance.AgilityStance
       PreferredComplexForm = None
       Traits = [ EtherealCarapace 0.20; AcidicBlood 10 ]
@@ -294,7 +300,7 @@ module Bestiary =
       Stats = [
         Force, 490; Fortitude, 520; Finesse, 340; Reflex, 350
         Prowess, 460; Poise, 420; Intellect, 150; Resolve, 380
-        Acuity, 170; Intuition, 300; Acumen, 200; Composure, 390 ]
+        Acuity, 170; Intuition, 300; Prowess, 200; Poise, 390 ]
       PreferredStance = CombatStance.DisciplineStance
       PreferredComplexForm = None
       Traits = [ RelentlessFerocity 25; AcidicBlood 15 ]
@@ -318,7 +324,7 @@ module Bestiary =
       Stats = [
         Force, 50; Fortitude, 60; Finesse, 120; Reflex, 100
         Prowess, 80; Poise, 70; Intellect, 90; Resolve, 80
-        Acuity, 130; Intuition, 110; Acumen, 75; Composure, 70 ]
+        Acuity, 130; Intuition, 110; Prowess, 75; Poise, 70 ]
       PreferredStance = CombatStance.AgilityStance
       PreferredComplexForm = Some ComplexForm.PhantasmalDiffusion
       Traits = [ VenomousSting 1; PackTactics 2 ]
@@ -342,7 +348,7 @@ module Bestiary =
       Stats = [
         Force, 160; Fortitude, 180; Finesse, 280; Reflex, 270
         Prowess, 220; Poise, 190; Intellect, 110; Resolve, 170
-        Acuity, 220; Intuition, 200; Acumen, 140; Composure, 180 ]
+        Acuity, 220; Intuition, 200; Prowess, 140; Poise, 180 ]
       PreferredStance = CombatStance.AgilityStance
       PreferredComplexForm = None
       Traits = [ VenomousSting 2; PackTactics 3 ]
@@ -366,7 +372,7 @@ module Bestiary =
       Stats = [
         Force, 420; Fortitude, 440; Finesse, 540; Reflex, 510
         Prowess, 460; Poise, 450; Intellect, 210; Resolve, 360
-        Acuity, 380; Intuition, 410; Acumen, 260; Composure, 400 ]
+        Acuity, 380; Intuition, 410; Prowess, 260; Poise, 400 ]
       PreferredStance = CombatStance.AgilityStance
       PreferredComplexForm = None
       Traits = [ RelentlessFerocity 30; PetrifyingGaze 20 ]
@@ -390,7 +396,7 @@ module Bestiary =
       Stats = [
         Force, 260; Fortitude, 270; Finesse, 160; Reflex, 190
         Prowess, 190; Poise, 210; Intellect, 70; Resolve, 180
-        Acuity, 80; Intuition, 130; Acumen, 90; Composure, 170 ]
+        Acuity, 80; Intuition, 130; Prowess, 90; Poise, 170 ]
       PreferredStance = CombatStance.PowerStance
       PreferredComplexForm = None
       Traits = [ MoltenAura 15; PackTactics 2 ]
@@ -413,7 +419,7 @@ module Bestiary =
       Stats = [
         Force, 590; Fortitude, 620; Finesse, 280; Reflex, 310
         Prowess, 510; Poise, 550; Intellect, 180; Resolve, 460
-        Acuity, 200; Intuition, 340; Acumen, 220; Composure, 480 ]
+        Acuity, 200; Intuition, 340; Prowess, 220; Poise, 480 ]
       PreferredStance = CombatStance.DisciplineStance
       PreferredComplexForm = None
       Traits = [ EtherealCarapace 0.25; AcidicBlood 20 ]
@@ -436,7 +442,7 @@ module Bestiary =
       Stats = [
         Force, 940; Fortitude, 920; Finesse, 650; Reflex, 680
         Prowess, 780; Poise, 760; Intellect, 780; Resolve, 720
-        Acuity, 690; Intuition, 670; Acumen, 550; Composure, 710 ]
+        Acuity, 690; Intuition, 670; Prowess, 550; Poise, 710 ]
       PreferredStance = CombatStance.PowerStance
       PreferredComplexForm = Some ComplexForm.ResonanceSpike
       Traits = [ RelentlessFerocity 35; MoltenAura 25 ]
@@ -460,7 +466,7 @@ module Bestiary =
       Stats = [
         Force, 200; Fortitude, 210; Finesse, 310; Reflex, 300
         Prowess, 240; Poise, 220; Intellect, 100; Resolve, 180
-        Acuity, 190; Intuition, 210; Acumen, 130; Composure, 190 ]
+        Acuity, 190; Intuition, 210; Prowess, 130; Poise, 190 ]
       PreferredStance = CombatStance.AgilityStance
       PreferredComplexForm = None
       Traits = [ PackTactics 3; VenomousSting 1 ]
@@ -483,7 +489,7 @@ module Bestiary =
       Stats = [
         Force, 320; Fortitude, 360; Finesse, 480; Reflex, 470
         Prowess, 410; Poise, 390; Intellect, 510; Resolve, 490
-        Acuity, 620; Intuition, 580; Acumen, 450; Composure, 480 ]
+        Acuity, 620; Intuition, 580; Prowess, 450; Poise, 480 ]
       PreferredStance = CombatStance.AgilityStance
       PreferredComplexForm = Some ComplexForm.PhantasmalDiffusion
       Traits = [ PsychicDoldrums 15; PetrifyingGaze 25 ]
@@ -507,7 +513,7 @@ module Bestiary =
       Stats = [
         Force, 1020; Fortitude, 980; Finesse, 740; Reflex, 760
         Prowess, 880; Poise, 850; Intellect, 640; Resolve, 790
-        Acuity, 710; Intuition, 720; Acumen, 580; Composure, 800 ]
+        Acuity, 710; Intuition, 720; Prowess, 580; Poise, 800 ]
       PreferredStance = CombatStance.DisciplineStance
       PreferredComplexForm = None
       Traits = [ EtherealCarapace 0.30; RelentlessFerocity 30 ]
@@ -531,7 +537,7 @@ module Bestiary =
       Stats = [
         Force, 330; Fortitude, 310; Finesse, 260; Reflex, 250
         Prowess, 220; Poise, 210; Intellect, 110; Resolve, 220
-        Acuity, 180; Intuition, 200; Acumen, 140; Composure, 200 ]
+        Acuity, 180; Intuition, 200; Prowess, 140; Poise, 200 ]
       PreferredStance = CombatStance.PowerStance
       PreferredComplexForm = None
       Traits = [ VenomousSting 2; PackTactics 3 ]
@@ -554,7 +560,7 @@ module Bestiary =
       Stats = [
         Force, 540; Fortitude, 660; Finesse, 350; Reflex, 380
         Prowess, 460; Poise, 520; Intellect, 390; Resolve, 680
-        Acuity, 360; Intuition, 480; Acumen, 340; Composure, 550 ]
+        Acuity, 360; Intuition, 480; Prowess, 340; Poise, 550 ]
       PreferredStance = CombatStance.DisciplineStance
       PreferredComplexForm = None
       Traits = [ ChillingPresence 15; EtherealCarapace 0.20 ]
@@ -577,7 +583,7 @@ module Bestiary =
       Stats = [
         Force, 480; Fortitude, 620; Finesse, 780; Reflex, 810
         Prowess, 680; Poise, 740; Intellect, 980; Resolve, 940
-        Acuity, 1040; Intuition, 920; Acumen, 780; Composure, 890 ]
+        Acuity, 1040; Intuition, 920; Prowess, 780; Poise, 890 ]
       PreferredStance = CombatStance.AgilityStance
       PreferredComplexForm = Some ComplexForm.PhantasmalDiffusion
       Traits = [ PsychicDoldrums 20; ChillingPresence 20 ]
@@ -601,7 +607,7 @@ module Bestiary =
       Stats = [
         Force, 440; Fortitude, 490; Finesse, 520; Reflex, 550
         Prowess, 580; Poise, 540; Intellect, 520; Resolve, 610
-        Acuity, 580; Intuition, 610; Acumen, 690; Composure, 660 ]
+        Acuity, 580; Intuition, 610; Prowess, 690; Poise, 660 ]
       PreferredStance = CombatStance.DisciplineStance
       PreferredComplexForm = Some ComplexForm.AegisLattice
       Traits = [ RelentlessFerocity 25; PackTactics 2 ]
@@ -624,7 +630,7 @@ module Bestiary =
       Stats = [
         Force, 620; Fortitude, 780; Finesse, 720; Reflex, 790
         Prowess, 840; Poise, 820; Intellect, 1060; Resolve, 960
-        Acuity, 1010; Intuition, 950; Acumen, 890; Composure, 920 ]
+        Acuity, 1010; Intuition, 950; Prowess, 890; Poise, 920 ]
       PreferredStance = CombatStance.DisciplineStance
       PreferredComplexForm = Some ComplexForm.ResonanceSpike
       Traits = [ PetrifyingGaze 30; PsychicDoldrums 20 ]
@@ -647,7 +653,7 @@ module Bestiary =
       Stats = [
         Force, 890; Fortitude, 960; Finesse, 780; Reflex, 820
         Prowess, 1080; Poise, 1120; Intellect, 720; Resolve, 980
-        Acuity, 790; Intuition, 860; Acumen, 880; Composure, 1040 ]
+        Acuity, 790; Intuition, 860; Prowess, 880; Poise, 1040 ]
       PreferredStance = CombatStance.DisciplineStance
       PreferredComplexForm = Some ComplexForm.AegisLattice
       Traits = [ EtherealCarapace 0.35; RelentlessFerocity 30 ]
@@ -672,7 +678,7 @@ module Bestiary =
       Stats = [
         Force, 680; Fortitude, 750; Finesse, 1050; Reflex, 980
         Prowess, 840; Poise, 810; Intellect, 880; Resolve, 920
-        Acuity, 1020; Intuition, 940; Acumen, 820; Composure, 910 ]
+        Acuity, 1020; Intuition, 940; Prowess, 820; Poise, 910 ]
       PreferredStance = CombatStance.AgilityStance
       PreferredComplexForm = Some ComplexForm.PhantasmalDiffusion
       Traits = [ EtherealCarapace 0.25; PackTactics 2 ]
@@ -695,7 +701,7 @@ module Bestiary =
       Stats = [
         Force, 1120; Fortitude, 1020; Finesse, 890; Reflex, 880
         Prowess, 940; Poise, 910; Intellect, 820; Resolve, 890
-        Acuity, 1060; Intuition, 880; Acumen, 780; Composure, 900 ]
+        Acuity, 1060; Intuition, 880; Prowess, 780; Poise, 900 ]
       PreferredStance = CombatStance.PowerStance
       PreferredComplexForm = None
       Traits = [ RelentlessFerocity 40; AcidicBlood 25 ]
@@ -718,7 +724,7 @@ module Bestiary =
       Stats = [
         Force, 890; Fortitude, 980; Finesse, 840; Reflex, 880
         Prowess, 1050; Poise, 1020; Intellect, 1150; Resolve, 1080
-        Acuity, 1020; Intuition, 990; Acumen, 1100; Composure, 1080 ]
+        Acuity, 1020; Intuition, 990; Prowess, 1100; Poise, 1080 ]
       PreferredStance = CombatStance.DisciplineStance
       PreferredComplexForm = Some ComplexForm.ResonanceSpike
       Traits = [ PsychicDoldrums 25; PetrifyingGaze 35; EtherealCarapace 0.30 ]

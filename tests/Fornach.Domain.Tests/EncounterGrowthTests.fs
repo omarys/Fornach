@@ -8,7 +8,7 @@ open Fornach.Domain
 /// reach full familiarity in ActionResolver.familiarityFactor).
 /// `Combatant.growFromStressedVictory` banks +5 on a victory that cost blood/morale/status,
 /// +1 more above half Recklessness. `Combatant.growFromDefeat` banks +10 on collapse or death.
-/// All four growth stats (Prowess/Poise or Acumen/Composure) rise together under stress.
+/// All four growth stats (Prowess/Poise or Prowess/Poise) rise together under stress.
 module EncounterGrowthTests =
   let private statOf (stat: StatId) (c: Combatant) = c.Stats.Get stat
   let private foe (cls: CharacterClass) (tier: CombatTier) = TierFactory.createClassTier cls tier
@@ -42,12 +42,10 @@ module EncounterGrowthTests =
     let grown = Combatant.growFromStressedVictory before
     Assert.Equal(statOf StatId.Prowess before + 5, statOf StatId.Prowess grown)
     Assert.Equal(statOf StatId.Poise before + 5, statOf StatId.Poise grown)
-    // Resolve/Intuition keep only their per-encounter tick; stress growth never touches them,
-    // and the other class's pair is untouched.
+    // Resolve/Intuition keep only their per-encounter tick; stress growth never touches them, and the
+    // merged pair is the only discipline stat there is now, so there is no "other class's pair" to leave alone.
     Assert.Equal(statOf StatId.Resolve before, statOf StatId.Resolve grown)
     Assert.Equal(statOf StatId.Intuition before, statOf StatId.Intuition grown)
-    Assert.Equal(statOf StatId.Acumen before, statOf StatId.Acumen grown)
-    Assert.Equal(statOf StatId.Composure before, statOf StatId.Composure grown)
 
   [<Fact>]
   let ``morale loss or a lingering status counts as stress, not just wounds`` () =
@@ -56,8 +54,8 @@ module EncounterGrowthTests =
     let frustrated = { base_ with Meters = { base_.Meters with Frustration = Meter.Create 20 } }
     let grewFromMorale = Combatant.growFromStressedVictory demoralised
     let grewFromStatus = Combatant.growFromStressedVictory frustrated
-    Assert.Equal(statOf StatId.Acumen base_ + 5, statOf StatId.Acumen grewFromMorale)
-    Assert.Equal(statOf StatId.Acumen base_ + 5, statOf StatId.Acumen grewFromStatus)
+    Assert.Equal(statOf StatId.Prowess base_ + 5, statOf StatId.Prowess grewFromMorale)
+    Assert.Equal(statOf StatId.Prowess base_ + 5, statOf StatId.Prowess grewFromStatus)
 
   [<Fact>]
   let ``a victory above half Recklessness adds +1 to the +5`` () =
@@ -71,13 +69,12 @@ module EncounterGrowthTests =
     Assert.Equal(statOf StatId.Prowess flawless + 6, statOf StatId.Prowess grownFlawless)
 
   [<Fact>]
-  let ``a mage grows Acumen/Composure under stress and never Prowess/Poise`` () =
+  let ``a mage grows the same shared discipline pair a fighter does`` () =
+    // Prowess and Poise serve both planes, so there is one pair to grow and both classes grow it.
     let before = bloodied CharacterClass.Mage
     let grown = Combatant.growFromStressedVictory before
-    Assert.Equal(statOf StatId.Acumen before + 5, statOf StatId.Acumen grown)
-    Assert.Equal(statOf StatId.Composure before + 5, statOf StatId.Composure grown)
-    Assert.Equal(statOf StatId.Prowess before, statOf StatId.Prowess grown)
-    Assert.Equal(statOf StatId.Poise before, statOf StatId.Poise grown)
+    Assert.Equal(statOf StatId.Prowess before + 5, statOf StatId.Prowess grown)
+    Assert.Equal(statOf StatId.Poise before + 5, statOf StatId.Poise grown)
 
   [<Fact>]
   let ``defeat banks +10 in the class discipline pair — the deepest growth in the game`` () =
@@ -88,9 +85,8 @@ module EncounterGrowthTests =
     Assert.Equal(statOf StatId.Resolve before, statOf StatId.Resolve grown)
     let mage = unharmed CharacterClass.Mage
     let grownMage = Combatant.growFromDefeat mage
-    Assert.Equal(statOf StatId.Acumen mage + 10, statOf StatId.Acumen grownMage)
-    Assert.Equal(statOf StatId.Composure mage + 10, statOf StatId.Composure grownMage)
-    Assert.Equal(statOf StatId.Prowess mage, statOf StatId.Prowess grownMage)
+    Assert.Equal(statOf StatId.Prowess mage + 10, statOf StatId.Prowess grownMage)
+    Assert.Equal(statOf StatId.Poise mage + 10, statOf StatId.Poise grownMage)
 
   [<Fact>]
   let ``bestiary familiarity counts +1 per encounter per species, uncapped`` () =

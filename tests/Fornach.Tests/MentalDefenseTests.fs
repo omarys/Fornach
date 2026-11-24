@@ -60,7 +60,7 @@ let ``physical classes carry respectable mental defence`` () =
     let champ = TierFactory.createClassTier cls CombatTier.Veteran
 
     let mentalDefence =
-      [ champ.GetStat Resolve; champ.GetStat Intuition; champ.GetStat Composure ]
+      [ champ.GetStat Resolve; champ.GetStat Intuition; champ.GetStat Poise ]
       |> List.min
 
     Assert.True(

@@ -170,24 +170,30 @@ type AltarReward =
   | KeyReward of keyId: string * keyName: string
   | RelicReward of EquipmentItem
 
+  /// What the pact reads as in the log and on the altar's menu. Every altar blessing is a debt: the points
+  /// count for this floor only, and the body pays for them every step until the stairs or a shrine.
   member this.Description : string =
+    let pact =
+      "a pact boon: it bleeds Health and Morale every step and ends at the stairs (a shrine lifts it early)"
+
     match this with
     | TemperedRelic (relic, boon, pairPercent, temper) ->
-      sprintf "Relic: %s (+%d%% %s) and +%d enlightenment" relic.Name pairPercent boon.Description temper
+      sprintf "Relic: %s (+%d%% %s) and +%d enlightenment — %s" relic.Name pairPercent boon.Description temper pact
     | Tempered (relic, defences, temper) ->
       let names list =
         list |> List.map (fun stat -> (Attributes.descriptorOf stat).CanonicalName) |> String.concat "/"
 
       sprintf
-        "Relic: %s (+%s) and +%d %s"
+        "Relic: %s (+%s) and +%d %s — %s"
         relic.Name
         (relic.StatPercentBonuses
          |> List.map (fun (stat, pct) -> sprintf "%d%% %s" pct (Attributes.descriptorOf stat).CanonicalName)
          |> String.concat ", ")
         temper
         (names defences)
+        pact
     | StatBuff (stats, bonus) ->
-      sprintf "+%d %s" bonus (stats |> List.map (sprintf "%A") |> String.concat " and ")
+      sprintf "+%d %s — %s" bonus (stats |> List.map (sprintf "%A") |> String.concat " and ") pact
     | VitalitySurge (hpPct, morPct) ->
       [ if hpPct > 0 then sprintf "+%d%% HP" hpPct
         if morPct > 0 then sprintf "+%d%% Morale" morPct ]
@@ -219,7 +225,12 @@ type AltarReward =
     Attributes.all
     |> List.filter (fun stat ->
       let descriptor = Attributes.descriptorOf stat
-      descriptor.Plane <> plane && descriptor.Orientation = Defense)
+
+      // Poise is the shared discipline guard: it belongs to both planes, so it is never "off-plane"
+      // and never takes the veil-crossing enlightenment.
+      descriptor.Vector <> Vector.Discipline
+      && descriptor.Plane <> plane
+      && descriptor.Orientation = Defense)
 
   /// The reward as a given plane can actually receive it. A Fighter may only be granted physical
   /// attributes and a Mage only mental ones, so a relic's pair is resolved against the bearer's
