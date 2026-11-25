@@ -6,7 +6,13 @@ open Fornach.Domain
 open Fornach.Spatial
 open Fornach.Engine
 
-let private reachableFromSpawn (floor: TowerFloor) : HashSet<Point> =
+let private cardinalNeighbors (p: Point) : Point[] =
+  [| { X = p.X + 1; Y = p.Y }
+     { X = p.X - 1; Y = p.Y }
+     { X = p.X; Y = p.Y + 1 }
+     { X = p.X; Y = p.Y - 1 } |]
+
+let private reachableCardinalFromSpawn (floor: TowerFloor) : HashSet<Point> =
   let visited = HashSet<Point>()
   let q = Queue<Point>()
   visited.Add floor.SpawnLocation |> ignore
@@ -14,7 +20,7 @@ let private reachableFromSpawn (floor: TowerFloor) : HashSet<Point> =
 
   while q.Count > 0 do
     let cur = q.Dequeue()
-    for n in Point.allNeighbors cur do
+    for n in cardinalNeighbors cur do
       if not (visited.Contains n) && floor.IsWalkableTile n then
         visited.Add n |> ignore
         q.Enqueue n
@@ -35,24 +41,31 @@ let ``floor generation is strictly deterministic for identical seeds across all 
       Assert.Equal(kv.Value, b.Tiles.[kv.Key])
 
 [<Fact>]
-let ``every stairway, shrine, chest, npc, and encounter is reachable from spawn across all 7 themes`` () =
-  for floorNum in 1 .. 7 do
-    for seed in [ 1; 42; 31337 ] do
-      let floor = TowerGenerator.generateFloorWithMode seed floorNum false
-      let reachable = reachableFromSpawn floor
+let ``every walkable tile, room, alcove, stairway, and entity is 4-way reachable from spawn across floors 1..12`` () =
+  for isStory in [ true; false ] do
+    for floorNum in 1 .. 12 do
+      for seed in [ 1; 7; 42; 4242; 9001; 31337 ] do
+        let floor = TowerGenerator.generateFloorWithMode seed floorNum isStory
+        let reachable = reachableCardinalFromSpawn floor
 
-      Assert.True(
-        reachable.Contains floor.StairwayLocation,
-        sprintf "Floor %d (seed %d, %A): stairway %A unreachable from spawn %A" floorNum seed floor.Theme floor.StairwayLocation floor.SpawnLocation
-      )
-
-      for kv in floor.Entities do
-        let pt = kv.Key
-        // Blocking entities (chests, shrines, npcs, enemies) are reachable if their own tile is walkable in the tile map
         Assert.True(
-          reachable.Contains pt,
-          sprintf "Floor %d (seed %d, %A): entity at %A unreachable from spawn %A" floorNum seed floor.Theme pt floor.SpawnLocation
+          reachable.Contains floor.StairwayLocation,
+          sprintf "Floor %d (story=%b, seed=%d, %A): stairway %A unreachable via 4-way movement from spawn %A" floorNum isStory seed floor.Theme floor.StairwayLocation floor.SpawnLocation
         )
+
+        for kv in floor.Entities do
+          let pt = kv.Key
+          Assert.True(
+            reachable.Contains pt,
+            sprintf "Floor %d (story=%b, seed=%d, %A): entity at %A unreachable via 4-way movement from spawn %A" floorNum isStory seed floor.Theme pt floor.SpawnLocation
+          )
+
+        for kv in floor.Tiles do
+          if kv.Value.IsWalkable then
+            Assert.True(
+              reachable.Contains kv.Key,
+              sprintf "Floor %d (story=%b, seed=%d, %A): walkable tile %A (%A) is isolated by pillars/chasms from spawn %A" floorNum isStory seed floor.Theme kv.Key kv.Value floor.SpawnLocation
+            )
 
 [<Fact>]
 let ``archways are placed on chamber thresholds rather than on spawn or stairway anchors`` () =

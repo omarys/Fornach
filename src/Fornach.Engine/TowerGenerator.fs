@@ -515,11 +515,14 @@ module TowerGenerator =
               roomThresholds.[rIdx].Add pt
             else
               setTile x y (Floor surface)
-            // Guarantee 1 step inside the room behind the threshold is clear of interior pillars
-            let inX = if x = plaza.X then x + 1 elif x = plaza.X + plaza.Width - 1 then x - 1 else x
-            let inY = if y = plaza.Y then y + 1 elif y = plaza.Y + plaza.Height - 1 then y - 1 else y
-            if getTile inX inY = Pillar || getTile inX inY = Chasm then
-              setTile inX inY (Floor surface)
+            // Guarantee cardinal neighbors inside the room behind the threshold are clear of pillars/chasms
+            // (so 4-way movement is never pinched even if a corridor enters near a room corner or rotunda cut)
+            for (cdx, cdy) in [| (1, 0); (-1, 0); (0, 1); (0, -1) |] do
+              let nx, ny = x + cdx, y + cdy
+              let np = { X = nx; Y = ny }
+              if plaza.Contains np && (getTile nx ny = Pillar || getTile nx ny = Chasm) then
+                if not (plaza.IsBorder np) then
+                  setTile nx ny (Floor surface)
           elif getTile x y = Pillar || getTile x y = Chasm then
             // Clear path through clipped rotunda corner or interior pillar if corridor crosses it
             setTile x y (Floor surface)
@@ -594,11 +597,14 @@ module TowerGenerator =
           // Carve 1-wide neck
           for s in 1 .. neckLen do
             setTile (archX + dx * s) (archY + dy * s) (Floor surface)
-          // Carve 4x4 alcove chamber (walkable interior + corner pillars)
+          // Carve 4x4 alcove chamber (walkable interior + corner pillars; never overwrite existing corridors/archways)
           for py in chY .. chY + 3 do
             for px in chX .. chX + 3 do
               let isCorner = (px = chX || px = chX + 3) && (py = chY || py = chY + 3)
-              setTile px py (if isCorner then Pillar else Floor surface)
+              if isCorner then
+                if getTile px py = Chasm then setTile px py Pillar
+              else
+                setTile px py (Floor surface)
           // Connect neck into chamber edge
           setTile (neckEndX + dx) (neckEndY + dy) (Floor surface)
           let chamberCenter = { X = chX + 1; Y = chY + 1 }
@@ -650,16 +656,19 @@ module TowerGenerator =
 
     setPt stairway (StairwayPortal doorState)
 
-    // 10. Verify Full Walkable Connectivity (every room, alcove, and stairway reachable from spawn)
-    let computeReachable () =
+    // 10. Verify Full 4-Way (Cardinal) Walkable Connectivity
+    // Ensures every room (including HazardCrucible rooms with chasm centers), every alcove, the stairway,
+    // and every walkable tile on the floor is 4-way reachable from spawn with no pillar/monolith blockages.
+    let cardinalOffsets = [| (1, 0); (-1, 0); (0, 1); (0, -1) |]
+
+    let computeCardinalReachable () =
       let visited = Array.zeroCreate<bool> (mapWidth * mapHeight)
       let q = System.Collections.Generic.Queue<Point>()
       visited.[spawn.Y * mapWidth + spawn.X] <- true
       q.Enqueue spawn
-      let offsets = [| (1, 0); (-1, 0); (0, 1); (0, -1); (1, 1); (1, -1); (-1, 1); (-1, -1) |]
       while q.Count > 0 do
         let cur = q.Dequeue()
-        for (dx, dy) in offsets do
+        for (dx, dy) in cardinalOffsets do
           let nx, ny = cur.X + dx, cur.Y + dy
           if inBounds nx ny then
             let idx = ny * mapWidth + nx
@@ -668,19 +677,88 @@ module TowerGenerator =
               q.Enqueue { X = nx; Y = ny }
       visited
 
+    let carveCardinalBridge (fromPt: Point) (toPt: Point) =
+      let stepX = if toPt.X >= fromPt.X then 1 else -1
+      let stepY = if toPt.Y >= fromPt.Y then 1 else -1
+      let mutable x = fromPt.X
+      let mutable doneX = false
+      while not doneX do
+        if not (getTile x fromPt.Y).IsWalkable then
+          setTile x fromPt.Y (Floor surface)
+        if x = toPt.X then doneX <- true else x <- x + stepX
+      let mutable y = fromPt.Y
+      let mutable doneY = false
+      while not doneY do
+        if not (getTile toPt.X y).IsWalkable then
+          setTile toPt.X y (Floor surface)
+        if y = toPt.Y then doneY <- true else y <- y + stepY
+
+    let findNearestReachable (visited: bool[]) (target: Point) : Point =
+      let mutable best = spawn
+      let mutable bestDist = Math.Abs(spawn.X - target.X) + Math.Abs(spawn.Y - target.Y)
+      for y in 0 .. mapHeight - 1 do
+        let rowOffset = y * mapWidth
+        for x in 0 .. mapWidth - 1 do
+          if visited.[rowOffset + x] then
+            let d = Math.Abs(x - target.X) + Math.Abs(y - target.Y)
+            if d < bestDist then
+              bestDist <- d
+              best <- { X = x; Y = y }
+      best
+
     let ensureReachable (target: Point) =
-      let visited = computeReachable ()
+      let visited = computeCardinalReachable ()
       if not visited.[target.Y * mapWidth + target.X] then
-        carveCauseway spawn target 1
-        setPt target (if target = stairway then StairwayPortal doorState else Floor surface)
+        let anchor = findNearestReachable visited target
+        carveCardinalBridge target anchor
+        if target = stairway then
+          setPt target (StairwayPortal doorState)
+        elif not (getPt target).IsWalkable then
+          setPt target (Floor surface)
+
+    let findWalkableTileIn (plaza: Plaza) : Point =
+      if (getPt plaza.Center).IsWalkable then plaza.Center
+      else
+        let mutable found : Point option = None
+        for py in plaza.Y + 1 .. plaza.Y + plaza.Height - 2 do
+          for px in plaza.X + 1 .. plaza.X + plaza.Width - 2 do
+            if found.IsNone && (getTile px py).IsWalkable then
+              found <- Some { X = px; Y = py }
+        match found with
+        | Some p -> p
+        | None ->
+          setPt plaza.Center (Floor surface)
+          plaza.Center
 
     ensureReachable stairway
     for i in 0 .. plazaCount - 1 do
-      let c = plazaArr.[i].Center
-      if (getPt c).IsWalkable then
-        ensureReachable c
+      ensureReachable (findWalkableTileIn plazaArr.[i])
     for (_, _, alcoveCenter) in alcoves do
       ensureReachable alcoveCenter
+
+    // Final sweep: repair any remaining disconnected walkable pocket (e.g. a side aisle or corner
+    // isolated by interior pillars) so 100% of walkable tiles form one 4-way connected component.
+    let mutable disconnectedRepair = true
+    let mutable repairGuard = 0
+    while disconnectedRepair && repairGuard < 32 do
+      repairGuard <- repairGuard + 1
+      let visited = computeCardinalReachable ()
+      let mutable stray : Point option = None
+      let mutable y = 0
+      while stray.IsNone && y < mapHeight do
+        let rowOffset = y * mapWidth
+        let mutable x = 0
+        while stray.IsNone && x < mapWidth do
+          if not visited.[rowOffset + x] && grid.[rowOffset + x].IsWalkable then
+            stray <- Some { X = x; Y = y }
+          x <- x + 1
+        y <- y + 1
+      match stray with
+      | Some pt ->
+        let anchor = findNearestReachable visited pt
+        carveCardinalBridge pt anchor
+      | None ->
+        disconnectedRepair <- false
 
     // 11. Populate Interactive Entities
     let mutable entities = Map.empty<Point, TowerEntity>
