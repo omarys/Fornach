@@ -6,6 +6,65 @@ open Fornach.Spatial
 
 module TowerGenerator =
 
+  /// Distinct architectural room archetypes for tactical variety
+  type private RoomArchetype =
+    | OpenPlaza
+    | ColonnadeHall
+    | GatehouseBastion
+    | HazardCrucible
+    | RotundaSanctuary
+    | RuinedScatter
+
+  /// Theme-driven layout parameters controlling chamber geometry, corridors, loops, and hazards
+  type private BiomeLayoutProfile =
+    { MinRoomW: int
+      MaxRoomW: int
+      MinRoomH: int
+      MaxRoomH: int
+      MainCorridorWidth: int
+      MaxLoops: int
+      PreferredArchetypes: RoomArchetype[]
+      HazardClusterCount: int
+      CrucibleUsesChasm: bool }
+
+  let private layoutProfileForTheme (theme: FloorTheme) : BiomeLayoutProfile =
+    match theme with
+    | QuarryPlazas ->
+      { MinRoomW = 10; MaxRoomW = 16; MinRoomH = 8; MaxRoomH = 12
+        MainCorridorWidth = 2; MaxLoops = 3
+        PreferredArchetypes = [| ColonnadeHall; GatehouseBastion; RuinedScatter |]
+        HazardClusterCount = 1; CrucibleUsesChasm = false }
+    | PineCloisters ->
+      { MinRoomW = 11; MaxRoomW = 17; MinRoomH = 9; MaxRoomH = 13
+        MainCorridorWidth = 2; MaxLoops = 3
+        PreferredArchetypes = [| RuinedScatter; ColonnadeHall; RotundaSanctuary |]
+        HazardClusterCount = 2; CrucibleUsesChasm = false }
+    | BasaltCalderas ->
+      { MinRoomW = 10; MaxRoomW = 15; MinRoomH = 8; MaxRoomH = 12
+        MainCorridorWidth = 2; MaxLoops = 2
+        PreferredArchetypes = [| HazardCrucible; GatehouseBastion; RuinedScatter |]
+        HazardClusterCount = 2; CrucibleUsesChasm = false }
+    | TempestTerraces ->
+      { MinRoomW = 10; MaxRoomW = 16; MinRoomH = 8; MaxRoomH = 11
+        MainCorridorWidth = 1; MaxLoops = 3
+        PreferredArchetypes = [| HazardCrucible; ColonnadeHall; GatehouseBastion |]
+        HazardClusterCount = 2; CrucibleUsesChasm = true }
+    | SunkenBoulevards ->
+      { MinRoomW = 11; MaxRoomW = 16; MinRoomH = 8; MaxRoomH = 12
+        MainCorridorWidth = 2; MaxLoops = 3
+        PreferredArchetypes = [| ColonnadeHall; HazardCrucible; RuinedScatter |]
+        HazardClusterCount = 2; CrucibleUsesChasm = false }
+    | ElysianSanctuaries ->
+      { MinRoomW = 11; MaxRoomW = 16; MinRoomH = 9; MaxRoomH = 13
+        MainCorridorWidth = 2; MaxLoops = 3
+        PreferredArchetypes = [| RotundaSanctuary; ColonnadeHall; RuinedScatter |]
+        HazardClusterCount = 1; CrucibleUsesChasm = false }
+    | CelestialSpires ->
+      { MinRoomW = 9; MaxRoomW = 14; MinRoomH = 8; MaxRoomH = 11
+        MainCorridorWidth = 1; MaxLoops = 4
+        PreferredArchetypes = [| RotundaSanctuary; HazardCrucible; GatehouseBastion |]
+        HazardClusterCount = 1; CrucibleUsesChasm = true }
+
   /// Resolves the thematic surface type for a given floor theme
   let private surfaceForTheme (theme: FloorTheme) : SurfaceType =
     match theme with
@@ -44,11 +103,21 @@ module TowerGenerator =
       p.X >= this.X && p.X < this.X + this.Width &&
       p.Y >= this.Y && p.Y < this.Y + this.Height
 
-  /// Generates a complete Tower floor layout with open architectural plazas and no blocky caves
+    member this.IsBorder (p: Point) : bool =
+      this.Contains p &&
+      (p.X = this.X || p.X = this.X + this.Width - 1 ||
+       p.Y = this.Y || p.Y = this.Y + this.Height - 1)
+
+    member this.IsStrictInterior (p: Point) : bool =
+      p.X > this.X && p.X < this.X + this.Width - 1 &&
+      p.Y > this.Y && p.Y < this.Y + this.Height - 1
+
+  /// Generates a complete Tower floor layout with themed room archetypes, perimeter archways,
+  /// tactical alcoves, and role-aware enemy formations.
   let generateFloorForPlane (seed: int) (floorNumber: int) (isStory: bool) (playerPlane: Plane) : TowerFloor =
     let rng = Random(seed + floorNumber * 1009)
 
-    // 1. Determine Floor Theme
+    // 1. Determine Floor Theme & Biome Layout Profile
     let themeOfIndex (index: int) =
       match index with
       | 0 -> QuarryPlazas
@@ -68,17 +137,28 @@ module TowerGenerator =
       else
         themeOfIndex ((floorNumber - 1) % 7)
 
+    let profile = layoutProfileForTheme theme
     let surface = surfaceForTheme theme
     let hazard = hazardForTheme theme
 
     let mapWidth = 88
     let mapHeight = 56
 
-    // Default: Entire floor begins as boundless open Chasm/Void
-    let mutable tiles = Map.empty<Point, TowerTile>
-    for y in 0 .. mapHeight - 1 do
-      for x in 0 .. mapWidth - 1 do
-        tiles <- Map.add { X = x; Y = y } Chasm tiles
+    // Flat mutable grid during generation (converted once to Map<Point, TowerTile> at the end)
+    let grid = Array.create (mapWidth * mapHeight) Chasm
+    let inline inBounds x y = x >= 0 && x < mapWidth && y >= 0 && y < mapHeight
+    let inline getTile x y = if inBounds x y then grid.[y * mapWidth + x] else Chasm
+    let inline setTile x y t = if inBounds x y then grid.[y * mapWidth + x] <- t
+    let inline getPt (p: Point) = getTile p.X p.Y
+    let inline setPt (p: Point) t = setTile p.X p.Y t
+
+    let chebyshev (a: Point) (b: Point) =
+      Math.Max(Math.Abs(a.X - b.X), Math.Abs(a.Y - b.Y))
+
+    let euclidean (a: Point) (b: Point) =
+      let dx = float (a.X - b.X)
+      let dy = float (a.Y - b.Y)
+      sqrt (dx * dx + dy * dy)
 
     // 2. Rejection-sample 9 to 12 chambers, each kept at least 2 tiles of chasm clear of the last
     let roomCount = 9 + rng.Next(0, 4)
@@ -96,10 +176,10 @@ module TowerGenerator =
     let mutable rooms : Plaza list = []
     let mutable attempts = 0
 
-    while rooms.Length < roomCount && attempts < 300 do
+    while rooms.Length < roomCount && attempts < 350 do
       attempts <- attempts + 1
-      let w = rng.Next(10, 17)
-      let h = rng.Next(8, 13)
+      let w = rng.Next(profile.MinRoomW, profile.MaxRoomW + 1)
+      let h = rng.Next(profile.MinRoomH, profile.MaxRoomH + 1)
 
       let candidate =
         { Id = rooms.Length
@@ -127,127 +207,415 @@ module TowerGenerator =
           Height = ph })
 
     let plazas = if rooms.Length >= 6 then rooms else fallbackRooms
+    let plazaArr = List.toArray plazas
+    let plazaCount = plazaArr.Length
+    let plazaAt (index: int) : Plaza = plazaArr.[Math.Min(index, plazaCount - 1)]
 
-    // Room roles are index-based (1 NPC, 2 shrine, 3 chest, 4 guardian); clamp so a short
-    // sample can never throw before the fallback above applies.
-    let plazaAt (index: int) : Plaza = plazas.[Math.Min(index, plazas.Length - 1)]
+    // 3. Build room connectivity graph (spanning tree + biome-capped loops) before carving
+    let adj = Array.init plazaCount (fun _ -> ResizeArray<int>())
+    let mainEdges = ResizeArray<int * int>()
+    let loopEdges = ResizeArray<int * int>()
+    let mutable linkSet = Set.empty<int * int>
 
-    // 3. Carve Plaza Floors and Colonnade Pillars
-    for plaza in plazas do
-      for py in plaza.Y .. plaza.Y + plaza.Height - 1 do
-        for px in plaza.X .. plaza.X + plaza.Width - 1 do
-          let pt = { X = px; Y = py }
-          let isBorder =
-            px = plaza.X || px = plaza.X + plaza.Width - 1 ||
-            py = plaza.Y || py = plaza.Y + plaza.Height - 1
+    let addEdge (isLoop: bool) (i: int) (j: int) =
+      let key = (Math.Min(i, j), Math.Max(i, j))
+      if not (linkSet.Contains key) then
+        linkSet <- linkSet.Add key
+        adj.[i].Add j
+        adj.[j].Add i
+        if isLoop then loopEdges.Add(i, j) else mainEdges.Add(i, j)
 
-          // Architectural Colonnades: pillars placed at rhythmic intervals along border edges
-          if isBorder && (px % 3 = 0 || py % 3 = 0) then
-            tiles <- Map.add pt Pillar tiles
-          elif (px = plaza.X + 3 || px = plaza.X + plaza.Width - 4) &&
-               (py = plaza.Y + 3 || py = plaza.Y + plaza.Height - 4) then
-            // Internal monument pillars
-            tiles <- Map.add pt Pillar tiles
-          else
-            // Check for environmental hazards (e.g. small lava rifts or shallow water pools)
-            if rng.Next(100) < 5 then
-              tiles <- Map.add pt (Hazard hazard) tiles
-            else
-              tiles <- Map.add pt (Floor surface) tiles
-
-    // 4. Carve Wide Colonnade Causeways (2 to 3 tiles wide) connecting plazas
-    let carveCauseway (p1: Point) (p2: Point) =
-      let minX, maxX = Math.Min(p1.X, p2.X), Math.Max(p1.X, p2.X)
-      let minY, maxY = Math.Min(p1.Y, p2.Y), Math.Max(p1.Y, p2.Y)
-
-      // Horizontal leg (width 2)
-      for x in minX .. maxX do
-        for dy in 0 .. 1 do
-          let pt = { X = x; Y = p1.Y + dy }
-          tiles <- Map.add pt (Floor surface) tiles
-
-      // Vertical leg (width 2)
-      for y in minY .. maxY do
-        for dx in 0 .. 1 do
-          let pt = { X = p2.X + dx; Y = y }
-          tiles <- Map.add pt (Floor surface) tiles
-
-      // Place open Archways at entrance and exit of the causeway
-      tiles <- Map.add p1 Archway tiles
-      tiles <- Map.add p2 Archway tiles
-
-    let chebyshev (a: Point) (b: Point) =
-      Math.Max(Math.Abs(a.X - b.X), Math.Abs(a.Y - b.Y))
-
-    let mutable links = Set.empty<int * int>
-
-    let connect (i: int) (j: int) =
-      let a, b = plazas.[i].Center, plazas.[j].Center
-      carveCauseway a b
-
-      // 2 endpoint archways plus up to 2 more along the run, so no two causeways look alike
-      for _ in 1 .. rng.Next(0, 3) do
-        let x = rng.Next(Math.Min(a.X, b.X), Math.Max(a.X, b.X) + 1)
-        tiles <- Map.add { X = x; Y = a.Y } Archway tiles
-
-      links <- links.Add((Math.Min(i, j), Math.Max(i, j)))
-
-    // Spanning tree: every chamber opens one causeway to its nearest already-placed chamber
-    for i in 1 .. plazas.Length - 1 do
+    for i in 1 .. plazaCount - 1 do
       let nearest =
-        [ 0 .. i - 1 ] |> List.minBy (fun j -> chebyshev plazas.[j].Center plazas.[i].Center)
+        [ 0 .. i - 1 ] |> List.minBy (fun j -> chebyshev plazaArr.[j].Center plazaArr.[i].Center)
+      addEdge false i nearest
 
-      connect i nearest
-
-    // Loops: ~20% of the remaining near pairs get a second path, capped at 3
     let mutable loopCount = 0
-
-    for i in 0 .. plazas.Length - 1 do
-      for j in i + 1 .. plazas.Length - 1 do
-        if loopCount < 3
-           && not (links.Contains((i, j)))
-           && chebyshev plazas.[i].Center plazas.[j].Center < 30
-           && rng.Next(5) = 0 then
-          connect i j
+    for i in 0 .. plazaCount - 1 do
+      for j in i + 1 .. plazaCount - 1 do
+        if loopCount < profile.MaxLoops
+           && not (linkSet.Contains((i, j)))
+           && chebyshev plazaArr.[i].Center plazaArr.[j].Center < 30
+           && rng.Next(4) = 0 then
+          addEdge true i j
           loopCount <- loopCount + 1
 
-    // Dead ends: 2-wide spurs run off a chamber edge and stop in the chasm
-    let carveStub (room: Plaza) (horizontal: bool) (sign: int) (length: int) =
-      let startX, startY =
-        if horizontal then
-          (if sign > 0 then room.X + room.Width else room.X - 1),
-          rng.Next(room.Y, room.Y + room.Height - 1)
-        else
-          rng.Next(room.X, room.X + room.Width - 1),
-          (if sign > 0 then room.Y + room.Height else room.Y - 1)
-
-      for step in 0 .. length - 1 do
-        for spread in 0 .. 1 do
-          let x = if horizontal then startX + sign * step else startX + spread
-          let y = if horizontal then startY + spread else startY + sign * step
-
-          if x >= 1 && x <= mapWidth - 2 && y >= 1 && y <= mapHeight - 2 then
-            tiles <- Map.add { X = x; Y = y } (Floor surface) tiles
-
-    for _ in 1 .. rng.Next(2, 5) do
-      let room = plazas.[rng.Next(plazas.Length)]
-      carveStub room (rng.Next(2) = 0) (if rng.Next(2) = 0 then -1 else 1) (rng.Next(4, 9))
-
-    // 5. Spawn in the chamber nearest the top-left corner; stairway in the farthest one
+    // 4. Assign Spawn, Stairway, Guardian, Shrine, NPC, and Chest rooms using graph distances
     let origin = { X = 0; Y = 0 }
-    let spawnPlaza = plazas |> List.minBy (fun p -> chebyshev p.Center origin)
-
+    let spawnIdx =
+      [ 0 .. plazaCount - 1 ] |> List.minBy (fun i -> chebyshev plazaArr.[i].Center origin)
+    let spawnPlaza = plazaArr.[spawnIdx]
     let spawn = spawnPlaza.Center
 
-    let stairwayPlaza =
-      plazas
-      |> List.filter (fun p -> p.Center <> spawn)
-      |> List.maxBy (fun p -> chebyshev p.Center spawn)
+    // BFS graph distance from spawnIdx
+    let graphDist = Array.create plazaCount Int32.MaxValue
+    let bfsQ = System.Collections.Generic.Queue<int>()
+    graphDist.[spawnIdx] <- 0
+    bfsQ.Enqueue spawnIdx
+    while bfsQ.Count > 0 do
+      let u = bfsQ.Dequeue()
+      for v in adj.[u] do
+        if graphDist.[v] = Int32.MaxValue then
+          graphDist.[v] <- graphDist.[u] + 1
+          bfsQ.Enqueue v
 
+    let stairwayIdx =
+      [ 0 .. plazaCount - 1 ]
+      |> List.filter (fun i -> i <> spawnIdx)
+      |> List.maxBy (fun i -> graphDist.[i], chebyshev plazaArr.[i].Center spawn)
+    let stairwayPlaza = plazaArr.[stairwayIdx]
     let stairway = stairwayPlaza.Center
 
+    // Guardian/Boss: never in spawn or stairway; placed in the deepest chamber approaching the stairway
+    let guardianIdx =
+      let away = [ 0 .. plazaCount - 1 ] |> List.filter (fun i -> i <> spawnIdx && i <> stairwayIdx)
+      match away with
+      | [] -> spawnIdx
+      | pool ->
+        pool
+        |> List.minBy (fun i -> chebyshev plazaArr.[i].Center stairway, -graphDist.[i])
+    let guardianPlaza = plazaArr.[guardianIdx]
+
+    // Two Shrines at mid-floor hubs (excluding spawn, stairway, and guardian when possible)
+    let maxDist = graphDist |> Array.filter (fun d -> d < Int32.MaxValue) |> Array.max |> max 1
+    let midDist = float maxDist / 2.0
+    let shrineCandidates =
+      [ 0 .. plazaCount - 1 ]
+      |> List.filter (fun i -> i <> spawnIdx && i <> stairwayIdx && i <> guardianIdx)
+      |> List.sortBy (fun i -> Math.Abs(float graphDist.[i] - midDist), -adj.[i].Count, i)
+
+    let shrineIdx1, shrineIdx2 =
+      match shrineCandidates with
+      | a :: b :: _ -> a, b
+      | [ a ] -> a, Math.Min(5, plazaCount - 1)
+      | [] -> Math.Min(2, plazaCount - 1), Math.Min(5, plazaCount - 1)
+
+    let npcIdx =
+      let near =
+        [ 0 .. plazaCount - 1 ]
+        |> List.filter (fun i -> i <> spawnIdx && i <> stairwayIdx && i <> guardianIdx && i <> shrineIdx1 && i <> shrineIdx2)
+        |> List.sortBy (fun i -> graphDist.[i], chebyshev plazaArr.[i].Center spawn)
+      match near with
+      | i :: _ -> i
+      | [] -> Math.Min(1, plazaCount - 1)
+    let npcPlaza = plazaArr.[npcIdx]
+
+    let chestIdx =
+      let midFar =
+        [ 0 .. plazaCount - 1 ]
+        |> List.filter (fun i -> i <> spawnIdx && i <> stairwayIdx && i <> shrineIdx1 && i <> shrineIdx2 && i <> npcIdx)
+        |> List.sortByDescending (fun i -> graphDist.[i], chebyshev plazaArr.[i].Center spawn)
+      match midFar with
+      | i :: _ -> i
+      | [] -> Math.Min(3, plazaCount - 1)
+    let chestPlaza = plazaArr.[chestIdx]
+
+    // 5. Assign Room Archetypes
+    let roomArchetypes = Array.create plazaCount OpenPlaza
+    for i in 0 .. plazaCount - 1 do
+      if i = spawnIdx then
+        roomArchetypes.[i] <- OpenPlaza
+      elif i = guardianIdx || i = shrineIdx1 || i = shrineIdx2 || i = stairwayIdx then
+        roomArchetypes.[i] <- RotundaSanctuary
+      else
+        let arch = profile.PreferredArchetypes.[(i + floorNumber) % profile.PreferredArchetypes.Length]
+        // Keep NPC room from having a central chasm/hazard crucible
+        if i = npcIdx && arch = HazardCrucible then
+          roomArchetypes.[i] <- ColonnadeHall
+        else
+          roomArchetypes.[i] <- arch
+
+    // Helper: carve a contiguous 3-5 tile hazard cluster inside a room without hitting center or borders
+    let carveHazardCluster (plaza: Plaza) =
+      if plaza.Width >= 7 && plaza.Height >= 6 then
+        let cx = rng.Next(plaza.X + 2, plaza.X + plaza.Width - 2)
+        let cy = rng.Next(plaza.Y + 2, plaza.Y + plaza.Height - 2)
+        let clusterSize = rng.Next(3, 6)
+        let mutable curX = cx
+        let mutable curY = cy
+        for _ in 1 .. clusterSize do
+          let p = { X = curX; Y = curY }
+          if plaza.IsStrictInterior p && p <> plaza.Center && getPt p = Floor surface then
+            setPt p (Hazard hazard)
+          let dir = rng.Next(4)
+          let nx = curX + (if dir = 0 then 1 elif dir = 1 then -1 else 0)
+          let ny = curY + (if dir = 2 then 1 elif dir = 3 then -1 else 0)
+          if nx > plaza.X + 1 && nx < plaza.X + plaza.Width - 2 && ny > plaza.Y + 1 && ny < plaza.Y + plaza.Height - 2 then
+            curX <- nx
+            curY <- ny
+
+    // 6. Carve Plaza Floors & Archetype Interior Geometry
+    for i in 0 .. plazaCount - 1 do
+      let plaza = plazaArr.[i]
+      let arch = roomArchetypes.[i]
+      let x0, x1 = plaza.X, plaza.X + plaza.Width - 1
+      let y0, y1 = plaza.Y, plaza.Y + plaza.Height - 1
+      let c = plaza.Center
+
+      match arch with
+      | OpenPlaza ->
+        for py in y0 .. y1 do
+          for px in x0 .. x1 do
+            let isBorder = px = x0 || px = x1 || py = y0 || py = y1
+            if isBorder && (px % 3 = 0 || py % 3 = 0) then
+              setTile px py Pillar
+            else
+              setTile px py (Floor surface)
+
+      | ColonnadeHall ->
+        for py in y0 .. y1 do
+          for px in x0 .. x1 do
+            let isBorder = px = x0 || px = x1 || py = y0 || py = y1
+            let isAisleRow = (py = y0 + 2 || py = y1 - 2) && px >= x0 + 2 && px <= x1 - 2 && (px - x0) % 2 = 0
+            if isBorder && (px % 2 = 0 || py % 2 = 0) then
+              setTile px py Pillar
+            elif isAisleRow && (px <> c.X || py <> c.Y) then
+              setTile px py Pillar
+            else
+              setTile px py (Floor surface)
+        for _ in 1 .. Math.Min(1, profile.HazardClusterCount) do
+          carveHazardCluster plaza
+
+      | GatehouseBastion ->
+        for py in y0 .. y1 do
+          for px in x0 .. x1 do
+            let isBorder = px = x0 || px = x1 || py = y0 || py = y1
+            if isBorder then
+              setTile px py Pillar
+            else
+              setTile px py (Floor surface)
+        // Interior flank pillars framing the central choke
+        if plaza.Width >= 10 && plaza.Height >= 8 then
+          setTile (c.X - 2) (c.Y - 1) Pillar
+          setTile (c.X + 2) (c.Y - 1) Pillar
+          setTile (c.X - 2) (c.Y + 1) Pillar
+          setTile (c.X + 2) (c.Y + 1) Pillar
+
+      | HazardCrucible ->
+        for py in y0 .. y1 do
+          for px in x0 .. x1 do
+            let isBorder = px = x0 || px = x1 || py = y0 || py = y1
+            if isBorder && (px % 3 = 0 || py % 3 = 0) then
+              setTile px py Pillar
+            else
+              setTile px py (Floor surface)
+        // Central 3x3 (or 3x2) hazard/chasm island ringed by corner pillars + wide walkable perimeter
+        let halfH = if plaza.Height >= 10 then 1 else 0
+        for dy in -halfH .. 1 do
+          for dx in -1 .. 1 do
+            let hx, hy = c.X + dx, c.Y + dy
+            if hx > x0 + 1 && hx < x1 - 1 && hy > y0 + 1 && hy < y1 - 1 then
+              if profile.CrucibleUsesChasm && dx = 0 && dy = 0 then
+                setTile hx hy Chasm
+              else
+                setTile hx hy (Hazard hazard)
+        // Corner pillars framing the crucible (leaving 2-tile walkable ring outside)
+        if plaza.Width >= 10 && plaza.Height >= 8 then
+          setTile (c.X - 2) (c.Y - 2) Pillar
+          setTile (c.X + 2) (c.Y - 2) Pillar
+          setTile (c.X - 2) (c.Y + 2) Pillar
+          setTile (c.X + 2) (c.Y + 2) Pillar
+
+      | RotundaSanctuary ->
+        for py in y0 .. y1 do
+          for px in x0 .. x1 do
+            let distCorner =
+              Math.Min(px - x0, x1 - px) + Math.Min(py - y0, y1 - py)
+            if distCorner < 2 then
+              setTile px py Chasm
+            elif distCorner = 2 || px = x0 || px = x1 || py = y0 || py = y1 then
+              if distCorner = 2 || (px + py) % 2 = 0 then
+                setTile px py Pillar
+              else
+                setTile px py (Floor surface)
+            else
+              setTile px py (Floor surface)
+        // 4 symmetrical sanctuary pillars framing the open central arena
+        if plaza.Width >= 10 && plaza.Height >= 8 then
+          setTile (c.X - 2) (c.Y - 2) Pillar
+          setTile (c.X + 2) (c.Y - 2) Pillar
+          setTile (c.X - 2) (c.Y + 2) Pillar
+          setTile (c.X + 2) (c.Y + 2) Pillar
+
+      | RuinedScatter ->
+        for py in y0 .. y1 do
+          for px in x0 .. x1 do
+            let isBorder = px = x0 || px = x1 || py = y0 || py = y1
+            if isBorder && (px % 4 = 0 || py % 4 = 0) then
+              setTile px py Pillar
+            else
+              setTile px py (Floor surface)
+        // 2-3 staggered 2x1 or L-shaped pillar cover clusters
+        let coverCount = 2 + rng.Next(0, 2)
+        for _ in 1 .. coverCount do
+          if plaza.Width >= 9 && plaza.Height >= 7 then
+            let rx = rng.Next(x0 + 2, x1 - 2)
+            let ry = rng.Next(y0 + 2, y1 - 2)
+            let pts =
+              if rng.Next(2) = 0 then [ { X = rx; Y = ry }; { X = rx + 1; Y = ry } ]
+              else [ { X = rx; Y = ry }; { X = rx + 1; Y = ry }; { X = rx; Y = ry + 1 } ]
+            if pts |> List.forall (fun p -> p <> c && chebyshev p c >= 2 && plaza.IsStrictInterior p) then
+              for p in pts do setPt p Pillar
+        for _ in 1 .. profile.HazardClusterCount do
+          carveHazardCluster plaza
+
+    // 7. Solidify room borders facing another room within aggroRadius (8) to prevent chasm-gap LOS aggro
+    let aggroGap = 8
+    for i in 0 .. plazaCount - 1 do
+      for j in i + 1 .. plazaCount - 1 do
+        let a = plazaArr.[i]
+        let b = plazaArr.[j]
+        // Horizontal gap check (vertical overlap)
+        let vOverlapMin = Math.Max(a.Y, b.Y)
+        let vOverlapMax = Math.Min(a.Y + a.Height - 1, b.Y + b.Height - 1)
+        if vOverlapMin <= vOverlapMax then
+          if b.X >= a.X + a.Width && b.X - (a.X + a.Width) <= aggroGap then
+            for y in vOverlapMin .. vOverlapMax do
+              if getTile (a.X + a.Width - 1) y <> Chasm then setTile (a.X + a.Width - 1) y Pillar
+              if getTile b.X y <> Chasm then setTile b.X y Pillar
+          elif a.X >= b.X + b.Width && a.X - (b.X + b.Width) <= aggroGap then
+            for y in vOverlapMin .. vOverlapMax do
+              if getTile (b.X + b.Width - 1) y <> Chasm then setTile (b.X + b.Width - 1) y Pillar
+              if getTile a.X y <> Chasm then setTile a.X y Pillar
+        // Vertical gap check (horizontal overlap)
+        let hOverlapMin = Math.Max(a.X, b.X)
+        let hOverlapMax = Math.Min(a.X + a.Width - 1, b.X + b.Width - 1)
+        if hOverlapMin <= hOverlapMax then
+          if b.Y >= a.Y + a.Height && b.Y - (a.Y + a.Height) <= aggroGap then
+            for x in hOverlapMin .. hOverlapMax do
+              if getTile x (a.Y + a.Height - 1) <> Chasm then setTile x (a.Y + a.Height - 1) Pillar
+              if getTile x b.Y <> Chasm then setTile x b.Y Pillar
+          elif a.Y >= b.Y + b.Height && a.Y - (b.Y + b.Height) <= aggroGap then
+            for x in hOverlapMin .. hOverlapMax do
+              if getTile x (b.Y + b.Height - 1) <> Chasm then setTile x (b.Y + b.Height - 1) Pillar
+              if getTile x a.Y <> Chasm then setTile x a.Y Pillar
+
+    // 8. Carve Causeways with True Perimeter Threshold Archways & Mixed Corridor Widths
+    let roomThresholds = Array.init plazaCount (fun _ -> ResizeArray<Point>())
+
+    let containingRoom (p: Point) : int =
+      let mutable found = -1
+      let mutable idx = 0
+      while found = -1 && idx < plazaCount do
+        if plazaArr.[idx].Contains p then found <- idx
+        idx <- idx + 1
+      found
+
+    let stampCorridorTile (x: int) (y: int) (isArchwayCandidate: bool) : unit =
+      if inBounds x y then
+        let pt = { X = x; Y = y }
+        let rIdx = containingRoom pt
+        if rIdx = -1 then
+          setTile x y (Floor surface)
+        else
+          let plaza = plazaArr.[rIdx]
+          if plaza.IsBorder pt then
+            if isArchwayCandidate then
+              setTile x y Archway
+              roomThresholds.[rIdx].Add pt
+            else
+              setTile x y (Floor surface)
+            // Guarantee 1 step inside the room behind the threshold is clear of interior pillars
+            let inX = if x = plaza.X then x + 1 elif x = plaza.X + plaza.Width - 1 then x - 1 else x
+            let inY = if y = plaza.Y then y + 1 elif y = plaza.Y + plaza.Height - 1 then y - 1 else y
+            if getTile inX inY = Pillar || getTile inX inY = Chasm then
+              setTile inX inY (Floor surface)
+          elif getTile x y = Pillar || getTile x y = Chasm then
+            // Clear path through clipped rotunda corner or interior pillar if corridor crosses it
+            setTile x y (Floor surface)
+
+    let carveCauseway (p1: Point) (p2: Point) (width: int) =
+      let stepX = if p2.X >= p1.X then 1 else -1
+      let stepY = if p2.Y >= p1.Y then 1 else -1
+      let spreadMax = Math.Max(0, width - 1)
+
+      // Horizontal leg from (p1.X, p1.Y) to (p2.X, p1.Y)
+      for dy in 0 .. spreadMax do
+        let mutable x = p1.X
+        let mutable doneX = false
+        while not doneX do
+          stampCorridorTile x (p1.Y + dy) (dy = 0)
+          if x = p2.X then doneX <- true else x <- x + stepX
+
+      // Vertical leg from (p2.X, p1.Y) to (p2.X, p2.Y)
+      for dx in 0 .. spreadMax do
+        let mutable y = p1.Y
+        let mutable doneY = false
+        while not doneY do
+          stampCorridorTile (p2.X + dx) y (dx = 0)
+          if y = p2.Y then doneY <- true else y <- y + stepY
+
+    // Main spanning-tree arteries use profile.MainCorridorWidth (1 or 2); loops are always 1-wide chokepoints
+    for (i, j) in mainEdges do
+      carveCauseway plazaArr.[i].Center plazaArr.[j].Center profile.MainCorridorWidth
+
+    for (i, j) in loopEdges do
+      carveCauseway plazaArr.[i].Center plazaArr.[j].Center 1
+
+    // 9. Tactical Alcove Dead-End Spurs (1-wide neck -> 4x4 mini-chamber with reward or oasis)
+    let alcoves = ResizeArray<Point * Point * Point>() // (archwayPt, neckEndPt, chamberCenter)
+    let alcoveBoxes = ResizeArray<Plaza>()
+
+    let tryCarveAlcove (roomIdx: int) =
+      let room = plazaArr.[roomIdx]
+      let dirs = [| (1, 0); (-1, 0); (0, 1); (0, -1) |]
+      let startDir = rng.Next(4)
+      let mutable placed = false
+      let mutable dIdx = 0
+      while not placed && dIdx < 4 do
+        let dx, dy = dirs.[(startDir + dIdx) % 4]
+        dIdx <- dIdx + 1
+        let neckLen = rng.Next(2, 5)
+        let archX, archY =
+          if dx > 0 then room.X + room.Width - 1, room.Center.Y
+          elif dx < 0 then room.X, room.Center.Y
+          elif dy > 0 then room.Center.X, room.Y + room.Height - 1
+          else room.Center.X, room.Y
+
+        let neckEndX = archX + dx * neckLen
+        let neckEndY = archY + dy * neckLen
+
+        // 4x4 chamber positioned right beyond the neck
+        let chX = if dx > 0 then neckEndX + 1 elif dx < 0 then neckEndX - 4 else neckEndX - 2
+        let chY = if dy > 0 then neckEndY + 1 elif dy < 0 then neckEndY - 4 else neckEndY - 2
+        let chamberBox = { Id = -1; X = chX; Y = chY; Width = 4; Height = 4 }
+
+        let boxValid =
+          chX >= 2 && chY >= 2 && chX + 4 < mapWidth - 2 && chY + 4 < mapHeight - 2
+          && not (plazas |> List.exists (fun r -> overlaps (inflated chamberBox) r))
+          && not (alcoveBoxes |> Seq.exists (fun ab -> overlaps (inflated chamberBox) ab))
+
+        if boxValid then
+          // Punch doorway on room border + clear 1 tile inside
+          let archPt = { X = archX; Y = archY }
+          setPt archPt Archway
+          roomThresholds.[roomIdx].Add archPt
+          setTile (archX - dx) (archY - dy) (Floor surface)
+          // Carve 1-wide neck
+          for s in 1 .. neckLen do
+            setTile (archX + dx * s) (archY + dy * s) (Floor surface)
+          // Carve 4x4 alcove chamber (walkable interior + corner pillars)
+          for py in chY .. chY + 3 do
+            for px in chX .. chX + 3 do
+              let isCorner = (px = chX || px = chX + 3) && (py = chY || py = chY + 3)
+              setTile px py (if isCorner then Pillar else Floor surface)
+          // Connect neck into chamber edge
+          setTile (neckEndX + dx) (neckEndY + dy) (Floor surface)
+          let chamberCenter = { X = chX + 1; Y = chY + 1 }
+          let neckEndPt = { X = neckEndX; Y = neckEndY }
+          alcoves.Add(archPt, neckEndPt, chamberCenter)
+          alcoveBoxes.Add chamberBox
+          placed <- true
+
+    let alcoveTarget = rng.Next(2, 5)
+    let mutable alcoveTries = 0
+    while alcoves.Count < alcoveTarget && alcoveTries < plazaCount * 2 do
+      let rIdx = rng.Next(plazaCount)
+      if rIdx <> spawnIdx then tryCarveAlcove rIdx
+      alcoveTries <- alcoveTries + 1
+
     // Make spawn and stairway tiles guaranteed walkable
-    tiles <- Map.add spawn (Floor surface) tiles
+    setPt spawn (Floor surface)
 
     // Door State logic based on floor progression
     let keyIdForFloor = sprintf "key_floor_%d" floorNumber
@@ -280,15 +648,72 @@ module TowerGenerator =
           let req = sprintf "Speak with the Floor %d Scholar and recover the lost ancient archive" floorNumber
           DoorState.LockedByQuest(questIdForFloor, sprintf "The Ascension Trial of Floor %d" floorNumber, req), None, Some questIdForFloor
 
-    tiles <- Map.add stairway (StairwayPortal doorState) tiles
+    setPt stairway (StairwayPortal doorState)
 
-    // 6. Populate Interactive Entities
+    // 10. Verify Full Walkable Connectivity (every room, alcove, and stairway reachable from spawn)
+    let computeReachable () =
+      let visited = Array.zeroCreate<bool> (mapWidth * mapHeight)
+      let q = System.Collections.Generic.Queue<Point>()
+      visited.[spawn.Y * mapWidth + spawn.X] <- true
+      q.Enqueue spawn
+      let offsets = [| (1, 0); (-1, 0); (0, 1); (0, -1); (1, 1); (1, -1); (-1, 1); (-1, -1) |]
+      while q.Count > 0 do
+        let cur = q.Dequeue()
+        for (dx, dy) in offsets do
+          let nx, ny = cur.X + dx, cur.Y + dy
+          if inBounds nx ny then
+            let idx = ny * mapWidth + nx
+            if not visited.[idx] && grid.[idx].IsWalkable then
+              visited.[idx] <- true
+              q.Enqueue { X = nx; Y = ny }
+      visited
+
+    let ensureReachable (target: Point) =
+      let visited = computeReachable ()
+      if not visited.[target.Y * mapWidth + target.X] then
+        carveCauseway spawn target 1
+        setPt target (if target = stairway then StairwayPortal doorState else Floor surface)
+
+    ensureReachable stairway
+    for i in 0 .. plazaCount - 1 do
+      let c = plazaArr.[i].Center
+      if (getPt c).IsWalkable then
+        ensureReachable c
+    for (_, _, alcoveCenter) in alcoves do
+      ensureReachable alcoveCenter
+
+    // 11. Populate Interactive Entities
     let mutable entities = Map.empty<Point, TowerEntity>
+
+    let findCleanTileIn (plaza: Plaza) (preferred: Point) : Point =
+      let isClean (p: Point) =
+        p <> spawn
+        && p <> stairway
+        && plaza.Contains p
+        && not (Map.containsKey p entities)
+        && match getPt p with Floor _ | Archway -> true | _ -> false
+      if isClean preferred then preferred
+      else
+        let mutable best : Point option = None
+        let mutable bestDist = Int32.MaxValue
+        for py in plaza.Y + 1 .. plaza.Y + plaza.Height - 2 do
+          for px in plaza.X + 1 .. plaza.X + plaza.Width - 2 do
+            let p = { X = px; Y = py }
+            if isClean p then
+              let d = chebyshev p preferred
+              if d < bestDist then
+                bestDist <- d
+                best <- Some p
+        match best with
+        | Some p -> p
+        | None ->
+          setPt preferred (Floor surface)
+          preferred
 
     // A. Battered Scavenger Chest (at spawn for Story Mode Stage 1)
     if isStory && floorNumber = 1 then
       let batteredChestPos = { X = spawn.X + 1; Y = spawn.Y }
-      tiles <- Map.add batteredChestPos (Floor surface) tiles
+      setPt batteredChestPos (Floor surface)
       let caltropsItem : EquipmentItem =
         { Name = "Sharpened Caltrops"
           Slot = EquipmentSlot.MentalRelic
@@ -317,9 +742,8 @@ module TowerGenerator =
           Morale = morale
           KeyId = keyId }
 
-    let npcPlaza = plazaAt 1
-    let npcPos = { X = npcPlaza.Center.X + 2; Y = npcPlaza.Center.Y }
-    tiles <- Map.add npcPos (Floor surface) tiles
+    let npcPos = findCleanTileIn npcPlaza { X = npcPlaza.Center.X + 2; Y = npcPlaza.Center.Y }
+    setPt npcPos (Floor surface)
 
     let npc =
       if isStory then
@@ -503,9 +927,8 @@ module TowerGenerator =
     // B2. Story Stage 1 places the captive sister beside the Bandit Leader's den. Her
     // quest only resolves once the leader falls, so the payoff reads as a reunion.
     if isStory && floorNumber = 1 then
-      let lyraPlaza = plazaAt 4
-      let lyraPos = { X = lyraPlaza.Center.X + 2; Y = lyraPlaza.Center.Y }
-      tiles <- Map.add lyraPos (Floor surface) tiles
+      let lyraPos = findCleanTileIn guardianPlaza { X = guardianPlaza.Center.X + 2; Y = guardianPlaza.Center.Y }
+      setPt lyraPos (Floor surface)
       let lyra =
         { Id = "npc_lyra"
           Name = "Lyra"
@@ -525,33 +948,33 @@ module TowerGenerator =
             }
           HasGivenReward = false }
       entities <- Map.add lyraPos (EntityNpc lyra) entities
-    // Two shrines per stage, one per class-appropriate stat pair, so a run can sharpen both halves of
-    // its plane. Shrines never sit in the altar rooms (plaza indices 1 and 4 in `WorldEvents`).
+
+    // C. Two shrines per stage at mid-floor hubs, one per class-appropriate stat pair
+    let shrinePositions = ResizeArray<Point>()
+    let shrineRoomIndices = Set [ shrineIdx1; shrineIdx2 ]
     let shrineSites =
-      [ 2, PrimaryPair, sprintf "shrine_floor_%d" floorNumber
-        5, SecondaryPair, sprintf "shrine_floor_%d_prime" floorNumber ]
+      [ shrineIdx1, PrimaryPair, sprintf "shrine_floor_%d" floorNumber
+        shrineIdx2, SecondaryPair, sprintf "shrine_floor_%d_prime" floorNumber ]
 
     for shrineIndex, boon, shrineId in shrineSites do
       let shrinePlaza = plazaAt shrineIndex
-      let shrinePos = { X = shrinePlaza.Center.X - 2; Y = shrinePlaza.Center.Y }
+      let shrinePos = findCleanTileIn shrinePlaza { X = shrinePlaza.Center.X - 2; Y = shrinePlaza.Center.Y }
+      setPt shrinePos (Floor surface)
 
-      if not (entities |> Map.exists (fun pt _ -> pt = shrinePos)) then
-        tiles <- Map.add shrinePos (Floor surface) tiles
+      let shrine =
+        { Id = shrineId
+          Name = sprintf "Monolith of %s" theme.Name
+          BlessingDescription = "Fully restores Health and Morale, repairs damaged Armor, restores Weapon to Pristine, and calms accumulated Recklessness."
+          Boon = boon
+          IsBlessed = false
+          IsUsed = false }
 
-        let shrine =
-          { Id = shrineId
-            Name = sprintf "Monolith of %s" theme.Name
-            BlessingDescription = "Fully restores Health and Morale, repairs damaged Armor, restores Weapon to Pristine, and calms accumulated Recklessness."
-            Boon = boon
-            IsBlessed = false
-            IsUsed = false }
+      entities <- Map.add shrinePos (EntityShrine shrine) entities
+      shrinePositions.Add shrinePos
 
-        entities <- Map.add shrinePos (EntityShrine shrine) entities
-
-    // D. Treasure Chests
-    let chestPlaza = plazaAt 3
-    let chestPos = { X = chestPlaza.Center.X; Y = chestPlaza.Center.Y + 3 }
-    tiles <- Map.add chestPos (Floor surface) tiles
+    // D. Treasure Chests (main chamber chest + tactical alcove rewards)
+    let chestPos = findCleanTileIn chestPlaza { X = chestPlaza.Center.X; Y = chestPlaza.Center.Y + 2 }
+    setPt chestPos (Floor surface)
 
     let relicItem : EquipmentItem =
       { Name = sprintf "Relic of %s" theme.Name
@@ -572,18 +995,29 @@ module TowerGenerator =
 
     entities <- Map.add chestPos (EntityChest chest) entities
 
-    // E. Floor Enemies & Guardians (or Story Bosses)
-    // The player spawns in the entrance chamber and the stairway is in the far one. The guardian
-    // must sit in neither, or a floor can open with the boss inside the room the player starts in,
-    // or standing on the exit. It is still anchored to a room center, so "same room" is exactly
-    // "same center point". A degenerate one-room floor has nowhere else to go, so fall back.
-    let guardianPlaza =
-      let away = plazas |> List.filter (fun p -> p.Center <> spawn && p.Center <> stairway)
-      let pool = if List.isEmpty away then plazas else away
-      pool.[Math.Min(4, pool.Length - 1)]
+    // Populate carved alcoves so spurs always hold a tactical reward (bonus cache or calming oasis)
+    for aIdx in 0 .. alcoves.Count - 1 do
+      let _, _, alcoveCenter = alcoves.[aIdx]
+      if aIdx = 0 && not (Map.containsKey alcoveCenter entities) then
+        setPt alcoveCenter (Floor surface)
+        let alcoveChest =
+          { Id = sprintf "alcove_chest_floor_%d" floorNumber
+            Description = "A tucked-away iron coffer hidden inside a side alcove."
+            LootKeyId = None
+            ItemReward = Some { relicItem with Name = sprintf "Alcove Cache of %s" theme.Name }
+            IsOpen = false }
+        entities <- Map.add alcoveCenter (EntityChest alcoveChest) entities
+      else
+        // CalmingSpores oasis pocket inside secondary alcoves
+        for dy in 0 .. 1 do
+          for dx in 0 .. 1 do
+            let p = { X = alcoveCenter.X + dx; Y = alcoveCenter.Y + dy }
+            if getPt p = Floor surface && not (Map.containsKey p entities) then
+              setPt p (Hazard CalmingSpores)
 
-    let guardianPos = guardianPlaza.Center
-    tiles <- Map.add guardianPos (Floor surface) tiles
+    // E. Floor Enemies & Guardians (or Story Bosses)
+    let guardianPos = findCleanTileIn guardianPlaza guardianPlaza.Center
+    setPt guardianPos (Floor surface)
 
     let biomeMonsters = Bestiary.byBiome theme
 
@@ -591,9 +1025,6 @@ module TowerGenerator =
       if isStory && floorNumber <= 7 then
         let bossCombatant =
           if floorNumber = 1 then
-            // The tutorial guardian is a mundane bandit chieftain, not a Grief Aspect. Authored at
-            // Veteran magnitude (level 30-35 band) and re-levelled by the floor's scaling like any other
-            // enemy: at `player.Level + 10` it is the strongest thing on the floor, which is the point.
             let chieftain = TierFactory.createClassLevel CharacterClass.Warrior 32
             { chieftain with Name = "Bandit Leader" }
           else
@@ -605,8 +1036,6 @@ module TowerGenerator =
             | 6 -> StoryBosses.createDepressionAspect ()
             | _ -> StoryBosses.createAcceptanceAspect ()
 
-        // Authored at Veteran magnitude; lift the Aspect to the tier its stage assumes. The tutorial
-        // chieftain is already levelled, so the call leaves it untouched.
         let bossCombatant = StoryBosses.scaleToStage floorNumber bossCombatant
         let bossName =
           if floorNumber = 1 then "Bandit Leader"
@@ -631,9 +1060,6 @@ module TowerGenerator =
           | list ->
             let idx = Math.Min(list.Length - 1, (floorNumber - 1) % list.Length)
             let rotated = list.[idx]
-            // The rotation alone used to drop GrandMaster templates on early floors (the Obsidian
-            // Fiend, level 160, as the tower-floor-3 guardian). Clamp to the authored magnitude this
-            // floor's template ladder assumes and take the strongest legal template instead.
             let ceiling = ProgressionScale.stageTemplateCeiling floorNumber
             if rotated.Level <= ceiling then rotated
             else
@@ -650,50 +1076,67 @@ module TowerGenerator =
 
     entities <- Map.add guardianPos (EntityEnemy guardianEnemy) entities
 
-    // F. Roaming mob packs: 3 to 5 enemies per chamber, 2 per chamber on the tutorial floor
-    let isFreeTile (pos: Point) =
+    // F. Tactical Enemy Formations (Gate Sentries, Pillar Stalkers, Vanguard Packs)
+    let isFreeMobTile (pos: Point) =
       pos <> spawn
       && pos <> stairway
-      && (match Map.tryFind pos tiles with
-          | Some t -> t.IsWalkable
-          | None -> false)
+      && ((isStory && floorNumber <= 1) || chebyshev pos spawn > 4)
+      && (match getPt pos with Floor _ -> true | _ -> false)
       && not (Map.containsKey pos entities)
 
-    let mobOffsets =
-      [ 2, 2
-        -2, 2
-        2, -2
-        -2, -2
-        3, 0
-        -3, 0
-        0, 3
-        0, -3
-        3, 3
-        -3, -3
-        // The mid ring, inside the same envelope as the corners: a room needs somewhere to put the
-        // extra three mobs the density curve now asks for.
-        3, 2
-        -3, 2
-        3, -2
-        -3, -2
-        2, 3
-        -2, 3
-        2, -3
-        -2, -3 ]
+    let hasAdjacentTile (pred: TowerTile -> bool) (p: Point) =
+      pred (getTile (p.X + 1) p.Y)
+      || pred (getTile (p.X - 1) p.Y)
+      || pred (getTile p.X (p.Y + 1))
+      || pred (getTile p.X (p.Y - 1))
+
+    let formationTilesFor (roomIdx: int) : Point list =
+      let room = plazaArr.[roomIdx]
+      let arch = roomArchetypes.[roomIdx]
+      let thresholds = roomThresholds.[roomIdx]
+      let interior = ResizeArray<Point>()
+      for py in room.Y + 1 .. room.Y + room.Height - 2 do
+        for px in room.X + 1 .. room.X + room.Width - 2 do
+          let p = { X = px; Y = py }
+          if isFreeMobTile p then interior.Add p
+
+      let gateSentries =
+        interior
+        |> Seq.filter (fun p ->
+          thresholds |> Seq.exists (fun th -> let d = chebyshev p th in d >= 1 && d <= 2))
+        |> Seq.toList
+
+      let pillarStalkers =
+        interior
+        |> Seq.filter (fun p -> hasAdjacentTile (function Pillar -> true | _ -> false) p)
+        |> Seq.toList
+
+      let vanguardPacks =
+        interior
+        |> Seq.filter (fun p ->
+          hasAdjacentTile (function Hazard _ | Chasm -> true | _ -> false) p
+          || chebyshev p room.Center <= 3)
+        |> Seq.toList
+
+      let prioritized =
+        match arch with
+        | GatehouseBastion -> gateSentries @ pillarStalkers @ vanguardPacks
+        | ColonnadeHall | RuinedScatter -> pillarStalkers @ gateSentries @ vanguardPacks
+        | HazardCrucible -> vanguardPacks @ pillarStalkers @ gateSentries
+        | RotundaSanctuary | OpenPlaza -> vanguardPacks @ gateSentries @ pillarStalkers
+
+      // Deduplicate while preserving priority order, then append any remaining interior tiles
+      let seen = System.Collections.Generic.HashSet<Point>()
+      let ordered = ResizeArray<Point>()
+      for p in prioritized do
+        if seen.Add p then ordered.Add p
+      for p in interior do
+        if seen.Add p then ordered.Add p
+      List.ofSeq ordered
 
     let mobSpecies (i: int) =
       if isStory && floorNumber = 1 then
-        // Tutorial floor: alternate low-level bandits (Warrior / Rogue) with equally low-level woodland
-        // creatures so a level-1 protagonist always has survivable fights. The PineCloisters Novice
-        // template (Blight Sprite) is level 20 and would one-shot a level-1 player, so creatures are
-        // generated at the tutorial level.
-        //
-        // Every mob is authored at the SAME level: `TowerSession.rescaleFloorEnemies` re-levels the floor
-        // by multiplying pools with `target / authored`, so a ramp (this used to be `1 + i * 2`, up to
-        // level 8) made equal-looking Lv.3 enemies span 478 to 2250 health — the 2250 one unkillable.
-        // Only the class varies now; the re-levelling sets the real level.
         let tutorialLevel = 3
-
         if i % 2 = 0 then
           let cls = if (i / 2) % 2 = 0 then CharacterClass.Warrior else CharacterClass.Rogue
           let name = if cls = CharacterClass.Warrior then "Bandit" else "Bandit Scout"
@@ -703,10 +1146,6 @@ module TowerGenerator =
           let cls = if (i / 2) % 2 = 0 then CharacterClass.Rogue else CharacterClass.Warrior
           let name = if cls = CharacterClass.Rogue then "Forest Wolf" else "Bramble Boar"
           let combatant = TierFactory.createClassLevel cls tutorialLevel
-          // The boar is a beast, not a Warrior wearing a boar's name: `MonsterFamily` is what
-          // `Combatant.IsBeast`, the lone-beast mercy rule and the beast AI instinct profile read.
-          // It stays a tutorial-only spawn (not in `Bestiary.allMonsters`, whose 21-species
-          // distribution is spec'd), so its pools keep the level-3 template shape above.
           let combatant =
             if cls = CharacterClass.Rogue then
               combatant
@@ -721,24 +1160,14 @@ module TowerGenerator =
           else
             let available =
               if isStory && floorNumber <= 3 then
-                // Story stages 2-3 are narrative tutorial tiers: keep encounters to the
-                // Novice-tier biome mob so a Veteran (e.g. Thorn Weaver) never opens on
-                // the protagonist.
                 [ biomeMonsters.[0] ]
               elif floorNumber <= 1 then
-                // Floor 1: First plazas have Novice mobs (e.g. Slag Hound), later plazas have Veteran mobs (e.g. Stone Gargoyle)
                 if i < 2 then [ biomeMonsters.[0] ]
                 else [ biomeMonsters.[Math.Min(1, biomeMonsters.Length - 1)] ]
               elif floorNumber <= 3 then
-                // Floors 2-3: Novice and Veteran mobs
                 biomeMonsters |> List.truncate 2
               else
-                // Floors 4+: Full spectrum of biome mobs, clamped to what this stage's template
-                // ladder assumes. The clamp existed for the guardian only, so story floor 5 happily placed a
-                // level-175 Storm Drake three tiles from the player's spawn. Same ceiling, same
-                // lowest-legal fallback.
                 let ceiling = ProgressionScale.stageTemplateCeiling floorNumber
-
                 if not isStory then
                   biomeMonsters
                 else
@@ -751,29 +1180,20 @@ module TowerGenerator =
 
     let mutable mobIndex = 0
 
-    for roomIndex in 0 .. plazas.Length - 1 do
-      let room = plazas.[roomIndex]
-      // Entrance chambers past Floor 1 are safe arrival thresholds (e.g. Quarry Foreman staging area)
-      // and do not spawn roaming mob packs directly on top of the stairway landing.
-      // Roaming density climbs smoothly with depth: Floor 1 tutorial fields 2 mobs/room;
-      // Floor 2 (Quarry stage) fields 2 to 3 mobs/chamber so tactical duels remain readable;
-      // deeper floors gradually scale up to full pack density.
+    for roomIndex in 0 .. plazaCount - 1 do
+      let room = plazaArr.[roomIndex]
       let targetCount =
-        if room = spawnPlaza && (not isStory || floorNumber > 1) then 0
+        if roomIndex = spawnIdx && (not isStory || floorNumber > 1) then 0
         elif isStory && floorNumber <= 1 then 2
         elif isStory && floorNumber <= 2 then 2 + rng.Next(0, 2)
         elif isStory && floorNumber <= 4 then 3 + rng.Next(0, 2)
         elif floorNumber <= 1 then 2
-        else Math.Min(mobOffsets.Length, 4 + floorNumber / 2 + rng.Next(0, 2))
+        else Math.Min(18, 4 + floorNumber / 2 + rng.Next(0, 2))
+
       let mutable placedCount = 0
-      let mutable offsetIndex = 0
-
-      while placedCount < targetCount && offsetIndex < mobOffsets.Length do
-        let ox, oy = mobOffsets.[offsetIndex]
-        offsetIndex <- offsetIndex + 1
-        let mobPos = { X = room.Center.X + ox; Y = room.Center.Y + oy }
-
-        if isFreeTile mobPos then
+      let candidates = formationTilesFor roomIndex
+      for mobPos in candidates do
+        if placedCount < targetCount && isFreeMobTile mobPos then
           let mobName, mobCombatant = mobSpecies mobIndex
           let mobEnemy =
             { Id = sprintf "grind_mob_%d_%d" floorNumber mobIndex
@@ -782,32 +1202,76 @@ module TowerGenerator =
               DropsKeyId = None
               IsDefeated = false
               ChaseCharge = 0.0 }
-          tiles <- Map.add mobPos (Floor surface) tiles
+          setPt mobPos (Floor surface)
           entities <- Map.add mobPos (EntityEnemy mobEnemy) entities
           placedCount <- placedCount + 1
           mobIndex <- mobIndex + 1
 
-    // G. Dynamic World & Tower Floor Encounters (ADR 0004 Phase 3)
+    // Finalize immutable Tiles map from flat grid before encounter placement so
+    // `WorldEvents.generateFloorEncountersInLayout` sees all pillars, hazards, and alcoves.
+    let mutable tiles =
+      [| for y in 0 .. mapHeight - 1 do
+           for x in 0 .. mapWidth - 1 ->
+             { X = x; Y = y }, grid.[y * mapWidth + x] |]
+      |> Map.ofArray
+
+    // G. Dynamic World & Tower Floor Encounters (ADR 0004 Phase 3 + graph/alcove-aware distribution)
     let plazaCenters = plazas |> List.map (fun p -> p.Center)
-    let floorEncounters = WorldEvents.generateFloorEncounters theme floorNumber plazaCenters playerPlane
+    let alcoveCenters = alcoves |> Seq.map (fun (_, _, c) -> c) |> Seq.toList
+    let floorEncounters =
+      WorldEvents.generateFloorEncountersInLayout
+        theme floorNumber spawn stairway plazaCenters alcoveCenters tiles entities playerPlane
 
-    for (encPos, enc) in floorEncounters do
-      tiles <- Map.add encPos (Floor surface) tiles
-      if encPos <> spawn && encPos <> stairway && not (Map.containsKey encPos entities) then
+    let isSafeAltarTile (p: Point) =
+      not (spawnPlaza.Contains p)
+      && not (shrinePositions |> Seq.exists (fun s -> euclidean p s < 6.5))
+
+    let nonShrineRooms =
+      [ 0 .. plazaCount - 1 ]
+      |> List.filter (fun i -> i <> spawnIdx && not (shrineRoomIndices.Contains i))
+
+    let mutable altarFallbackIdx = 0
+
+    for (rawPos, enc) in floorEncounters do
+      let isAltar = match enc with FloorEncounter.SacrificialAltar _ -> true | _ -> false
+      let rawClean =
+        rawPos <> spawn
+        && rawPos <> stairway
+        && not (Map.containsKey rawPos entities)
+        && (match getPt rawPos with Floor _ -> true | _ -> false)
+        && (not isAltar || isSafeAltarTile rawPos)
+
+      let finalPosOpt =
+        if rawClean then Some rawPos
+        elif isAltar then
+          let rec tryRooms offset =
+            if offset >= nonShrineRooms.Length then None
+            else
+              let rIdx = nonShrineRooms.[(altarFallbackIdx + offset) % nonShrineRooms.Length]
+              let candidate = findCleanTileIn plazaArr.[rIdx] plazaArr.[rIdx].Center
+              if isSafeAltarTile candidate && not (Map.containsKey candidate entities) then
+                altarFallbackIdx <- altarFallbackIdx + 1
+                Some candidate
+              else
+                tryRooms (offset + 1)
+          tryRooms 0
+        else
+          let rIdx =
+            match containingRoom rawPos with
+            | -1 -> Math.Min(1, plazaCount - 1)
+            | idx -> idx
+          let snapped = findCleanTileIn plazaArr.[rIdx] rawPos
+          if snapped <> spawn && snapped <> stairway && not (Map.containsKey snapped entities) then
+            Some snapped
+          else
+            None
+
+      match finalPosOpt with
+      | Some encPos ->
+        if getPt encPos <> Floor surface then
+          tiles <- Map.add encPos (Floor surface) tiles
         entities <- Map.add encPos (EntityEncounter enc) entities
-
-    // 7. Verify Path Connectivity using A* Pathfinding
-    let isPassable (p: Point) =
-      match Map.tryFind p tiles with
-      | Some t -> t.IsWalkable
-      | None -> false
-
-    let path = Pathfinding.aStar isPassable spawn stairway
-    match path with
-    | Some _ -> ()
-    | None ->
-      // If path was obstructed by procedural jitter, carve direct emergency line
-      carveCauseway spawn stairway
+      | None -> ()
 
     { FloorNumber = floorNumber
       Theme = theme

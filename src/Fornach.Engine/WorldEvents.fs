@@ -420,49 +420,214 @@ module WorldEvents =
         MoraleGrowth = 10
         IsCommuned = false }
 
-  /// Procedurally generates 2 to 4 diverse dynamic encounters for a floor based on biome and layout
+  let private euclid (a: Point) (b: Point) : float =
+    let dx = float (a.X - b.X)
+    let dy = float (a.Y - b.Y)
+    sqrt (dx * dx + dy * dy)
+
+  let private preferredRoomOffsets =
+    [ (0, 0)
+      (2, 1); (-2, 1); (2, -1); (-2, -1)
+      (3, 2); (-3, 2); (3, -2); (-3, -2)
+      (1, 2); (-1, 2); (1, -2); (-1, -2)
+      (2, 0); (-2, 0); (0, 2); (0, -2)
+      (1, 1); (-1, 1); (1, -1); (-1, -1)
+      (1, 0); (-1, 0); (0, 1); (0, -1)
+      (3, 0); (-3, 0); (0, 3); (0, -3)
+      (3, 1); (-3, 1); (3, -1); (-3, -1) ]
+
+  /// Picks a walkable, non-Pillar, non-Hazard, unoccupied `Floor` tile near `center`.
+  let private pickFloorTile
+    (center: Point)
+    (spawn: Point)
+    (stairway: Point)
+    (tiles: Map<Point, TowerTile>)
+    (entities: Map<Point, TowerEntity>)
+    (occupied: Set<Point>)
+    (extraFilter: Point -> bool)
+    : Point option =
+    preferredRoomOffsets
+    |> List.tryPick (fun (dx, dy) ->
+      let pt = { X = center.X + dx; Y = center.Y + dy }
+      if pt = spawn
+         || pt = stairway
+         || Set.contains pt occupied
+         || Map.containsKey pt entities
+         || not (extraFilter pt) then
+        None
+      else
+        match Map.tryFind pt tiles with
+        | Some (Floor _) -> Some pt
+        | _ -> None)
+
+  /// Minimum Euclidean distance between any Sacrificial Altar and any Shrine (strictly above
+  /// `EnemyDensityTests.sameRoomDistance = 6.0` so an altar never shares a chamber with a shrine).
+  let private minAltarShrineDistance = 8.0
+
+  /// Minimum Euclidean distance from spawn to count a room/tile as outside the entrance chamber.
+  let private minNonSpawnDistance = 6.0
+
+  /// Distributes dynamic floor encounters across all non-spawn rooms (and optional alcove tips)
+  /// scored by distance from spawn/stairway, selecting walkable, non-Pillar, non-Hazard,
+  /// unoccupied `Floor` tiles and guaranteeing Altars never share a room with a Shrine or spawn.
+  let generateFloorEncountersInLayout
+    (theme: FloorTheme)
+    (floorNum: int)
+    (spawn: Point)
+    (stairway: Point)
+    (plazaCenters: Point list)
+    (alcoveCenters: Point list)
+    (tiles: Map<Point, TowerTile>)
+    (entities: Map<Point, TowerEntity>)
+    (playerPlane: Plane)
+    : (Point * FloorEncounter) list =
+    if plazaCenters.IsEmpty then []
+    else
+      let shrinePositions =
+        entities
+        |> Map.toList
+        |> List.choose (fun (pt, ent) ->
+          match ent with
+          | EntityShrine _ -> Some pt
+          | _ -> None)
+
+      let isSafeForAltar (pt: Point) =
+        euclid pt spawn >= minNonSpawnDistance
+        && shrinePositions |> List.forall (fun s -> euclid pt s >= minAltarShrineDistance)
+
+      // Score all non-spawn rooms by distance from spawn (ascending: early -> mid -> far/outer)
+      let nonSpawnRooms =
+        plazaCenters
+        |> List.filter (fun c -> euclid c spawn >= minNonSpawnDistance)
+        |> List.sortBy (fun c -> euclid c spawn, c.X, c.Y)
+
+      if nonSpawnRooms.IsEmpty then []
+      else
+        let n = nonSpawnRooms.Length
+        let mutable occupied = Set.empty
+        let mutable usedAltarRooms = Set.empty
+        let mutable results = []
+
+        let tryPlaceInCandidates (candidates: Point list) (extraFilter: Point -> bool) (encounter: FloorEncounter) : Point option =
+          candidates
+          |> List.tryPick (fun roomCenter ->
+            match pickFloorTile roomCenter spawn stairway tiles entities occupied extraFilter with
+            | Some pt ->
+              occupied <- Set.add pt occupied
+              results <- (pt, encounter) :: results
+              Some roomCenter
+            | None -> None)
+
+        // 1. Sacrificial Altars: early-to-mid floor, never in spawn or sharing a room with a Shrine.
+        let altarRooms =
+          nonSpawnRooms
+          |> List.filter (fun c -> shrinePositions |> List.forall (fun s -> euclid c s >= minAltarShrineDistance))
+
+        let altar1 = FloorEncounter.SacrificialAltar (createAltar theme floorNum PrimaryPair)
+        match tryPlaceInCandidates altarRooms isSafeForAltar altar1 with
+        | Some usedRoom -> usedAltarRooms <- Set.add usedRoom usedAltarRooms
+        | None -> ()
+
+        let secondAltarData = createAltar theme floorNum SecondaryPair
+        let altar2 =
+          FloorEncounter.SacrificialAltar
+            { secondAltarData with
+                Id = secondAltarData.Id + "_b"
+                Name = secondAltarData.Name + " (Weathered)" }
+        let altar2Rooms =
+          let midStart = max 0 (altarRooms.Length / 2)
+          let rotated = (altarRooms |> List.skip midStart) @ (altarRooms |> List.take midStart)
+          rotated |> List.filter (fun c -> not (Set.contains c usedAltarRooms))
+        match tryPlaceInCandidates (altar2Rooms @ altarRooms) isSafeForAltar altar2 with
+        | Some usedRoom -> usedAltarRooms <- Set.add usedRoom usedAltarRooms
+        | None -> ()
+
+        // Build mid-to-far room ordering (explicitly reaching outer rooms 6..11) plus alcoves.
+        let midToFarRooms =
+          let half = n / 2
+          let outer = nonSpawnRooms |> List.skip half |> List.rev
+          let inner = nonSpawnRooms |> List.take half |> List.rev
+          outer @ inner
+
+        let rotateBy (offset: int) (xs: 'a list) =
+          if xs.IsEmpty then []
+          else
+            let k = ((offset % xs.Length) + xs.Length) % xs.Length
+            (xs |> List.skip k) @ (xs |> List.take k)
+
+        let farRotated shift = rotateBy (floorNum + shift) midToFarRooms
+        let alcovesRotated shift = rotateBy (floorNum + shift) alcoveCenters
+        let anyWalkable (_: Point) = true
+
+        // 2. Memory Echo: prefer an alcove tip, otherwise a mid-to-far outer room
+        let echoEnc = FloorEncounter.MemoryEchoFragment (createMemoryEcho theme floorNum)
+        tryPlaceInCandidates (alcovesRotated 0 @ farRotated 0) anyWalkable echoEnc |> ignore
+
+        // 3. Biome/Floor varied dynamic encounters (guaranteeing 1 Ambush + 1-2 additional POIs)
+        match floorNum % 3 with
+        | 0 ->
+          tryPlaceInCandidates (alcovesRotated 1 @ farRotated 1) anyWalkable (FloorEncounter.WanderingTrader (createTrader theme floorNum)) |> ignore
+          tryPlaceInCandidates (farRotated 2) anyWalkable (FloorEncounter.MechanicalTrapGauntlet (createTrap theme floorNum)) |> ignore
+          tryPlaceInCandidates (farRotated 3) anyWalkable (FloorEncounter.AmbushLair (createAmbush theme floorNum)) |> ignore
+        | 1 ->
+          tryPlaceInCandidates (alcovesRotated 1 @ farRotated 1) anyWalkable (FloorEncounter.TreasureVault (createVault theme floorNum playerPlane)) |> ignore
+          tryPlaceInCandidates (farRotated 2) anyWalkable (FloorEncounter.AmbushLair (createAmbush theme floorNum)) |> ignore
+        | _ ->
+          tryPlaceInCandidates (alcovesRotated 1 @ farRotated 1) anyWalkable (FloorEncounter.WanderingTrader (createTrader theme floorNum)) |> ignore
+          tryPlaceInCandidates (farRotated 2) anyWalkable (FloorEncounter.AmbushLair (createAmbush theme floorNum)) |> ignore
+
+        List.rev results
+
+  /// Procedurally generates 3 to 5 diverse dynamic encounters for a floor based on biome and layout.
+  /// Distributes encounters across all non-spawn rooms (including outer rooms 6..11) ordered by
+  /// distance from spawn while keeping Altars out of spawn and traditional shrine rooms (indices 2, 5, 8).
   let generateFloorEncounters (theme: FloorTheme) (floorNum: int) (plazaCenters: Point list) (playerPlane: Plane) : (Point * FloorEncounter) list =
     match plazaCenters with
-    | p0 :: p1 :: p2 :: p3 :: p4 :: p5 :: _ ->
-      [ // 1. Memory Echo on every floor (narrative core of the grief ascent)
-        let echoPos = { X = p0.X - 3; Y = p0.Y + 2 }
-        echoPos, FloorEncounter.MemoryEchoFragment (createMemoryEcho theme floorNum)
+    | spawnCenter :: rest when rest.Length >= 5 ->
+      // Exclude traditional shrine plaza indices (2, 5, 8) for Altar placement when tile/entity maps are not supplied.
+      let indexedNonSpawn =
+        plazaCenters
+        |> List.indexed
+        |> List.skip 1
+        |> List.sortBy (fun (_, c) -> euclid c spawnCenter, c.X, c.Y)
 
-        // 2. Sacrificial Altar — deliberately kept out of the shrine rooms (plaza indices 2, 5 and 8 in
-        // `TowerGenerator`), so a stage never offers a free blessing and a costly pact side by side.
-        let altarPos = { X = p1.X + 3; Y = p1.Y + 2 }
-        altarPos, FloorEncounter.SacrificialAltar (createAltar theme floorNum PrimaryPair)
+      let altarSafe =
+        indexedNonSpawn
+        |> List.filter (fun (idx, _) -> idx <> 2 && idx <> 5 && idx <> 8)
+        |> List.map snd
 
-        // 2b. The stage's second altar sharpens the other pair, so a run can raise both halves of its
-        // plane from pacts alone. It keeps its own id (`..._prime`) and its own weathered name.
-        let secondAltar = createAltar theme floorNum SecondaryPair
-        let secondAltarPos = { X = p4.X + 3; Y = p4.Y - 2 }
-        secondAltarPos,
+      let allNonSpawn = indexedNonSpawn |> List.map snd
+      let outerFirst =
+        let half = allNonSpawn.Length / 2
+        (allNonSpawn |> List.skip half |> List.rev) @ (allNonSpawn |> List.take half |> List.rev)
+
+      let pick (xs: Point list) (idx: int) =
+        xs.[((idx % xs.Length) + xs.Length) % xs.Length]
+
+      let altar1Center = pick altarSafe 0
+      let altar2Center = pick altarSafe (max 1 (altarSafe.Length / 2))
+      let echoCenter = pick outerFirst floorNum
+      let primaryPoiCenter = pick outerFirst (floorNum + 1)
+      let ambushCenter = pick outerFirst (floorNum + 2)
+      let trapCenter = pick outerFirst (floorNum + 3)
+
+      let secondAltar = createAltar theme floorNum SecondaryPair
+      [ { X = echoCenter.X - 2; Y = echoCenter.Y + 1 }, FloorEncounter.MemoryEchoFragment (createMemoryEcho theme floorNum)
+        { X = altar1Center.X + 2; Y = altar1Center.Y + 1 }, FloorEncounter.SacrificialAltar (createAltar theme floorNum PrimaryPair)
+        { X = altar2Center.X + 2; Y = altar2Center.Y - 1 },
         FloorEncounter.SacrificialAltar
           { secondAltar with
               Id = secondAltar.Id + "_b"
               Name = secondAltar.Name + " (Weathered)" }
-
-        // 3. Biome/Floor varied dynamic encounters (1 to 2 additional, guaranteeing 3 to 4 total)
         match floorNum % 3 with
         | 0 ->
-          let traderPos = { X = p1.X - 3; Y = p1.Y - 2 }
-          let trapPos = { X = p4.X - 3; Y = p4.Y + 2 }
-          let ambushPos = { X = p3.X + 3; Y = p3.Y - 2 }
-          traderPos, FloorEncounter.WanderingTrader (createTrader theme floorNum)
-          trapPos, FloorEncounter.MechanicalTrapGauntlet (createTrap theme floorNum)
-          // Every floor carries an ambush: the floors on this branch used to be the only ones without
-          // one, which made clean floors 3 and 6 the thinnest fights in the story.
-          ambushPos, FloorEncounter.AmbushLair (createAmbush theme floorNum)
+          { X = primaryPoiCenter.X - 2; Y = primaryPoiCenter.Y - 1 }, FloorEncounter.WanderingTrader (createTrader theme floorNum)
+          { X = trapCenter.X - 2; Y = trapCenter.Y + 1 }, FloorEncounter.MechanicalTrapGauntlet (createTrap theme floorNum)
+          { X = ambushCenter.X + 2; Y = ambushCenter.Y - 1 }, FloorEncounter.AmbushLair (createAmbush theme floorNum)
         | 1 ->
-          let ambushPos = { X = p3.X + 3; Y = p3.Y - 2 }
-          let vaultPos = { X = p3.X - 3; Y = p3.Y + 2 }
-          ambushPos, FloorEncounter.AmbushLair (createAmbush theme floorNum)
-          vaultPos, FloorEncounter.TreasureVault (createVault theme floorNum playerPlane)
+          { X = ambushCenter.X + 2; Y = ambushCenter.Y - 1 }, FloorEncounter.AmbushLair (createAmbush theme floorNum)
+          { X = primaryPoiCenter.X - 2; Y = primaryPoiCenter.Y + 1 }, FloorEncounter.TreasureVault (createVault theme floorNum playerPlane)
         | _ ->
-          let ambushPos = { X = p3.X + 3; Y = p3.Y - 2 }
-          let traderPos = { X = p1.X - 3; Y = p1.Y - 2 }
-          ambushPos, FloorEncounter.AmbushLair (createAmbush theme floorNum)
-          traderPos, FloorEncounter.WanderingTrader (createTrader theme floorNum)
-      ]
+          { X = ambushCenter.X + 2; Y = ambushCenter.Y - 1 }, FloorEncounter.AmbushLair (createAmbush theme floorNum)
+          { X = primaryPoiCenter.X - 2; Y = primaryPoiCenter.Y - 1 }, FloorEncounter.WanderingTrader (createTrader theme floorNum) ]
     | _ -> []

@@ -32,6 +32,7 @@
     <Compile Include="FamiliarityTests.fs" />
     <Compile Include="SpatialAndRelicTests.fs" />
     <Compile Include="AltarTollTests.fs" />
+    <Compile Include="LevelDesignTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

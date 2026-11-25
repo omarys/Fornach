@@ -167,6 +167,83 @@ module SpatialAndRelicTests =
     Assert.Contains(wallEvts, (function CombatEvent.HazardPushed(_, "Solid Stone Wall", 10, _) -> true | _ -> false))
 
   [<Fact>]
+  let ``resolveKnockbackHazardWithDestruction crumbles Pillar on heavy knockback and refreshes vision cache`` () =
+    let pillarPt = { X = 5; Y = 4 }
+    let tiles =
+      [ for x in 0 .. 9 do for y in 0 .. 9 -> { X = x; Y = y }, Floor SurfaceType.BasaltRock ]
+      |> Map.ofList
+      |> Map.add pillarPt Pillar
+
+    let floor: TowerFloor =
+      { FloorNumber = 3
+        Theme = FloorTheme.BasaltCalderas
+        Width = 10
+        Height = 10
+        Tiles = tiles
+        Entities = Map.empty
+        StairwayLocation = { X = 0; Y = 0 }
+        SpawnLocation = { X = 5; Y = 5 }
+        Explored = Set.empty
+        Visible = Set.empty
+        SeenEnemies = Set.empty
+        ActiveQuests = []
+        InitialPlayerLevel = 1 }
+
+    let target = TierFactory.createClassLevel CharacterClass.Fighter 1
+
+    // Pre-warm TileGridCache on original floor
+    Assert.True(floor.MakeOpaqueChecker() pillarPt)
+    Assert.False(floor.MakeWalkableChecker() pillarPt)
+
+    // Light knockback keeps the pillar intact
+    let _, intactFloor, _ =
+      TowerSession.resolveKnockbackHazardWithDestruction floor { X = 5; Y = 6 } { X = 5; Y = 5 } target false
+    Assert.Equal(Some Pillar, Map.tryFind pillarPt intactFloor.Tiles)
+
+    // Heavy knockback shatters the pillar into theme Floor and updates TileGridCache
+    let stunned, crumbledFloor, evts =
+      TowerSession.resolveKnockbackHazardWithDestruction floor { X = 5; Y = 6 } { X = 5; Y = 5 } target true
+    Assert.Equal(target.Meters.Frustration + 10, stunned.Meters.Frustration)
+    Assert.Equal(Some (Floor SurfaceType.BasaltRock), Map.tryFind pillarPt crumbledFloor.Tiles)
+    Assert.False(crumbledFloor.MakeOpaqueChecker() pillarPt)
+    Assert.True(crumbledFloor.MakeWalkableChecker() pillarPt)
+    Assert.Contains(evts, (function CombatEvent.HazardPushed(_, "Shattered Pillar", 10, _) -> true | _ -> false))
+
+  [<Fact>]
+  let ``generateFloorEncountersInLayout distributes encounters across outer rooms and alcoves away from shrines`` () =
+    let spawn = { X = 10; Y = 10 }
+    let stairway = { X = 80; Y = 10 }
+    let plazas =
+      [ for i in 0 .. 9 -> { X = 10 + i * 12; Y = 10 + (i % 2) * 14 } ]
+    let alcoves = [ { X = 100; Y = 30 }; { X = 115; Y = 30 } ]
+    let mutable tiles = Map.empty
+    for c in plazas @ alcoves do
+      for dx in -3 .. 3 do
+        for dy in -3 .. 3 do
+          tiles <- Map.add { X = c.X + dx; Y = c.Y + dy } (Floor SurfaceType.PavedStone) tiles
+    // Place an interior Pillar at one room center to verify picker avoids non-Floor tiles
+    tiles <- Map.add plazas.[1] Pillar tiles
+    let shrinePos = plazas.[2]
+    let shrine : TowerShrine =
+      { Id = "shrine_test"; Name = "Test Shrine"; BlessingDescription = "Restores"; Boon = StatBoon.PrimaryPair; IsUsed = false; IsBlessed = false }
+    let entities = Map.ofList [ shrinePos, EntityShrine shrine ]
+
+    let encounters =
+      WorldEvents.generateFloorEncountersInLayout FloorTheme.QuarryPlazas 1 spawn stairway plazas alcoves tiles entities Plane.Physical
+
+    Assert.True(encounters.Length >= 4, sprintf "expected at least 4 encounters, got %d" encounters.Length)
+    for (pt, enc) in encounters do
+      Assert.Equal(Some (Floor SurfaceType.PavedStone), Map.tryFind pt tiles)
+      Assert.NotEqual(spawn, pt)
+      Assert.NotEqual(stairway, pt)
+      match enc with
+      | FloorEncounter.SacrificialAltar _ ->
+        let dx = float (pt.X - shrinePos.X)
+        let dy = float (pt.Y - shrinePos.Y)
+        Assert.True(sqrt (dx * dx + dy * dy) >= 6.0, sprintf "Altar at %A too close to shrine at %A" pt shrinePos)
+      | _ -> ()
+
+  [<Fact>]
   let ``AI adaptToDefensiveRepetition detects repeated guards against elite enemy`` () =
     let enemy = TierFactory.createClassLevel CharacterClass.Fighter 5
     let guardFort = Some(Guard (FortitudeGuard false))

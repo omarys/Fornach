@@ -1272,14 +1272,36 @@ module TowerSession =
       let tolled, tollLines = altarToll stepped
       { tolled with MessageLog = tollLines @ tolled.MessageLog }, events
 
-  /// Resolves environmental hazard consequences when a combatant is knocked back.
-  /// Computes the destination tile displaced 1 step away from the attacker's position,
-  /// checks the tile on the floor, and applies hazard or wall collision effects.
-  let resolveKnockbackHazard
+  /// Default floor surface type for a given floor theme (used when crumbling a destructible Pillar).
+  let private surfaceForTheme (theme: FloorTheme) : SurfaceType =
+    match theme with
+    | QuarryPlazas -> SurfaceType.PavedStone
+    | PineCloisters -> SurfaceType.ForestMoss
+    | BasaltCalderas -> SurfaceType.BasaltRock
+    | TempestTerraces -> SurfaceType.PavedStone
+    | SunkenBoulevards -> SurfaceType.ShallowWater
+    | ElysianSanctuaries -> SurfaceType.LilyPetals
+    | CelestialSpires -> SurfaceType.StarlitGlass
+
+  /// True when an attack classification carries heavy knockback force capable of crumbling a `Pillar`.
+  let isHeavyKnockbackAttack (attack: AttackClassification) : bool =
+    match attack with
+    | ForceStrike true
+    | ShieldBash true
+    | ForceInsightStrike -> true
+    | _ -> false
+
+  /// Resolves environmental hazard consequences when a combatant is knocked back, and when
+  /// `isHeavyKnockback` is true and the target slams into a `Pillar`, crumbles that `Pillar`
+  /// into a walkable `Floor` tile (creating a fresh `TowerFloor` record so `TileGridCache` updates
+  /// sightlines and walkability automatically).
+  let resolveKnockbackHazardWithDestruction
     (floor: TowerFloor)
     (attackerPos: Point)
     (targetPos: Point)
-    (target: Combatant) : Combatant * CombatEvent list =
+    (target: Combatant)
+    (isHeavyKnockback: bool)
+    : Combatant * TowerFloor * CombatEvent list =
     let dx =
       if targetPos.X = attackerPos.X then 0
       elif targetPos.X > attackerPos.X then 1 else -1
@@ -1297,22 +1319,39 @@ module TowerSession =
     | Some (Hazard LavaRift) ->
       let damagedTarget = { target with Health = target.Health.ApplyDelta -15 }
       let evt = CombatEvent.HazardPushed(target.Id, "Molten Lava Rift", 15, "Knocked backwards into a Molten Lava Rift! Sizzling magma inflicts 15 direct burn damage!")
-      damagedTarget, [ evt ]
+      damagedTarget, floor, [ evt ]
 
     | Some (Hazard AcidSlag) ->
       let damagedTarget = { target with Armor = target.Armor.Shred 15 }
       let evt = CombatEvent.HazardPushed(target.Id, "Corrosive Acid Slag", 15, "Knocked backwards into Corrosive Acid Slag! Acid dissolves 15 armor durability!")
-      damagedTarget, [ evt ]
+      damagedTarget, floor, [ evt ]
 
     | Some (Hazard DeepCurrent) ->
       let damagedTarget = { target with Meters = { target.Meters with Exhaustion = target.Meters.Exhaustion + 15 } }
       let evt = CombatEvent.HazardPushed(target.Id, "Deep Floodwater Current", 15, "Knocked backwards into Deep Floodwater! Murky undertow inflicts +15 Exhaustion drag!")
-      damagedTarget, [ evt ]
+      damagedTarget, floor, [ evt ]
 
     | Some (Hazard CalmingSpores) ->
       let clearedTarget = { target with Meters = { target.Meters with Recklessness = Meter.Zero } }
       let evt = CombatEvent.HazardPushed(target.Id, "Calming Spores", 0, "Knocked backwards into Calming Spores! Fragrant psychotropic pollen clears Recklessness to 0!")
-      clearedTarget, [ evt ]
+      clearedTarget, floor, [ evt ]
+
+    | Some Pillar when isHeavyKnockback ->
+      // Heavy knockback shatters the pillar into walkable rubble, opening sightlines and flanking lanes!
+      let stunnedTarget =
+        let m = target.Meters
+        { Combatant.clearStacks target with
+            Meters = { m with Frustration = m.Frustration + 10 } }
+      let crumbledFloor =
+        { floor with Tiles = Map.add destPt (Floor (surfaceForTheme floor.Theme)) floor.Tiles }
+      let evt =
+        CombatEvent.HazardPushed(
+          target.Id,
+          "Shattered Pillar",
+          10,
+          "Slammed through a stone pillar! The column crumbles to rubble, opening the sightline (+10 Frustration)!"
+        )
+      stunnedTarget, crumbledFloor, [ evt ]
 
     | Some Pillar | None ->
       // Solid stone wall or monolith impact: momentum resets and frustration spikes
@@ -1321,11 +1360,22 @@ module TowerSession =
         { Combatant.clearStacks target with
             Meters = { m with Frustration = m.Frustration + 10 } }
       let evt = CombatEvent.HazardPushed(target.Id, "Solid Stone Wall", 10, "Violently slammed against a solid stone wall! Momentum shattered and frustration spikes (+10)!")
-      stunnedTarget, [ evt ]
+      stunnedTarget, floor, [ evt ]
 
     | Some _ ->
       // Standard walkable floor: clear displacement without environmental damage
-      target, []
+      target, floor, []
+
+  /// Resolves environmental hazard consequences when a combatant is knocked back.
+  /// Computes the destination tile displaced 1 step away from the attacker's position,
+  /// checks the tile on the floor, and applies hazard or wall collision effects.
+  let resolveKnockbackHazard
+    (floor: TowerFloor)
+    (attackerPos: Point)
+    (targetPos: Point)
+    (target: Combatant) : Combatant * CombatEvent list =
+    let updatedTarget, _, evts = resolveKnockbackHazardWithDestruction floor attackerPos targetPos target false
+    updatedTarget, evts
 
   /// Resolves an altar sacrifice: pays cost, grants reward, marks altar used
   let applyAltarSacrifice (altarPt: Point) (state: TowerRunState) : Result<TowerRunState, string> =
